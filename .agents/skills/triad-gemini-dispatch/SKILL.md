@@ -116,7 +116,7 @@ Token set: `ok | server-capacity | cli-subscription-cap | token-limit |
 oauth-env | schema-rejected | timeout | extraction-error | unknown`. Or branch
 on wrapper exit: `0` ok / `1` cli-fail / `2` timeout / `3` arg /
 `4` binary-missing / `64` server-cap-exhausted / `65` terminal / `66` schema
-fail.
+fail / `67` schema-rejected.
 
 **Gemini envelope note:** `gemini -p … --output-format json` returns a single
 JSON object `{response, stats, error}`. Classify from stderr AND the `error`
@@ -133,7 +133,7 @@ the output classification from the `[wrapper]` summary line.
 | `unknown` (1) | **Step 5 — repair subagent (MANDATORY + concurrent; Hard rule 6).** |
 | `extraction-error` (1) | **Step 5 — repair subagent.** rc=0 but the extractor found no answer (empty envelope / masked error). |
 | `timeout` (2) | **Step 5 — repair subagent** (route for uniformity; likely ESCALATE). Wrapper fail-fasts (no retry on timeout). |
-| schema fail (66) | Surface: the pydantic class / schema is invalid or structured-output retries exhausted. Fix the class and re-dispatch. **NOT** repair territory. |
+| schema fail (66) / schema-rejected (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (gemini's `{response}` validated against the injected schema). `67` = a submit-time schema refusal (codex-style; not produced by gemini). |
 | arg (3) / binary missing (4) | Surface to user with cause. |
 
 ### Step 5 — Repair via the `gemini-wrapper-repair` named subagent

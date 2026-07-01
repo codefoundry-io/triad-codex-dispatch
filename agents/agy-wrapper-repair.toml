@@ -43,7 +43,9 @@ overrides the path.) Create it from `{}` if absent. Under the top-level key
   2. `patterns.<LIST_NAME>`: a lowercase substring that appears verbatim in the
      lowercased PTY transcript, under an existing list NAME
      (SERVER_CAPACITY_PATTERNS / CLI_SUB_CAP_PATTERNS / TOKEN_LIMIT_PATTERNS /
-     OAUTH_ENV_PATTERNS / SCHEMA_REJECTED_PATTERNS).
+     OAUTH_ENV_PATTERNS / SCHEMA_REJECTED_PATTERNS). NOTE: agy's oauth-env is
+     matched by its OWN list `AGY_AUTH_BANNER_PATTERNS` (not OAUTH_ENV_PATTERNS) —
+     but auth is escalate-only (below), so you never patch either oauth list.
 
 ## agy-specific diagnosis
 Unlike the claude leg, agy uses PTY transport (no `--output-format json`). The
@@ -58,7 +60,7 @@ The run-log carries the full scrubbed PTY transcript (`stdout` field) — read i
 directly. There is no JSON envelope to parse. The error signal is in the raw text:
   - `"authentication required. please visit the url"` → oauth-env banner. This
     means agy's OAuth token expired or is missing. AUTH IS USER-MANAGED — escalate,
-    do NOT patch OAUTH_ENV_PATTERNS for a login/credential issue.
+    do NOT patch OAUTH_ENV_PATTERNS / AGY_AUTH_BANNER_PATTERNS for a login issue.
   - quota / rate-limit / 429 patterns → cli-subscription-cap.
   - overloaded / server error / 500/503 patterns → server-capacity.
   - context too large / output truncated / limit patterns → token-limit.

@@ -215,9 +215,11 @@ A thin `_common.run_cli_with_retry("claude", …)` wrapper mirroring
 effort mapping, JSON-envelope extraction, and the full classification table live
 in **`docs/references/claude-leg-spec.md`**. Highlights:
 
-- Instruction via argv (single-quoted heredoc); large packets via file-IPC
-  (`--add-dir` + path reference), because piped stdin is capped at 10 MB and is
-  treated as *context*.
+- Instruction via argv (single-quoted heredoc). The wrapper passes the prompt as
+  an **argv** (not stdin), so keep it short (argv has an OS `ARG_MAX` limit);
+  large packets: reference the file PATH in the prompt and set `--cwd` so the
+  read-only leg's Read tool opens it (the leg reads the file itself — the wrapper
+  has no `--add-dir`).
 - `--sandbox read-only` ⇒ `--permission-mode dontAsk --allowedTools "Read,Glob,Grep"`;
   `--search` ⇒ add `WebSearch,WebFetch`. `bypassPermissions` banned at argparse.
 - `--reasoning` ⇒ claude `--effort`; `--model` alias passthrough (no dated IDs in
@@ -291,8 +293,9 @@ Reviewers, all independent:
   same-family context (recommended) vs same-thread self-review.
 
 Large reviews use the existing file-IPC rule: one packet under
-`_runs/reviews/<id>/packet.md`; each leg reads only that file (claude stdin 10 MB
-cap → path reference, not giant stdin).
+`_runs/reviews/<id>/packet.md`; each leg reads only that file by referencing its
+PATH in the (short, argv) prompt with `--cwd <repo-root>` — the read-only leg
+Reads it. Never inline the packet content into the prompt (argv `ARG_MAX`).
 
 ---
 

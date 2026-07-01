@@ -49,10 +49,14 @@ same packet catch failure modes a single family (or the author) would miss.
    Repeat until all three return no blocking questions. One family's unresolved
    blocking question = NOT SAFE to merge.
 5. **File-IPC for the packet.** Pre-assemble ONE review packet at
-   `_runs/reviews/<id>/packet.md` (the diff + intent + the suspect decisions).
-   Each leg reads ONLY that file (pass its path in the prompt; for claude use
-   `--add-dir` + the path, NOT giant stdin — the 10 MB stdin cap). Never inline a
-   large diff into a dispatch prompt.
+   `_runs/reviews/<id>/packet.md` under the repo root (the diff + intent + the
+   suspect decisions). Each leg reads ONLY that file by **referencing its path
+   inside the dispatch `--prompt`** (a short instruction — "Read
+   `_runs/reviews/<id>/packet.md` and review it") and running with `--cwd
+   <repo-root>` so the read-only leg's Read tool can open it. Keep the `--prompt`
+   SHORT — a path, NEVER the packet's content (argv has an OS size limit; the
+   claude/gemini/agy wrappers pass the prompt as an argv, not stdin). Never
+   inline a large diff into a dispatch prompt.
 
 ## Flow
 
@@ -70,10 +74,12 @@ Fan out — each gets the same packet path and the same framing prompt:
 > (merge-stoppers) separately from minor ones. End with SAFE / NOT-SAFE and, if
 > NOT-SAFE, the blocking questions."
 
-- claude leg: `triad-claude-dispatch` — `--sandbox read-only --reasoning high`,
-  packet via `--add-dir`.
+- claude leg: `triad-claude-dispatch` — `--sandbox read-only --reasoning high
+  --cwd <repo-root>`; the packet path is referenced in the prompt (the leg Reads
+  it under read-only).
 - Google leg: `triad-antigravity-dispatch` (or `triad-gemini-dispatch`) —
-  `--sandbox read-only`. agy web tools are fine (it may check current docs).
+  `--sandbox read-only --cwd <repo-root>`. agy web tools are fine (it may check
+  current docs).
 - fresh codex: `spawn_agent` a fresh codex reviewer with the packet; it writes
   its verdict to `_runs/reviews/<id>/codex-verdict.md` BEFORE the leader reads
   the other two.

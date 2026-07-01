@@ -123,12 +123,14 @@ CLS=$(printf '%s' "$SUMMARY" | sed -E 's/.*\[wrapper\] antigravity ([a-z-]+) .*/
 Token set: `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env
 | schema-rejected | timeout | extraction-error | unknown`. Exit codes: `0` ok /
 `1` cli-fail / `2` timeout / `3` arg / `4` binary-missing / `64`
-server-cap-exhausted / `65` terminal / `66` schema fail.
+server-cap-exhausted / `65` terminal / `66` schema fail / `67` schema-rejected.
 
-**agy-specific exit note:** `ANTIGRAVITY_VENDOR_EXIT_MAP[0] = extraction-error` —
-vendor rc=0 with no sentinel emitted means the answer was present but the sentinel
-was not written (e.g. agy truncated output). This is classified `extraction-error`,
-not `ok`.
+**agy-specific exit note:** `ANTIGRAVITY_VENDOR_EXIT_MAP[0] = extraction-error`
+fires ONLY on the **no-answer path**. A rc=0 agy call with a non-empty extracted
+answer returns `ok` and never reaches this mapping. Only when the extractor finds
+no usable answer (rc=0 but the completion sentinel was not written) does the `[0]`
+entry classify it `extraction-error` (not `ok`) → repair. So do not expect
+`extraction-error` on ordinary successful rc=0 calls.
 
 ### Step 4 — Branch on classification
 
@@ -140,7 +142,7 @@ not `ok`.
 | `unknown` (1) | **Step 5 — repair subagent (MANDATORY + concurrent; Hard rule 6).** |
 | `extraction-error` (1) | **Step 5 — repair subagent.** rc=0 but the extractor found no sentinel / empty answer body. |
 | `timeout` (2) | **Step 5 — repair subagent** (route for uniformity; likely ESCALATE). Wrapper fail-fasts (no retry on timeout). |
-| schema fail (66) | Surface: the pydantic class / schema is invalid or the one-shot repair re-run failed. Fix the class and re-dispatch. **NOT** repair territory. |
+| schema fail (66) / schema-rejected (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (agy has no native schema mode — the wrapper injects the schema into the prompt and validates the reply). `67` = a submit-time schema refusal (codex-style; not produced by agy). |
 | arg (3) / binary missing (4) | Surface to user with cause. |
 
 ### Step 5 — Repair via the `agy-wrapper-repair` named subagent

@@ -1,10 +1,18 @@
 # Claude Leg Spec — `claude_wrapper.py` (Claude Code `claude -p` single-shot)
 
 **Status:** reference spec for the new Codex-led toolkit. Target home in the new
-repo: `skills/triad-claude-dispatch/references/claude-headless-spec.md`.
+repo: `.agents/skills/triad-claude-dispatch/references/claude-headless-spec.md`.
 **Verified against:** Claude Code **v2.1.196** (`claude --help`) + official docs
 `code.claude.com/docs/en/{headless,cli-reference,model-config,env-vars}.md` +
 Agent SDK `structured-outputs`. Extraction date 2026-07-01.
+
+> **ERRATA (2026-07-01):** the IMPLEMENTED `claude_wrapper.py` does **not**
+> include `--add-dir`. Large-packet file-IPC uses `--cwd <repo-root>` + a path
+> reference inside the (argv) prompt — the read-only leg's Read tool opens the
+> file itself. Every `--add-dir` mention below describes the original design and
+> is superseded by the `--cwd` + path-reference mechanism. (Adding `--add-dir`
+> passthrough remains a possible future enhancement if a leg must read files
+> outside `--cwd`.)
 
 This spec defines how the new **claude leg** is driven as a single-shot worker,
 mirroring the existing `gemini_wrapper.py` / `codex_wrapper.py` legs and reusing
