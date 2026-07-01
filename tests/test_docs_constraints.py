@@ -158,6 +158,8 @@ def test_runtime_convenience_profile_keeps_install_targets_read_only():
         "migration/COMPANY-SETUP.ko.md",
     ]:
         text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "/Users/YOUR_USER" not in text
+        assert "YOUR_USER" not in text
         blocks = []
         cursor = 0
         while True:
@@ -173,18 +175,33 @@ def test_runtime_convenience_profile_keeps_install_targets_read_only():
             body
             for body in blocks
             if "/path/to/triad-codex-dispatch/bin/_logs" in body
-            and "/Users/YOUR_USER/.config/triad-codex-dispatch" in body
+            and "/absolute/home/path/.config/triad-codex-dispatch" in body
         ]
         assert matching, f"runtime profile block not found in {rel}"
         body = matching[0]
         assert "~/.local/bin" not in body
-        assert "/Users/YOUR_USER/.local/bin" not in body
         assert "~/.codex/agents" not in body
-        assert "/Users/YOUR_USER/.codex/agents" not in body
-        assert "/Users/YOUR_USER/.config/triad-codex-dispatch" in body
+        assert "~/.config/triad-codex-dispatch" not in body
+        assert "/absolute/home/path/.config/triad-codex-dispatch" in body
+        assert "do not rely on shell expansion inside TOML" in text or "TOML 안의 shell expansion에 의존하지" in text
         assert "/path/to/triad-codex-dispatch/bin/_logs" in body
         assert 'approval_policy = "on-request"' in body
         assert 'sandbox_mode = "workspace-write"' in body
+
+
+def test_docs_use_bash_compatible_triad_entrypoint_snippets():
+    for rel in [
+        "README.md",
+        "migration/COMPANY-SETUP.md",
+        "migration/COMPANY-SETUP.ko.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "cat >> ~/.zshrc" not in text
+        assert "source ~/.zshrc" not in text
+        assert "TRIAD_SHELL_RC=\"${HOME}/.bashrc\"" in text
+        assert "case \"${SHELL:-}\" in" in text
+        assert "cat >> \"$TRIAD_SHELL_RC\" <<'EOF'" in text
+        assert ". \"$TRIAD_SHELL_RC\"" in text
 
 
 def test_repair_named_agents_use_scoped_permission_profile():
@@ -272,6 +289,8 @@ def test_docs_explain_user_layer_command_rules_install():
         assert "~/.bashrc" in text
         assert "python3 >= 3.12" in text
         assert "bubblewrap" in text
+        assert "developers.openai.com/codex/concepts/sandboxing" in text
+        assert "Bootstrap does not install OS packages" in text or "Bootstrap은 OS package를 설치하지" in text
         assert "command codex --profile triad-codex-dispatch --search" in text
         assert "Existing Codex sessions must be restarted" in text or "기존 Codex session을 재시작" in text
         assert "absolute-wrapper" in text

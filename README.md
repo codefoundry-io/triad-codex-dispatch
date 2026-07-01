@@ -86,14 +86,17 @@ Users must also keep wrapper prompt files and `--cwd` values inside the active
 trusted workspace, or explicitly set `TRIAD_WRAPPER_ALLOWED_ROOTS` before
 starting Codex for additional trusted roots.
 
-Linux/WSL2 prerequisites: Codex itself needs `bubblewrap` (`bwrap`) for reliable
-local sandboxing. On Ubuntu 20.04, install/provide `bubblewrap`, `git`, and
-`jq`; make sure `python3 --version` is `python3 >= 3.12` before bootstrap
-because the stock Ubuntu 20.04 Python is older. Ubuntu 20.04 usually starts
-users in bash, so the shell setup below writes `~/.bashrc` by default and
-switches to `~/.zshrc` only for zsh users. Ensure `~/.local/bin` is on `PATH`,
-or set `TRIAD_BOOTSTRAP_BIN_DIR` to a launcher directory that is already on
-`PATH`.
+Linux/WSL2 prerequisites: OpenAI Codex sandbox docs
+(`https://developers.openai.com/codex/concepts/sandboxing`) say to install
+`bubblewrap` (`bwrap`) on Linux and WSL2 for reliable local sandboxing. On
+Ubuntu 20.04, install/provide `bubblewrap`, `git`, and `jq`; make sure
+`python3 --version` is `python3 >= 3.12` before bootstrap because the stock
+Ubuntu 20.04 Python is older. Ubuntu 20.04 usually starts users in bash, so the
+shell setup below writes `~/.bashrc` by default and switches to `~/.zshrc` only
+for zsh users. Ensure `~/.local/bin` is on `PATH`, or set
+`TRIAD_BOOTSTRAP_BIN_DIR` to a launcher directory that is already on `PATH`.
+Bootstrap does not install OS packages; fleet setup must provide the host
+packages before users start Codex.
 
 The install command above is the deployment/default heavy-user posture: matching
 triad wrapper commands always run outside the sandbox without another prompt.
@@ -131,6 +134,10 @@ codex-triad
 Use the plain `codex` function only on machines where the heavy-user external-CLI
 posture is the desired default. Existing Codex sessions must be restarted after
 profile or rules changes.
+The snippet sources the chosen RC file for the current terminal. On stock
+Ubuntu, login shells normally source `~/.bashrc` through `~/.profile`; on
+minimal or custom images, add the same source line to the login shell startup
+file if a new terminal does not expose `codex-triad`.
 
 Start a new Codex thread after install so plugin skills load from the refreshed
 plugin cache. Trust the workspace only when developing from this repo or relying
@@ -240,6 +247,18 @@ checkout path의 `bin/*.py`를 실행한다.
 `<release-ref>`는 merge 후에는 `main`, 이 branch를 직접 검증할 때는
 `distribution-layer`로 둔다.
 
+Linux/WSL2 전제: OpenAI Codex sandbox 문서
+(`https://developers.openai.com/codex/concepts/sandboxing`)는 Linux와 WSL2에서
+안정적인 local sandboxing을 위해 `bubblewrap`(`bwrap`) 설치를 안내한다. Ubuntu
+20.04에서는 `bubblewrap`, `git`, `jq`를 설치하거나 제공한다. Ubuntu 20.04 기본
+Python은 오래됐으므로 bootstrap 전에 `python3 --version`이 `python3 >= 3.12`인지
+확인한다. Ubuntu 20.04는 보통 bash로 시작하므로 아래 shell 설정은 기본으로
+`~/.bashrc`에 쓰고, zsh 사용자일 때만 `~/.zshrc`로 전환한다. `~/.local/bin`이
+`PATH`에 있어야 하며, 그렇지 않으면 `TRIAD_BOOTSTRAP_BIN_DIR`를 이미 `PATH`에
+있는 launcher directory로 지정한다.
+Bootstrap은 OS package를 설치하지 않으므로 fleet setup이 사용자가 Codex를
+시작하기 전에 host package를 제공해야 한다.
+
 위 설치 명령은 배포용 heavy-user 기본 자세다. 매칭되는 triad wrapper command는
 매번 추가 prompt 없이 항상 sandbox 밖에서 실행된다. 이는 생성된 Codex profile과
 user-layer `prefix_rule` allowlist로 구현하며, `danger-full-access`를 쓰는 방식이
@@ -276,6 +295,10 @@ codex-triad
 plain `codex` function은 heavy-user external-CLI 자세가 그 머신의 기본값이어도 되는
 환경에서만 켠다. profile이나 rules를 바꾼 뒤에는 기존 Codex session을 재시작해야
 한다.
+이 snippet은 현재 terminal에서 바로 쓰도록 선택한 RC 파일을 source한다. stock
+Ubuntu에서는 login shell이 보통 `~/.profile`을 통해 `~/.bashrc`를 읽는다. minimal
+image나 custom dotfile 환경에서 새 terminal에 `codex-triad`가 보이지 않으면 같은
+source line을 login shell startup file에 추가한다.
 
 설치 후 새 Codex thread를 시작해야 plugin cache의 skill이 로드된다. 이 repo에서
 개발하거나 repo-local `.agents/skills/`를 직접 쓸 때만 workspace trust가 필요하다.
@@ -429,15 +452,16 @@ sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 network_access = true
 writable_roots = [
-  "/Users/YOUR_USER/.config/triad-codex-dispatch",
+  "/absolute/home/path/.config/triad-codex-dispatch",
   "/path/to/triad-codex-dispatch/bin/_logs",
 ]
 ```
 
-Replace `YOUR_USER` with your macOS username and `/path/to/triad-codex-dispatch`
-with the local checkout used by bootstrap launchers. Bootstrap creates
-`bin/_logs` during `scripts/bootstrap.sh --check`. Then start Codex with the
-profile:
+Use absolute paths in manual TOML; do not rely on shell expansion inside TOML.
+Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`, and
+replace `/path/to/triad-codex-dispatch` with the local checkout used by
+bootstrap launchers. Bootstrap creates `bin/_logs` during
+`scripts/bootstrap.sh --check`. Then start Codex with the profile:
 
 ```bash
 codex --profile triad-codex-dispatch --search
@@ -686,14 +710,16 @@ sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 network_access = true
 writable_roots = [
-  "/Users/YOUR_USER/.config/triad-codex-dispatch",
+  "/absolute/home/path/.config/triad-codex-dispatch",
   "/path/to/triad-codex-dispatch/bin/_logs",
 ]
 ```
 
-macOS 사용자 이름으로 `YOUR_USER`를 바꾸고, `/path/to/triad-codex-dispatch`는
-bootstrap launcher가 가리키는 local checkout 경로로 바꾼다. bootstrap이
-`scripts/bootstrap.sh --check` 중 `bin/_logs`를 만든다. 그 뒤 아래처럼 시작한다.
+수동 TOML에는 절대 경로를 쓴다. TOML 안의 shell expansion에 의존하지 않는다.
+`/absolute/home/path`는 `printf '%s\n' "$HOME"` 결과로 바꾸고,
+`/path/to/triad-codex-dispatch`는 bootstrap launcher가 가리키는 local checkout
+경로로 바꾼다. bootstrap이 `scripts/bootstrap.sh --check` 중 `bin/_logs`를
+만든다. 그 뒤 아래처럼 시작한다.
 
 ```bash
 codex --profile triad-codex-dispatch --search

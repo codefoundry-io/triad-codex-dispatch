@@ -63,14 +63,17 @@ and authenticated; business-tier `gemini` is optional unless the team enables
 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Bootstrap probes those auth states unless
 `TRIAD_BOOTSTRAP_SKIP_AUTH=1` is set for CI or scheduled updater jobs.
 
-Linux/WSL2 prerequisites: Codex itself needs `bubblewrap` (`bwrap`) for reliable
-local sandboxing. On Ubuntu 20.04, install/provide `bubblewrap`, `git`, and
-`jq`; make sure `python3 --version` is `python3 >= 3.12` before bootstrap
-because the stock Ubuntu 20.04 Python is older. Ubuntu 20.04 usually starts
-users in bash, so the shell setup below writes `~/.bashrc` by default and
-switches to `~/.zshrc` only for zsh users. Ensure `~/.local/bin` is on `PATH`,
-or set `TRIAD_BOOTSTRAP_BIN_DIR` to a launcher directory that is already on
-`PATH`.
+Linux/WSL2 prerequisites: OpenAI Codex sandbox docs
+(`https://developers.openai.com/codex/concepts/sandboxing`) say to install
+`bubblewrap` (`bwrap`) on Linux and WSL2 for reliable local sandboxing. On
+Ubuntu 20.04, install/provide `bubblewrap`, `git`, and `jq`; make sure
+`python3 --version` is `python3 >= 3.12` before bootstrap because the stock
+Ubuntu 20.04 Python is older. Ubuntu 20.04 usually starts users in bash, so the
+shell setup below writes `~/.bashrc` by default and switches to `~/.zshrc` only
+for zsh users. Ensure `~/.local/bin` is on `PATH`, or set
+`TRIAD_BOOTSTRAP_BIN_DIR` to a launcher directory that is already on `PATH`.
+Bootstrap does not install OS packages; fleet setup must provide the host
+packages before users start Codex.
 
 The install command above is the deployment/default heavy-user posture: matching
 triad wrapper commands always run outside the sandbox without another prompt.
@@ -108,6 +111,10 @@ codex-triad
 Use the plain `codex` function only on machines where the heavy-user external-CLI
 posture is the desired default. Existing Codex sessions must be restarted after
 profile or rules changes.
+The snippet sources the chosen RC file for the current terminal. On stock
+Ubuntu, login shells normally source `~/.bashrc` through `~/.profile`; on
+minimal or custom images, add the same source line to the login shell startup
+file if a new terminal does not expose `codex-triad`.
 
 Open a new Codex thread after installation so plugin skills load from the plugin
 cache. Trust the workspace only when developing from this repo or relying on
@@ -162,12 +169,15 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 writable_roots = [
-  "/Users/YOUR_USER/.codex/agents",
-  "/Users/YOUR_USER/.config/triad-codex-dispatch",
-  "/Users/YOUR_USER/.local/bin",
+  "/absolute/home/path/.codex/agents",
+  "/absolute/home/path/.config/triad-codex-dispatch",
+  "/absolute/home/path/.local/bin",
 ]
 network_access = false
 ```
+
+Use absolute paths in manual TOML; do not rely on shell expansion inside TOML.
+Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`.
 
 Run bootstrap with `codex --profile triad-codex-dispatch-install --search` or
 approve `scripts/bootstrap.sh --check` once from a normal session. Do not keep
@@ -255,11 +265,16 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 writable_roots = [
-  "/Users/YOUR_USER/.config/triad-codex-dispatch",
+  "/absolute/home/path/.config/triad-codex-dispatch",
   "/path/to/triad-codex-dispatch/bin/_logs",
 ]
 network_access = true
 ```
+
+Use absolute paths in manual TOML; do not rely on shell expansion inside TOML.
+Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`, and
+replace `/path/to/triad-codex-dispatch` with the local checkout used by
+bootstrap launchers.
 
 Start that profile with:
 
@@ -429,7 +444,10 @@ installed plugin cache only after no dispatch is running.
 
 ## What Bootstrap Checks
 
-`scripts/bootstrap.sh --check` verifies or installs:
+`scripts/bootstrap.sh --check` verifies or installs toolkit-managed items only.
+Bootstrap does not install OS packages; on Ubuntu 20.04 or WSL2 hosts, fleet
+setup must provide the Codex Linux/WSL2 sandbox prerequisite `bubblewrap` /
+`bwrap` before users start Codex.
 
 - Required binaries: `codex`, `claude`, `agy`, `python3 >= 3.12`, and `jq`.
 - Optional binary: `gemini`, unless `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`.
