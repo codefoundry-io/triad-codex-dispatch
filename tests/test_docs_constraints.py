@@ -268,6 +268,10 @@ def test_docs_explain_user_layer_command_rules_install():
         assert "codex execpolicy check" in text
         assert "always run outside the sandbox" in text or "항상 sandbox 밖에서 실행" in text
         assert "codex-triad()" in text
+        assert "Ubuntu 20.04" in text
+        assert "~/.bashrc" in text
+        assert "python3 >= 3.12" in text
+        assert "bubblewrap" in text
         assert "command codex --profile triad-codex-dispatch --search" in text
         assert "Existing Codex sessions must be restarted" in text or "기존 Codex session을 재시작" in text
         assert "absolute-wrapper" in text

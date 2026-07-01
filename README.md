@@ -86,6 +86,15 @@ Users must also keep wrapper prompt files and `--cwd` values inside the active
 trusted workspace, or explicitly set `TRIAD_WRAPPER_ALLOWED_ROOTS` before
 starting Codex for additional trusted roots.
 
+Linux/WSL2 prerequisites: Codex itself needs `bubblewrap` (`bwrap`) for reliable
+local sandboxing. On Ubuntu 20.04, install/provide `bubblewrap`, `git`, and
+`jq`; make sure `python3 --version` is `python3 >= 3.12` before bootstrap
+because the stock Ubuntu 20.04 Python is older. Ubuntu 20.04 usually starts
+users in bash, so the shell setup below writes `~/.bashrc` by default and
+switches to `~/.zshrc` only for zsh users. Ensure `~/.local/bin` is on `PATH`,
+or set `TRIAD_BOOTSTRAP_BIN_DIR` to a launcher directory that is already on
+`PATH`.
+
 The install command above is the deployment/default heavy-user posture: matching
 triad wrapper commands always run outside the sandbox without another prompt.
 That is implemented by the generated Codex profile plus user-layer
@@ -98,7 +107,11 @@ shell functions during initial setup. The function pins the wrapper trusted
 root to the directory where the user starts Codex:
 
 ```bash
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 # Recommended: explicit triad entrypoint.
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
@@ -111,7 +124,7 @@ codex-triad() {
 #     command codex --profile triad-codex-dispatch --search "$@"
 # }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 codex-triad
 ```
 
@@ -239,7 +252,11 @@ user-layer `prefix_rule` allowlist로 구현하며, `danger-full-access`를 쓰�
 시작한 directory를 wrapper trusted root로 고정한다.
 
 ```bash
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 # 권장: 명시적인 triad entrypoint.
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
@@ -252,7 +269,7 @@ codex-triad() {
 #     command codex --profile triad-codex-dispatch --search "$@"
 # }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 codex-triad
 ```
 
@@ -371,7 +388,11 @@ To get the same day-to-day UX as the source toolkit, start Codex through the
 profile every time. The recommended shell setup is:
 
 ```bash
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
     command codex --profile triad-codex-dispatch --search "$@"
@@ -382,7 +403,7 @@ codex-triad() {
 #     command codex --profile triad-codex-dispatch --search "$@"
 # }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 ```
 
 Then use `codex-triad` for triad work, or enable the optional plain `codex` function
@@ -493,13 +514,17 @@ TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
     command codex --profile triad-codex-dispatch --search "$@"
 }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 codex-triad
 ```
 
@@ -621,7 +646,11 @@ wrapper command는 추가 approval prompt 없이 항상 sandbox 밖에서 실행
 권장 shell 설정은 아래와 같다.
 
 ```bash
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
     command codex --profile triad-codex-dispatch --search "$@"
@@ -632,7 +661,7 @@ codex-triad() {
 #     command codex --profile triad-codex-dispatch --search "$@"
 # }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 ```
 
 triad 작업에는 `codex-triad`를 쓰고, 이 자세가 머신 기본값이어도 되는 경우에만
@@ -739,13 +768,17 @@ TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
     command codex --profile triad-codex-dispatch --search "$@"
 }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 codex-triad
 ```
 

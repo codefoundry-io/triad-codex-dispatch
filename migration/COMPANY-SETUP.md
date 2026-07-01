@@ -63,6 +63,15 @@ and authenticated; business-tier `gemini` is optional unless the team enables
 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Bootstrap probes those auth states unless
 `TRIAD_BOOTSTRAP_SKIP_AUTH=1` is set for CI or scheduled updater jobs.
 
+Linux/WSL2 prerequisites: Codex itself needs `bubblewrap` (`bwrap`) for reliable
+local sandboxing. On Ubuntu 20.04, install/provide `bubblewrap`, `git`, and
+`jq`; make sure `python3 --version` is `python3 >= 3.12` before bootstrap
+because the stock Ubuntu 20.04 Python is older. Ubuntu 20.04 usually starts
+users in bash, so the shell setup below writes `~/.bashrc` by default and
+switches to `~/.zshrc` only for zsh users. Ensure `~/.local/bin` is on `PATH`,
+or set `TRIAD_BOOTSTRAP_BIN_DIR` to a launcher directory that is already on
+`PATH`.
+
 The install command above is the deployment/default heavy-user posture: matching
 triad wrapper commands always run outside the sandbox without another prompt.
 That is implemented by the generated Codex profile plus user-layer
@@ -75,7 +84,11 @@ shell functions during initial setup. The function pins the wrapper trusted root
 to the directory where the user starts Codex:
 
 ```bash
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 # Recommended: explicit triad entrypoint.
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
@@ -88,7 +101,7 @@ codex-triad() {
 #     command codex --profile triad-codex-dispatch --search "$@"
 # }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 codex-triad
 ```
 
@@ -199,7 +212,11 @@ To get the same day-to-day UX as the source toolkit, start Codex through the
 profile every time. The recommended shell setup is:
 
 ```bash
-cat >> ~/.zshrc <<'EOF'
+TRIAD_SHELL_RC="${HOME}/.bashrc"
+case "${SHELL:-}" in
+  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
+esac
+cat >> "$TRIAD_SHELL_RC" <<'EOF'
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
     command codex --profile triad-codex-dispatch --search "$@"
@@ -210,7 +227,7 @@ codex-triad() {
 #     command codex --profile triad-codex-dispatch --search "$@"
 # }
 EOF
-source ~/.zshrc
+. "$TRIAD_SHELL_RC"
 ```
 
 Then use `codex-triad` for triad work, or enable the optional plain `codex` function
