@@ -28,11 +28,11 @@ same packet catch failure modes a single family (or the author) would miss.
    Runtime selection: `TRIAD_GOOGLE_REVIEW_CLI` env (`antigravity` | `gemini`),
    else agy, else gemini. If neither Google leg is available, log it (NOT an
    error) and run with the remaining two families.
-3. **codex (fresh)** — a FRESH codex reviewer for independence: `spawn_agent` a
-   fresh codex subagent (or a nested `codex exec`) with the same packet, produced
-   and saved BEFORE it sees the other legs' outputs. The leader does NOT review
-   in its own thread (its context is polluted by having authored/orchestrated
-   the change).
+3. **codex (fresh)** — a FRESH codex reviewer for independence: use Codex
+   multi-agent `spawn_agent` to start a fresh subagent with the same packet,
+   produced and saved BEFORE it sees the other legs' outputs. The leader does
+   NOT review in its own thread (its context is polluted by having
+   authored/orchestrated the change).
 
 ## Hard rules
 
@@ -57,6 +57,10 @@ same packet catch failure modes a single family (or the author) would miss.
    SHORT — a path, NEVER the packet's content (argv has an OS size limit; the
    claude/gemini/agy wrappers pass the prompt as an argv, not stdin). Never
    inline a large diff into a dispatch prompt.
+6. **Fresh Codex is subagent-only.** The Codex-family reviewer MUST be spawned
+   with the multi-agent `spawn_agent` tool using `fork_context=false`. Do not
+   shell out to a second Codex CLI process from this repo. If `spawn_agent` is
+   unavailable, log the Codex-family reviewer as unavailable for that round.
 
 ## Flow
 
@@ -80,9 +84,10 @@ Fan out — each gets the same packet path and the same framing prompt:
 - Google leg: `triad-antigravity-dispatch` (or `triad-gemini-dispatch`) —
   `--sandbox read-only --cwd <repo-root>`. agy web tools are fine (it may check
   current docs).
-- fresh codex: `spawn_agent` a fresh codex reviewer with the packet; it writes
-  its verdict to `_runs/reviews/<id>/codex-verdict.md` BEFORE the leader reads
-  the other two.
+- fresh codex: use multi-agent `spawn_agent` with `fork_context=false` so the
+  reviewer starts from a fresh context. Tell it to read the packet path, not the
+  other reviewers' outputs, and to write its verdict to
+  `_runs/reviews/<id>/codex-verdict.md` BEFORE the leader reads the other two.
 
 ### Step 3 — Consolidate (leader, after all three land)
 
@@ -105,6 +110,8 @@ review record if the change is significant — owner judgment).
 
 - No Google-family leg available (gemini individual tier dead + agy absent) →
   run claude + fresh-codex only; log the missing family.
+- No multi-agent `spawn_agent` tool available → log the Codex-family reviewer as
+  unavailable for this round. Do not replace it with another Codex CLI process.
 - A leg returns a terminal/repair-routed failure → surface it; that family's
   review is unavailable for this round (do not treat a wrapper failure as SAFE).
 

@@ -51,7 +51,9 @@ triad-codex-dispatch/
     test_classifier_extension.py
 ```
 
-Do not ship `codex_wrapper.py` as a dispatch leg in the main path. Codex is now the leader family. Keep `codex_tasks.py` only if the fallback repair path uses nested `codex exec`; otherwise omit or move to `legacy/`.
+Do not ship `codex_wrapper.py` as a dispatch leg in the main path. Codex is now
+the leader family, and this repo should not shell out to a second Codex CLI
+process for dispatch or repair.
 
 ## Claude Leg
 
@@ -107,9 +109,9 @@ Add config snippets declaring `claude-wrapper-repair`, `gemini-wrapper-repair`, 
 
 The skill asks Codex to spawn the named repair agent, continue foreground work, then `wait_agent` and read `<run_log>.repair.json`.
 
-Fallback if the spike fails: use nested `codex exec` as the repair runner. `codex exec` supports noninteractive runs, JSONL, `--output-schema`, `-o`, `--sandbox`, `--ephemeral`, and stdin prompts. This is less elegant but scriptable and can preserve the same file-based JSON contract.
-
-Last fallback: leader performs repair inline. That loses concurrency and pollutes leader context, but preserves classifier improvement.
+If the named-subagent spike fails, do not add a same-family CLI fallback in this
+repo. Mark repair unavailable for that route and surface the failure; inline
+leader repair is a last-resort manual diagnosis, not an automated dispatch path.
 
 ## Classifier Extension
 
@@ -130,7 +132,10 @@ New reviewers:
 - Google family: `antigravity_wrapper.py` preferred, `gemini_wrapper.py` fallback.
 - Codex family: Codex leader’s own perspective.
 
-To preserve independence, the Codex verdict must be produced before reading Claude/Google outputs, saved to a review file, and not revised until consolidation. Stronger option: spawn a fresh Codex reviewer subagent or nested `codex exec` reviewer with the same packet, then the leader only consolidates. Owner call: whether “Codex-as-leader” means same thread or fresh same-family context.
+To preserve independence, the Codex verdict must be produced by a fresh Codex
+subagent before reading Claude/Google outputs, saved to a review file, and not
+revised until consolidation. Same-thread self-review is not accepted for
+merge-gate review.
 
 Large reviews should keep the current file-IPC rule: preassemble one repo-relative packet under `_runs/reviews/<id>/packet.md`; vendor reviewers read only that file. Claude stdin is capped at 10 MB, so large Claude reviews must use file path references, not giant stdin.
 
@@ -151,15 +156,19 @@ For locked-down fleets, publish repo marketplace metadata and admin `requirement
 3. Port `_common.py` namespace and Claude extraction.
 4. Implement `claude_wrapper.py` and fake-CLI tests.
 5. Adapt Gemini/Agy skills to Codex skill format.
-6. Add Codex repair-agent configs and fallback `codex exec` runner.
+6. Add Codex repair-agent configs using named subagents only.
 7. Adapt cross-family review.
 8. Package plugin/marketplace/bootstrap docs.
 9. Run daily checks and end-to-end fake vendor tests before real vendor smoke tests.
 
 ## No Clean Codex Equivalent
 
-There is no documented one-call Claude-style `Agent(subagent_type=..., run_in_background=true)` file-contract equivalent. Codex has subagent workflows and spawn/wait tools, but the named, background, file-writing repair loop must be proven in the target Codex runtime. The concrete fallback is nested `codex exec`, accepting more process overhead and weaker in-session observability.
+Codex has subagent workflows and spawn/wait tools; the named, background,
+file-writing repair loop must be proven in the target Codex runtime. If that
+mechanism is unavailable, the route is unavailable rather than replaced with a
+same-family CLI subprocess.
 
 Plugin distribution exists in Codex, but it is not a direct Claude `/plugin install` mirror. It uses Codex marketplaces, cache installs, and restart/upgrade flows.
 
-Codex’s own review perspective is not naturally independent when Codex is the orchestrator. Use a fresh Codex subagent/exec reviewer if the owner requires strict independence.
+Codex's own review perspective is not naturally independent when Codex is the
+orchestrator. Use a fresh Codex subagent for strict independence.

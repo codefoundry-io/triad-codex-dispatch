@@ -1,12 +1,9 @@
-"""Shared helpers for codex/gemini subprocess wrappers.
+"""Shared helpers for subprocess wrappers.
 
 Framework — vendor-JSON IO + 5-class classification + noise-tag extraction
 + pydantic schema validation (optional) with 1 schema-repair retry.
 
 Per-CLI vendor JSON modes (always on):
-- Codex: `codex exec --json -o <last_msg> --ephemeral -c approval_policy=never`
-  (config-alive 2026-05-30: no `--ignore-user-config`; approval pinned)
-  → stdout = JSONL events stream (vendor schema), stderr ≈ 39 B (vendor quiet).
 - Gemini: `gemini -p ... --output-format json`
   → stdout = single JSON object {response, stats, error}, stderr ≈ 189 B.
 

@@ -52,8 +52,8 @@ machine (codex-cli 0.142.4), evidence in `docs/references/spike-evidence-*`:
   `~/.codex/agents/` (personal), `.codex/agents/` (project).
 - **Conclusion:** the repair loop is **Codex named subagents** (spawn → wait →
   read `<run_log>.repair.json`) — a clean mirror of Claude's
-  `Agent(subagent_type, run_in_background)` + file-IO contract. The
-  nested-`codex exec` fallback is NOT needed for the core mechanism.
+  `Agent(subagent_type, run_in_background)` + file-IO contract. Codex-family
+  work in this repo uses Codex subagents, not a second Codex CLI process.
 - **Caveat (open):** proven at **personal scope**. Open GitHub bugs
   ([#14579](https://github.com/openai/codex/issues/14579),
   [#26408](https://github.com/openai/codex/issues/26408),
@@ -293,10 +293,10 @@ Reviewers, all independent:
 - **claude** — `claude_wrapper.py` read-only leg.
 - **Google family** — agy (preferred) or gemini leg.
 - **codex** — the leader's own family. To preserve independence when Codex is the
-  orchestrator, produce the Codex verdict from a **fresh Codex subagent** (or
-  nested `codex exec`) with the same packet, saved before reading the other
-  legs' outputs; the leader only consolidates. **Owner decision:** fresh
-  same-family context (recommended) vs same-thread self-review.
+  orchestrator, produce the Codex verdict from a **fresh Codex subagent** spawned
+  with the same packet, saved before reading the other legs' outputs; the leader
+  only consolidates. Same-thread self-review is not accepted for merge-gate
+  review.
 
 Large reviews use the existing file-IPC rule: one packet under
 `_runs/reviews/<id>/packet.md`; each leg reads only that file by referencing its
