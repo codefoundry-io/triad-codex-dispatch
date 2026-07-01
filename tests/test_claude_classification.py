@@ -36,7 +36,9 @@ def test_is_error_maps_to_oauth_env(tmp_path):
     Exit code must be EXIT_TERMINAL (65) — not 0 or 1.
     """
     r = _run(tmp_path, fake_mode="is_error")
-    assert r.returncode != 0, "is_error mode must fail (rc != 0)"
+    assert r.returncode == 65, (
+        f"is_error (auth 401) must be terminal EXIT_TERMINAL=65; got {r.returncode}"
+    )
     assert _cls(r.stderr) == "oauth-env", (
         f"is_error should classify as 'oauth-env'; got {_cls(r.stderr)!r}\n"
         f"stderr={r.stderr!r}"
