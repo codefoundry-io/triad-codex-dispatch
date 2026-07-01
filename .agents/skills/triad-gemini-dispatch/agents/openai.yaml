@@ -1,0 +1,17 @@
+# Codex skill metadata for triad-gemini-dispatch.
+# (Codex reads SKILL.md frontmatter for name/description; this file carries the
+# invocation policy + declared dependencies. Verify exact keys against the
+# current Codex skills doc — developers.openai.com/codex/skills — before relying
+# on any beyond allow_implicit_invocation, which is the documented default.)
+
+# The Codex leader may invoke this skill on its own when a single-shot gemini
+# call via the company business/Vertex/API-key tier fits (a fresh-eyes opinion,
+# a Google-ecosystem prompt, a fan-out leg). NOT for individual-tier users
+# (individual gemini auth is deprecated — use triad-antigravity-dispatch).
+allow_implicit_invocation: true
+
+# Runtime dependencies this skill drives.
+dependencies:
+  - bin/gemini_wrapper.py
+  - bin/policies/gemini-readonly.toml
+  - agents/gemini-wrapper-repair.toml

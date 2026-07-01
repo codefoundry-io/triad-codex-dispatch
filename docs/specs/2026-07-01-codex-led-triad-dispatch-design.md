@@ -159,17 +159,17 @@ triad-codex-dispatch/
     claude-daily-check.sh   # NEW  drift probe (mirror gemini/agy daily-check)
     gemini-daily-check.sh   # reused
     agy-daily-check.sh      # reused
-  skills/                   # Codex SKILL.md runbooks (.agents/skills discovery)
+  .agents/skills/           # Codex SKILL.md runbooks — MUST live here (VERIFIED §4a):
     triad-claude-dispatch/SKILL.md        # NEW
     triad-gemini-dispatch/SKILL.md        # ADAPTED (Codex leader)
-    triad-antigravity-dispatch/SKILL.md   # ADAPTED
+    triad-antigravity-dispatch/SKILL.md   # ADAPTED (PRIMARY Google leg)
     triad-cross-family-review/SKILL.md    # ADAPTED/INVERTED (Codex is leader family)
     <name>/agents/openai.yaml             # per-skill metadata / invocation policy
-  agents/                   # Codex named subagents (.codex/agents/*.toml at install)
-    claude-wrapper-repair.toml            # NEW
-    gemini-wrapper-repair.toml            # ADAPTED
-    agy-wrapper-repair.toml               # ADAPTED
-    repair-prompts/*.md                   # developer_instructions bodies (per-attempt workflow)
+  agents/                   # repo SOURCE for the repair named subagents; the
+    claude-wrapper-repair.toml            #   bootstrap INSTALLS these to
+    gemini-wrapper-repair.toml            #   ~/.codex/agents/ (personal scope — the
+    agy-wrapper-repair.toml               #   spawnable scope verified in §2.1; project
+                                          #   .codex/agents/ has open bug #26408)
   <codex-plugin-manifest>   # TBD — exact path/format per §11 Spike D
   migration/
     COMPANY-SETUP.md / .ko.md             # install + update + egress + auth
@@ -185,6 +185,26 @@ triad-codex-dispatch/
 `codex_wrapper.py` is **not** a dispatch leg here (Codex is the leader family).
 Keep it only if a fresh-Codex-subagent reviewer or a codex `--task` path reuses
 it; otherwise omit.
+
+## 4a. Skill discovery — VERIFIED with real codex (2026-07-01, tmux)
+
+Ran `codex` (v0.142.4) in the repo and drove it via tmux:
+
+- Skills placed in **`.agents/skills/<name>/SKILL.md`** register as first-class
+  skills — typing `$triad-claude` surfaced `triad-claude-dispatch [Skill]` with
+  the SKILL.md `description`, and it appeared under the `/skills` list with the
+  `.agents/skills/` scope. So the **SKILL.md format (name + description
+  frontmatter) is correct**.
+- The SAME files under a plain **`skills/`** dir do NOT register as skills (they
+  show only as filesystem entries under `@`, not as `[Skill]`). So `.agents/skills/`
+  is mandatory — NOT the Claude-plugin `skills/` layout.
+- Workspace **trust** gates project-local loading: codex prompts "Do you trust
+  this directory?" on first entry; skills load only after trusting. The install /
+  onboarding docs must tell users to trust the workspace.
+
+Consequence: skills live in `.agents/skills/` (this repo), repair named subagents
+install to `~/.codex/agents/` (§4 + §2.1). The `skills/` path in earlier drafts
+is superseded by this.
 
 ---
 
