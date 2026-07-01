@@ -1,0 +1,11 @@
+# Codex skill metadata for triad-cross-family-review.
+# Composes the dispatch legs (no repair agent of its own).
+
+# The leader may invoke this on its own before a risky merge (self-rule: review
+# before merge).
+allow_implicit_invocation: true
+
+dependencies:
+  - .agents/skills/triad-claude-dispatch
+  - .agents/skills/triad-antigravity-dispatch
+  - .agents/skills/triad-gemini-dispatch
