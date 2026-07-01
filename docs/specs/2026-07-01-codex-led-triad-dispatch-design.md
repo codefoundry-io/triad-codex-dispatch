@@ -82,11 +82,15 @@ interface, dependencies; explicit invocation via `$skill`.
 features `plugins` + `plugin_sharing` are stable/on; admins can restrict sources
 via `requirements.toml`.
 
-> **Unverified (→ §11 Spike D):** the exact Codex **plugin manifest** path/format
-> and whether a plugin can bundle skills **and** named agents **and** the `bin/`
-> wrappers so all three deploy together. The draft plan's `.codex-plugin/plugin.json`
-> + `.agents/plugins/marketplace.json` are guesses; confirm against live docs +
-> a real `codex plugin marketplace add` of this repo before committing to them.
+> **Spike D result (2026-07-01):** the manifest path is
+> `.codex-plugin/plugin.json` and the repo marketplace path is
+> `.agents/plugins/marketplace.json`, confirmed against the current Codex manual,
+> `codex plugin --help`, and a real local install. Plugin-shipped skills work
+> through a plugin-root `skills/` package mirror. Plugin-shipped repair agent
+> TOMLs are copied into the plugin cache, but a fresh `codex --search exec`
+> leader could not spawn `claude-wrapper-repair` by name
+> (`unknown agent_type 'claude-wrapper-repair'`). Therefore bootstrap installs
+> `agents/*.toml` into `~/.codex/agents/` personal scope.
 
 ### 2.4 Claude leg (`claude -p`) — confirmed
 
@@ -170,7 +174,9 @@ triad-codex-dispatch/
     gemini-wrapper-repair.toml            #   ~/.codex/agents/ (personal scope — the
     agy-wrapper-repair.toml               #   spawnable scope verified in §2.1; project
                                           #   .codex/agents/ has open bug #26408)
-  <codex-plugin-manifest>   # TBD — exact path/format per §11 Spike D
+  .codex-plugin/plugin.json # Codex plugin manifest (verified by Spike D)
+  skills/                   # Plugin packaging mirror of .agents/skills/
+  .agents/plugins/marketplace.json
   migration/
     COMPANY-SETUP.md / .ko.md             # install + update + egress + auth
     AGENTS.recommended.md                 # recommended Codex AGENTS.md
@@ -301,7 +307,7 @@ Reads it. Never inline the packet content into the prompt (argv `ARG_MAX`).
 
 ## 10. Distribution & onboarding
 
-Ship as a Codex plugin + marketplace (§2.3), pending Spike D:
+Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
 
 1. `codex plugin marketplace add <internal repo or local root>`
 2. `codex plugin marketplace upgrade`
@@ -310,18 +316,20 @@ Ship as a Codex plugin + marketplace (§2.3), pending Spike D:
    the internal source).
 4. `scripts/bootstrap.sh --check` verifies `codex`/`claude`/`gemini`/`agy`,
    Python, `jq`, auth, PATH for `bin/`, and a writable classifier path. If plugin
-   install does not expose `bin/` on PATH, bootstrap installs a launcher (no
-   symlinks in artifacts — packaging/launcher per user rule).
+   install does not expose `bin/` on PATH, bootstrap installs launchers (no
+   symlinks in artifacts — packaging/launcher per user rule). Because
+   plugin-shipped named agents are not spawnable, bootstrap also copies
+   `agents/*.toml` into `~/.codex/agents/`.
 
 ---
 
 ## 11. Phased build order (riskiest-spike-first)
 
-- **Spike D (do FIRST — last mechanism risk):** package a minimal plugin of this
-  repo, `codex plugin marketplace add` it locally, and confirm a **plugin-shipped
-  named repair agent is spawnable by name** (the open-bug territory). If it
-  fails: fall back to a bootstrap that installs repair agents into
-  `~/.codex/agents/` (personal scope — proven), decoupled from the plugin.
+- **Spike D (DONE — 2026-07-01):** packaged the repo as a Codex plugin, installed
+  it from a local marketplace, and confirmed plugin-shipped named repair agents
+  are **not** spawnable by name. Fallback selected: bootstrap installs repair
+  agents into `~/.codex/agents/` (personal scope — proven), decoupled from the
+  plugin's skill package.
 - **Spike E:** claude leg edges — stdin-vs-argv instruction semantics,
   `--json-schema` validation failure, large-file references, auth/permission
   denials mapping.
@@ -337,8 +345,8 @@ Ship as a Codex plugin + marketplace (§2.3), pending Spike D:
 
 ## 12. Open items / no clean Codex equivalent
 
-- **Plugin-shipped named agents** (Spike D) — the one unproven mechanism.
-- **Codex plugin manifest** exact path/format — unverified (§2.3).
+- **Plugin-shipped named agents** — Spike D says no; keep personal-scope
+  bootstrap fallback until Codex supports plugin-shipped named agent discovery.
 - **Codex-as-leader review independence** — not naturally independent; solved via
   a fresh Codex subagent reviewer (§9).
 - **No `run_in_background`-identical contract** — Codex uses SpawnAgent + Wait;
@@ -353,7 +361,8 @@ Ship as a Codex plugin + marketplace (§2.3), pending Spike D:
 3. claude `--reasoning` enum: mirror codex `{low..xhigh}` vs allow claude `max`.
 4. claude read-only allowlist default set + default model (unset vs alias).
 5. Keep or drop `codex_wrapper.py` / codex `--task` legs in the Codex-led repo.
-6. Distribution fallback if Spike D fails (plugin vs bootstrap-into-`~/.codex/agents`).
+6. Distribution fallback if Spike D fails: **decided by spike** — bootstrap into
+   `~/.codex/agents`.
 
 ---
 

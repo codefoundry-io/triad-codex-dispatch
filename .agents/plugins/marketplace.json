@@ -1,0 +1,20 @@
+{
+  "name": "triad-codex-dispatch-local",
+  "interface": {
+    "displayName": "Triad Codex Dispatch Local"
+  },
+  "plugins": [
+    {
+      "name": "triad-codex-dispatch",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
