@@ -125,6 +125,25 @@ schema-rejected | timeout | extraction-error | unknown | …`. Exit codes reuse
 
 ---
 
+## 3a. Google-family leg = agy — gemini CLI deprecated (VERIFIED 2026-07-01)
+
+Live verification (evidence: `docs/references/google-family-agy-readonly.md`):
+
+- **gemini CLI individual tier is DEAD** — `gemini 0.46.0` auth returns
+  `IneligibleTierError … migrate to the Antigravity suite`. So the **Google-family
+  dispatch leg = agy** (`triad-antigravity-dispatch`); the gemini leg is deprecated
+  for individual tier (keep only for a business / Vertex / API-key path).
+- **Read-only heavy-file / consult dispatches use agy `--sandbox read-only`, NOT
+  gemini plan mode.** agy is Go — no Node/V8 heap OOM (the crash that kills gemini
+  plan mode on heavy files). Verified: a read-only write attempt is blocked and
+  agy's settings restore byte-exactly (per-call deny transaction).
+- **Read-only is ALWAYS per-call — never a global policy.** A global read-only
+  policy would kill the leg's code-agent role. The same leg does write/code work
+  under `--sandbox workspace-write`. Mirrors codex's per-call `--sandbox`.
+- Pro model via agy `--model "Gemini 3.1 Pro (High)"` (no dated IDs in code).
+
+---
+
 ## 4. Repository layout
 
 ```text
@@ -134,8 +153,8 @@ triad-codex-dispatch/
     _pty.py                 # reused verbatim
     _agy_settings.py        # reused verbatim
     codex_tasks.py          # reused IFF codex `--task` legs are kept (else drop)
-    gemini_wrapper.py       # reused verbatim
-    antigravity_wrapper.py  # reused verbatim
+    gemini_wrapper.py       # reused; DEPRECATED leg (gemini individual tier dead — §3a); non-default
+    antigravity_wrapper.py  # reused — PRIMARY Google-family leg (agy); read-only via per-call --sandbox (§3a)
     claude_wrapper.py       # NEW  (claude -p single-shot; see references/claude-leg-spec.md)
     claude-daily-check.sh   # NEW  drift probe (mirror gemini/agy daily-check)
     gemini-daily-check.sh   # reused
