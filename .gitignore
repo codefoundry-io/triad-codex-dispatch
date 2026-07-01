@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 _logs/
 _debug/
+.superpowers/
