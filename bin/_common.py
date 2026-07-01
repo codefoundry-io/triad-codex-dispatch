@@ -794,6 +794,13 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
     except Exception as e:
         return "", f"stdout is not valid JSON: {e}"
 
+    subtype = obj.get("subtype", "")
+    if subtype == "error_max_structured_output_retries":
+        return "", "schema-retries-exhausted: structured output failed validation"
+    structured = obj.get("structured_output")
+    if structured is not None:
+        return json.dumps(structured, ensure_ascii=False), None
+
     is_error = obj.get("is_error", False)
     result = obj.get("result", "")
     if not isinstance(result, str):
