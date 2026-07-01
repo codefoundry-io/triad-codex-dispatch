@@ -153,6 +153,13 @@ OAUTH_ENV_PATTERNS: tuple[str, ...] = (
     # SERVER_CAPACITY_PATTERNS and `"oauth"`/`"unauthorized"` in this list.
     "401 unauthorized",
     "http 401",
+    # 2026-07-01 (Task 5): real claude `is_error=true / api_error_status=401`
+    # capture (spike-e-claude-findings.md §2). Phrase is distinctive and
+    # FP-safe: it appears exclusively in the claude vendor envelope's `result`
+    # field on an auth-401 failure. Never added bare `"401"` or `"oauth"` —
+    # those were removed for FP reasons above. This form does not match any
+    # known capacity/tool-block stderr pattern.
+    "invalid authentication credentials",
     # `"unauthorized"` removed 2026-05-03: matched `[LocalAgentExecutor]
     # Blocked call: Unauthorized tool call: ...` (1/152 false positive in
     # 200-verify batch — misled user toward "re-login" when the actual

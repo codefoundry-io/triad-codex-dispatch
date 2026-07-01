@@ -10,7 +10,8 @@ def main():
                           "structured_output":{"todos":["x"]}}))
     elif mode == "is_error":
         print(json.dumps({"type":"result","is_error":True,"api_error_status":401,
-                          "result":"Not logged in"}))
+                          "result":"Failed to authenticate. API Error: 401 Invalid authentication credentials"}))
+        return 1
     elif mode == "empty":
         pass  # no stdout → extraction-error
     return 0
