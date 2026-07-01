@@ -1,11 +1,7 @@
-# Codex skill metadata for triad-cross-family-review.
-# Composes the dispatch legs (no repair agent of its own).
+interface:
+  display_name: "Triad Cross-Family Review"
+  short_description: "Run independent Claude, Google-family, and Codex review"
+  default_prompt: "Use $triad-cross-family-review before merging a risky change."
 
-# The leader may invoke this on its own before a risky merge (self-rule: review
-# before merge).
-allow_implicit_invocation: true
-
-dependencies:
-  - .agents/skills/triad-claude-dispatch
-  - .agents/skills/triad-antigravity-dispatch
-  - .agents/skills/triad-gemini-dispatch
+policy:
+  allow_implicit_invocation: true

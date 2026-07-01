@@ -52,6 +52,14 @@ check_binary() {
   fi
 }
 
+check_optional_binary() {
+  if command -v "$1" >/dev/null 2>&1; then
+    ok "found optional binary: $1"
+  else
+    warn "optional binary not found: $1"
+  fi
+}
+
 check_python() {
   if ! command -v python3 >/dev/null 2>&1; then
     fail "missing required binary: python3"
@@ -71,6 +79,7 @@ PY
 run_auth_probe() {
   name="$1"
   cmd="$2"
+  required="${3:-required}"
   python3 - "$AUTH_TIMEOUT" "$cmd" <<'PY'
 import subprocess
 import sys
@@ -93,9 +102,17 @@ PY
   if [ "$rc" -eq 0 ]; then
     ok "$name auth probe passed"
   elif [ "$rc" -eq 124 ]; then
-    fail "$name auth probe timed out after ${AUTH_TIMEOUT}s"
+    if [ "$required" = "required" ]; then
+      fail "$name auth probe timed out after ${AUTH_TIMEOUT}s"
+    else
+      warn "$name auth probe timed out after ${AUTH_TIMEOUT}s"
+    fi
   else
-    fail "$name auth probe failed"
+    if [ "$required" = "required" ]; then
+      fail "$name auth probe failed"
+    else
+      warn "$name auth probe failed"
+    fi
   fi
 }
 
@@ -107,8 +124,18 @@ check_auth() {
 
   run_auth_probe "codex" "${TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex doctor}"
   run_auth_probe "claude" "${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude -p 'Return exactly OK.' --output-format json --permission-mode dontAsk --allowedTools Read}"
-  run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p 'Return exactly OK.'}"
   run_auth_probe "agy" "${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-agy -p 'Return exactly OK.'}"
+  if command -v gemini >/dev/null 2>&1; then
+    if [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
+      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p 'Return exactly OK.'}"
+    else
+      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p 'Return exactly OK.'}" optional
+    fi
+  elif [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
+    fail "missing required binary: gemini"
+  else
+    warn "gemini auth probe skipped because gemini is not installed"
+  fi
 }
 
 install_launchers() {
@@ -118,8 +145,15 @@ install_launchers() {
     return
   fi
 
-  if path_has_dir "$repo_bin"; then
-    ok "repo bin directory already on PATH"
+  all_wrappers_ready=1
+  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+    resolved="$(command -v "$wrapper" 2>/dev/null || true)"
+    if [ -z "$resolved" ] || [ ! -x "$resolved" ]; then
+      all_wrappers_ready=0
+    fi
+  done
+  if [ "$all_wrappers_ready" -eq 1 ]; then
+    ok "wrapper commands already executable on PATH"
     return
   fi
 
@@ -135,9 +169,15 @@ install_launchers() {
       fail "missing wrapper: $target"
       continue
     fi
+    escaped_target="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$target")" || {
+      fail "could not quote launcher target: $target"
+      continue
+    }
     {
-      printf '#!/usr/bin/env bash\n'
-      printf 'exec python3 %q "$@"\n' "$target"
+      printf '#!/usr/bin/env python3\n'
+      printf 'import os\n'
+      printf 'import sys\n'
+      printf 'os.execv(sys.executable, [sys.executable, %s] + sys.argv[1:])\n' "$escaped_target"
     } >"$launcher" || {
       fail "could not write launcher: $launcher"
       continue
@@ -206,8 +246,12 @@ printf 'reminder: trust this workspace in Codex before relying on project-local 
 
 check_binary codex
 check_binary claude
-check_binary gemini
 check_binary agy
+if [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
+  check_binary gemini
+else
+  check_optional_binary gemini
+fi
 check_python
 check_binary jq
 install_launchers

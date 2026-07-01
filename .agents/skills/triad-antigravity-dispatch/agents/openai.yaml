@@ -1,17 +1,7 @@
-# Codex skill metadata for triad-antigravity-dispatch.
-# (Codex reads SKILL.md frontmatter for name/description; this file carries the
-# invocation policy + declared dependencies. Verify exact keys against the
-# current Codex skills doc — developers.openai.com/codex/skills — before relying
-# on any beyond allow_implicit_invocation, which is the documented default.)
+interface:
+  display_name: "Triad Antigravity Dispatch"
+  short_description: "Dispatch a single-shot agy Google-family leg"
+  default_prompt: "Use $triad-antigravity-dispatch for a Google-family consult."
 
-# The Codex leader may invoke this skill on its own when a single-shot agy
-# call fits (a Google-family second opinion, web-grounded research, a live-URL
-# lookup, a cross-family fan-out leg). agy is the search/research specialist:
-# its read_url/search_web tools are native + always allowed — no --search flag
-# needed. Include agy on web-grounded tasks.
-allow_implicit_invocation: true
-
-# Runtime dependencies this skill drives.
-dependencies:
-  - bin/antigravity_wrapper.py
-  - agents/agy-wrapper-repair.toml
+policy:
+  allow_implicit_invocation: true

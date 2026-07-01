@@ -1,6 +1,6 @@
 ---
 name: triad-antigravity-dispatch
-description: Use when the Codex leader needs a single-shot Antigravity (agy) answer via the wrapper framework. agy is the PRIMARY Google-family leg — the gemini CLI individual tier is deprecated (IneligibleTierError) and agy is its successor. Triggering signals — the leader is about to run antigravity_wrapper.py raw; the user said "agy 한 번 불러줘" / "agy 로 X 처리" / "구글 AI 단발 호출"; a higher-level orchestration (e.g. triad-cross-family-review) needs the Google-family leg of a fan-out; web-grounded research / live-URL lookups are needed (agy's read_url/search_web is native and always allowed — agy is the search/research specialist, include it whenever web grounding is wanted); classification-aware routing with a self-improving repair named-subagent fallback is wanted instead of a raw subprocess. Do NOT use for claude (triad-claude-dispatch) or for the codex leader's own work.
+description: Use when the Codex leader needs a single-shot Antigravity (agy) answer via the wrapper framework. agy is the PRIMARY Google-family leg — the gemini CLI individual tier is deprecated (IneligibleTierError) and agy is its successor. Triggering signals — the leader is about to run antigravity_wrapper.py raw; the user said "agy 한 번 불러줘" / "agy 로 X 처리" / "구글 AI 단발 호출"; a higher-level orchestration (e.g. triad-cross-family-review) needs the Google-family leg of a fan-out; a separate Google-family leg needs web-grounded research or live-URL lookup (agy's read_url/search_web is native and always allowed); classification-aware routing with a self-improving repair named-subagent fallback is wanted instead of a raw subprocess. Do NOT use for claude (triad-claude-dispatch) or for the codex leader's own direct work.
 ---
 
 # triad-antigravity-dispatch
@@ -13,16 +13,18 @@ standard "call agy once" path — the Google-family mirror of `triad-claude-disp
 deprecated (`IneligibleTierError` → "migrate to the Antigravity suite"); agy is its
 successor. Use agy for all individual-tier Google-family calls.
 
-**agy is the search/research specialist.** Its `read_url` and `search_web` tools
-are native and always allowed (even under `--sandbox read-only`). Include agy on any
-task requiring live web grounding; the Codex leader uses `codex --search` for its
-own web needs, but agy handles web-grounded leg work natively.
+**agy is the Google-family search/research specialist.** Its `read_url` and
+`search_web` tools are native and always allowed (even under `--sandbox
+read-only`). Include agy when the dispatch needs a separate Google-family
+web-grounded leg; the Codex leader uses `codex --search` for its own direct web
+needs.
 
 ## Use when
 
 - The Codex leader has a discrete prompt and needs agy's answer (or a structured
-  failure signal) — e.g. a Google-ecosystem second opinion, web-grounded research,
-  live-URL lookup, or the Google-family leg of a cross-family fan-out.
+  failure signal) — e.g. a Google-ecosystem second opinion, a separate
+  Google-family web-grounded research leg, live-URL lookup, or the Google-family
+  leg of a cross-family fan-out.
 - Live web search / `read_url` / `search_web` is needed (agy's native tools;
   always allowed — no flag required, unlike the codex leader's `--search`).
 - Going through this SKILL (instead of raw `antigravity_wrapper.py`) is what makes

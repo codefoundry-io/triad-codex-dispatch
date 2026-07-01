@@ -6,14 +6,17 @@ Codex-led triad dispatch toolkit.
 ```md
 # Triad Codex Dispatch Usage
 
-Run Codex from the repository root and trust the workspace when prompted.
+Run Codex from the repository root. Installed plugin skills load from the plugin
+cache in a new Codex thread; trust the workspace when using repo-local
+`.agents/skills/` during development.
 
 Use the installed triad dispatch skills instead of invoking wrapper scripts
 directly:
 
 - `$triad-claude-dispatch` for a single-shot Claude Code consult.
 - `$triad-antigravity-dispatch` for the primary Google-family consult, including
-  web-grounded research and live URL checks.
+  web-grounded research and live URL checks when a separate Google-family leg is
+  useful.
 - `$triad-gemini-dispatch` only for business, Vertex, or API-key Gemini tiers.
 - `$triad-cross-family-review` before risky merges.
 

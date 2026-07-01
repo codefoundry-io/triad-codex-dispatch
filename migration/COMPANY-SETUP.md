@@ -28,18 +28,23 @@ codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
 scripts/bootstrap.sh --check
 ```
 
-For an internal Git marketplace, replace `.` with the owner-approved internal
-source:
+For an internal Git marketplace, keep a local checkout for bootstrap and replace
+the source with the owner-approved internal source:
 
 ```bash
+git clone <internal-git-url> triad-codex-dispatch
+cd triad-codex-dispatch
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref main
-codex plugin marketplace upgrade
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
 scripts/bootstrap.sh --check
 ```
 
-Open a new Codex thread after installation. Trust the workspace when Codex asks;
-project-local `.agents/skills/` are trust-gated.
+The plugin install uses the marketplace snapshot. Bootstrap still reads
+`scripts/`, `bin/`, and `agents/` from the local checkout.
+
+Open a new Codex thread after installation so plugin skills load from the plugin
+cache. Trust the workspace only when developing from this repo or relying on
+repo-local `.agents/skills/`; project-local skills are trust-gated.
 
 ## Recommended Codex User Settings
 
@@ -65,8 +70,20 @@ The only user-home writes this distribution layer needs are bootstrap targets:
 - `~/.config/triad-codex-dispatch/` for classifier patches.
 
 Default recommendation: leave those outside the sandbox and approve
-`scripts/bootstrap.sh --check` when it requests the personal-scope write. If a
-team wants bootstrap to run unattended, add only those exact writable roots:
+`scripts/bootstrap.sh --check` when it requests the personal-scope write. This
+keeps network access approval-based:
+
+```toml
+# ~/.codex/config.toml
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+```
+
+If a team wants bootstrap to run unattended, add only those exact writable roots:
 
 ```toml
 # ~/.codex/config.toml
@@ -76,16 +93,47 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 writable_roots = [
-  "/Users/chaniri/.codex/agents",
-  "/Users/chaniri/.config/triad-codex-dispatch",
+  "/Users/YOUR_USER/.codex/agents",
+  "/Users/YOUR_USER/.config/triad-codex-dispatch",
 ]
 network_access = false
 ```
 
-Replace `/Users/chaniri` with the target user's home directory for managed
-rollout templates.
+If the team intentionally wants fewer prompts for vendor CLI calls, use a
+separate trusted-workspace convenience profile and make the egress tradeoff
+explicit:
+
+```toml
+# ~/.codex/triad-dispatch.config.toml
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+writable_roots = [
+  "/Users/YOUR_USER/.codex/agents",
+  "/Users/YOUR_USER/.config/triad-codex-dispatch",
+]
+network_access = true
+```
+
+`network_access = true` enables outbound network for commands in that Codex
+session; it is not a domain allowlist scoped only to Codex, Claude, agy, or
+Gemini. Use managed network policy or approval prompts if the fleet needs
+domain-scoped egress.
 
 ## Update
+
+Local clone:
+
+```bash
+cd /path/to/triad-codex-dispatch
+git pull --ff-only
+codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+scripts/bootstrap.sh --check
+```
+
+Internal Git marketplace:
 
 ```bash
 cd /path/to/triad-codex-dispatch
@@ -101,12 +149,14 @@ Start a new Codex thread after reinstalling so plugin skills are reloaded.
 
 `scripts/bootstrap.sh --check` verifies or installs:
 
-- `codex`, `claude`, `gemini`, `agy`, `python3 >= 3.12`, and `jq`.
-- Auth probes for Codex, Claude, Gemini, and agy. Set
-  `TRIAD_BOOTSTRAP_SKIP_AUTH=1` only for hermetic CI tests.
+- Required binaries: `codex`, `claude`, `agy`, `python3 >= 3.12`, and `jq`.
+- Optional binary: `gemini`, unless `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`.
+- Auth probes for Codex, Claude, and agy. Gemini auth is optional unless
+  `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Set `TRIAD_BOOTSTRAP_SKIP_AUTH=1` only
+  for hermetic CI tests or scheduled updater jobs.
 - Wrapper launchers for `claude_wrapper.py`, `gemini_wrapper.py`, and
-  `antigravity_wrapper.py` when the repo `bin/` directory is not on `PATH`.
-  Launchers are small executable scripts, not symlinks.
+  `antigravity_wrapper.py` when executable wrapper commands are not already on
+  `PATH`. Launchers are small executable scripts, not symlinks.
 - Writable classifier extension JSON at
   `~/.config/triad-codex-dispatch/classifier-patches.json`, or
   `TRIAD_CLASSIFIER_EXTENSION` if set.
@@ -133,7 +183,8 @@ If `~/.local/bin` is not on `PATH`, either add it before running bootstrap or se
 Admins can publish this repo as the only allowed marketplace source and disable
 public plugin sharing. Owner must provide the final internal source URL.
 
-Example managed requirements shape:
+Illustrative managed requirements shape, not a copy-paste final policy until an
+admin verifies the current Codex fleet-management keys:
 
 ```toml
 features.plugins = true

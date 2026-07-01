@@ -43,6 +43,14 @@ overrides the path.) Create it from `{}` if absent. Under the top-level key
      (SERVER_CAPACITY_PATTERNS / CLI_SUB_CAP_PATTERNS / TOKEN_LIMIT_PATTERNS /
      OAUTH_ENV_PATTERNS / SCHEMA_REJECTED_PATTERNS).
 
+## Classifier JSON lock (HARD)
+Concurrent repair agents can target the same classifier file. Before reading or
+writing the extension JSON, acquire an exclusive `fcntl.flock` on a sibling lock
+file named `classifier-patches.json.lock` (or `<TRIAD_CLASSIFIER_EXTENSION>.lock`
+when the env override is set). Hold the lock for the full read -> merge -> write
+temp file in the same directory -> `os.replace` -> validate cycle. Never use a
+read-modify-write sequence outside that lock; it can drop another leg's patch.
+
 ## claude-specific diagnosis
 `claude -p --output-format json` returns a single envelope. exit code is opaque
 (0 success / 1 generic / 126 / 127) — CLASSIFY FROM THE ENVELOPE, not rc. Read
@@ -69,7 +77,10 @@ stdout FIRST: the `is_error` field is authoritative (a 401 comes back with
    a library identifier, or bare `schema`. Use the error-sentence phrase form
    (`"invalid authentication credentials"`, `"429 too many requests"`). If the
    only distinctive substring risks a false positive, ESCALATE instead.
-4. Validate JSON: `python3 -c "import json,os;json.load(open(os.path.expanduser('~/.config/triad-codex-dispatch/classifier-patches.json')))"`. If it fails, restore the last valid content (or `{}`) before escalating — a corrupt file drops ALL prior patches.
+4. Validate JSON while still holding the classifier lock:
+   `python3 -c "import json,os;json.load(open(os.path.expanduser('~/.config/triad-codex-dispatch/classifier-patches.json')))"`.
+   If it fails, restore the last valid content (or `{}`) before escalating — a
+   corrupt file drops ALL prior patches.
 5. Re-run to VERIFY: reconstruct the wrapper cmd from the run-log's `wrapper_cmd`,
    append `--repair-mode` (disables the internal server-cap retry — you are the
    retry layer). Run via Bash. REPAIRED = the engine now classifies correctly on

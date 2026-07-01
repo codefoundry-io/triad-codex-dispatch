@@ -47,6 +47,14 @@ overrides the path.) Create it from `{}` if absent. Under the top-level key
      matched by its OWN list `AGY_AUTH_BANNER_PATTERNS` (not OAUTH_ENV_PATTERNS) —
      but auth is escalate-only (below), so you never patch either oauth list.
 
+## Classifier JSON lock (HARD)
+Concurrent repair agents can target the same classifier file. Before reading or
+writing the extension JSON, acquire an exclusive `fcntl.flock` on a sibling lock
+file named `classifier-patches.json.lock` (or `<TRIAD_CLASSIFIER_EXTENSION>.lock`
+when the env override is set). Hold the lock for the full read -> merge -> write
+temp file in the same directory -> `os.replace` -> validate cycle. Never use a
+read-modify-write sequence outside that lock; it can drop another leg's patch.
+
 ## agy-specific diagnosis
 Unlike the claude leg, agy uses PTY transport (no `--output-format json`). The
 wrapper scrubs control bytes from the raw PTY output and checks for a per-call
@@ -90,7 +98,10 @@ read-only — do NOT add them to a classifier patch.
    a library identifier, or bare `schema`. Use the error-sentence phrase form
    (`"authentication required. please visit"`, `"429 too many requests"`). If the
    only distinctive substring risks a false positive, ESCALATE instead.
-4. Validate JSON: `python3 -c "import json,os;json.load(open(os.path.expanduser('~/.config/triad-codex-dispatch/classifier-patches.json')))"`. If it fails, restore the last valid content (or `{}`) before escalating — a corrupt file drops ALL prior patches.
+4. Validate JSON while still holding the classifier lock:
+   `python3 -c "import json,os;json.load(open(os.path.expanduser('~/.config/triad-codex-dispatch/classifier-patches.json')))"`.
+   If it fails, restore the last valid content (or `{}`) before escalating — a
+   corrupt file drops ALL prior patches.
 5. Re-run to VERIFY: reconstruct the wrapper cmd from the run-log's `wrapper_cmd`,
    append `--repair-mode` (disables the internal server-cap retry — you are the
    retry layer). Run via Bash. REPAIRED = the engine now classifies correctly on

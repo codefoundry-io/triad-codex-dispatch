@@ -27,17 +27,23 @@ codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
 scripts/bootstrap.sh --check
 ```
 
-사내 Git marketplace를 쓸 때는 `.` 대신 owner가 확정한 내부 source를 넣는다.
+사내 Git marketplace를 쓸 때도 bootstrap용 local checkout은 필요하다. `.` 대신
+owner가 확정한 내부 source를 넣는다.
 
 ```bash
+git clone <internal-git-url> triad-codex-dispatch
+cd triad-codex-dispatch
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref main
-codex plugin marketplace upgrade
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
 scripts/bootstrap.sh --check
 ```
 
-설치 후 새 Codex thread를 시작한다. Codex가 workspace trust를 물으면 trust해야
-project-local `.agents/skills/`가 로드된다.
+plugin 설치는 marketplace snapshot을 쓰지만, bootstrap은 local checkout의
+`scripts/`, `bin/`, `agents/`를 읽는다.
+
+설치 후 새 Codex thread를 시작해야 plugin cache의 skill이 로드된다. 이 repo에서
+개발하거나 repo-local `.agents/skills/`를 직접 쓸 때만 workspace trust가 필요하다.
+project-local skill은 trust gate를 통과해야 로드된다.
 
 ## 권장 Codex 사용자 설정
 
@@ -64,8 +70,20 @@ network_access = false
 - `~/.config/triad-codex-dispatch/`: classifier patches.
 
 기본 권장: 이 두 경로는 sandbox 밖에 두고, `scripts/bootstrap.sh --check`가
-personal-scope write 승인을 요청할 때 승인한다. 팀에서 bootstrap을 무인 실행해야
-한다면 아래 두 writable root만 정확히 추가한다.
+personal-scope write 승인을 요청할 때 승인한다. 이 경우 network access는 계속
+승인 기반이다.
+
+```toml
+# ~/.codex/config.toml
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+```
+
+팀에서 bootstrap을 무인 실행해야 한다면 아래 두 writable root만 정확히 추가한다.
 
 ```toml
 # ~/.codex/config.toml
@@ -75,15 +93,46 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 writable_roots = [
-  "/Users/chaniri/.codex/agents",
-  "/Users/chaniri/.config/triad-codex-dispatch",
+  "/Users/YOUR_USER/.codex/agents",
+  "/Users/YOUR_USER/.config/triad-codex-dispatch",
 ]
 network_access = false
 ```
 
-관리 배포 템플릿에서는 `/Users/chaniri`를 대상 사용자의 home directory로 바꾼다.
+vendor CLI 호출 때 반복 승인을 줄이는 것이 목표라면 trusted workspace 전용
+편의 profile을 따로 만들고 egress tradeoff를 명시한다.
+
+```toml
+# ~/.codex/triad-dispatch.config.toml
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+writable_roots = [
+  "/Users/YOUR_USER/.codex/agents",
+  "/Users/YOUR_USER/.config/triad-codex-dispatch",
+]
+network_access = true
+```
+
+`network_access = true`는 해당 Codex session의 command에 outbound network를
+허용한다. Codex, Claude, agy, Gemini 도메인만 허용하는 domain allowlist가 아니다.
+도메인 단위 egress 제한이 필요하면 managed network policy나 command approval을
+사용한다.
 
 ## 업데이트
+
+로컬 clone:
+
+```bash
+cd /path/to/triad-codex-dispatch
+git pull --ff-only
+codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+scripts/bootstrap.sh --check
+```
+
+사내 Git marketplace:
 
 ```bash
 cd /path/to/triad-codex-dispatch
@@ -99,12 +148,15 @@ scripts/bootstrap.sh --check
 
 `scripts/bootstrap.sh --check`는 다음을 확인하거나 설치한다.
 
-- `codex`, `claude`, `gemini`, `agy`, `python3 >= 3.12`, `jq`.
-- Codex, Claude, Gemini, agy auth probe. hermetic CI 테스트에서만
-  `TRIAD_BOOTSTRAP_SKIP_AUTH=1`을 쓴다.
-- repo `bin/`이 `PATH`에 없으면 `claude_wrapper.py`, `gemini_wrapper.py`,
-  `antigravity_wrapper.py` launcher를 설치한다. symlink가 아니라 실행 가능한
-  작은 스크립트다.
+- 필수 binary: `codex`, `claude`, `agy`, `python3 >= 3.12`, `jq`.
+- 선택 binary: `gemini`. 단 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`이면 필수다.
+- Codex, Claude, agy auth probe. Gemini auth는
+  `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`일 때만 필수다.
+  `TRIAD_BOOTSTRAP_SKIP_AUTH=1`은 hermetic CI 테스트나 예약 updater job에서만
+  쓴다.
+- 실행 가능한 wrapper command가 `PATH`에 없으면 `claude_wrapper.py`,
+  `gemini_wrapper.py`, `antigravity_wrapper.py` launcher를 설치한다. symlink가
+  아니라 실행 가능한 작은 스크립트다.
 - classifier extension JSON:
   `~/.config/triad-codex-dispatch/classifier-patches.json`, 또는
   `TRIAD_CLASSIFIER_EXTENSION`이 지정한 경로.
@@ -130,7 +182,8 @@ scripts/bootstrap.sh --check
 관리자는 이 저장소를 허용된 marketplace source로 제한하고 public plugin sharing을
 끄는 방식으로 배포할 수 있다. 최종 internal source URL은 owner 결정이 필요하다.
 
-예시 managed requirements 형태:
+현재 Codex fleet-management key를 admin이 재검증하기 전에는 아래를 copy-paste
+최종 policy가 아니라 예시 형태로만 취급한다.
 
 ```toml
 features.plugins = true
