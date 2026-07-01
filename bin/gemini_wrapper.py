@@ -19,7 +19,7 @@ Options:
         with `cls.model_validate_json()`. On validation fail, retry once
         with a clarifying suffix; second failure → exit 66.
   --repair-mode
-        Internal: invoked by Sonnet repair sub-agent (server-cap retry=0).
+        Internal: invoked by Codex repair subagent (server-cap retry=0).
 """
 from __future__ import annotations
 
@@ -34,13 +34,15 @@ from _common import (
     debug_log,
     emit_run_log,
     load_pydantic_class,
+    load_prompt_text,
     log,
     require_binary,
     run_cli_with_retry,
+    validate_wrapper_cwd,
 )
 
 
-APPROVAL_CHOICES = ("default", "auto_edit", "plan", "yolo")
+APPROVAL_CHOICES = ("default", "auto_edit")
 SANDBOX_CHOICES = ("read-only", "workspace-write")
 
 # Per-call READ-ONLY via the Gemini CLI Policy Engine (--policy) instead of the
@@ -55,7 +57,9 @@ _READONLY_POLICY = Path(__file__).resolve().parent / "policies" / "gemini-readon
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Gemini CLI single-shot wrapper")
-    p.add_argument("--prompt", required=True, help="User prompt")
+    prompt_group = p.add_mutually_exclusive_group(required=True)
+    prompt_group.add_argument("--prompt", help="User prompt")
+    prompt_group.add_argument("--prompt-file", help="Read user prompt from a UTF-8 file")
     p.add_argument(
         "--approval-mode",
         default="default",
@@ -72,10 +76,10 @@ def main() -> int:
     p.add_argument(
         "--sandbox",
         choices=SANDBOX_CHOICES,
-        default=None,
+        default="read-only",
         help="read-only -> attach a per-call Policy Engine deny (write_file/replace/"
              "run_shell_command) INSTEAD of the crashy plan mode; workspace-write -> "
-             "write-enabled (code-agent). Default: unset (no policy attached).",
+             "write-enabled (code-agent). Default: read-only.",
     )
     p.add_argument(
         "--model",
@@ -90,7 +94,7 @@ def main() -> int:
     p.add_argument(
         "--repair-mode",
         action="store_true",
-        help="Internal: invoked by Sonnet repair sub-agent (server-cap retry=0)",
+        help="Internal: invoked by Codex repair subagent (server-cap retry=0)",
     )
     p.add_argument(
         "--debug",
@@ -100,11 +104,23 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    if not args.prompt.strip():
+    try:
+        prompt = load_prompt_text(args.prompt, args.prompt_file)
+    except Exception as e:
+        log(f"prompt load failed: {e}")
+        return EXIT_ARG_ERROR
+
+    if not prompt.strip():
         log("empty prompt")
         return EXIT_ARG_ERROR
 
-    if args.sandbox == "read-only" and args.approval_mode in ("yolo", "auto_edit"):
+    try:
+        cwd = validate_wrapper_cwd(args.cwd)
+    except Exception as e:
+        log(f"--cwd validation failed: {e}")
+        return EXIT_ARG_ERROR
+
+    if args.sandbox == "read-only" and args.approval_mode == "auto_edit":
         log(f"--sandbox read-only conflicts with --approval-mode {args.approval_mode} "
             "(a write-auto-approving mode). Use --approval-mode default with read-only.")
         return EXIT_ARG_ERROR
@@ -112,7 +128,7 @@ def main() -> int:
         log(f"read-only policy file missing: {_READONLY_POLICY}")
         return EXIT_ARG_ERROR
 
-    require_binary("gemini")
+    gemini_bin = require_binary("gemini")
 
     pydantic_cls = None
     if args.pydantic:
@@ -124,7 +140,7 @@ def main() -> int:
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [
-            "gemini",
+            gemini_bin,
             "-p", effective_prompt,
             "--approval-mode", args.approval_mode,
             "--output-format", "json",
@@ -140,22 +156,22 @@ def main() -> int:
     result = run_cli_with_retry(
         "gemini",
         build_cmd,
-        args.prompt,
-        cwd=args.cwd,
+        prompt,
+        cwd=cwd,
         timeout=args.timeout,
         pydantic_cls=pydantic_cls,
         last_msg_path=None,
         repair_mode=args.repair_mode,
     )
 
-    audit_cmd = build_cmd(args.prompt)
-    audit("gemini", audit_cmd, args.prompt, result)
+    audit_cmd = build_cmd(prompt)
+    audit("gemini", audit_cmd, prompt, result)
 
     if args.debug:
-        debug_log("gemini", args.prompt, result)
+        debug_log("gemini", prompt, result)
 
     # Per-execution run-log (failure only) — dispatch SKILL input artifact.
-    run_log_path = emit_run_log("gemini", sys.argv, audit_cmd, args.prompt, result)
+    run_log_path = emit_run_log("gemini", sys.argv, audit_cmd, prompt, result)
     if run_log_path is not None:
         log(f"run-log: {run_log_path}")
 

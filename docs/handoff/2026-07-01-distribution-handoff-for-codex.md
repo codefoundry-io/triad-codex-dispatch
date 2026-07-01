@@ -10,14 +10,15 @@ discovers the dispatch skills.
 
 ## 0. Your task
 
-Build the **distribution layer** for this Codex-led dispatch toolkit so teams can
-INSTALL and UPDATE it across machines: a Codex plugin + marketplace, a bootstrap
-script, and install/update docs. **Do Spike D FIRST** (§2) — it decides whether
-the repair agents ship in the plugin or via bootstrap. Nothing here should
-contradict the VERIFIED constraints in §4. Flag every owner decision (§5) rather
-than guessing. Use the installed **OpenAI docs MCP** (`developers.openai.com/mcp`)
-+ `codex plugin --help` to confirm the exact plugin manifest schema — do NOT
-invent config keys.
+Historical task brief for building the **distribution layer** for this
+Codex-led dispatch toolkit so teams can INSTALL and UPDATE it across machines: a
+Codex plugin + marketplace, a bootstrap script, and install/update docs. Spike D
+is now resolved by the conservative bootstrap fallback in §2 and
+`docs/references/spike-d-plugin-agent-distribution-decision.md`. Nothing here
+should contradict the VERIFIED constraints in §4. Flag every owner decision (§5)
+rather than guessing. Use the installed **OpenAI docs MCP**
+(`developers.openai.com/mcp`) + `codex plugin --help` to confirm the exact
+plugin manifest schema — do NOT invent config keys.
 
 ---
 
@@ -27,7 +28,8 @@ invent config keys.
   `gemini_wrapper.py`, `antigravity_wrapper.py` + `_common.py` / `_pty.py` /
   `_agy_settings.py`. Single-shot → shared classification token set → run-log
   JSON. `claude -p` leg built; gemini read-only via per-call `--policy` Policy
-  Engine (never plan mode). 15/15 hermetic tests (`python3 -m pytest tests/`).
+  Engine (never plan mode). The historical engine suite was green at handoff;
+  the current distribution branch has additional tests.
 - **Skills** `.agents/skills/` (VERIFIED discoverable by real codex): 4 SKILL.md
   runbooks + `agents/openai.yaml` — `triad-claude-dispatch`,
   `triad-antigravity-dispatch` (PRIMARY Google leg), `triad-gemini-dispatch`
@@ -44,13 +46,18 @@ Read `docs/specs/2026-07-01-codex-led-triad-dispatch-design.md` §10 (distributi
 
 ---
 
-## 2. Spike D — DO THIS FIRST (the one unproven mechanism)
+## 2. Spike D — historical task brief, now resolved by fallback
 
 **Question:** can the **named repair subagents be SHIPPED in a Codex plugin AND
 still be spawned by name** by the leader? (Personal-scope `~/.codex/agents/*.toml`
 was already verified spawnable; PROJECT-scope `.codex/agents/` has open bug
 [#26408](https://github.com/openai/codex/issues/26408). Plugin-shipped is a
 THIRD, untested path.)
+
+**Current distribution decision:** plugin-shipped skills are used, but repair
+agents are installed into `~/.codex/agents/` by bootstrap because that
+personal-scope path has retained spawn-by-name evidence. See
+`docs/references/spike-d-plugin-agent-distribution-decision.md`.
 
 **How to spike (throwaway):**
 1. Package a MINIMAL plugin of this repo (skills + `agents/*.toml` + `bin/`).
@@ -106,8 +113,9 @@ verified; plugin-shipped skills need confirming against `codex plugin` docs.)
   `max_depth=1`.
 - **Codex plugin/marketplace exists:** `codex plugin {add,list,marketplace,remove}`;
   features `plugins` + `plugin_sharing` stable; cache `~/.codex/plugins/cache/`.
-- **Repair agents need web search** → the leader session must run `codex --search`
-  (subagents inherit it — verified). `--search` is TOP-LEVEL: `codex --search exec`.
+- **Repair agents need web search** → the leader session must start with
+  top-level Codex search enabled (subagents inherit it — verified). Do not shell
+  out to a second Codex CLI process from this repo.
 - **Classifier extension:** `~/.config/triad-codex-dispatch/classifier-patches.json`
   (per-cli keyed: `claude` / `gemini` / `antigravity`). Must be writable.
 - **Google-family = agy** (gemini individual tier is DEAD — IneligibleTierError →
@@ -123,11 +131,13 @@ verified; plugin-shipped skills need confirming against `codex plugin` docs.)
 ## 5. Open owner decisions (ask the human — do not guess)
 
 1. **Repair-agent distribution** — plugin-shipped vs bootstrap-into-`~/.codex/agents/`
-   (decided by Spike D's result; if both work, which is preferred?).
+   — decided for this distribution: bootstrap into `~/.codex/agents/` until
+   plugin-shipped named-agent spawnability has retained evidence.
 2. **Classifier path** — isolate `triad-codex-dispatch` + import old
    `triad-dispatch` gemini/agy patches (recommended) vs share the old path.
-3. **Keep or drop `codex_wrapper.py`** (Codex is the leader family — a leg wrapper
-   for the leader's own family is only needed for a fresh-Codex reviewer / `--task`).
+3. **Codex same-family leg** — decided for this distribution: do not ship a
+   `codex_wrapper.py` dispatch leg. Codex is the leader; fresh Codex review uses
+   `spawn_agent(fork_context=false)`.
 4. **Marketplace source** — internal git URL vs local-clone (closed network).
 5. **Plugin manifest path/format** — confirm the exact schema before committing.
 
@@ -140,7 +150,7 @@ verified; plugin-shipped skills need confirming against `codex plugin` docs.)
 - **Install flow**: on a clean shell, run `bootstrap.sh --check` and confirm every
   probe passes; then have a codex leader `$triad-claude-dispatch` a trivial prompt
   and confirm the `[wrapper] claude ok` path (needs claude auth).
-- **Regression**: `python3 -m pytest tests/` stays 15/15.
+- **Regression**: `python3 -m pytest tests/` stays green.
 
 ## 7. Guardrails
 

@@ -13,6 +13,12 @@ Agent SDK `structured-outputs`. Extraction date 2026-07-01.
 > is superseded by the `--cwd` + path-reference mechanism. (Adding `--add-dir`
 > passthrough remains a possible future enhancement if a leg must read files
 > outside `--cwd`.)
+>
+> **ERRATA (2026-07-02):** no-prompt Codex rules require the wrapper command's
+> first argv token to be an absolute launcher/check-out path. Dispatch skills
+> must not wrap the wrapper in `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`,
+> heredoc command substitution, redirection, or inline env assignment. Long
+> prompts use wrapper `--prompt-file /absolute/path`.
 
 This spec defines how the new **claude leg** is driven as a single-shot worker,
 mirroring the existing `gemini_wrapper.py` / `codex_wrapper.py` legs and reusing
@@ -58,8 +64,10 @@ claude -p '<INSTRUCTION>' \
   [--bare]
 ```
 
-- Deliver the **instruction via argv** (single-quoted heredoc, like the Codex
-  wrapper's `--prompt`) so Korean / emoji / `$vars` / backticks survive.
+- Deliver short instructions via wrapper `--prompt`; deliver long instructions
+  via wrapper `--prompt-file /absolute/path`. Do not use heredoc command
+  substitution in no-prompt dispatch commands because Codex command rules will
+  not match the wrapper prefix.
 - **Do NOT rely on pure piped stdin for the instruction.** Docs are ambiguous:
   piped stdin is treated as *additional context* when an argv prompt is present,
   and as the sole instruction only when used alone. For deterministic behavior
@@ -172,6 +180,10 @@ Run with `--output-format json`. Single top-level result object. Extractor reads
 - Wrapper `--pydantic module:Class` → generate JSON Schema → pass via
   `--json-schema '<schema>'` → read `.structured_output` → then **still
   Pydantic-validate locally** (defense in depth; mirrors the Codex/Gemini path).
+- The implemented wrapper rejects `--pydantic` unless
+  `TRIAD_ALLOW_PYDANTIC_IMPORT=1` is set, because loading a schema module imports
+  Python code and no-prompt dispatch may run the wrapper outside the Codex
+  sandbox.
 - Failure: `subtype == error_max_structured_output_retries` → schema fail (rc 66).
 - Supported schema features: `object/array/string/number/boolean/null`, `enum`,
   `const`, `required`, nested objects, `$ref`.

@@ -32,9 +32,11 @@ is deprecated (IneligibleTierError → Antigravity).
 
 ## Hard rules
 
-1. **Bash invocation only.** Run `gemini_wrapper.py` via a shell command. The
-   stderr `[wrapper] gemini <class> …` summary and the `run-log: <path>` line
-   only surface via Bash — never wrap the wrapper itself in a subagent.
+1. **Literal absolute-wrapper invocation.** Resolve `gemini_wrapper.py` once,
+   then run the absolute launcher/check-out path as the first argv token. Do
+   not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`, command
+   substitution, redirection, or inline env assignment; Codex command rules
+   match argv prefixes and those shell forms miss the no-prompt allowlist.
 2. **Path-based repair input.** Pass the run-log file *path* to the repair
    subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large stdout
    corrupt on inline embedding).
@@ -57,27 +59,43 @@ is deprecated (IneligibleTierError → Antigravity).
    (`spawn_agent` then continue; `wait_agent` + read the response file when you
    need the outcome). Skipping it is a silent regression that lets the same
    vendor error keep failing un-routed on every later call.
-7. **Read-only heavy-file: use `--sandbox read-only`, NEVER `--approval-mode plan`.**
-   Plan mode crashes the Node/V8 heap on heavy files (gemini-cli issues
-   #11321 / #18331 / #26588). `--sandbox read-only` routes through the
-   per-call Policy Engine (`--policy bin/policies/gemini-readonly.toml`), which
-   denies mutation + shell tools for that call only without the Node OOM.
+7. **Read-only calls: use `--sandbox read-only`, never `--approval-mode plan`.**
+   `plan` is not a wrapper option. It previously crashed the Node/V8 heap on
+   heavy files (gemini-cli issues #11321 / #18331 / #26588), so read-only now
+   routes through the per-call Policy Engine
+   (`--policy bin/policies/gemini-readonly.toml`), which denies mutation + shell
+   tools for that call only without the Node OOM.
+8. **No plan/yolo approval modes.** The wrapper argparse accepts only
+   `--approval-mode default|auto_edit`. `plan` is replaced by the per-call
+   read-only policy above, and `yolo` is not a permitted mode in this repo.
 
 ## Flow
 
 ### Step 1 — Build the wrapper invocation
 
-Single-quoted heredoc for the prompt body so Korean / emoji / `$vars` /
-backticks survive intact:
+Use an absolute wrapper path literally. Resolve it in a separate command if
+needed; do not combine resolution and execution with `&&`, pipes, shell
+substitution, or a shell wrapper. For short prompts, pass `--prompt` directly:
 
 ```bash
-gemini_wrapper.py \
-  --prompt "$(cat <<'PROMPT'
-<leader-prompt-verbatim>
-PROMPT
-)" \
+/Users/YOUR_USER/.local/bin/gemini_wrapper.py \
+  --prompt "Read _runs/reviews/<id>/packet.md and review it." \
   [--sandbox read-only|workspace-write] \
-  [--approval-mode default|auto_edit|plan|yolo] \
+  [--approval-mode default|auto_edit] \
+  [--model <name>] \
+  [--pydantic module:Class] \
+  [--skip-trust] \
+  [--cwd /absolute/path] \
+  [--timeout <seconds>]
+```
+
+For a long prompt, write a UTF-8 prompt file first and pass its absolute path:
+
+```bash
+/Users/YOUR_USER/.local/bin/gemini_wrapper.py \
+  --prompt-file /absolute/path/to/prompt.txt \
+  [--sandbox read-only|workspace-write] \
+  [--approval-mode default|auto_edit] \
   [--model <name>] \
   [--pydantic module:Class] \
   [--skip-trust] \
@@ -87,13 +105,16 @@ PROMPT
 
 Defaults: no `--sandbox` (no policy attached). `--sandbox read-only` attaches
 `bin/policies/gemini-readonly.toml` via the Policy Engine for that call only
-(`--policy` flag; see Hard rule 7 — never use `--approval-mode plan` for
-read-only on heavy files). `--sandbox workspace-write` = write-enabled
-code-agent. `--approval-mode default` (read auto, write/shell prompt user) is
-the argparse default. `--model` is free-form — no dated IDs in code; verify the
-exact accepted string against the business/Vertex tier; default = CLI Auto
-router. `--pydantic` drives structured output (validated,
-`structured_output` → local pydantic check).
+(`--policy` flag; see Hard rule 7 — `plan` is not a supported wrapper mode).
+`--sandbox workspace-write` = write-enabled code-agent. `--approval-mode
+default` (read auto, write/shell prompt user) is the argparse default;
+`auto_edit` is write-enabled and therefore conflicts with `--sandbox read-only`.
+`--approval-mode plan/yolo` is rejected by argparse.
+`--model` is free-form — no dated IDs in code; verify the exact accepted string
+against the business/Vertex tier; default = CLI Auto router. `--pydantic`
+drives structured output (validated,
+`structured_output` → local pydantic check), and requires
+`TRIAD_ALLOW_PYDANTIC_IMPORT=1` because it imports Python code.
 
 ### Step 2 — Run via Bash; capture rc, stdout, stderr
 
@@ -140,6 +161,10 @@ the output classification from the `[wrapper]` summary line.
 
 Verified mechanism (personal-scope named agent, spawnable by name). The leader
 spawns the agent, continues foreground work, then waits.
+The bootstrap-installed repair agent carries `default_permissions =
+"triad_repair"`: read the toolkit checkout, write only the classifier config and
+bounded `bin/_logs` IPC area, read Python/vendor executable paths needed for
+verification, and use network for verification.
 
 #### 5a. Extract the run-log path + derive the output path
 
@@ -170,7 +195,7 @@ Input:
     "attempts":  "<int 1-3>",
     "per_attempt_log": "<array of {n, hypothesis, source, patch, py_compile, rerun}>"
   },
-  "task": "Extract the literal error from the gemini envelope (stderr + error field) -> date-anchored web search -> add ONE entry to ~/.config/triad-codex-dispatch/classifier-patches.json (gemini envelope, key 'gemini') -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
+  "task": "Extract the literal error from the gemini envelope (stderr + error field) -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (gemini envelope, key 'gemini') -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
 }
 ```
 

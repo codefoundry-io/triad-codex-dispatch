@@ -1,4 +1,5 @@
 import importlib, os, sys
+import pytest
 sys.path.insert(0, "bin")
 
 def test_default_path_is_namespaced(monkeypatch):
@@ -13,3 +14,11 @@ def test_env_override_wins(monkeypatch, tmp_path):
     monkeypatch.setenv("TRIAD_CLASSIFIER_EXTENSION", str(target))
     c = importlib.reload(importlib.import_module("_common"))
     assert c._classifier_extension_path() == target
+
+
+def test_pydantic_import_requires_explicit_opt_in(monkeypatch):
+    pytest.importorskip("pydantic")
+    monkeypatch.delenv("TRIAD_ALLOW_PYDANTIC_IMPORT", raising=False)
+    c = importlib.reload(importlib.import_module("_common"))
+    with pytest.raises(PermissionError):
+        c.load_pydantic_class("json:JSONDecoder")

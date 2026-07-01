@@ -39,9 +39,11 @@ needs.
 
 ## Hard rules
 
-1. **Bash invocation only.** Run `antigravity_wrapper.py` via a shell command. The
-   stderr `[wrapper] antigravity <class> …` summary and the `run-log: <path>` line
-   only surface via Bash — never wrap the wrapper itself in a subagent.
+1. **Literal absolute-wrapper invocation.** Resolve `antigravity_wrapper.py`
+   once, then run the absolute launcher/check-out path as the first argv token.
+   Do not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`,
+   command substitution, redirection, or inline env assignment; Codex command
+   rules match argv prefixes and those shell forms miss the no-prompt allowlist.
 2. **Path-based repair input.** Pass the run-log file *path* to the repair
    subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large pty transcript
    corrupt on inline embedding).
@@ -71,15 +73,25 @@ needs.
 
 ### Step 1 — Build the wrapper invocation
 
-Single-quoted heredoc for the prompt body so Korean / emoji / `$vars` / backticks
-survive intact:
+Use an absolute wrapper path literally. Resolve it in a separate command if
+needed; do not combine resolution and execution with `&&`, pipes, shell
+substitution, or a shell wrapper. For short prompts, pass `--prompt` directly:
 
 ```bash
-antigravity_wrapper.py \
-  --prompt "$(cat <<'PROMPT'
-<leader-prompt-verbatim>
-PROMPT
-)" \
+/Users/YOUR_USER/.local/bin/antigravity_wrapper.py \
+  --prompt "Read _runs/reviews/<id>/packet.md and review it." \
+  [--sandbox read-only|workspace-write] \
+  [--model "Gemini 3.1 Pro (High)"] \
+  [--pydantic module:Class] \
+  [--cwd /absolute/path] \
+  [--timeout <seconds>]
+```
+
+For a long prompt, write a UTF-8 prompt file first and pass its absolute path:
+
+```bash
+/Users/YOUR_USER/.local/bin/antigravity_wrapper.py \
+  --prompt-file /absolute/path/to/prompt.txt \
   [--sandbox read-only|workspace-write] \
   [--model "Gemini 3.1 Pro (High)"] \
   [--pydantic module:Class] \
@@ -98,8 +110,9 @@ Flags:
 - `--model` — agy display-name string (e.g. `"Gemini 3.1 Pro (High)"`,
   `"Gemini 3.5 Flash (High)"`). Run `agy models` to list accepted strings. No
   dated model IDs in code.
-- `--pydantic` — `module:Class` spec; the wrapper appends a JSON-output instruction
-  to the prompt and validates the response (agy has no native schema mode).
+- `--pydantic` — `module:Class` spec; the wrapper appends a JSON-output
+  instruction to the prompt and validates the response (agy has no native schema
+  mode). Requires `TRIAD_ALLOW_PYDANTIC_IMPORT=1` because it imports Python code.
 - `--cwd` — absolute path; required with `--sandbox workspace-write`.
 - `--timeout` — seconds (default 600); the wrapper sets `--print-timeout` offset
   internally (`max(timeout - 10, 5)s`).
@@ -151,6 +164,10 @@ entry classify it `extraction-error` (not `ok`) → repair. So do not expect
 
 Verified mechanism (personal-scope named agent, spawnable by name): the leader
 spawns the agent, continues foreground work, then waits.
+The bootstrap-installed repair agent carries `default_permissions =
+"triad_repair"`: read the toolkit checkout, write only the classifier config and
+bounded `bin/_logs` IPC area, read Python/vendor executable paths needed for
+verification, and use network for verification.
 
 #### 5a. Extract the run-log path + derive the output path
 
@@ -181,7 +198,7 @@ Input:
     "attempts":  "<int 1-3>",
     "per_attempt_log": "<array of {n, hypothesis, source, patch, py_compile, rerun}>"
   },
-  "task": "Extract the literal error from the PTY transcript -> date-anchored web search -> add ONE entry to ~/.config/triad-codex-dispatch/classifier-patches.json (antigravity envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
+  "task": "Extract the literal error from the PTY transcript -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (antigravity envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
 }
 ```
 

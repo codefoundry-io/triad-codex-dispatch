@@ -1,7 +1,9 @@
 import os
+import shutil
 import stat
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -9,23 +11,25 @@ ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 
 
-def _fake_bin(tmp_path: Path, *names: str) -> Path:
+def _fake_bin(tmp_path: Path, *names: str, python_script: str | None = None) -> Path:
     bin_dir = tmp_path / "fake-bin"
     bin_dir.mkdir()
     for name in names:
         path = bin_dir / name
         if name == "python3":
-            path.write_text(
-                f"#!/usr/bin/env bash\nexec {sys.executable} \"$@\"\n",
-                encoding="utf-8",
-            )
+            body = python_script or f"exec {sys.executable} \"$@\""
+            path.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8")
         else:
             path.write_text(f"#!/usr/bin/env bash\necho '{name} fake 1.0'\n", encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return bin_dir
 
 
-def _make_repo_root(tmp_path: Path, executable_wrappers=True) -> Path:
+def _make_repo_root(
+    tmp_path: Path,
+    executable_wrappers=True,
+    real_agents=False,
+) -> Path:
     repo_root = tmp_path / "repo"
     bin_dir = repo_root / "bin"
     agents_dir = repo_root / "agents"
@@ -38,26 +42,37 @@ def _make_repo_root(tmp_path: Path, executable_wrappers=True) -> Path:
         wrapper = bin_dir / name
         wrapper.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
         wrapper.chmod(mode)
-    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        (agents_dir / f"{name}.toml").write_text(
-            f'name = "{name}"\ndescription = "{name}"\n',
-            encoding="utf-8",
-        )
+    if real_agents:
+        for path in (ROOT / "agents").glob("*.toml"):
+            shutil.copy2(path, agents_dir / path.name)
+    else:
+        for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
+            (agents_dir / f"{name}.toml").write_text(
+                f'name = "{name}"\ndescription = "{name}"\n',
+                encoding="utf-8",
+            )
     return repo_root
 
 
 def _run_bootstrap(
     tmp_path: Path,
     fake_names=("codex", "claude", "gemini", "agy"),
-    repo_root=ROOT,
+    repo_root=None,
+    pre_path=(),
     extra_path=(),
+    python_script=None,
+    env_overrides=None,
 ):
-    fake_bin = _fake_bin(tmp_path, *fake_names, "jq", "python3")
+    if repo_root is None:
+        repo_root = _make_repo_root(tmp_path, real_agents=True)
+    fake_bin = _fake_bin(tmp_path, *fake_names, "jq", "python3", python_script=python_script)
     launcher_bin = tmp_path / "launchers"
     launcher_bin.mkdir()
     python_bin = Path(sys.executable).parent
     extra = os.pathsep.join(str(p) for p in extra_path)
-    path_parts = [str(fake_bin), str(launcher_bin)]
+    path_parts = [str(fake_bin)]
+    path_parts.extend(str(p) for p in pre_path)
+    path_parts.append(str(launcher_bin))
     if extra:
         path_parts.append(extra)
     path_parts.extend([str(python_bin), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
@@ -70,6 +85,8 @@ def _run_bootstrap(
         "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_bin),
         "TRIAD_BOOTSTRAP_SKIP_AUTH": "1",
     }
+    if env_overrides:
+        env.update(env_overrides)
     result = subprocess.run(
         ["bash", str(BOOTSTRAP), "--check"],
         cwd=ROOT,
@@ -85,13 +102,41 @@ def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     home = Path(env["HOME"])
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    classifier_dir = Path(env["XDG_CONFIG_HOME"]) / "triad-codex-dispatch"
+    fake_bin = Path(env["PATH"].split(os.pathsep)[0]).resolve()
+    python_exe_dir = Path(sys.executable).resolve().parent
+    python_root = Path(sys.base_prefix).resolve()
+    python_prefix = Path(sys.prefix).resolve()
     for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        assert (home / ".codex" / "agents" / f"{name}.toml").is_file()
+        installed = home / ".codex" / "agents" / f"{name}.toml"
+        assert installed.is_file()
+        text = installed.read_text(encoding="utf-8")
+        assert "__TRIAD_REPO_ROOT__" not in text
+        assert "__TRIAD_CLASSIFIER_PATH__" not in text
+        assert "__TRIAD_CLASSIFIER_DIR__" not in text
+        assert "__TRIAD_PYTHON3__" not in text
+        assert "__TRIAD_PYTHON_READ_ROOTS__" not in text
+        assert "__TRIAD_VENDOR_READ_ROOTS__" not in text
+        assert str(repo_root) in text
+        assert str(classifier_dir / "classifier-patches.json") in text
+        data = tomllib.loads(text)
+        fs = data["permissions"]["triad_repair"]["filesystem"]
+        assert fs[str(repo_root)] == "read"
+        assert fs[str(repo_root / "bin" / "_logs")] == "write"
+        assert fs[str(classifier_dir)] == "write"
+        assert fs[str(python_exe_dir)] == "read"
+        assert fs[str(python_root)] == "read"
+        assert fs[str(python_prefix)] == "read"
+        assert fs[str(fake_bin)] == "read"
     assert (
         Path(env["XDG_CONFIG_HOME"])
         / "triad-codex-dispatch"
         / "classifier-patches.json"
     ).read_text(encoding="utf-8") == "{}\n"
+    assert (repo_root / "bin" / "_logs").is_dir()
+    assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
+    assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
 
 
 def test_check_warns_when_gemini_binary_is_missing(tmp_path):
@@ -112,8 +157,22 @@ def test_check_fails_when_required_binary_is_missing(tmp_path):
     assert "missing required binary: claude" in result.stderr
 
 
+def test_check_stops_before_install_when_python_version_fails(tmp_path):
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        python_script="exit 1",
+    )
+
+    assert result.returncode != 0
+    assert "python3 >= 3.12 required" in result.stderr
+    assert "required prerequisite checks failed" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
 def test_check_installs_executable_launcher_scripts(tmp_path):
-    result, _env, launcher_bin = _run_bootstrap(tmp_path)
+    result, env, launcher_bin = _run_bootstrap(tmp_path)
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
 
     assert result.returncode == 0, result.stderr + result.stdout
     for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
@@ -122,7 +181,7 @@ def test_check_installs_executable_launcher_scripts(tmp_path):
         assert os.access(launcher, os.X_OK)
         text = launcher.read_text(encoding="utf-8")
         assert "os.execv" in text
-        assert str(ROOT / "bin" / name) in text
+        assert str(repo_root / "bin" / name) in text
 
 
 def test_check_installs_launchers_when_repo_bin_on_path_but_not_executable(tmp_path):
@@ -134,8 +193,200 @@ def test_check_installs_launchers_when_repo_bin_on_path_but_not_executable(tmp_p
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert "launcher scripts installed in PATH" in result.stdout
+    assert "launcher scripts installed and active on PATH" in result.stdout
     for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
         launcher = launcher_bin / name
         assert launcher.is_file()
         assert os.access(launcher, os.X_OK)
+
+
+def test_check_fails_when_stale_wrapper_shadows_launcher(tmp_path):
+    stale_bin = tmp_path / "stale-bin"
+    stale_bin.mkdir()
+    for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        wrapper = stale_bin / name
+        wrapper.write_text("#!/usr/bin/env bash\necho stale\n", encoding="utf-8")
+        wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
+
+    result, _env, launcher_bin = _run_bootstrap(tmp_path, pre_path=(stale_bin,))
+
+    assert result.returncode != 0
+    assert "wrapper command is shadowed or stale on PATH" in result.stderr
+    for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        assert (launcher_bin / name).is_file()
+
+
+def test_check_rejects_relative_repo_root_override(tmp_path):
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_REPO_ROOT": "relative/repo"},
+    )
+
+    assert result.returncode != 0
+    assert "TRIAD_BOOTSTRAP_REPO_ROOT must be an absolute path" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_check_rejects_relative_classifier_override(tmp_path):
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_CLASSIFIER_EXTENSION": "relative/classifier.json"},
+    )
+
+    assert result.returncode != 0
+    assert "TRIAD_CLASSIFIER_EXTENSION must be an absolute path" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_check_rejects_relative_launcher_dir_override(tmp_path):
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": "relative/bin"},
+    )
+
+    assert result.returncode != 0
+    assert "TRIAD_BOOTSTRAP_BIN_DIR must be an absolute path" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_check_can_install_optional_codex_runtime_profile(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    profile = Path(env["HOME"]) / ".codex" / "triad-codex-dispatch.config.toml"
+    assert profile.is_file()
+    text = profile.read_text(encoding="utf-8")
+    assert "triad-codex-dispatch managed runtime profile" in text
+    data = tomllib.loads(text)
+    assert "Explicit external-CLI consent profile" in text
+    assert data["approval_policy"] == "on-request"
+    assert data["approvals_reviewer"] == "user"
+    assert data["sandbox_mode"] == "workspace-write"
+    sandbox = data["sandbox_workspace_write"]
+    assert sandbox["network_access"] is True
+    roots = sandbox["writable_roots"]
+    assert str(Path(env["XDG_CONFIG_HOME"]) / "triad-codex-dispatch") in roots
+    assert str(Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]) / "bin" / "_logs") in roots
+    assert not any(".codex/agents" in root for root in roots)
+    assert not any(".local/bin" in root for root in roots)
+    assert "Codex runtime profile installed" in result.stdout
+
+
+def test_check_can_install_runtime_profile_with_never_policy(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "never",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    profile = Path(env["HOME"]) / ".codex" / "triad-codex-dispatch.config.toml"
+    data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    assert data["approval_policy"] == "never"
+
+
+def test_check_rejects_invalid_runtime_profile_approval_policy(tmp_path):
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "danger-full-access",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "invalid TRIAD_CODEX_PROFILE_APPROVAL_POLICY" in result.stderr
+
+
+def test_check_refuses_to_overwrite_unmanaged_codex_runtime_profile(tmp_path):
+    profile = tmp_path / "home" / ".codex" / "triad-codex-dispatch.config.toml"
+    profile.parent.mkdir(parents=True)
+    profile.write_text('approval_policy = "never"\n', encoding="utf-8")
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite unmanaged Codex profile" in result.stderr
+    assert profile.read_text(encoding="utf-8") == 'approval_policy = "never"\n'
+
+
+def test_check_can_install_optional_codex_command_rules(tmp_path):
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    rules = Path(env["HOME"]) / ".codex" / "rules" / "triad-codex-dispatch.rules"
+    assert rules.is_file()
+    text = rules.read_text(encoding="utf-8")
+    assert "triad-codex-dispatch managed command rules" in text
+    assert "Codex command rules installed" in result.stdout
+    assert 'decision = "allow"' in text
+    assert "bash -lc" in text
+    assert "zsh -lc" in text
+    assert "python3 -c" in text
+    assert str(launcher_bin / "claude_wrapper.py") in text
+    assert str(repo_root / "bin" / "claude_wrapper.py") in text
+    assert str(launcher_bin / "antigravity_wrapper.py") in text
+    assert str(repo_root / "bin" / "antigravity_wrapper.py") in text
+    assert str(launcher_bin / "gemini_wrapper.py") in text
+    assert str(repo_root / "bin" / "gemini_wrapper.py") in text
+    assert f'pattern = [["{launcher_bin / "claude_wrapper.py"}"]]' in text
+    assert f'pattern = [["{repo_root / "bin" / "claude_wrapper.py"}"]]' not in text
+    assert 'pattern = [["claude_wrapper.py"' not in text
+    assert 'pattern = [["gemini_wrapper.py"' not in text
+    assert 'pattern = [["antigravity_wrapper.py"' not in text
+    assert 'pattern = ["python3"]' not in text
+    assert 'pattern = [["python3"]' not in text
+    assert "pattern = [[\"/usr/bin/env\"" not in text
+    assert "pattern = [[\"env\"" not in text
+    assert "python3 " in text
+    assert "/usr/bin/env python3 " in text
+
+    launcher_text = (launcher_bin / "claude_wrapper.py").read_text(encoding="utf-8")
+    assert launcher_text.startswith("#!")
+    assert "TRIAD_REQUIRE_PINNED_VENDOR" in launcher_text
+    assert "TRIAD_CLAUDE_BIN" in launcher_text
+
+
+def test_check_refuses_to_overwrite_unmanaged_codex_command_rules(tmp_path):
+    rules = tmp_path / "home" / ".codex" / "rules" / "triad-codex-dispatch.rules"
+    rules.parent.mkdir(parents=True)
+    rules.write_text('prefix_rule(pattern = ["python3"], decision = "allow")\n', encoding="utf-8")
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1"},
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite unmanaged Codex rules file" in result.stderr
+    assert rules.read_text(encoding="utf-8") == (
+        'prefix_rule(pattern = ["python3"], decision = "allow")\n'
+    )
+
+
+def test_check_rejects_invalid_codex_rules_name(tmp_path):
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
+            "TRIAD_CODEX_RULES_NAME": "../default.rules",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "invalid TRIAD_CODEX_RULES_NAME" in result.stderr

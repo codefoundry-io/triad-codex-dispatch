@@ -51,11 +51,11 @@ EXIT_CLI_FAIL = 1
 EXIT_TIMEOUT = 2
 EXIT_ARG_ERROR = 3
 EXIT_BINARY_MISSING = 4
-EXIT_RATE_GIVE_UP = 64   # transient retry exhausted → Sonnet repair sub-agent
-EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env → user escalate
+EXIT_RATE_GIVE_UP = 64   # transient retry exhausted -> Codex repair subagent
+EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env -> user escalate
 EXIT_SCHEMA_FAIL = 66    # pydantic validation failed even after 1 retry
 EXIT_SCHEMA_REJECTED = 67  # codex refused --output-schema at submit (massage/strict-rule drift)
-EXIT_FANOUT_PARTIAL = 68   # --task fan-out incomplete (partial / zero / fewer-than-requested subagents) — surfaced, never silent
+EXIT_FANOUT_PARTIAL = 68   # --task fan-out incomplete (partial / zero / fewer-than-requested subagents) - surfaced, never silent
 EXIT_TASK_BLOCKED = 69   # --task code: codex self-reported BLOCKED / NEEDS_CONTEXT (no edit to commit)
 
 
@@ -273,11 +273,112 @@ def log(msg: str) -> None:
 
 
 def require_binary(name: str) -> str:
+    env_name = {
+        "claude": "TRIAD_CLAUDE_BIN",
+        "agy": "TRIAD_AGY_BIN",
+        "gemini": "TRIAD_GEMINI_BIN",
+    }.get(name)
+    if env_name:
+        pinned = os.environ.get(env_name)
+        if pinned:
+            path = Path(pinned).expanduser()
+            if not path.is_absolute():
+                log(f"{env_name} must be an absolute path")
+                sys.exit(EXIT_BINARY_MISSING)
+            try:
+                resolved = path.resolve(strict=True)
+            except OSError:
+                log(f"{env_name} does not resolve to an executable: {path}")
+                sys.exit(EXIT_BINARY_MISSING)
+            if not resolved.is_file() or not os.access(resolved, os.X_OK):
+                log(f"{env_name} is not executable: {resolved}")
+                sys.exit(EXIT_BINARY_MISSING)
+            return str(resolved)
+        if os.environ.get("TRIAD_REQUIRE_PINNED_VENDOR") == "1":
+            log(f"{env_name} is required by the bootstrap launcher")
+            sys.exit(EXIT_BINARY_MISSING)
+
     path = shutil.which(name)
     if not path:
         log(f"binary '{name}' not found on PATH")
         sys.exit(EXIT_BINARY_MISSING)
-    return path
+    return str(Path(path).resolve())
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def runtime_allowed_roots() -> list[Path]:
+    raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
+    if not raw:
+        return []
+    roots = []
+    for item in raw.split(os.pathsep):
+        if not item:
+            continue
+        path = Path(item).expanduser()
+        if not path.is_absolute():
+            raise ValueError(
+                "TRIAD_WRAPPER_ALLOWED_ROOTS entries must be absolute paths"
+            )
+        roots.append(path.resolve(strict=False))
+
+    result: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        text = str(root)
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(root)
+    return result
+
+
+def _ensure_within_runtime_roots(path: Path, label: str) -> Path:
+    resolved = path.resolve(strict=True)
+    roots = runtime_allowed_roots()
+    if not roots:
+        raise ValueError(
+            "TRIAD_WRAPPER_ALLOWED_ROOTS must be set before using "
+            f"{label}; set it to the trusted workspace root"
+        )
+    if not any(_path_is_within(resolved, root) for root in roots):
+        allowed = ", ".join(str(root) for root in roots)
+        raise ValueError(f"{label} must be under an allowed runtime root: {allowed}")
+    return resolved
+
+
+def load_prompt_text(prompt: Optional[str], prompt_file: Optional[str]) -> str:
+    """Load the wrapper prompt from argv text or an absolute UTF-8 file."""
+    if prompt is not None:
+        return prompt
+    if not prompt_file:
+        raise ValueError("either --prompt or --prompt-file is required")
+    path = Path(prompt_file).expanduser()
+    if not path.is_absolute():
+        raise ValueError("--prompt-file must be an absolute path")
+    resolved = _ensure_within_runtime_roots(path, "--prompt-file")
+    if not resolved.is_file():
+        raise ValueError(f"--prompt-file must be a file: {resolved}")
+    return resolved.read_text(encoding="utf-8")
+
+
+def validate_wrapper_cwd(cwd: Optional[str]) -> Optional[str]:
+    """Validate a vendor cwd without expanding the no-prompt trust boundary."""
+    if not cwd:
+        return None
+    path = Path(cwd).expanduser()
+    if not path.is_absolute():
+        raise ValueError("--cwd must be an absolute path")
+    resolved = _ensure_within_runtime_roots(path, "--cwd")
+    if not resolved.is_dir():
+        raise ValueError(f"--cwd must be an existing directory: {resolved}")
+    return str(resolved)
 
 
 def _classifier_extension_path() -> Path:
@@ -441,6 +542,11 @@ def load_pydantic_class(spec: str):
     """
     if not PYDANTIC_OK:
         raise RuntimeError("pydantic not installed — `pip3 install --user pydantic`")
+    if os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
+        raise PermissionError(
+            "--pydantic imports Python code outside the Codex sandbox; set "
+            "TRIAD_ALLOW_PYDANTIC_IMPORT=1 only for trusted schema modules"
+        )
     if ":" in spec:
         mod_path, cls_name = spec.rsplit(":", 1)
     else:

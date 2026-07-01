@@ -27,10 +27,24 @@ codex --search
 ```
 
 Do not use `danger-full-access`, `bypassPermissions`, or yolo-style permission
-modes for this toolkit. Repair agents may only write:
+modes for this toolkit. Bootstrap installs shipped repair agents with
+`default_permissions = "triad_repair"` so they can read the toolkit checkout,
+write only the classifier config and bounded run-log IPC area, and use network
+for repair verification. The profile uses bootstrap-injected absolute filesystem
+grants for the toolkit checkout, classifier config, bounded run-log IPC area,
+Python runtime, and resolved vendor CLI executable directories, not
+`:workspace_roots`, so it does not expand into the caller workspace. Repair
+verification strips the original wrapper `--cwd` and runs from the toolkit
+checkout; it checks classifier routing, not caller-repo behavior.
+They may only write:
 
 - `~/.config/triad-codex-dispatch/classifier-patches.json`
 - the requested `<run_log>.repair.json` response file
+
+Classifier patch edits must use the adjacent advisory lock file. Runtime
+artifacts under `bin/_logs/<cli>/` are bounded by the wrapper, but normal
+dispatch should still remove the run log and matching `.repair.json` after the
+repair branch is handled.
 
 Run before relying on the toolkit on a new machine:
 

@@ -2,6 +2,9 @@
 # Mode is read from the FAKE_MODE env var so the wrapper (which owns the argv) needn't pass it.
 import json, os, sys
 def main():
+    argv_file = os.environ.get("ARGV_FILE")
+    if argv_file:
+        open(argv_file, "w", encoding="utf-8").write("\n".join(sys.argv[1:]))
     mode = os.environ.get("FAKE_MODE", "success")   # success|is_error|structured|empty
     if mode == "success":
         print(json.dumps({"type":"result","subtype":"success","is_error":False,"result":"FAKE-OK"}))

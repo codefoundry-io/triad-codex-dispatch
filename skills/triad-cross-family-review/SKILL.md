@@ -22,22 +22,34 @@ same packet catch failure modes a single family (or the author) would miss.
 ## The three reviewers
 
 1. **claude** — via `triad-claude-dispatch`, `--sandbox read-only` (never let a
-   reviewer mutate the tree). `--reasoning high`.
+   reviewer mutate the tree). Use max-depth review settings:
+   `--reasoning xhigh`.
 2. **Google family** — via `triad-antigravity-dispatch` (agy, PRIMARY) or, for a
    business-tier gemini account, `triad-gemini-dispatch`. `--sandbox read-only`.
    Runtime selection: `TRIAD_GOOGLE_REVIEW_CLI` env (`antigravity` | `gemini`),
    else agy, else gemini. If neither Google leg is available, log it (NOT an
-   error) and run with the remaining two families.
+   error) and run with the remaining two families. For agy review, pass
+   `--model "${TRIAD_GOOGLE_REVIEW_MODEL:-Gemini 3.1 Pro (High)}"` when that
+   model is available; if it is not available, log the fallback instead of
+   inventing a model name. For business-tier gemini, pass an owner-verified
+   `TRIAD_GOOGLE_REVIEW_MODEL` when configured; otherwise use the CLI default and
+   log that the business-tier model is unpinned.
 3. **codex (fresh)** — a FRESH codex reviewer for independence: use Codex
    multi-agent `spawn_agent` to start a fresh subagent with the same packet,
    produced and saved BEFORE it sees the other legs' outputs. The leader does
    NOT review in its own thread (its context is polluted by having
-   authored/orchestrated the change).
+   authored/orchestrated the change). Give the reviewer an explicit deep,
+   adversarial prompt ("think as hard as you can; assume a subtle coverage gap is
+   present") because there is no separate CLI reasoning flag on `spawn_agent`.
 
 ## Hard rules
 
 1. **Read-only reviewers.** Every leg is dispatched `--sandbox read-only`. A
    reviewer that edits the tree is a bug.
+   The reviewer prompt MUST also say: "Do NOT run scripts/tests, spawn
+   subprocesses, invoke vendor CLIs, or modify files; review by reading the packet
+   and referenced files only." This avoids hangs and keeps reviewers from
+   live-running the code under review.
 2. **Independence before consolidation.** Collect all three verdicts BEFORE the
    leader reasons across them. Do not feed one reviewer another's output. The
    fresh-codex verdict is written to a file before the leader reads any leg.
@@ -54,9 +66,10 @@ same packet catch failure modes a single family (or the author) would miss.
    inside the dispatch `--prompt`** (a short instruction — "Read
    `_runs/reviews/<id>/packet.md` and review it") and running with `--cwd
    <repo-root>` so the read-only leg's Read tool can open it. Keep the `--prompt`
-   SHORT — a path, NEVER the packet's content (argv has an OS size limit; the
-   claude/gemini/agy wrappers pass the prompt as an argv, not stdin). Never
-   inline a large diff into a dispatch prompt.
+   SHORT — a path, NEVER the packet's content. Never inline a large diff into a
+   dispatch prompt. The leg skills must invoke wrappers as literal absolute
+   wrapper commands; do not use heredoc command substitution, `bash -lc`,
+   `zsh -lc`, `python3`, or `/usr/bin/env` for no-prompt dispatch.
 6. **Fresh Codex is subagent-only.** The Codex-family reviewer MUST be spawned
    with the multi-agent `spawn_agent` tool using `fork_context=false`. Do not
    shell out to a second Codex CLI process from this repo. If `spawn_agent` is
@@ -74,20 +87,26 @@ paths), a 2–3 line intent, and the 2–5 decisions you most want scrutinized.
 Fan out — each gets the same packet path and the same framing prompt:
 
 > "Review the change in `<packet-path>`. Frame every doubt as a QUESTION about a
-> specific decision (file:line). Do not fix anything. List blocking questions
-> (merge-stoppers) separately from minor ones. End with SAFE / NOT-SAFE and, if
-> NOT-SAFE, the blocking questions."
+> specific decision (file:line). Do not fix anything. Do NOT run scripts/tests,
+> spawn subprocesses, invoke vendor CLIs, or modify files; review by reading the
+> packet and referenced files only. List blocking questions (merge-stoppers)
+> separately from minor ones. End with SAFE / NOT-SAFE and, if NOT-SAFE, the
+> blocking questions."
 
-- claude leg: `triad-claude-dispatch` — `--sandbox read-only --reasoning high
+- claude leg: `triad-claude-dispatch` — `--sandbox read-only --reasoning xhigh
   --cwd <repo-root>`; the packet path is referenced in the prompt (the leg Reads
   it under read-only).
 - Google leg: `triad-antigravity-dispatch` (or `triad-gemini-dispatch`) —
-  `--sandbox read-only --cwd <repo-root>`. agy web tools are fine (it may check
-  current docs).
+  `--sandbox read-only --cwd <repo-root>`. For agy, prefer `--model "Gemini 3.1
+  Pro (High)"` (or `TRIAD_GOOGLE_REVIEW_MODEL`) after verifying the model exists;
+  agy web tools are fine (it may check current docs).
 - fresh codex: use multi-agent `spawn_agent` with `fork_context=false` so the
   reviewer starts from a fresh context. Tell it to read the packet path, not the
-  other reviewers' outputs, and to write its verdict to
+  other reviewers' outputs, to reason deeply/adversarially, and to write its
+  verdict to
   `_runs/reviews/<id>/codex-verdict.md` BEFORE the leader reads the other two.
+  Call `wait_agent` for that spawned reviewer before reading
+  `codex-verdict.md`; reading the file before the wait completes is a race.
 
 ### Step 3 — Consolidate (leader, after all three land)
 

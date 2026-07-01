@@ -1,0 +1,87 @@
+# Copy this template into ~/.codex/rules/triad-codex-dispatch.rules, or run
+# TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 scripts/bootstrap.sh --check to generate
+# the same rules with user-specific absolute paths.
+#
+# Before copying manually, replace:
+# - /path/to/launcher-dir with your absolute TRIAD_BOOTSTRAP_BIN_DIR
+#   (default: /Users/YOUR_USER/.local/bin)
+# - /path/to/triad-codex-dispatch with the checkout used by bootstrap
+# - /path/to/workspace with the trusted workspace root used for prompt files and --cwd
+#
+# No-prompt dispatch requires literal argv whose first token is the absolute
+# bootstrap launcher path. Do not add bare wrapper names, checkout bin/*.py
+# paths, python3, env, bash -lc, or zsh -lc as allowed patterns.
+#
+# See:
+# Expected: matchedRules contains triad-codex-dispatch allow rule.
+# codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- /path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only
+# codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- /path/to/launcher-dir/claude_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only
+# Expected: matchedRules is empty.
+# codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- claude_wrapper.py --prompt hi --sandbox read-only
+# codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- /path/to/triad-codex-dispatch/bin/claude_wrapper.py --prompt hi --sandbox read-only
+# codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- python3 /path/to/triad-codex-dispatch/bin/gemini_wrapper.py --prompt hi --sandbox read-only
+# codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- zsh -lc "claude_wrapper.py --prompt hi"
+
+prefix_rule(
+    pattern = [[
+        "/path/to/launcher-dir/claude_wrapper.py",
+    ]],
+    decision = "allow",
+    justification = "Allow authenticated triad Claude wrapper commands outside the sandbox.",
+    match = [
+        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only",
+        "/path/to/launcher-dir/claude_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
+        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only --reasoning xhigh",
+        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox workspace-write --cwd /path/to/workspace",
+    ],
+    not_match = [
+        "claude_wrapper.py --prompt hi --sandbox read-only",
+        "/path/to/triad-codex-dispatch/bin/claude_wrapper.py --prompt hi --sandbox read-only",
+        "bash -lc claude_wrapper.py --prompt hi",
+        "zsh -lc claude_wrapper.py --prompt hi",
+        "python3 /path/to/triad-codex-dispatch/bin/claude_wrapper.py --prompt hi --sandbox read-only",
+        "/usr/bin/env python3 /path/to/triad-codex-dispatch/bin/claude_wrapper.py --prompt hi --sandbox read-only",
+    ],
+)
+
+prefix_rule(
+    pattern = [[
+        "/path/to/launcher-dir/antigravity_wrapper.py",
+    ]],
+    decision = "allow",
+    justification = "Allow authenticated triad Antigravity wrapper commands outside the sandbox.",
+    match = [
+        "/path/to/launcher-dir/antigravity_wrapper.py --prompt hi --sandbox read-only",
+        "/path/to/launcher-dir/antigravity_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
+        "/path/to/launcher-dir/antigravity_wrapper.py --prompt hi --sandbox read-only --model Gemini 3.1 Pro (High)",
+    ],
+    not_match = [
+        "antigravity_wrapper.py --prompt hi --sandbox read-only",
+        "/path/to/triad-codex-dispatch/bin/antigravity_wrapper.py --prompt hi --sandbox read-only",
+        "bash -lc antigravity_wrapper.py --prompt hi",
+        "zsh -lc antigravity_wrapper.py --prompt hi",
+        "python3 /path/to/triad-codex-dispatch/bin/antigravity_wrapper.py --prompt hi --sandbox read-only",
+        "/usr/bin/env python3 /path/to/triad-codex-dispatch/bin/antigravity_wrapper.py --prompt hi --sandbox read-only",
+    ],
+)
+
+prefix_rule(
+    pattern = [[
+        "/path/to/launcher-dir/gemini_wrapper.py",
+    ]],
+    decision = "allow",
+    justification = "Allow authenticated triad Gemini business-tier wrapper commands outside the sandbox.",
+    match = [
+        "/path/to/launcher-dir/gemini_wrapper.py --prompt hi --sandbox read-only",
+        "/path/to/launcher-dir/gemini_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
+        "/path/to/launcher-dir/gemini_wrapper.py --prompt hi --sandbox workspace-write --cwd /path/to/workspace --approval-mode auto_edit",
+    ],
+    not_match = [
+        "gemini_wrapper.py --prompt hi --sandbox read-only",
+        "/path/to/triad-codex-dispatch/bin/gemini_wrapper.py --prompt hi --sandbox read-only",
+        "bash -lc gemini_wrapper.py --prompt hi",
+        "zsh -lc gemini_wrapper.py --prompt hi",
+        "python3 /path/to/triad-codex-dispatch/bin/gemini_wrapper.py --prompt hi --sandbox read-only",
+        "/usr/bin/env python3 /path/to/triad-codex-dispatch/bin/gemini_wrapper.py --prompt hi --sandbox read-only",
+    ],
+)

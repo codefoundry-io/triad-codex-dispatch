@@ -25,9 +25,6 @@ triad-codex-dispatch/
     gemini_wrapper.py                    # reused verbatim initially
     antigravity_wrapper.py               # reused verbatim initially
     claude_wrapper.py                    # new
-    claude-daily-check.sh                # new drift probe
-    gemini-daily-check.sh                # reused/adapted docs text only
-    agy-daily-check.sh                   # reused/adapted docs text only
   skills/
     triad-claude-dispatch/SKILL.md       # new Codex runbook
     triad-gemini-dispatch/SKILL.md       # adapted from Claude skill
@@ -48,7 +45,9 @@ triad-codex-dispatch/
   tests/
     fixtures/fake_claude.py
     test_claude_wrapper.py
-    test_classifier_extension.py
+    test_classifier_path.py
+    test_docs_constraints.py
+    test_log_cleanup.py
 ```
 
 Do not ship `codex_wrapper.py` as a dispatch leg in the main path. Codex is now
@@ -121,7 +120,7 @@ Keep the JSON schema exactly as-is. Add a `claude` top-level key. Default to a n
 ~/.config/triad-codex-dispatch/classifier-patches.json
 ```
 
-Keep `TRIAD_CLASSIFIER_EXTENSION` override. Provide a migration script that can import existing `gemini` and `antigravity` patches from `~/.config/triad-dispatch/classifier-patches.json`.
+Keep `TRIAD_CLASSIFIER_EXTENSION` override. A migration script that imports existing `gemini` and `antigravity` patches from `~/.config/triad-dispatch/classifier-patches.json` is future work unless the owner explicitly requests it.
 
 Owner decision: share the old path for cross-tool learning, or isolate paths to avoid one repo’s repair agent changing the other repo’s behavior. I recommend isolation plus import.
 
@@ -147,7 +146,10 @@ Ship as a Codex plugin with `.codex-plugin/plugin.json` and a marketplace entry.
 3. install from `/plugins` or preconfigure marketplace policy.
 4. run `scripts/bootstrap.sh --check` to verify `codex`, `claude`, `gemini`, `agy`, Python, `jq`, auth, PATH, and writable classifier path.
 
-For locked-down fleets, publish repo marketplace metadata and admin `requirements.toml` allowing only the internal marketplace source. If plugin install does not expose `bin/` on PATH, bootstrap should symlink wrappers into `~/.local/bin` or install a small launcher.
+For locked-down fleets, publish repo marketplace metadata and admin
+`requirements.toml` allowing only the internal marketplace source. If plugin
+install does not expose `bin/` on PATH, bootstrap installs small launcher files;
+do not ship symlinks as artifacts.
 
 ## Phased Build Order
 

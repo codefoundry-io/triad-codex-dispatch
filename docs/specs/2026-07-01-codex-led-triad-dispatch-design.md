@@ -39,8 +39,9 @@ that co-housing is not worth the complexity.
 The riskiest element (the whole repair loop depends on it). Spike on this
 machine (codex-cli 0.142.4), evidence in `docs/references/spike-evidence-*`:
 
-- A `codex --search exec` leader **spawned a personal-scope named agent**
-  (`~/.codex/agents/spike-repair.toml`) **by name** (`collab: SpawnAgent` →
+- A Codex leader session started with top-level search enabled **spawned a
+  personal-scope named agent** (`~/.codex/agents/spike-repair.toml`) **by name**
+  (`collab: SpawnAgent` →
   "Spawn returned agent id … for the named `spike-repair` role"), **waited**
   (`collab: Wait`), and the subagent **did a web search** (`web_search_used:true`,
   correct fact) and **wrote a JSON result file** the leader read back.
@@ -54,13 +55,14 @@ machine (codex-cli 0.142.4), evidence in `docs/references/spike-evidence-*`:
   read `<run_log>.repair.json`) — a clean mirror of Claude's
   `Agent(subagent_type, run_in_background)` + file-IO contract. Codex-family
   work in this repo uses Codex subagents, not a second Codex CLI process.
-- **Caveat (open):** proven at **personal scope**. Open GitHub bugs
+- **Caveat:** proven at **personal scope**. Open GitHub bugs
   ([#14579](https://github.com/openai/codex/issues/14579),
   [#26408](https://github.com/openai/codex/issues/26408),
-  [#19399](https://github.com/openai/codex/issues/19399)) about **project-scope
-  / plugin-shipped** named agents not being spawnable did NOT reproduce here, but
-  we distribute via a plugin → **§11 Spike D** must confirm plugin-shipped agents
-  register as spawnable named agents.
+  [#19399](https://github.com/openai/codex/issues/19399)) cover related
+  discovery problems. The retained-evidence supported distribution path is
+  personal scope, so bootstrap installs repair agents into `~/.codex/agents/`.
+  See `docs/references/spike-d-plugin-agent-distribution-decision.md` for the
+  plugin-cache evidence boundary.
 
 ### 2.2 Codex skills — procedural runbooks, portable
 
@@ -82,15 +84,13 @@ interface, dependencies; explicit invocation via `$skill`.
 features `plugins` + `plugin_sharing` are stable/on; admins can restrict sources
 via `requirements.toml`.
 
-> **Spike D result (2026-07-01):** the manifest path is
+> **Spike D distribution decision (2026-07-01):** the manifest path is
 > `.codex-plugin/plugin.json` and the repo marketplace path is
 > `.agents/plugins/marketplace.json`, confirmed against the current Codex manual,
 > `codex plugin --help`, and a real local install. Plugin-shipped skills work
-> through a plugin-root `skills/` package mirror. Plugin-shipped repair agent
-> TOMLs are copied into the plugin cache, but a fresh `codex --search exec`
-> leader could not spawn `claude-wrapper-repair` by name
-> (`unknown agent_type 'claude-wrapper-repair'`). Therefore bootstrap installs
-> `agents/*.toml` into `~/.codex/agents/` personal scope.
+> through a plugin-root `skills/` package mirror. Repair agents are not run from
+> the plugin cache; bootstrap installs `agents/*.toml` into `~/.codex/agents/`,
+> the retained-evidence verified personal scope.
 
 ### 2.4 Claude leg (`claude -p`) — confirmed
 
@@ -100,8 +100,8 @@ structured output → `.structured_output`; **no `--sandbox` flag** — read-onl
 `--permission-mode dontAsk --allowedTools "Read,Glob,Grep"`; web search opt-in
 via `--allowedTools WebSearch,WebFetch`; `--effort {low,medium,high,xhigh,max}`;
 model via aliases only; **classify from the JSON envelope**, not exit code
-(claude has no documented exit-code taxonomy). `--search` on codex is TOP-LEVEL
-(`codex --search exec …`), already handled correctly by the source wrapper.
+(claude has no documented exit-code taxonomy). Search for the Codex leader is a
+top-level session option and is inherited by repair subagents.
 
 ---
 
@@ -156,13 +156,9 @@ triad-codex-dispatch/
     _common.py              # ADAPTED: namespaced classifier path + claude envelope handling
     _pty.py                 # reused verbatim
     _agy_settings.py        # reused verbatim
-    codex_tasks.py          # reused IFF codex `--task` legs are kept (else drop)
     gemini_wrapper.py       # reused; DEPRECATED leg (gemini individual tier dead — §3a); non-default
     antigravity_wrapper.py  # reused — PRIMARY Google-family leg (agy); read-only via per-call --sandbox (§3a)
     claude_wrapper.py       # NEW  (claude -p single-shot; see references/claude-leg-spec.md)
-    claude-daily-check.sh   # NEW  drift probe (mirror gemini/agy daily-check)
-    gemini-daily-check.sh   # reused
-    agy-daily-check.sh      # reused
   .agents/skills/           # Codex SKILL.md runbooks — MUST live here (VERIFIED §4a):
     triad-claude-dispatch/SKILL.md        # NEW
     triad-gemini-dispatch/SKILL.md        # ADAPTED (Codex leader)
@@ -184,13 +180,16 @@ triad-codex-dispatch/
   tests/
     fixtures/fake_claude.py               # NEW fake CLI for hermetic wrapper tests
     test_claude_wrapper.py                # NEW
-    test_classifier_extension.py          # reused/adapted
+    test_classifier_path.py               # namespaced classifier path
+    test_docs_constraints.py              # distribution/skill guardrails
+    test_log_cleanup.py                   # bounded run-log/audit cleanup
   docs/                     # this spec + references
 ```
 
-`codex_wrapper.py` is **not** a dispatch leg here (Codex is the leader family).
-Keep it only if a fresh-Codex-subagent reviewer or a codex `--task` path reuses
-it; otherwise omit.
+`codex_wrapper.py` and `codex_tasks.py` are **not** dispatch legs here (Codex is
+the leader family). Fresh Codex review uses `spawn_agent(fork_context=false)` so
+the leader gets an independent Codex subagent perspective, not a nested Codex CLI
+worker.
 
 ## 4a. Skill discovery — VERIFIED with real codex (2026-07-01, tmux)
 
@@ -221,11 +220,10 @@ A thin `_common.run_cli_with_retry("claude", …)` wrapper mirroring
 effort mapping, JSON-envelope extraction, and the full classification table live
 in **`docs/references/claude-leg-spec.md`**. Highlights:
 
-- Instruction via argv (single-quoted heredoc). The wrapper passes the prompt as
-  an **argv** (not stdin), so keep it short (argv has an OS `ARG_MAX` limit);
-  large packets: reference the file PATH in the prompt and set `--cwd` so the
-  read-only leg's Read tool opens it (the leg reads the file itself — the wrapper
-  has no `--add-dir`).
+- Instruction via `--prompt` for short path prompts, or `--prompt-file
+  /absolute/path` for long prompts. Dispatch skills invoke the wrapper as a
+  literal absolute wrapper path; heredoc command substitution is not used because
+  it prevents Codex command rules from matching the wrapper prefix.
 - `--sandbox read-only` ⇒ `--permission-mode dontAsk --allowedTools "Read,Glob,Grep"`;
   `--search` ⇒ add `WebSearch,WebFetch`. `bypassPermissions` banned at argparse.
 - `--reasoning` ⇒ claude `--effort`; `--model` alias passthrough (no dated IDs in
@@ -240,8 +238,8 @@ in **`docs/references/claude-leg-spec.md`**. Highlights:
 Each dispatch skill keeps the source toolkit's operational pattern, re-expressed
 as a Codex `SKILL.md`:
 
-1. Invoke the wrapper **via Bash only** (stderr `[wrapper] <cli> <class> …`
-   summary + `run-log:` path surface only through Bash).
+1. Invoke the wrapper as a **literal absolute-wrapper command** so user-layer
+   Codex command rules can match the argv prefix.
 2. Read the **last** `[wrapper]` line; extract classification.
 3. Branch on the fixed token set.
 4. On `unknown` / `extraction-error` / `timeout` → **spawn the repair named
@@ -262,10 +260,24 @@ Per §2.1 the mechanism is proven. Each repair agent is a named TOML subagent:
   `developer_instructions` (the per-attempt workflow: extract literal error →
   date-anchored web search → patch the classifier extension JSON → validate JSON
   → re-run with `--repair-mode`; 3-attempt ceiling; file-based response),
-  `sandbox_mode = "workspace-write"` scoped to the run-log dir + the classifier
-  JSON only, `model_reasoning_effort = "high"`.
-- **Web search:** enabled by the leader's `codex --search exec …` (propagates to
-  the subagent — verified). Confirm the shipped-agent path re-enables it.
+  `default_permissions = "triad_repair"`, `model_reasoning_effort = "high"`.
+  Bootstrap replaces the `__TRIAD_REPO_ROOT__` placeholder with the local toolkit
+  checkout path when installing to `~/.codex/agents/`, and also injects the
+  classifier directory, Python runtime path, and resolved vendor CLI executable
+  directories. The `triad_repair` Codex permission profile uses absolute
+  filesystem grants, not `:workspace_roots`;
+  it reads the toolkit checkout, writes only the classifier directory and the
+  checkout's `bin/_logs`, and enables network for the repair verification call.
+  It does not grant write access to the caller's source tree. Verification
+  re-runs remove the original wrapper `--cwd` and execute from the toolkit
+  checkout so classifier routing can be checked without granting caller
+  workspace access. Keep the evidence boundary explicit: §2.1 proves
+  personal-scope spawn-by-name; the permission profile schema is sourced from
+  the current official Codex manual and recorded in
+  `docs/references/codex-permission-profile-evidence.md`.
+- **Web search:** enabled by starting the leader session with top-level
+  `codex --search`; subagents inherit it (verified). Confirm any shipped-agent
+  path preserves that inheritance before changing distribution.
 - **Dispatch (from the skill):** SpawnAgent by name with a JSON-shaped task
   (`run_log_path`, `output_path`, `output_schema`) → Wait → read `output_path`.
 - **Scope guard (HARD):** only write `<run_log>.repair.json` and the classifier
@@ -279,10 +291,12 @@ Per §2.1 the mechanism is proven. Each repair agent is a named TOML subagent:
 Keep the two-layer merge design. **Namespace the path** to
 `~/.config/triad-codex-dispatch/classifier-patches.json` (isolated from the
 Claude-led tool so one repo's repair agent can't change the other's behavior);
-keep the `TRIAD_CLASSIFIER_EXTENSION` override. Ship a small **import** helper to
-copy existing `gemini`/`antigravity` patches from the old path. Add a top-level
-`claude` key for the new leg. **Owner decision:** isolate-plus-import (recommended)
-vs share the old path for cross-tool learning.
+keep the `TRIAD_CLASSIFIER_EXTENSION` override. Importing existing
+`gemini`/`antigravity` patches from the old path is future work unless the owner
+explicitly requests it; this distribution merge only creates the isolated path.
+Add a top-level `claude` key for the new leg when a Claude repair patch is first
+needed. **Owner decision:** isolate-plus-future-import (recommended) vs share the
+old path for cross-tool learning.
 
 ---
 
@@ -310,26 +324,51 @@ Reads it. Never inline the packet content into the prompt (argv `ARG_MAX`).
 Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
 
 1. `codex plugin marketplace add <internal repo or local root>`
-2. `codex plugin marketplace upgrade`
+2. For Git-backed marketplaces, `codex plugin marketplace upgrade` refreshes the
+   currently configured marketplace snapshot. It does not change a pinned
+   `--ref`; when moving to a different release ref, remove/re-add the marketplace
+   source with the new ref, then reinstall the plugin:
+   `codex plugin marketplace remove triad-codex-dispatch-local` followed by
+   `codex plugin marketplace add <internal-git-url-or-owner/repo> --ref
+   <release-ref>`. The bootstrap checkout must also advance to the same fetched
+   snapshot with `git fetch --tags origin <release-ref>` and
+   `git checkout --detach FETCH_HEAD`; this avoids stale bootstrap sources even
+   when `<release-ref>` is a moving branch. Local directory marketplaces update
+   from the local clone; refresh the clone first and reinstall the plugin.
 3. install via `/plugins` or preconfigured marketplace policy (locked fleets:
    publish repo marketplace metadata + admin `requirements.toml` allowing only
    the internal source).
-4. `scripts/bootstrap.sh --check` verifies `codex`/`claude`/`gemini`/`agy`,
-   Python, `jq`, auth, PATH for `bin/`, and a writable classifier path. If plugin
-   install does not expose `bin/` on PATH, bootstrap installs launchers (no
-   symlinks in artifacts — packaging/launcher per user rule). Because
-   plugin-shipped named agents are not spawnable, bootstrap also copies
-   `agents/*.toml` into `~/.codex/agents/`.
+4. `scripts/bootstrap.sh --check` verifies required `codex`/`claude`/`agy`,
+   optional `gemini` unless `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`, Python, `jq`,
+   auth, PATH for `bin/`, and a writable classifier path. If plugin install does
+   not expose `bin/` on PATH, bootstrap installs launchers (no symlinks in
+   artifacts — packaging/launcher per user rule). Because the supported
+   repair-agent runtime path is personal scope, bootstrap also copies
+   `agents/*.toml` into `~/.codex/agents/`. When
+   `TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1` is set, bootstrap also installs or
+   refreshes the optional runtime profile at
+   `$CODEX_HOME/triad-codex-dispatch.config.toml`; it defaults that profile to
+   `approval_policy = "on-request"` as the explicit external-CLI consent profile
+   for authenticated heavy users, while keeping `workspace-write` and bounded
+   writable roots. It refuses to overwrite an unmanaged profile without the
+   triad marker. Fleets with a separately approved no-prompt posture can set
+   `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never`. When
+   `TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1` is set, bootstrap also installs or
+   refreshes `$CODEX_HOME/rules/triad-codex-dispatch.rules` with user-specific
+   launcher/check-out paths. Those rules allow only absolute launcher and
+   absolute checkout `bin/*.py` wrapper prefixes, refuse to overwrite an
+   unmanaged rules file, and deliberately avoid bare wrapper names, `python3`,
+   `/usr/bin/env`, and broad shell entrypoints such as `bash -lc` and `zsh -lc`.
 
 ---
 
 ## 11. Phased build order (riskiest-spike-first)
 
-- **Spike D (DONE — 2026-07-01):** packaged the repo as a Codex plugin, installed
-  it from a local marketplace, and confirmed plugin-shipped named repair agents
-  are **not** spawnable by name. Fallback selected: bootstrap installs repair
-  agents into `~/.codex/agents/` (personal scope — proven), decoupled from the
-  plugin's skill package.
+- **Spike D distribution decision (2026-07-01):** packaged the repo as a Codex
+  plugin, installed it from a local marketplace, and verified that skills load
+  from the plugin package. Retained spawn-by-name evidence exists for
+  personal scope, so fallback selected: bootstrap installs repair agents into
+  `~/.codex/agents/`, decoupled from the plugin's skill package.
 - **Spike E:** claude leg edges — stdin-vs-argv instruction semantics,
   `--json-schema` validation failure, large-file references, auth/permission
   denials mapping.
@@ -338,15 +377,17 @@ Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
 3. Adapt gemini/agy dispatch skills to Codex `SKILL.md`.
 4. Author the repair named subagents (+ new `claude-wrapper-repair`).
 5. Adapt cross-family review (fresh-Codex reviewer).
-6. Package plugin/marketplace + bootstrap + migration docs (per Spike D result).
+6. Package plugin/marketplace + bootstrap + migration docs (per the Spike D
+   distribution decision).
 7. Daily checks + end-to-end fake-vendor tests, then real-vendor smoke tests.
 
 ---
 
 ## 12. Open items / no clean Codex equivalent
 
-- **Plugin-shipped named agents** — Spike D says no; keep personal-scope
-  bootstrap fallback until Codex supports plugin-shipped named agent discovery.
+- **Plugin-shipped named agents** — not a supported runtime path in this
+  distribution. Keep personal-scope bootstrap fallback until a retained
+  spawn-by-name proof exists for plugin-shipped named agent discovery.
 - **Codex-as-leader review independence** — not naturally independent; solved via
   a fresh Codex subagent reviewer (§9).
 - **No `run_in_background`-identical contract** — Codex uses SpawnAgent + Wait;
@@ -360,9 +401,10 @@ Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
 2. Cross-family Codex reviewer: fresh subagent (recommended) vs same-thread.
 3. claude `--reasoning` enum: mirror codex `{low..xhigh}` vs allow claude `max`.
 4. claude read-only allowlist default set + default model (unset vs alias).
-5. Keep or drop `codex_wrapper.py` / codex `--task` legs in the Codex-led repo.
-6. Distribution fallback if Spike D fails: **decided by spike** — bootstrap into
-   `~/.codex/agents`.
+5. `codex_wrapper.py` / codex worker legs are dropped from the Codex-led repo;
+   revisit only if Codex exposes a non-nested same-family reviewer surface.
+6. Repair-agent distribution fallback: bootstrap into `~/.codex/agents`
+   (personal scope retained-evidence verified).
 
 ---
 
@@ -371,7 +413,8 @@ Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
 - Draft plan: `docs/references/codex-draft-plan.md` (Codex xhigh + web search).
 - claude leg: `docs/references/claude-leg-spec.md`, `claude-headless-reference.md`.
 - Spike evidence: `docs/references/spike-evidence-leader.log`,
-  `spike-evidence-result.json`.
+  `spike-evidence-result.json`,
+  `spike-d-plugin-agent-distribution-decision.md`.
 - Official: developers.openai.com/codex/{subagents,config-reference},
   code.claude.com/docs/en/{headless,cli-reference,model-config,env-vars}.
 - Tier-2: installed `codex --help` / `codex features list` / `claude --help`.

@@ -26,9 +26,11 @@ standard "call claude once" path — the mirror of the Claude-led toolkit's
 
 ## Hard rules
 
-1. **Bash invocation only.** Run `claude_wrapper.py` via a shell command. The
-   stderr `[wrapper] claude <class> …` summary and the `run-log: <path>` line
-   only surface via Bash — never wrap the wrapper itself in a subagent.
+1. **Literal absolute-wrapper invocation.** Resolve `claude_wrapper.py` once,
+   then run the absolute launcher/check-out path as the first argv token. Do
+   not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`, command
+   substitution, redirection, or inline env assignment; Codex command rules
+   match argv prefixes and those shell forms miss the no-prompt allowlist.
 2. **Path-based repair input.** Pass the run-log file *path* to the repair
    subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large stdout
    corrupt on inline embedding).
@@ -55,15 +57,27 @@ standard "call claude once" path — the mirror of the Claude-led toolkit's
 
 ### Step 1 — Build the wrapper invocation
 
-Single-quoted heredoc for the prompt body so Korean / emoji / `$vars` / backticks
-survive intact:
+Use an absolute wrapper path literally. Resolve it in a separate command if
+needed; do not combine resolution and execution with `&&`, pipes, shell
+substitution, or a shell wrapper. For short prompts, pass `--prompt` directly:
 
 ```bash
-claude_wrapper.py \
-  --prompt "$(cat <<'PROMPT'
-<leader-prompt-verbatim>
-PROMPT
-)" \
+/Users/YOUR_USER/.local/bin/claude_wrapper.py \
+  --prompt "Read _runs/reviews/<id>/packet.md and review it." \
+  [--sandbox read-only|workspace-write] \
+  [--search] \
+  [--model opus|sonnet|haiku|fable] \
+  [--reasoning low|medium|high|xhigh] \
+  [--pydantic module:Class] \
+  [--cwd /absolute/path] \
+  [--timeout <seconds>]
+```
+
+For a long prompt, write a UTF-8 prompt file first and pass its absolute path:
+
+```bash
+/Users/YOUR_USER/.local/bin/claude_wrapper.py \
+  --prompt-file /absolute/path/to/prompt.txt \
   [--sandbox read-only|workspace-write] \
   [--search] \
   [--model opus|sonnet|haiku|fable] \
@@ -78,7 +92,8 @@ Defaults: `--sandbox read-only` behavior (the wrapper maps read-only →
 is banned at argparse). `--search` opts into WebSearch/WebFetch (off by default —
 use for research/consult/review). `--model` takes an alias only (no dated IDs).
 `--reasoning` maps to claude `--effort`. `--pydantic` drives `--json-schema`
-structured output (validated, `structured_output` → local pydantic check).
+structured output (validated, `structured_output` → local pydantic check), and
+requires `TRIAD_ALLOW_PYDANTIC_IMPORT=1` because it imports Python code.
 
 ### Step 2 — Run via Bash; capture rc, stdout, stderr
 
@@ -119,6 +134,10 @@ exit: `0` ok / `1` cli-fail / `2` timeout / `3` arg / `4` binary-missing /
 
 Verified mechanism (personal-scope named agent, spawnable by name; see the design
 spec's spike): the leader spawns the agent, continues foreground work, then waits.
+The bootstrap-installed repair agent carries `default_permissions =
+"triad_repair"`: read the toolkit checkout, write only the classifier config and
+bounded `bin/_logs` IPC area, read Python/vendor executable paths needed for
+verification, and use network for verification.
 
 #### 5a. Extract the run-log path + derive the output path
 
@@ -149,7 +168,7 @@ Input:
     "attempts":  "<int 1-3>",
     "per_attempt_log": "<array of {n, hypothesis, source, patch, py_compile, rerun}>"
   },
-  "task": "Extract the literal error -> date-anchored web search -> add ONE entry to ~/.config/triad-codex-dispatch/classifier-patches.json (claude envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
+  "task": "Extract the literal error -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (claude envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
 }
 ```
 

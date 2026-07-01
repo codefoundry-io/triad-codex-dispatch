@@ -3,7 +3,8 @@
 from __future__ import annotations
 import argparse, json, sys
 from _common import (EXIT_ARG_ERROR, audit, debug_log, emit_run_log,
-                     load_pydantic_class, log, require_binary, run_cli_with_retry)
+                     load_pydantic_class, load_prompt_text, log, require_binary,
+                     run_cli_with_retry, validate_wrapper_cwd)
 
 SANDBOX_CHOICES = ("read-only", "workspace-write")   # bypassPermissions banned (no-yolo)
 REASONING_CHOICES = ("low", "medium", "high", "xhigh")
@@ -11,7 +12,9 @@ READONLY_TOOLS = "Read,Glob,Grep"
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Claude Code single-shot wrapper")
-    p.add_argument("--prompt", required=True)
+    prompt_group = p.add_mutually_exclusive_group(required=True)
+    prompt_group.add_argument("--prompt")
+    prompt_group.add_argument("--prompt-file")
     p.add_argument("--sandbox", default="read-only", choices=SANDBOX_CHOICES)
     p.add_argument("--search", action="store_true", help="Enable WebSearch/WebFetch")
     p.add_argument("--model", default=None, help="Model alias (opus/sonnet/haiku/fable)")
@@ -23,10 +26,22 @@ def main() -> int:
     p.add_argument("--debug", action="store_true")
     args = p.parse_args()
 
-    if not args.prompt.strip():
+    try:
+        prompt = load_prompt_text(args.prompt, args.prompt_file)
+    except Exception as e:
+        log(f"prompt load failed: {e}")
+        return EXIT_ARG_ERROR
+
+    if not prompt.strip():
         log("empty prompt"); return EXIT_ARG_ERROR
 
-    require_binary("claude")
+    try:
+        cwd = validate_wrapper_cwd(args.cwd)
+    except Exception as e:
+        log(f"--cwd validation failed: {e}")
+        return EXIT_ARG_ERROR
+
+    claude_bin = require_binary("claude")
 
     pydantic_cls = None
     if args.pydantic:
@@ -38,9 +53,13 @@ def main() -> int:
     def build_cmd(effective_prompt: str) -> list[str]:
         tools = READONLY_TOOLS + (",WebSearch,WebFetch" if args.search else "")
         perm = "dontAsk" if args.sandbox == "read-only" else "acceptEdits"
-        cmd = ["claude", "-p", effective_prompt,
+        cmd = [claude_bin, "-p", effective_prompt,
                "--output-format", "json", "--no-session-persistence",
-               "--permission-mode", perm, "--allowedTools", tools]
+               "--permission-mode", perm]
+        if args.sandbox == "read-only":
+            cmd += ["--allowedTools", tools]
+        elif args.search:
+            cmd += ["--allowedTools", "WebSearch,WebFetch"]
         if args.model:
             cmd += ["--model", args.model]
         if args.reasoning:
@@ -50,16 +69,16 @@ def main() -> int:
             cmd += ["--json-schema", json.dumps(pydantic_to_codex_schema(pydantic_cls))]
         return cmd
 
-    result = run_cli_with_retry("claude", build_cmd, args.prompt,
-                                cwd=args.cwd, timeout=args.timeout,
+    result = run_cli_with_retry("claude", build_cmd, prompt,
+                                cwd=cwd, timeout=args.timeout,
                                 pydantic_cls=pydantic_cls, last_msg_path=None,
                                 repair_mode=args.repair_mode)
 
-    audit_cmd = build_cmd(args.prompt)
-    audit("claude", audit_cmd, args.prompt, result)
+    audit_cmd = build_cmd(prompt)
+    audit("claude", audit_cmd, prompt, result)
     if args.debug:
-        debug_log("claude", args.prompt, result)
-    run_log_path = emit_run_log("claude", sys.argv, audit_cmd, args.prompt, result)
+        debug_log("claude", prompt, result)
+    run_log_path = emit_run_log("claude", sys.argv, audit_cmd, prompt, result)
     if run_log_path is not None:
         log(f"run-log: {run_log_path}")
 
