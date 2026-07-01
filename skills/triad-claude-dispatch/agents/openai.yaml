@@ -1,0 +1,14 @@
+# Codex skill metadata for triad-claude-dispatch.
+# (Codex reads SKILL.md frontmatter for name/description; this file carries the
+# invocation policy + declared dependencies. Verify exact keys against the
+# current Codex skills doc — developers.openai.com/codex/skills — before relying
+# on any beyond allow_implicit_invocation, which is the documented default.)
+
+# The Codex leader may invoke this skill on its own when a single-shot claude
+# call fits (a fresh-eyes opinion, an Anthropic-ecosystem prompt, a fan-out leg).
+allow_implicit_invocation: true
+
+# Runtime dependencies this skill drives.
+dependencies:
+  - bin/claude_wrapper.py
+  - agents/claude-wrapper-repair.toml
