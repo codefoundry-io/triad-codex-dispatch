@@ -1,7 +1,7 @@
 # Claude Leg Spec — `claude_wrapper.py` (Claude Code `claude -p` single-shot)
 
 **Status:** reference spec for the new Codex-led toolkit. Target home in the new
-repo: `.agents/skills/triad-claude-dispatch/references/claude-headless-spec.md`.
+repo: `skills/triad-claude-dispatch/references/claude-headless-spec.md`.
 **Verified against:** Claude Code **v2.1.196** (`claude --help`) + official docs
 `code.claude.com/docs/en/{headless,cli-reference,model-config,env-vars}.md` +
 Agent SDK `structured-outputs`. Extraction date 2026-07-01.

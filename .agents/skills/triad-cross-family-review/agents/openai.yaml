@@ -1,7 +1,0 @@
-interface:
-  display_name: "Triad Cross-Family Review"
-  short_description: "Run independent Claude, Google-family, and Codex review"
-  default_prompt: "Use $triad-cross-family-review before merging a risky change."
-
-policy:
-  allow_implicit_invocation: true

@@ -3,6 +3,7 @@ __pycache__/
 _logs/
 _debug/
 .superpowers/
+.agents/skills/
 _runs/
 .triad-bin/
 .triad-config/

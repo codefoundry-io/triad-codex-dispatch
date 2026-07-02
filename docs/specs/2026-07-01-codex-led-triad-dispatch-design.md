@@ -67,12 +67,16 @@ machine (codex-cli 0.142.4), evidence in `docs/references/spike-evidence-*`:
 ### 2.2 Codex skills — procedural runbooks, portable
 
 Codex skills are `SKILL.md` folders the leader follows as step-by-step
-instructions (same spirit as Claude skills), discovered from `.agents/skills`
-(repo), `~/.agents/skills` (user), `/etc/codex/skills` (admin), + system.
+instructions (same spirit as Claude skills). Codex can discover project-local
+`.agents/skills`, user `~/.agents/skills`, admin `/etc/codex/skills`, system
+skills, and plugin-declared skill roots. This repo's distributed plugin skills
+live under `skills/` only; keeping a repo-local `.agents/skills` mirror creates
+duplicate triad skill registrations when the plugin is installed while
+developing from the repo.
 Optional per-skill `agents/openai.yaml` controls `allow_implicit_invocation`,
 interface, dependencies; explicit invocation via `$skill`.
 
-> **Correction to the draft plan:** Codex **skills** (`.agents/skills/*/SKILL.md`
+> **Correction to the draft plan:** Codex **skills** (`skills/*/SKILL.md`
 > + `agents/openai.yaml`) and Codex **named subagents** (`.codex/agents/*.toml`)
 > are **two different systems**. The draft plan conflated them. This spec keeps
 > them separate: dispatch/review logic = skills; repair workers = named agents.
@@ -159,7 +163,7 @@ triad-codex-dispatch/
     gemini_wrapper.py       # reused; DEPRECATED leg (gemini individual tier dead — §3a); non-default
     antigravity_wrapper.py  # reused — PRIMARY Google-family leg (agy); read-only via per-call --sandbox (§3a)
     claude_wrapper.py       # NEW  (claude -p single-shot; see references/claude-leg-spec.md)
-  .agents/skills/           # Codex SKILL.md runbooks — MUST live here (VERIFIED §4a):
+  skills/                   # Codex plugin SKILL.md runbooks (single distributed source):
     triad-claude-dispatch/SKILL.md        # NEW
     triad-gemini-dispatch/SKILL.md        # ADAPTED (Codex leader)
     triad-antigravity-dispatch/SKILL.md   # ADAPTED (PRIMARY Google leg)
@@ -171,7 +175,6 @@ triad-codex-dispatch/
     agy-wrapper-repair.toml               #   spawnable scope verified in §2.1; project
                                           #   .codex/agents/ has open bug #26408)
   .codex-plugin/plugin.json # Codex plugin manifest (verified by Spike D)
-  skills/                   # Plugin packaging mirror of .agents/skills/
   .agents/plugins/marketplace.json
   migration/
     COMPANY-SETUP.md / .ko.md             # install + update + egress + auth
@@ -191,25 +194,26 @@ the leader family). Fresh Codex review uses `spawn_agent(fork_context=false)` so
 the leader gets an independent Codex subagent perspective, not a nested Codex CLI
 worker.
 
-## 4a. Skill discovery — VERIFIED with real codex (2026-07-01, tmux)
+## 4a. Skill discovery — verified project-local path, current plugin layout
 
-Ran `codex` (v0.142.4) in the repo and drove it via tmux:
+Historical project-local verification ran `codex` (v0.142.4) in the repo and
+drove it via tmux:
 
 - Skills placed in **`.agents/skills/<name>/SKILL.md`** register as first-class
   skills — typing `$triad-claude` surfaced `triad-claude-dispatch [Skill]` with
   the SKILL.md `description`, and it appeared under the `/skills` list with the
   `.agents/skills/` scope. So the **SKILL.md format (name + description
   frontmatter) is correct**.
-- The SAME files under a plain **`skills/`** dir do NOT register as skills (they
-  show only as filesystem entries under `@`, not as `[Skill]`). So `.agents/skills/`
-  is mandatory — NOT the Claude-plugin `skills/` layout.
-- Workspace **trust** gates project-local loading: codex prompts "Do you trust
-  this directory?" on first entry; skills load only after trusting. The install /
-  onboarding docs must tell users to trust the workspace.
+- Plugin distribution is different: `.codex-plugin/plugin.json` declares
+  `skills: "./skills/"`, and installed plugin skills load from the plugin cache
+  in a new Codex thread.
+- Workspace **trust** gates project-local `.agents/skills` loading. The
+  distribution repo does not ship a `.agents/skills` mirror because that mirror
+  creates duplicate triad skills when the plugin is also installed.
 
-Consequence: skills live in `.agents/skills/` (this repo), repair named subagents
-install to `~/.codex/agents/` (§4 + §2.1). The `skills/` path in earlier drafts
-is superseded by this.
+Consequence: distributed skills live in `skills/`; repair named subagents install
+to `~/.codex/agents/` (§4 + §2.1). The old mirrored `.agents/skills` source path
+is intentionally not tracked in this repo.
 
 ---
 

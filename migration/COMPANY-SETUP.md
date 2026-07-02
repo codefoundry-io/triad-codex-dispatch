@@ -133,8 +133,9 @@ minimal or custom images, add the same source line to the login shell startup
 file if a new terminal does not expose `codex-triad`.
 
 Open a new Codex thread after installation so plugin skills load from the plugin
-cache. Trust the workspace only when developing from this repo or relying on
-repo-local `.agents/skills/`; project-local skills are trust-gated.
+cache. Distributed skills live under `skills/`; do not keep a repo-local
+`.agents/skills/` mirror in this checkout, or Codex will show duplicate triad
+skills when the plugin is installed while developing from the repo.
 
 ## Pre-Release Gate
 

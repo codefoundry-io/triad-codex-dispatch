@@ -1,7 +1,0 @@
-interface:
-  display_name: "Triad Gemini Dispatch"
-  short_description: "Dispatch a Gemini business or Vertex leg"
-  default_prompt: "Use $triad-gemini-dispatch for a business-tier Gemini consult."
-
-policy:
-  allow_implicit_invocation: true

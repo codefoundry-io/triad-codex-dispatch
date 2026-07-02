@@ -1,7 +1,0 @@
-interface:
-  display_name: "Triad Claude Dispatch"
-  short_description: "Dispatch a single-shot Claude Code leg"
-  default_prompt: "Use $triad-claude-dispatch for a Claude consult."
-
-policy:
-  allow_implicit_invocation: true

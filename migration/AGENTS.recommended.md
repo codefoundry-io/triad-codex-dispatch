@@ -7,8 +7,9 @@ Codex-led triad dispatch toolkit.
 # Triad Codex Dispatch Usage
 
 Run Codex from the repository root. Installed plugin skills load from the plugin
-cache in a new Codex thread; trust the workspace when using repo-local
-`.agents/skills/` during development.
+cache in a new Codex thread. Do not add a repo-local `.agents/skills/` mirror for
+this toolkit while the plugin is installed, or Codex will show duplicate triad
+skills.
 
 Use the installed triad dispatch skills instead of invoking wrapper scripts
 directly:

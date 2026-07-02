@@ -4,7 +4,7 @@
 
 **Goal:** Package the Codex-led triad dispatch repo for team install/update with a Codex plugin, repo marketplace, bootstrap checks, and migration docs.
 
-**Architecture:** The repo root is the plugin source and contains `.codex-plugin/plugin.json`; its manifest points at the existing `.agents/skills/` tree and leaves named repair agents out of manifest fields unless Spike D proves Codex supports them. The bootstrap script owns environment checks and the fallback personal-scope repair-agent install path.
+**Architecture:** The repo root is the plugin source and contains `.codex-plugin/plugin.json`; its manifest points at `skills/` and leaves named repair agents out of manifest fields unless Spike D proves Codex supports them. The bootstrap script owns environment checks and the fallback personal-scope repair-agent install path. The older `.agents/skills/` mirror was removed to avoid duplicate skill registrations when the plugin is installed while developing from the repo.
 
 **Tech Stack:** Codex CLI plugin marketplace, POSIX shell, Python pytest for hermetic bootstrap checks, Markdown docs.
 
@@ -17,7 +17,7 @@
 - Create: `.agents/plugins/marketplace.json`
 - Modify: `docs/specs/2026-07-01-codex-led-triad-dispatch-design.md`
 
-- [ ] Create the root plugin manifest with `skills: "./.agents/skills/"`.
+- [ ] Create the root plugin manifest with `skills: "./skills/"`.
 - [ ] Create a repo marketplace entry pointing `source.path` at `"."`.
 - [ ] Run `codex plugin marketplace add . --json` and `codex plugin add triad-codex-dispatch@<marketplace> --json`.
 - [ ] Attempt a real fresh Codex named-agent spawn for `claude-wrapper-repair`; if unavailable, record the fallback decision.

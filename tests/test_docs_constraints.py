@@ -68,36 +68,34 @@ def test_codex_wrapper_leg_is_documented_as_not_shipped():
 
 
 def test_cross_family_review_uses_fresh_codex_subagent_only():
-    skill_paths = [
-        ROOT / ".agents/skills/triad-cross-family-review/SKILL.md",
-        ROOT / "skills/triad-cross-family-review/SKILL.md",
-    ]
-    for path in skill_paths:
-        text = path.read_text(encoding="utf-8")
-        assert "spawn_agent" in text
-        assert "wait_agent" in text
-        assert "fork_context=false" in text
-        assert "nested" not in text.lower()
-        assert "--reasoning xhigh" in text
-        assert "Gemini 3.1 Pro (High)" in text
-        assert "TRIAD_GOOGLE_REVIEW_MODEL" in text
-        assert "Do NOT run scripts/tests" in text
-        assert "spawn subprocesses" in text
-        assert "invoke vendor CLIs" in text
-        assert "reason deeply/adversarially" in text
+    text = (ROOT / "skills/triad-cross-family-review/SKILL.md").read_text(encoding="utf-8")
+    assert "spawn_agent" in text
+    assert "wait_agent" in text
+    assert "fork_context=false" in text
+    assert "nested" not in text.lower()
+    assert "--reasoning xhigh" in text
+    assert "Gemini 3.1 Pro (High)" in text
+    assert "TRIAD_GOOGLE_REVIEW_MODEL" in text
+    assert "Do NOT run scripts/tests" in text
+    assert "spawn subprocesses" in text
+    assert "invoke vendor CLIs" in text
+    assert "reason deeply/adversarially" in text
 
 
 def test_gemini_dispatch_skills_do_not_offer_yolo_or_plan_modes():
-    for rel in [
-        ".agents/skills/triad-gemini-dispatch/SKILL.md",
-        "skills/triad-gemini-dispatch/SKILL.md",
-    ]:
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "approval-mode default|auto_edit" in text
-        assert "--approval-mode plan" in text
-        assert "[--approval-mode default|auto_edit|plan|yolo]" not in text
-        assert "[--approval-mode default|auto_edit]" in text
-        assert "plan/yolo" in text.lower()
+    text = (ROOT / "skills/triad-gemini-dispatch/SKILL.md").read_text(encoding="utf-8")
+    assert "approval-mode default|auto_edit" in text
+    assert "--approval-mode plan" in text
+    assert "[--approval-mode default|auto_edit|plan|yolo]" not in text
+    assert "[--approval-mode default|auto_edit]" in text
+    assert "plan/yolo" in text.lower()
+
+
+def test_distribution_repo_does_not_ship_duplicate_repo_local_skills():
+    tracked = [path.relative_to(ROOT).as_posix() for path in _tracked_files()]
+    assert not [path for path in tracked if path.startswith(".agents/skills/")]
+    manifest = (ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
+    assert '"skills": "./skills/"' in manifest
 
 
 def test_distribution_docs_name_all_user_home_write_targets():
