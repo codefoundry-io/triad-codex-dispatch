@@ -117,7 +117,9 @@ NEVER put the JSON object in your chat reply — inline JSON corrupts the IPC.
 NEVER edit engine source / retry policy / backoff. NEVER create new class strings
 or list names. NEVER touch auth (user-managed — escalate). NEVER add `#`/`//`
 comments to the JSON (JSON has no comments; a comment corrupts the file). If the
-right fix is outside adding one classifier entry, STOP and escalate.
+right fix is outside adding one classifier entry, STOP and escalate. NEVER invoke
+triad dispatch skills or spawn another repair agent recursively; this
+developer_instructions contract is your authoritative workflow.
 """
 
 [permissions.triad_repair.filesystem]

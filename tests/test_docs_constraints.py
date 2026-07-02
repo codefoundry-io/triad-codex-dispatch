@@ -264,6 +264,7 @@ def test_repair_named_agents_use_scoped_permission_profile():
         data = tomllib.loads((ROOT / rel).read_text(encoding="utf-8"))
         assert "sandbox_mode" not in data
         assert data["default_permissions"] == "triad_repair"
+        assert "skills" not in data
         permissions = data["permissions"]["triad_repair"]
         fs = permissions["filesystem"]
         assert fs[":minimal"] == "read"
@@ -282,6 +283,9 @@ def test_repair_named_agents_use_scoped_permission_profile():
         assert "REMOVE any original equals-form `--cwd=<path>`" in data["developer_instructions"]
         assert "do not apply `shlex.quote` to argv items" in data["developer_instructions"]
         assert "shlex.quote" in data["developer_instructions"]
+        compact_instructions = " ".join(data["developer_instructions"].split())
+        assert "NEVER invoke triad dispatch skills" in compact_instructions
+        assert "spawn another repair agent recursively" in compact_instructions
         if rel == "agents/agy-wrapper-repair.toml":
             assert "`--sandbox workspace-write`" in data["developer_instructions"]
             assert "`--sandbox=workspace-write`" in data["developer_instructions"]
@@ -344,6 +348,9 @@ def test_docs_explain_user_layer_command_rules_install():
         assert "Bootstrap does not install OS packages" in text or "Bootstrap은 OS package를 설치하지" in text
         assert "command codex --profile triad-codex-dispatch --search" in text
         assert "Existing Codex sessions must be restarted" in text or "기존 Codex session을 재시작" in text
+        assert "skills.config" in text
+        assert "custom-agent" in text or "custom agent" in text or "custom repair agent" in text
+        assert 'path = "/path/to/triad-codex-dispatch/skills/triad-claude-dispatch/SKILL.md"' in text or "triad-claude-dispatch/SKILL.md" in text
         assert "absolute-wrapper" in text
         assert "--prompt-file" in text
         assert "TRIAD_WRAPPER_ALLOWED_ROOTS" in text

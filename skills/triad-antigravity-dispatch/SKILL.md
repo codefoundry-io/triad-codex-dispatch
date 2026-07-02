@@ -167,12 +167,17 @@ entry classify it `extraction-error` (not `ok`) → repair. So do not expect
 
 ### Step 5 — Repair via the `agy-wrapper-repair` named subagent
 
-Verified mechanism (personal-scope named agent, spawnable by name): the leader
-spawns the agent, continues foreground work, then waits.
+Verified mechanism: bootstrap installs the repair agent as an official Codex
+custom agent under `$CODEX_HOME/agents` / `~/.codex/agents`. The leader spawns
+the agent, continues foreground work, then waits. If `spawn_agent` reports an
+unknown agent type after install/update, start a new Codex session/thread; the
+current session may not hot-reload custom-agent TOMLs.
 The bootstrap-installed repair agent carries `default_permissions =
-"triad_repair"`: read the toolkit checkout, write only the classifier config and
-bounded `bin/_logs` IPC area, read Python/vendor executable paths needed for
-verification, and use network for verification.
+"triad_repair"`: the generated TOML profile grants read access to the toolkit
+checkout, write access only to the classifier config and bounded `bin/_logs` IPC
+area, read access to Python/vendor executable paths needed for verification, and
+network for verification. This is the declared profile grant boundary; a broader
+parent session or managed runtime override may still allow more.
 
 #### 5a. Extract the run-log path + derive the output path
 

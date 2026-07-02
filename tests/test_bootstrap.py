@@ -10,7 +10,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 
-
 def _fake_bin(tmp_path: Path, *names: str, python_script: str | None = None) -> Path:
     bin_dir = tmp_path / "fake-bin"
     bin_dir.mkdir()
@@ -33,6 +32,7 @@ def _make_repo_root(
     repo_root = tmp_path / "repo"
     bin_dir = repo_root / "bin"
     agents_dir = repo_root / "agents"
+    skills_dir = repo_root / "skills"
     bin_dir.mkdir(parents=True)
     agents_dir.mkdir()
     mode = stat.S_IRUSR | stat.S_IWUSR
@@ -45,6 +45,7 @@ def _make_repo_root(
     if real_agents:
         for path in (ROOT / "agents").glob("*.toml"):
             shutil.copy2(path, agents_dir / path.name)
+        shutil.copytree(ROOT / "skills", skills_dir)
     else:
         for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
             (agents_dir / f"{name}.toml").write_text(
@@ -102,6 +103,15 @@ def _run_bootstrap(
     return result, env, launcher_bin
 
 
+def _assert_installed_agents_are_repair_only(codex_home: Path) -> None:
+    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
+        installed = codex_home / "agents" / f"{name}.toml"
+        assert installed.is_file()
+        data = tomllib.loads(installed.read_text(encoding="utf-8"))
+        assert "skills" not in data
+        assert data["default_permissions"] == "triad_repair"
+
+
 def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
@@ -126,6 +136,7 @@ def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
         assert str(repo_root) in text
         assert str(classifier_dir / "classifier-patches.json") in text
         data = tomllib.loads(text)
+        assert "skills" not in data
         fs = data["permissions"]["triad_repair"]["filesystem"]
         assert fs[str(repo_root)] == "read"
         assert fs[str(repo_root / "bin" / "_logs")] == "write"
@@ -142,6 +153,26 @@ def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
     assert (repo_root / "bin" / "_logs").is_dir()
     assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
     assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
+    assert (
+        "start a new Codex session/thread after bootstrap so custom agents reload"
+        in result.stdout
+    )
+
+
+def test_check_fails_when_repair_agent_placeholder_is_unresolved(tmp_path):
+    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    agent = repo_root / "agents" / "claude-wrapper-repair.toml"
+    agent.write_text(
+        agent.read_text(encoding="utf-8") + '\nplaceholder = "__TRIAD_UNKNOWN_PLACEHOLDER__"\n',
+        encoding="utf-8",
+    )
+
+    result, _env, _launcher_bin = _run_bootstrap(tmp_path, repo_root=repo_root)
+
+    assert result.returncode != 0
+    assert "unresolved repair-agent placeholders" in result.stderr
+    assert "__TRIAD_UNKNOWN_PLACEHOLDER__" in result.stderr
+    assert "repair agents installed to personal Codex scope" not in result.stdout
 
 
 def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
@@ -156,8 +187,7 @@ def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        assert (codex_home / "agents" / f"{name}.toml").is_file()
+    _assert_installed_agents_are_repair_only(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
@@ -175,8 +205,7 @@ def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     codex_home = Path(env["HOME"]) / "custom-codex-home"
-    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        assert (codex_home / "agents" / f"{name}.toml").is_file()
+    _assert_installed_agents_are_repair_only(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path.cwd() / "~").exists()
@@ -203,8 +232,7 @@ def test_check_supports_workspace_contained_install_targets(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (workspace_bin / "claude_wrapper.py").is_file()
     assert (workspace_config / "triad-codex-dispatch" / "classifier-patches.json").is_file()
-    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        assert (workspace_codex / "agents" / f"{name}.toml").is_file()
+    _assert_installed_agents_are_repair_only(workspace_codex)
     assert (workspace_codex / "triad-codex-dispatch.config.toml").is_file()
     assert (workspace_codex / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path(env["HOME"]) / ".codex").exists()

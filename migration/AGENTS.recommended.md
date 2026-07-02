@@ -29,15 +29,18 @@ codex --search
 
 Do not use `danger-full-access`, `bypassPermissions`, or yolo-style permission
 modes for this toolkit. Bootstrap installs shipped repair agents with
-`default_permissions = "triad_repair"` so they can read the toolkit checkout,
-write only the classifier config and bounded run-log IPC area, and use network
-for repair verification. The profile uses bootstrap-injected absolute filesystem
-grants for the toolkit checkout, classifier config, bounded run-log IPC area,
-Python runtime, and resolved vendor CLI executable directories, not
-`:workspace_roots`, so it does not expand into the caller workspace. Repair
-verification strips the original wrapper `--cwd` and runs from the toolkit
-checkout; it checks classifier routing, not caller-repo behavior.
-They may only write:
+`default_permissions = "triad_repair"` so the generated TOML grants read access
+to the toolkit checkout, write access only to the classifier config and bounded
+run-log IPC area, and network for repair verification. This is the declared
+profile grant boundary, not proof that a broader parent session or managed
+runtime override cannot allow more. The profile uses bootstrap-injected absolute
+filesystem grants for the toolkit checkout, classifier config, bounded run-log
+IPC area, Python runtime, and resolved vendor CLI executable directories, not
+`:workspace_roots`, so the profile itself does not expand into the caller
+workspace. Repair verification strips the original wrapper `--cwd` and runs
+from the toolkit checkout; it checks classifier routing, not caller-repo
+behavior.
+The generated profile grants write access only to:
 
 - `~/.config/triad-codex-dispatch/classifier-patches.json`
 - the requested `<run_log>.repair.json` response file

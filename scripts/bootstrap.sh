@@ -6,7 +6,7 @@ usage() {
 Usage: scripts/bootstrap.sh --check
 
 Checks local prerequisites for triad-codex-dispatch and installs local launcher
-scripts plus personal-scope Codex repair agents when needed.
+scripts plus personal-scope Codex custom repair agents when needed.
 
 Assumes codex, claude, and agy are already installed and OAuth logged in.
 
@@ -378,6 +378,7 @@ PY
     return
   }
 
+  repair_agent_errors_before="$errors"
   for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
     file="$src/$name.toml"
     if [ ! -f "$file" ]; then
@@ -386,6 +387,7 @@ PY
     fi
     python3 - "$file" "$dest/$name.toml" "$REPO_ROOT" "$CLASSIFIER_PATH" "$classifier_dir" "$python_exe" "$python_exe_dir" "$python_root" "$python_prefix" <<'PY' || fail "could not install repair agent: $name"
 from pathlib import Path
+import re
 import shutil
 import sys
 
@@ -434,10 +436,17 @@ for old, new in {
     text = text.replace(old, new)
 text = text.replace('"__TRIAD_PYTHON_READ_ROOTS__" = "read"', python_root_lines)
 text = text.replace('"__TRIAD_VENDOR_READ_ROOTS__" = "read"', vendor_root_lines)
+unresolved = sorted(set(re.findall(r"__TRIAD_[A-Z0-9_]+__", text)))
+if unresolved:
+    raise SystemExit(f"unresolved repair-agent placeholders: {', '.join(unresolved)}")
 dest.write_text(text, encoding="utf-8")
 PY
   done
+  if [ "$errors" -ne "$repair_agent_errors_before" ]; then
+    return
+  fi
   ok "repair agents installed to personal Codex scope: $dest"
+  warn "start a new Codex session/thread after bootstrap so custom agents reload"
 }
 
 ensure_log_dir() {
