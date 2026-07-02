@@ -252,27 +252,42 @@ rerun the 3-way review.
 
 ### Remove
 
-Remove the installed plugin and marketplace source:
+Default user-home removal:
 
 ```bash
 codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
 codex plugin marketplace remove triad-codex-dispatch-local
-```
-
-Optional cleanup for files installed by bootstrap:
-
-```bash
 rm -f ~/.codex/agents/claude-wrapper-repair.toml
 rm -f ~/.codex/agents/gemini-wrapper-repair.toml
 rm -f ~/.codex/agents/agy-wrapper-repair.toml
+rm -f ~/.codex/triad-codex-dispatch.config.toml
+rm -f ~/.codex/rules/triad-codex-dispatch.rules
 rm -f ~/.local/bin/claude_wrapper.py
 rm -f ~/.local/bin/gemini_wrapper.py
 rm -f ~/.local/bin/antigravity_wrapper.py
 ```
 
-If bootstrap used `TRIAD_BOOTSTRAP_BIN_DIR`, remove launcher files from that
-directory instead of `~/.local/bin`. If bootstrap used `CODEX_HOME`, remove
-repair agents from `$CODEX_HOME/agents` instead of `~/.codex/agents`.
+If bootstrap used a custom `TRIAD_BOOTSTRAP_BIN_DIR`, remove launcher files from
+that directory instead of `~/.local/bin`. If bootstrap used a custom
+`CODEX_HOME`, remove repair agents, the generated profile, and generated rules
+from that `$CODEX_HOME` instead of `~/.codex`.
+
+Advanced workspace-contained removal must use the same environment that was used
+for install, then remove the local runtime directories if they were dedicated to
+this plugin:
+
+```bash
+export CODEX_HOME="$PWD/.triad-codex-home"
+export XDG_CONFIG_HOME="$PWD/.triad-config"
+export TRIAD_BOOTSTRAP_BIN_DIR="$PWD/.triad-bin"
+export PATH="$TRIAD_BOOTSTRAP_BIN_DIR:$PATH"
+
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin marketplace remove triad-codex-dispatch-local
+rm -rf .triad-codex-home/
+rm -rf .triad-config/
+rm -rf .triad-bin/
+```
 
 Only remove classifier patches if you intentionally want to discard learned
 local routing:
@@ -493,27 +508,41 @@ branch를 `origin/main`이 아닌 다른 base와 비교해야 하면 `RELEASE_BA
 
 ### 삭제
 
-설치된 plugin과 marketplace source를 제거한다.
+기본 user-home 설치 삭제:
 
 ```bash
 codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
 codex plugin marketplace remove triad-codex-dispatch-local
-```
-
-bootstrap이 설치한 repair agent 파일은 선택적으로 지운다.
-
-```bash
 rm -f ~/.codex/agents/claude-wrapper-repair.toml
 rm -f ~/.codex/agents/gemini-wrapper-repair.toml
 rm -f ~/.codex/agents/agy-wrapper-repair.toml
+rm -f ~/.codex/triad-codex-dispatch.config.toml
+rm -f ~/.codex/rules/triad-codex-dispatch.rules
 rm -f ~/.local/bin/claude_wrapper.py
 rm -f ~/.local/bin/gemini_wrapper.py
 rm -f ~/.local/bin/antigravity_wrapper.py
 ```
 
-bootstrap에서 `TRIAD_BOOTSTRAP_BIN_DIR`를 지정했다면 `~/.local/bin` 대신 그
-디렉터리에서 launcher 파일을 지운다. bootstrap에 `CODEX_HOME`을 지정했다면
-repair agent는 `~/.codex/agents`가 아니라 `$CODEX_HOME/agents`에서 지운다.
+bootstrap에서 custom `TRIAD_BOOTSTRAP_BIN_DIR`를 지정했다면 `~/.local/bin` 대신
+그 디렉터리에서 launcher 파일을 지운다. custom `CODEX_HOME`을 지정했다면 repair
+agent, 생성 profile, 생성 rules는 `~/.codex`가 아니라 그 `$CODEX_HOME`에서
+지운다.
+
+Advanced workspace-contained 설치를 지울 때는 설치 때와 같은 환경으로 plugin
+remove를 실행한 뒤, 이 plugin 전용으로 만든 local runtime directory를 지운다.
+
+```bash
+export CODEX_HOME="$PWD/.triad-codex-home"
+export XDG_CONFIG_HOME="$PWD/.triad-config"
+export TRIAD_BOOTSTRAP_BIN_DIR="$PWD/.triad-bin"
+export PATH="$TRIAD_BOOTSTRAP_BIN_DIR:$PATH"
+
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin marketplace remove triad-codex-dispatch-local
+rm -rf .triad-codex-home/
+rm -rf .triad-config/
+rm -rf .triad-bin/
+```
 
 classifier patch는 로컬에서 학습된 routing 정보다. 버리려는 게 확실할 때만 지운다.
 

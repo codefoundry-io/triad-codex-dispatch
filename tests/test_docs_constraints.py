@@ -141,6 +141,30 @@ def test_install_docs_state_auth_assumption_and_target_choices():
     assert ".triad-bin/" in gitignore
 
 
+def test_readme_remove_docs_cover_default_and_workspace_targets():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Default user-home removal" in text
+    assert "기본 user-home 설치 삭제" in text
+    assert "codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local" in text
+    assert "codex plugin marketplace remove triad-codex-dispatch-local" in text
+    assert "~/.codex/agents/claude-wrapper-repair.toml" in text
+    assert "~/.codex/agents/gemini-wrapper-repair.toml" in text
+    assert "~/.codex/agents/agy-wrapper-repair.toml" in text
+    assert "~/.codex/triad-codex-dispatch.config.toml" in text
+    assert "~/.codex/rules/triad-codex-dispatch.rules" in text
+    assert "~/.local/bin/claude_wrapper.py" in text
+    assert "~/.local/bin/gemini_wrapper.py" in text
+    assert "~/.local/bin/antigravity_wrapper.py" in text
+    assert "~/.config/triad-codex-dispatch" in text
+    assert "TRIAD_BOOTSTRAP_BIN_DIR" in text
+    assert "CODEX_HOME" in text
+    assert "XDG_CONFIG_HOME" in text
+    assert ".triad-codex-home/" in text
+    assert ".triad-config/" in text
+    assert ".triad-bin/" in text
+    assert "launchctl bootout" in text
+
+
 def test_distribution_docs_explain_bootstrap_pinned_paths():
     for rel in [
         "README.md",
