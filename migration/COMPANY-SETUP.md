@@ -15,7 +15,10 @@ the internal marketplace source.
   path is personal-scope installation.
 - Fallback: `scripts/bootstrap.sh --check` copies `agents/*.toml` into
   `$CODEX_HOME/agents/`, or `~/.codex/agents/` when `CODEX_HOME` is unset, the
-  personal scope already verified spawnable. See
+  personal scope already verified spawnable. The installed TOMLs are official
+  Codex custom agents, but shipped repair agents do not enable triad dispatch
+  skills because they must not recursively dispatch. Use `skills.config` only
+  for custom subagents that intentionally call triad dispatch skills. See
   `docs/references/spike-d-plugin-agent-distribution-decision.md`.
 
 ## Install
@@ -58,9 +61,9 @@ codex --profile triad-codex-dispatch --search
 Install target:
 
 - **User-home install is the default and recommended path.** Leave `CODEX_HOME`
-  unset. Bootstrap writes repair agents, profile, and rules under `~/.codex/`;
-  classifier patches under `~/.config/triad-codex-dispatch/`; and launchers
-  under `~/.local/bin` unless `TRIAD_BOOTSTRAP_BIN_DIR` is set.
+  unset. Bootstrap writes Codex custom repair agents, profile, and rules under
+  `~/.codex/`; classifier patches under `~/.config/triad-codex-dispatch/`; and
+  launchers under `~/.local/bin` unless `TRIAD_BOOTSTRAP_BIN_DIR` is set.
 - **Workspace-contained install is advanced only.** Use it only if the team
   already manages a logged-in folder-scoped `CODEX_HOME`. Set `CODEX_HOME`,
   `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`, and `PATH` consistently before
@@ -126,16 +129,40 @@ codex-triad
 
 Use the plain `codex` function only on machines where the heavy-user external-CLI
 posture is the desired default. Existing Codex sessions must be restarted after
-profile or rules changes.
+profile, rules, custom-agent, or `skills.config` changes.
 The snippet sources the chosen RC file for the current terminal. On stock
 Ubuntu, login shells normally source `~/.bashrc` through `~/.profile`; on
 minimal or custom images, add the same source line to the login shell startup
 file if a new terminal does not expose `codex-triad`.
 
-Open a new Codex thread after installation so plugin skills load from the plugin
-cache. Distributed skills live under `skills/`; do not keep a repo-local
+Open a new Codex session/thread after installation so plugin skills and
+custom-agent TOMLs load from the plugin cache and `$CODEX_HOME/agents`. Existing
+sessions may not see newly installed `agent_type`s. If you add or change
+`skills.config` in custom subagents, restart the Codex session again.
+Distributed skills live under `skills/`; do not keep a repo-local
 `.agents/skills/` mirror in this checkout, or Codex will show duplicate triad
 skills when the plugin is installed while developing from the repo.
+
+Custom subagents that should call triad dispatch skills must opt in through the
+official Codex custom-agent `skills.config` schema:
+
+```toml
+[[skills.config]]
+path = "/path/to/triad-codex-dispatch/skills/triad-claude-dispatch/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/path/to/triad-codex-dispatch/skills/triad-antigravity-dispatch/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/path/to/triad-codex-dispatch/skills/triad-gemini-dispatch/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "/path/to/triad-codex-dispatch/skills/triad-cross-family-review/SKILL.md"
+enabled = true
+```
 
 ## Pre-Release Gate
 
@@ -442,13 +469,16 @@ only read during normal dispatch.
 Replace `/path/to/triad-codex-dispatch` with the local checkout used by bootstrap
 launchers. Keep only that `bin/_logs` runtime artifact directory writable, not
 the whole checkout. Bootstrap also installs each repair-agent TOML with a Codex
-permission profile named `triad_repair` (`default_permissions = "triad_repair"`):
-the agent can read the toolkit checkout, write only
-`~/.config/triad-codex-dispatch` and the checkout's `bin/_logs`, and use network
-for the repair verification call. It does not receive write access to the
-caller's source tree. Bootstrap injects absolute filesystem grants for the
-toolkit checkout, classifier directory, Python runtime, and resolved vendor CLI
-executable directories; the repair profile does not use `:workspace_roots`. The
+permission profile named `triad_repair` (`default_permissions = "triad_repair"`).
+The generated profile grants read access to the toolkit checkout, write access
+only to `~/.config/triad-codex-dispatch` and the
+checkout's `bin/_logs`, and network for the repair verification call. It does
+not intentionally grant write access to the caller's source tree. This is the
+declared TOML grant boundary, not proof that a broader parent session or
+managed runtime override cannot allow more. Bootstrap injects absolute
+filesystem grants for the toolkit checkout, classifier directory, Python
+runtime, and resolved vendor CLI executable directories; the repair profile does
+not use `:workspace_roots`. The
 repo keeps named-agent spawnability evidence separate from official Codex
 permission-profile evidence in
 `docs/references/spike-d-plugin-agent-distribution-decision.md` and
@@ -495,7 +525,10 @@ change an existing pinned `--ref`. Re-add the marketplace source when changing
 <release-ref>` plus detached `FETCH_HEAD` step above is what advances the local
 bootstrap checkout before bootstrap runs.
 
-Start a new Codex thread after reinstalling so plugin skills are reloaded.
+Start a new Codex session/thread after reinstalling so plugin skills and
+custom-agent TOMLs are reloaded. If you maintain custom subagents with
+`skills.config`, re-check their absolute `SKILL.md` paths after moving the
+checkout.
 
 ## Remove
 

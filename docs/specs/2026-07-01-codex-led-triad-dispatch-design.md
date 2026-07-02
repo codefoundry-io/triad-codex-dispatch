@@ -269,13 +269,15 @@ Per §2.1 the mechanism is proven. Each repair agent is a named TOML subagent:
   checkout path when installing to `~/.codex/agents/`, and also injects the
   classifier directory, Python runtime path, and resolved vendor CLI executable
   directories. The `triad_repair` Codex permission profile uses absolute
-  filesystem grants, not `:workspace_roots`;
-  it reads the toolkit checkout, writes only the classifier directory and the
-  checkout's `bin/_logs`, and enables network for the repair verification call.
-  It does not grant write access to the caller's source tree. Verification
-  re-runs remove the original wrapper `--cwd` and execute from the toolkit
-  checkout so classifier routing can be checked without granting caller
-  workspace access. Keep the evidence boundary explicit: §2.1 proves
+  filesystem grants, not `:workspace_roots`; the generated TOML profile grants
+  read access to the toolkit checkout, write access only to the classifier
+  directory and the checkout's `bin/_logs`, and network for the repair
+  verification call. It does not intentionally grant write access to the
+  caller's source tree. This is the declared profile grant boundary, not proof
+  that a broader parent session or managed runtime override cannot allow more.
+  Verification re-runs remove the original wrapper `--cwd` and execute from the
+  toolkit checkout so classifier routing can be checked without intentionally
+  granting caller workspace access. Keep the evidence boundary explicit: §2.1 proves
   personal-scope spawn-by-name; the permission profile schema is sourced from
   the current official Codex manual and recorded in
   `docs/references/codex-permission-profile-evidence.md`.

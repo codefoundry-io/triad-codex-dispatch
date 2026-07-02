@@ -136,7 +136,9 @@ NEVER create new class strings or list names. NEVER touch auth (user-managed —
 escalate). NEVER add `#`/`//` comments to the JSON (JSON has no comments; a
 comment corrupts the file). NEVER write to any key other than `gemini` (keys for
 other legs such as `claude` must remain untouched). If the right fix is outside
-adding one classifier entry under `gemini`, STOP and escalate.
+adding one classifier entry under `gemini`, STOP and escalate. NEVER invoke
+triad dispatch skills or spawn another repair agent recursively; this
+developer_instructions contract is your authoritative workflow.
 """
 
 [permissions.triad_repair.filesystem]
