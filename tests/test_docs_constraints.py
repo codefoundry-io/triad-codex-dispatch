@@ -347,6 +347,9 @@ def test_docs_explain_user_layer_command_rules_install():
         assert "absolute-wrapper" in text
         assert "--prompt-file" in text
         assert "TRIAD_WRAPPER_ALLOWED_ROOTS" in text
+        compact = " ".join(text.split())
+        assert "process working directory" in compact
+        assert "workspace-write dispatch works without extra env" in compact or "추가 env 없이 workspace-write dispatch" in compact
         assert "write-attempt" in text or "write attempt" in text or "write-attempt" in text
         assert "Provider Sandbox Differences" in text or "Provider별 Sandbox 차이" in text
         assert "Gemini Policy Engine" in text

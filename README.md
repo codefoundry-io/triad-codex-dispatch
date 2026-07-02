@@ -99,9 +99,11 @@ branch directly, use `distribution-layer`.
 
 Bootstrap probes the required auth states unless `TRIAD_BOOTSTRAP_SKIP_AUTH=1`
 is set for CI or scheduled updater jobs.
-Users must also keep wrapper prompt files and `--cwd` values inside the active
-trusted workspace, or explicitly set `TRIAD_WRAPPER_ALLOWED_ROOTS` before
-starting Codex for additional trusted roots.
+Users must also keep wrapper prompt files and `--cwd` values inside the wrapper
+process working directory. Wrappers trust that directory by default, so normal
+code-write dispatch works without extra env when the leader runs the wrapper from
+the target workspace. Set `TRIAD_WRAPPER_ALLOWED_ROOTS` before starting Codex
+only for additional trusted roots.
 
 Linux/WSL2 prerequisites: OpenAI Codex sandbox docs
 (`https://developers.openai.com/codex/concepts/sandboxing`) say to install
@@ -594,8 +596,9 @@ Codex with it means normal dispatch may send relevant prompts, repo snippets,
 review packets, and failure logs to the already-authenticated `claude`, `agy`,
 and optional `gemini` CLIs. `--sandbox workspace-write` dispatch also allows
 the selected external CLI to edit/write inside the wrapper's trusted runtime
-root; wrappers reject `--cwd` and `--prompt-file` outside that root unless the
-user predeclares another root with `TRIAD_WRAPPER_ALLOWED_ROOTS`. With
+root. Wrappers trust their process working directory by default and reject
+`--cwd` and `--prompt-file` outside that root unless the user predeclares another
+root with `TRIAD_WRAPPER_ALLOWED_ROOTS`. With
 `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the generated rules, matching
 wrapper commands always run outside the sandbox without another approval prompt.
 This is the packaged deployment path; it still does **not** use
@@ -705,9 +708,11 @@ substitution in the wrapper command when relying on no-prompt rules.
 Structured-output `--pydantic module:Class` remains available, but wrappers
 reject it unless `TRIAD_ALLOW_PYDANTIC_IMPORT=1` is set because loading the class
 imports Python code outside the Codex sandbox.
-Wrappers also reject `--prompt-file` and `--cwd` paths outside
-`TRIAD_WRAPPER_ALLOWED_ROOTS`. The `codex-triad` shell function sets that root
-to the directory where Codex was started; users can pre-set
+Wrappers also reject `--prompt-file` and `--cwd` paths outside the trusted root.
+By default the trusted root is the wrapper process working directory, so
+workspace-write dispatch works without extra env when the leader runs the
+wrapper from the target workspace. The `codex-triad` shell function still exports
+the starting directory as a convenience. Users can pre-set
 `TRIAD_WRAPPER_ALLOWED_ROOTS` to a colon-separated absolute list when they need
 additional trusted workspace roots.
 
@@ -854,9 +859,11 @@ scripts/bootstrap.sh --check
 것은 일반 dispatch가 관련 prompt, repo snippet, review packet, failure log를 이미
 인증된 `claude`, `agy`, 선택적 `gemini` CLI로 보낼 수 있음을 승인한다는 뜻이다.
 `--sandbox workspace-write` dispatch는 선택된 external CLI가 wrapper의 trusted
-runtime root 안에서 edit/write를 수행할 수도 있음을 의미한다. wrapper는 `--cwd`와
-`--prompt-file`이 이 root 밖이면 거부하며, 추가 root는 Codex 시작 전에
-`TRIAD_WRAPPER_ALLOWED_ROOTS`로 명시해야 한다.
+runtime root 안에서 edit/write를 수행할 수도 있음을 의미한다. wrapper는 기본으로
+자기 process working directory를 trusted root로 보고, `--cwd`와 `--prompt-file`이
+이 root 밖이면 거부한다. 따라서 leader가 target workspace에서 wrapper를 실행하면
+추가 env 없이 code-write가 된다. 추가 root가 필요할 때만 Codex 시작 전에
+`TRIAD_WRAPPER_ALLOWED_ROOTS`로 명시한다.
 `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never`와 생성된 rules를 같이 쓰면 매칭되는
 wrapper command는 추가 approval prompt 없이 항상 sandbox 밖에서 실행된다. 이것이
 배포용 기본 경로다. 그래도 `danger-full-access`는 쓰지 않는다.
@@ -963,9 +970,11 @@ no-prompt rules에 의존할 때 wrapper command 안에서
 structured-output `--pydantic module:Class` 기능은 남아 있지만, class 로딩이 Codex
 sandbox 밖 Python import가 되므로 `TRIAD_ALLOW_PYDANTIC_IMPORT=1`을 명시한 경우에만
 허용한다.
-wrapper는 `TRIAD_WRAPPER_ALLOWED_ROOTS` 밖의 `--prompt-file`과 `--cwd`를 거부한다.
-`codex-triad` shell function은 Codex를 시작한 directory를 이 root로 설정한다. 추가
-trusted workspace root가 필요하면 Codex 시작 전에 colon-separated absolute list로
+wrapper는 trusted root 밖의 `--prompt-file`과 `--cwd`를 거부한다. 기본 trusted
+root는 wrapper process working directory이므로, leader가 target workspace에서
+wrapper를 실행하면 추가 env 없이 workspace-write dispatch가 된다. `codex-triad`
+shell function은 편의상 Codex를 시작한 directory를 export한다. 추가 trusted
+workspace root가 필요할 때만 Codex 시작 전에 colon-separated absolute list로
 `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정한다.
 
 ### Provider별 Sandbox 차이

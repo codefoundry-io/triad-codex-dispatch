@@ -282,9 +282,10 @@ scripts/bootstrap.sh --check
 Codex를 시작하면 일반 dispatch가 관련 prompt, repo snippet, review packet,
 failure log를 이미 인증된 `claude`, `agy`, 선택적 `gemini` CLI로 보낼 수 있음을
 승인한다. `--sandbox workspace-write`에서는 선택된 external CLI가 wrapper의 trusted
-runtime root 안에서 edit/write를 수행할 수도 있다. wrapper는 `--cwd`와
-`--prompt-file`이 이 root 밖이면 거부하며, 추가 root는 Codex 시작 전에
-`TRIAD_WRAPPER_ALLOWED_ROOTS`로 명시해야 한다.
+runtime root 안에서 edit/write를 수행할 수도 있다. wrapper는 기본으로 자기 process
+working directory를 trusted root로 보고, `--cwd`와 `--prompt-file`이 이 root 밖이면
+거부한다. 추가 root가 필요할 때만 Codex 시작 전에
+`TRIAD_WRAPPER_ALLOWED_ROOTS`로 명시한다.
 `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never`와 생성된 rules를 같이 쓰면 매칭되는
 wrapper command는 추가 approval prompt 없이 항상 sandbox 밖에서 실행된다.
 이것이 배포용 기본 경로다.
@@ -386,10 +387,11 @@ script는 안전하게 split하지 않는다. no-prompt 경로에서는 literal 
 command를 사용한다. 긴 prompt는 active workspace 아래 absolute prompt file, 예를
 들면 `$PWD/_runs/prompts/<id>.txt`에 쓰고 `--prompt-file /absolute/path/to/prompt.txt`로
 넘긴다. wrapper command에서 heredoc command substitution을 쓰지 않는다. wrapper는
-`TRIAD_WRAPPER_ALLOWED_ROOTS` 밖의 `--prompt-file`과 `--cwd`를 거부한다.
-`codex-triad` shell function은 Codex를 시작한 directory를 이 root로 설정한다. 추가
-trusted workspace root가 필요하면 Codex 시작 전에 `TRIAD_WRAPPER_ALLOWED_ROOTS`를
-설정한다.
+trusted root 밖의 `--prompt-file`과 `--cwd`를 거부한다. 기본 trusted root는 wrapper
+process working directory이므로, leader가 target workspace에서 wrapper를 실행하면
+추가 env 없이 workspace-write dispatch가 된다. `codex-triad` shell function은
+편의상 Codex를 시작한 directory를 export한다. 추가 trusted workspace root가 필요할
+때만 Codex 시작 전에 `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정한다.
 structured-output `--pydantic module:Class` 기능은 남아 있지만, class 로딩이 Codex
 sandbox 밖 Python import가 되므로 `TRIAD_ALLOW_PYDANTIC_IMPORT=1`을 명시한 경우에만
 허용한다.

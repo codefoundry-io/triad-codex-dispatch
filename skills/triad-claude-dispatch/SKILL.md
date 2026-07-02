@@ -31,6 +31,10 @@ standard "call claude once" path — the mirror of the Claude-led toolkit's
    not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`, command
    substitution, redirection, or inline env assignment; Codex command rules
    match argv prefixes and those shell forms miss the no-prompt allowlist.
+   For `--sandbox workspace-write`, run the command with the tool/process
+   working directory set to the same trusted workspace passed as `--cwd`. If
+   `TRIAD_WRAPPER_ALLOWED_ROOTS` is unset, wrappers trust the process working
+   directory by default; set the env var only for extra roots.
 2. **Path-based repair input.** Pass the run-log file *path* to the repair
    subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large stdout
    corrupt on inline embedding).

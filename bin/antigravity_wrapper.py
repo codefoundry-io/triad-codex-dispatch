@@ -65,7 +65,17 @@ def _make_sentinel(prompt: str, attempt: int) -> str:
     return f"AGY_DONE_{h}"
 
 
-def _build_cmd(prompt, sentinel, agy_bin, agy_sandbox, model, timeout, *, pydantic=False):
+def _build_cmd(
+    prompt,
+    sentinel,
+    agy_bin,
+    agy_sandbox,
+    model,
+    timeout,
+    *,
+    pydantic=False,
+    cwd=None,
+):
     if pydantic:
         sealed = (
             f"{prompt}\n\n"
@@ -81,7 +91,10 @@ def _build_cmd(prompt, sentinel, agy_bin, agy_sandbox, model, timeout, *, pydant
             f"on its own line."
         )
     print_to = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
-    cmd = [agy_bin, "-p", sealed, "--print-timeout", f"{print_to}s"]
+    cmd = [agy_bin]
+    if cwd:
+        cmd += ["--new-project", "--add-dir", cwd]
+    cmd += ["-p", sealed, "--print-timeout", f"{print_to}s"]
     if agy_sandbox:
         cmd.append("--sandbox")
     if model:
@@ -256,8 +269,16 @@ def main() -> int:
 
     sentinel = _make_sentinel(prompt, 0)
     eff_prompt = inject_schema_to_prompt(prompt, pydantic_cls) if pydantic_cls else prompt
-    cmd = _build_cmd(eff_prompt, sentinel, agy_bin, agy_sandbox, args.model, args.timeout,
-                     pydantic=pydantic_cls is not None)
+    cmd = _build_cmd(
+        eff_prompt,
+        sentinel,
+        agy_bin,
+        agy_sandbox,
+        args.model,
+        args.timeout,
+        pydantic=pydantic_cls is not None,
+        cwd=cwd,
+    )
 
     start = time.monotonic()
     with _agy_settings.agy_settings_guard(deny_rules):

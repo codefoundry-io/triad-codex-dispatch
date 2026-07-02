@@ -60,7 +60,7 @@ def test_prompt_file_must_be_absolute(tmp_path):
     assert "--prompt-file must be an absolute path" in r.stderr
 
 
-def test_prompt_file_requires_explicit_allowed_roots(tmp_path):
+def test_prompt_file_defaults_to_process_cwd_when_allowed_roots_unset(tmp_path):
     prompt_file = tmp_path / "prompt.txt"
     prompt_file.write_text("body", encoding="utf-8")
     env = dict(os.environ, PATH=_fake_claude_on_path(tmp_path) + os.pathsep + os.environ["PATH"])
@@ -75,9 +75,58 @@ def test_prompt_file_requires_explicit_allowed_roots(tmp_path):
         capture_output=True,
         text=True,
         env=env,
+        cwd=tmp_path,
+    )
+    assert r.returncode == 0
+    assert "FAKE-OK" in r.stdout
+
+
+def test_prompt_file_without_allowed_roots_must_stay_under_process_cwd(tmp_path):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    prompt_file = outside / "prompt.txt"
+    prompt_file.write_text("body", encoding="utf-8")
+    env = dict(os.environ, PATH=_fake_claude_on_path(tmp_path) + os.pathsep + os.environ["PATH"])
+    env.pop("TRIAD_WRAPPER_ALLOWED_ROOTS", None)
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "bin/claude_wrapper.py"),
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=workspace,
     )
     assert r.returncode == 3
-    assert "TRIAD_WRAPPER_ALLOWED_ROOTS must be set" in r.stderr
+    assert "--prompt-file must be under an allowed runtime root" in r.stderr
+
+
+def test_cwd_defaults_to_process_cwd_when_allowed_roots_unset(tmp_path):
+    env = dict(os.environ, PATH=_fake_claude_on_path(tmp_path) + os.pathsep + os.environ["PATH"])
+    env.pop("TRIAD_WRAPPER_ALLOWED_ROOTS", None)
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "bin/claude_wrapper.py"),
+            "--prompt",
+            "hi",
+            "--sandbox",
+            "workspace-write",
+            "--cwd",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+    )
+    assert r.returncode == 0
+    assert "FAKE-OK" in r.stdout
 
 
 def test_prompt_file_must_stay_under_allowed_runtime_root(tmp_path):

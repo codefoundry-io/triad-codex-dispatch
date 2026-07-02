@@ -316,7 +316,7 @@ def _path_is_within(path: Path, root: Path) -> bool:
 def runtime_allowed_roots() -> list[Path]:
     raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
     if not raw:
-        return []
+        return [Path.cwd().resolve(strict=True)]
     roots = []
     for item in raw.split(os.pathsep):
         if not item:
@@ -342,11 +342,6 @@ def runtime_allowed_roots() -> list[Path]:
 def _ensure_within_runtime_roots(path: Path, label: str) -> Path:
     resolved = path.resolve(strict=True)
     roots = runtime_allowed_roots()
-    if not roots:
-        raise ValueError(
-            "TRIAD_WRAPPER_ALLOWED_ROOTS must be set before using "
-            f"{label}; set it to the trusted workspace root"
-        )
     if not any(_path_is_within(resolved, root) for root in roots):
         allowed = ", ".join(str(root) for root in roots)
         raise ValueError(f"{label} must be under an allowed runtime root: {allowed}")

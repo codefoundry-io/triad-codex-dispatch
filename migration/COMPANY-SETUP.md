@@ -288,9 +288,10 @@ users. Starting Codex with it means normal dispatch may send relevant prompts,
 repo snippets, review packets, and failure logs to the already-authenticated
 `claude`, `agy`, and optional `gemini` CLIs. With
 `--sandbox workspace-write`, the selected external CLI may also edit/write
-inside the wrapper's trusted runtime root. Wrappers reject `--cwd` and
-`--prompt-file` outside that root unless the user predeclares another trusted
-root with `TRIAD_WRAPPER_ALLOWED_ROOTS`. With
+inside the wrapper's trusted runtime root. Wrappers trust their process working
+directory by default and reject `--cwd` and `--prompt-file` outside that root
+unless the user predeclares another trusted root with
+`TRIAD_WRAPPER_ALLOWED_ROOTS`. With
 `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the generated rules, matching
 wrapper commands always run outside the sandbox without another approval prompt.
 This is the packaged deployment path.
@@ -396,8 +397,10 @@ For long prompts, write an absolute prompt file under the active workspace, for
 example `$PWD/_runs/prompts/<id>.txt`, and pass
 `--prompt-file /absolute/path/to/prompt.txt`; do not use heredoc command
 substitution in the wrapper command. Wrappers reject `--prompt-file` and `--cwd`
-outside `TRIAD_WRAPPER_ALLOWED_ROOTS`. The `codex-triad` shell function sets
-that root to the directory where Codex was started; set
+outside the trusted root. By default that root is the wrapper process working
+directory, so workspace-write dispatch works without extra env when the leader
+runs the wrapper from the target workspace. The `codex-triad` shell function
+still exports the starting directory as a convenience; set
 `TRIAD_WRAPPER_ALLOWED_ROOTS` before starting Codex only when additional trusted
 workspace roots are required.
 Structured-output `--pydantic module:Class` remains available, but wrappers

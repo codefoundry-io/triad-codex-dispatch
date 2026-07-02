@@ -37,6 +37,10 @@ is deprecated (IneligibleTierError → Antigravity).
    not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`, command
    substitution, redirection, or inline env assignment; Codex command rules
    match argv prefixes and those shell forms miss the no-prompt allowlist.
+   For `--sandbox workspace-write`, run the command with the tool/process
+   working directory set to the same trusted workspace passed as `--cwd`. If
+   `TRIAD_WRAPPER_ALLOWED_ROOTS` is unset, wrappers trust the process working
+   directory by default; set the env var only for extra roots.
 2. **Path-based repair input.** Pass the run-log file *path* to the repair
    subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large stdout
    corrupt on inline embedding).
@@ -106,8 +110,10 @@ For a long prompt, write a UTF-8 prompt file first and pass its absolute path:
 Defaults: no `--sandbox` (no policy attached). `--sandbox read-only` attaches
 `bin/policies/gemini-readonly.toml` via the Policy Engine for that call only
 (`--policy` flag; see Hard rule 7 — `plan` is not a supported wrapper mode).
-`--sandbox workspace-write` = write-enabled code-agent. `--approval-mode
-default` (read auto, write/shell prompt user) is the argparse default;
+`--sandbox workspace-write` = write-enabled code-agent; run the wrapper from the
+same directory passed as `--cwd` unless `TRIAD_WRAPPER_ALLOWED_ROOTS` declares
+extra roots. `--approval-mode default` (read auto, write/shell prompt user) is
+the argparse default;
 `auto_edit` is write-enabled and therefore conflicts with `--sandbox read-only`.
 `--approval-mode plan/yolo` is rejected by argparse.
 `--model` is free-form — no dated IDs in code; verify the exact accepted string

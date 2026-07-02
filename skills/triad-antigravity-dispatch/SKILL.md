@@ -44,6 +44,10 @@ needs.
    Do not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`,
    command substitution, redirection, or inline env assignment; Codex command
    rules match argv prefixes and those shell forms miss the no-prompt allowlist.
+   For `--sandbox workspace-write`, run the command with the tool/process
+   working directory set to the same trusted workspace passed as `--cwd`. If
+   `TRIAD_WRAPPER_ALLOWED_ROOTS` is unset, wrappers trust the process working
+   directory by default; set the env var only for extra roots.
 2. **Path-based repair input.** Pass the run-log file *path* to the repair
    subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large pty transcript
    corrupt on inline embedding).
@@ -106,7 +110,8 @@ Flags:
   `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`. `read_url`/`search_web` remain
   allowed. Pass `--sandbox` flag to agy (OS-ring sandbox) as well.
 - `--sandbox workspace-write` — write-capable in the worktree `--cwd`; dangerous
-  paths and destructive commands denied. Requires `--cwd`.
+  paths and destructive commands denied. Requires `--cwd`; run the wrapper from
+  that same directory unless `TRIAD_WRAPPER_ALLOWED_ROOTS` declares extra roots.
 - `--model` — agy display-name string (e.g. `"Gemini 3.1 Pro (High)"`,
   `"Gemini 3.5 Flash (High)"`). Run `agy models` to list accepted strings. No
   dated model IDs in code.
