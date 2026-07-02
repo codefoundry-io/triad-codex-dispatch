@@ -4,3 +4,6 @@ _logs/
 _debug/
 .superpowers/
 _runs/
+.triad-bin/
+.triad-config/
+.triad-codex-home/

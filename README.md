@@ -31,13 +31,19 @@ subagents, and a cross-family pre-merge review.
 
 Spike D distribution decision: plugin-shipped skills install correctly, but
 repair agents are not run from the plugin cache. Bootstrap copies
-`agents/*.toml` into `~/.codex/agents/`, the retained-evidence verified
-personal-scope named-agent path. See
+`agents/*.toml` into `$CODEX_HOME/agents/`, or `~/.codex/agents/` when
+`CODEX_HOME` is unset, the retained-evidence verified personal-scope
+named-agent path. See
 `docs/references/spike-d-plugin-agent-distribution-decision.md`.
 
 ## Install / Update / Remove
 
 ### Install
+
+Install assumes the three required CLIs are already installed and OAuth logged
+in: `codex`, `claude`, and `agy`. This installer does not perform OAuth/login
+setup. Business-tier `gemini` is optional unless the team enables
+`TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`.
 
 Local clone:
 
@@ -68,6 +74,20 @@ scripts/bootstrap.sh --check
 codex --profile triad-codex-dispatch --search
 ```
 
+Install target:
+
+- **User-home install is the default and recommended path.** Leave `CODEX_HOME`
+  unset. Bootstrap writes repair agents, the generated profile, and command
+  rules under `~/.codex/`, classifier patches under
+  `~/.config/triad-codex-dispatch/`, and launcher scripts in `~/.local/bin`
+  unless `TRIAD_BOOTSTRAP_BIN_DIR` is set.
+- **Workspace-contained install is advanced only.** Use it only if the team
+  already manages a logged-in folder-scoped `CODEX_HOME`. Set `CODEX_HOME`,
+  `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`, and `PATH` consistently before
+  `codex plugin marketplace add`, `codex plugin add`, bootstrap, and every later
+  `codex --profile triad-codex-dispatch` session. The repo ignores
+  `.triad-codex-home/`, `.triad-config/`, and `.triad-bin/`.
+
 The plugin install uses the marketplace snapshot; bootstrap still needs a local
 checkout because it reads this repo's `scripts/`, `bin/`, and `agents/`. Keep
 the local checkout detached at the fetched `<release-ref>` snapshot used by the
@@ -77,11 +97,8 @@ path.
 Use `main` as `<release-ref>` after this branch is merged; while validating this
 branch directly, use `distribution-layer`.
 
-Baseline user prerequisites: this plugin is for users who already operate all
-triad CLIs. `codex`, `claude`, and `agy` must be installed and authenticated;
-business-tier `gemini` is optional unless the team enables
-`TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Bootstrap probes those auth states unless
-`TRIAD_BOOTSTRAP_SKIP_AUTH=1` is set for CI or scheduled updater jobs.
+Bootstrap probes the required auth states unless `TRIAD_BOOTSTRAP_SKIP_AUTH=1`
+is set for CI or scheduled updater jobs.
 Users must also keep wrapper prompt files and `--cwd` values inside the active
 trusted workspace, or explicitly set `TRIAD_WRAPPER_ALLOWED_ROOTS` before
 starting Codex for additional trusted roots.
@@ -151,6 +168,9 @@ Local clone:
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 ```
 
@@ -163,11 +183,72 @@ git checkout --detach FETCH_HEAD
 codex plugin marketplace remove triad-codex-dispatch-local
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 ```
 
 Start a new Codex thread after updating so Codex loads the refreshed plugin
 skills.
+
+### Pre-Release Gate
+
+Before publishing a release ref or pushing `main`, run the full local gate from
+the checkout that will be distributed:
+
+```bash
+bash <<'TRIAD_RELEASE_GATE'
+set -euo pipefail
+
+release_base="${RELEASE_BASE:-origin/main}"
+tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/triad-codex-dispatch-release-check.XXXXXX")"
+trap 'rm -rf "$tmp_root"' EXIT
+tmp_root="$(cd "$tmp_root" && pwd -P)"
+mkdir -p "$tmp_root/bin"
+
+case "$release_base" in
+  origin/*) git fetch --prune origin ;;
+esac
+
+if ! git rev-parse --verify -q "$release_base^{commit}" >/dev/null; then
+  printf '%s\n' "release base not found: $release_base; run git fetch or set RELEASE_BASE" >&2
+  exit 1
+fi
+
+git diff --check
+git diff --cached --check
+git diff --check "$release_base"...HEAD
+git status --short > "$tmp_root/git-status.txt"
+if test -s "$tmp_root/git-status.txt"; then
+  cat "$tmp_root/git-status.txt" >&2
+  printf '%s\n' "release gate requires a clean worktree, including untracked files" >&2
+  exit 1
+fi
+
+python3 -m pytest -q tests/ -p no:cacheprovider
+bash -n scripts/bootstrap.sh
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+TRIAD_BOOTSTRAP_BIN_DIR="$tmp_root/bin" \
+CODEX_HOME="$tmp_root/codex" \
+HOME="$tmp_root/home" \
+XDG_CONFIG_HOME="$tmp_root/config" \
+PATH="$tmp_root/bin:$PATH" \
+scripts/bootstrap.sh --check
+TRIAD_RELEASE_GATE
+```
+
+Then run `triad-cross-family-review` on the exact diff or release candidate.
+Refresh your chosen base first, for example with `git fetch --prune origin`, or
+set `RELEASE_BASE` when the release branch should be compared against a base
+other than `origin/main`.
+Do not push the release until the independent reviewers are unanimous:
+`Claude SAFE`, `agy SAFE`, and `fresh Codex SAFE`. If any reviewer returns a
+blocking question, update the implementation or docs, rerun the gate above, and
+rerun the 3-way review.
 
 ### Remove
 
@@ -190,7 +271,8 @@ rm -f ~/.local/bin/antigravity_wrapper.py
 ```
 
 If bootstrap used `TRIAD_BOOTSTRAP_BIN_DIR`, remove launcher files from that
-directory instead of `~/.local/bin`.
+directory instead of `~/.local/bin`. If bootstrap used `CODEX_HOME`, remove
+repair agents from `$CODEX_HOME/agents` instead of `~/.codex/agents`.
 
 Only remove classifier patches if you intentionally want to discard learned
 local routing:
@@ -209,6 +291,11 @@ rm -f ~/Library/LaunchAgents/com.company.triad-codex-dispatch-update.plist
 ## 설치 / 업데이트 / 삭제
 
 ### 설치
+
+설치는 필수 3개 CLI인 `codex`, `claude`, `agy`가 이미 설치되어 있고 OAuth login이
+끝난 상태를 전제로 한다. 이 installer는 OAuth/login 설정을 대신하지 않는다.
+business-tier `gemini`는 팀이 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`을 켠 경우에만
+필수다.
 
 로컬 clone 기준:
 
@@ -238,6 +325,19 @@ TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 codex --profile triad-codex-dispatch --search
 ```
+
+설치 대상:
+
+- **사용자 홈 설치가 기본이자 권장 경로다.** `CODEX_HOME`을 지정하지 않는다.
+  bootstrap은 repair agent, 생성 profile, command rules를 `~/.codex/` 아래에 쓰고,
+  classifier patch는 `~/.config/triad-codex-dispatch/`에 쓴다. launcher는
+  `TRIAD_BOOTSTRAP_BIN_DIR`가 없으면 `~/.local/bin`에 둔다.
+- **workspace-contained 설치는 advanced 옵션이다.** 팀이 이미 로그인된
+  folder-scoped `CODEX_HOME`을 관리할 때만 쓴다. bootstrap 전과 이후 모든
+  `codex --profile triad-codex-dispatch` session 전뿐 아니라 `codex plugin marketplace add`,
+  `codex plugin add`, bootstrap 전에도 `CODEX_HOME`, `XDG_CONFIG_HOME`,
+  `TRIAD_BOOTSTRAP_BIN_DIR`, `PATH`를 일관되게 설정한다. 이 repo는 `.triad-codex-home/`,
+  `.triad-config/`, `.triad-bin/`을 ignore한다.
 
 plugin 설치는 marketplace snapshot을 쓰지만, bootstrap은 이 repo의 `scripts/`,
 `bin/`, `agents/`를 읽으므로 local checkout이 필요하다. bootstrap 실행 전
@@ -312,6 +412,9 @@ project-local skill은 trust gate를 통과해야 로드된다.
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 ```
 
@@ -324,10 +427,69 @@ git checkout --detach FETCH_HEAD
 codex plugin marketplace remove triad-codex-dispatch-local
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 ```
 
 업데이트 후 새 Codex thread를 시작해야 갱신된 plugin skill이 로드된다.
+
+### 배포 전 Gate
+
+release ref를 공개하거나 `main`에 push하기 전에, 배포할 checkout에서 전체 gate를
+실행한다.
+
+```bash
+bash <<'TRIAD_RELEASE_GATE'
+set -euo pipefail
+
+release_base="${RELEASE_BASE:-origin/main}"
+tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/triad-codex-dispatch-release-check.XXXXXX")"
+trap 'rm -rf "$tmp_root"' EXIT
+tmp_root="$(cd "$tmp_root" && pwd -P)"
+mkdir -p "$tmp_root/bin"
+
+case "$release_base" in
+  origin/*) git fetch --prune origin ;;
+esac
+
+if ! git rev-parse --verify -q "$release_base^{commit}" >/dev/null; then
+  printf '%s\n' "release base not found: $release_base; run git fetch or set RELEASE_BASE" >&2
+  exit 1
+fi
+
+git diff --check
+git diff --cached --check
+git diff --check "$release_base"...HEAD
+git status --short > "$tmp_root/git-status.txt"
+if test -s "$tmp_root/git-status.txt"; then
+  cat "$tmp_root/git-status.txt" >&2
+  printf '%s\n' "release gate requires a clean worktree, including untracked files" >&2
+  exit 1
+fi
+
+python3 -m pytest -q tests/ -p no:cacheprovider
+bash -n scripts/bootstrap.sh
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+TRIAD_BOOTSTRAP_BIN_DIR="$tmp_root/bin" \
+CODEX_HOME="$tmp_root/codex" \
+HOME="$tmp_root/home" \
+XDG_CONFIG_HOME="$tmp_root/config" \
+PATH="$tmp_root/bin:$PATH" \
+scripts/bootstrap.sh --check
+TRIAD_RELEASE_GATE
+```
+
+그 다음 정확한 diff 또는 release candidate에 대해 `triad-cross-family-review`를
+돌린다. 먼저 `git fetch --prune origin` 등으로 비교 base를 갱신하거나, release
+branch를 `origin/main`이 아닌 다른 base와 비교해야 하면 `RELEASE_BASE`를 지정한다.
+`Claude가 SAFE`, `agy가 SAFE`, `fresh Codex가 SAFE`로 만장일치가 되기
+전에는 release를 push하지 않는다. blocker 질문이 하나라도 나오면 구현이나 문서를
+수정하고 위 gate와 3자 review를 다시 실행한다.
 
 ### 삭제
 
@@ -350,7 +512,8 @@ rm -f ~/.local/bin/antigravity_wrapper.py
 ```
 
 bootstrap에서 `TRIAD_BOOTSTRAP_BIN_DIR`를 지정했다면 `~/.local/bin` 대신 그
-디렉터리에서 launcher 파일을 지운다.
+디렉터리에서 launcher 파일을 지운다. bootstrap에 `CODEX_HOME`을 지정했다면
+repair agent는 `~/.codex/agents`가 아니라 `$CODEX_HOME/agents`에서 지운다.
 
 classifier patch는 로컬에서 학습된 routing 정보다. 버리려는 게 확실할 때만 지운다.
 
@@ -572,10 +735,11 @@ normal toolkit path:
 - bounded wrapper run logs and repair response files under
   `/path/to/triad-codex-dispatch/bin/_logs`.
 
-Do not keep install/update targets such as `~/.codex/agents` or `~/.local/bin`
-writable in the normal runtime profile. Repair-agent TOMLs and wrapper launchers
-are installed by bootstrap/update; approve `scripts/bootstrap.sh --check` once,
-or use a short-lived install-only profile / `--add-dir` for those directories.
+Do not keep install/update targets such as `$CODEX_HOME/agents` (default
+`~/.codex/agents`) or `~/.local/bin` writable in the normal runtime profile.
+Repair-agent TOMLs and wrapper launchers are installed by bootstrap/update;
+approve `scripts/bootstrap.sh --check` once, or use a short-lived install-only
+profile / `--add-dir` for those directories.
 Bootstrap installs repair-agent TOMLs with a Codex permission profile named
 `triad_repair` (`default_permissions = "triad_repair"`): it reads the toolkit
 checkout, writes only `~/.config/triad-codex-dispatch` and that checkout's
@@ -821,10 +985,11 @@ Google-family 기본 leg는 agy다.
 
 이 설정은 `workspace-write` 안에 머물면서 classifier patch, bounded wrapper
 run log / `.repair.json`, vendor CLI network 호출 때 반복 승인을 줄인다.
-`~/.codex/agents`와 `~/.local/bin`은 일반 runtime profile에 계속 writable로 두지
-않는다. repair-agent TOML과 wrapper launcher 설치는 bootstrap/update 작업이므로
-`scripts/bootstrap.sh --check`를 1회 승인하거나, 해당 디렉터리에 대한 짧은
-install-only profile / `--add-dir`를 사용한다. bootstrap은 repair-agent TOML에
+`$CODEX_HOME/agents`(`CODEX_HOME`이 없으면 `~/.codex/agents`)와 `~/.local/bin`은
+일반 runtime profile에 계속 writable로 두지 않는다. repair-agent TOML과 wrapper
+launcher 설치는 bootstrap/update 작업이므로 `scripts/bootstrap.sh --check`를 1회
+승인하거나, 해당 디렉터리에 대한 짧은 install-only profile / `--add-dir`를 사용한다.
+bootstrap은 repair-agent TOML에
 `triad_repair` Codex permission profile(`default_permissions = "triad_repair"`)을
 설치한다. 이 profile은 toolkit checkout을 읽고, `~/.config/triad-codex-dispatch`와
 그 checkout의 `bin/_logs`만 쓰며, repair verification call을 위해 network를 켠다.
@@ -884,7 +1049,11 @@ Git marketplace snapshots.
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
-TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+scripts/bootstrap.sh --check
 ```
 
 For an internal Git marketplace source, use:
@@ -896,7 +1065,11 @@ git checkout --detach FETCH_HEAD
 codex plugin marketplace remove triad-codex-dispatch-local
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
-TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+scripts/bootstrap.sh --check
 ```
 
 `marketplace upgrade` refreshes the currently configured source; it does not
@@ -920,7 +1093,7 @@ For macOS launchd with a local clone, create
   <array>
     <string>/bin/zsh</string>
     <string>-lc</string>
-    <string>cd /path/to/triad-codex-dispatch &amp;&amp; git pull --ff-only &amp;&amp; codex plugin add triad-codex-dispatch@triad-codex-dispatch-local &amp;&amp; TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check</string>
+    <string>cd /path/to/triad-codex-dispatch &amp;&amp; git pull --ff-only &amp;&amp; codex plugin add triad-codex-dispatch@triad-codex-dispatch-local &amp;&amp; TRIAD_BOOTSTRAP_SKIP_AUTH=1 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never scripts/bootstrap.sh --check</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -960,7 +1133,11 @@ scheduled job so it does not spend vendor calls; run `scripts/bootstrap.sh
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
-TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+scripts/bootstrap.sh --check
 ```
 
 사내 Git marketplace:
@@ -972,7 +1149,11 @@ git checkout --detach FETCH_HEAD
 codex plugin marketplace remove triad-codex-dispatch-local
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
-TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+scripts/bootstrap.sh --check
 ```
 
 `marketplace upgrade`는 이미 설정된 source를 새로고침할 뿐, 기존 `--ref`를 다른

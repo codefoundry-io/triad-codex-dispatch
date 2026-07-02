@@ -8,6 +8,8 @@ Usage: scripts/bootstrap.sh --check
 Checks local prerequisites for triad-codex-dispatch and installs local launcher
 scripts plus personal-scope Codex repair agents when needed.
 
+Assumes codex, claude, and agy are already installed and OAuth logged in.
+
 Set TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 to also install/update the optional
 runtime Codex profile at $CODEX_HOME/triad-codex-dispatch.config.toml.
 That profile defaults to approval_policy=on-request. Set
@@ -29,6 +31,8 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RAW_REPO_ROOT="${TRIAD_BOOTSTRAP_REPO_ROOT:-$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)}"
 RAW_LAUNCHER_DIR="${TRIAD_BOOTSTRAP_BIN_DIR:-$HOME/.local/bin}"
 LAUNCHER_DIR="$RAW_LAUNCHER_DIR"
+RAW_CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+CODEX_HOME="$RAW_CODEX_HOME"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 RAW_CLASSIFIER_PATH="${TRIAD_CLASSIFIER_EXTENSION:-$CONFIG_HOME/triad-codex-dispatch/classifier-patches.json}"
 REPO_ROOT="$RAW_REPO_ROOT"
@@ -110,15 +114,20 @@ PY
 }
 
 canonicalize_path_inputs() {
-  canonicalized="$(python3 - "$RAW_REPO_ROOT" "$RAW_CLASSIFIER_PATH" "$RAW_LAUNCHER_DIR" <<'PY' 2>&1
+  canonicalize_err="$(mktemp "${TMPDIR:-/tmp}/triad-codex-canonicalize.XXXXXX")" || {
+    fail "could not create temporary file for path canonicalization"
+    return
+  }
+  canonicalized="$(python3 - "$RAW_REPO_ROOT" "$RAW_CLASSIFIER_PATH" "$RAW_LAUNCHER_DIR" "$RAW_CODEX_HOME" 2>"$canonicalize_err" <<'PY'
 from pathlib import Path
 import shutil
 import sys
 
-repo_raw, classifier_raw, launcher_raw = sys.argv[1:]
+repo_raw, classifier_raw, launcher_raw, codex_home_raw = sys.argv[1:]
 repo = Path(repo_raw).expanduser()
 classifier = Path(classifier_raw).expanduser()
 launcher = Path(launcher_raw).expanduser()
+codex_home = Path(codex_home_raw).expanduser()
 errors = []
 if not repo.is_absolute():
     errors.append(f"TRIAD_BOOTSTRAP_REPO_ROOT must be an absolute path: {repo_raw}")
@@ -128,6 +137,8 @@ if not classifier.is_absolute():
     errors.append(f"TRIAD_CLASSIFIER_EXTENSION must be an absolute path: {classifier_raw}")
 if not launcher.is_absolute():
     errors.append(f"TRIAD_BOOTSTRAP_BIN_DIR must be an absolute path: {launcher_raw}")
+if not codex_home.is_absolute():
+    errors.append(f"CODEX_HOME must be an absolute path: {codex_home_raw}")
 if errors:
     for error in errors:
         print(error)
@@ -135,19 +146,32 @@ if errors:
 print(repo.resolve())
 print(classifier.parent.resolve(strict=False) / classifier.name)
 print(launcher.resolve(strict=False))
+print(codex_home.resolve(strict=False))
 PY
   )"
   if [ "$?" -ne 0 ]; then
+    canonicalize_output="$(
+      printf '%s\n' "$canonicalized"
+      cat "$canonicalize_err"
+    )"
     while IFS= read -r line; do
       [ -n "$line" ] && fail "$line"
     done <<EOF
-$canonicalized
+$canonicalize_output
 EOF
+    rm -f "$canonicalize_err"
     return
   fi
+  if [ -s "$canonicalize_err" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && warn "$line"
+    done <"$canonicalize_err"
+  fi
+  rm -f "$canonicalize_err"
   REPO_ROOT="$(printf '%s\n' "$canonicalized" | sed -n '1p')"
   CLASSIFIER_PATH="$(printf '%s\n' "$canonicalized" | sed -n '2p')"
   LAUNCHER_DIR="$(printf '%s\n' "$canonicalized" | sed -n '3p')"
+  CODEX_HOME="$(printf '%s\n' "$canonicalized" | sed -n '4p')"
 }
 
 run_auth_probe() {
@@ -330,7 +354,7 @@ PY
 
 install_repair_agents() {
   src="$REPO_ROOT/agents"
-  dest="$HOME/.codex/agents"
+  dest="$CODEX_HOME/agents"
   classifier_dir="$(dirname -- "$CLASSIFIER_PATH")"
   python_info="$(python3 - <<'PY'
 from pathlib import Path
@@ -432,8 +456,12 @@ install_codex_runtime_profile() {
 
   classifier_dir="$(dirname -- "$CLASSIFIER_PATH")"
   log_dir="$REPO_ROOT/bin/_logs"
-  codex_home="${CODEX_HOME:-$HOME/.codex}"
-  installed="$(python3 - "$codex_home" "$CODEX_PROFILE_NAME" "$CODEX_PROFILE_APPROVAL_POLICY" "$classifier_dir" "$log_dir" <<'PY' 2>&1
+  codex_home="$CODEX_HOME"
+  profile_err="$(mktemp "${TMPDIR:-/tmp}/triad-codex-profile.XXXXXX")" || {
+    fail "could not create temporary file for Codex profile install"
+    return
+  }
+  installed="$(python3 - "$codex_home" "$CODEX_PROFILE_NAME" "$CODEX_PROFILE_APPROVAL_POLICY" "$classifier_dir" "$log_dir" 2>"$profile_err" <<'PY'
 from pathlib import Path
 import sys
 
@@ -486,13 +514,24 @@ print(profile_path)
 PY
   )"
   if [ "$?" -ne 0 ]; then
+    profile_output="$(
+      printf '%s\n' "$installed"
+      cat "$profile_err"
+    )"
     while IFS= read -r line; do
       [ -n "$line" ] && fail "$line"
     done <<EOF
-$installed
+$profile_output
 EOF
+    rm -f "$profile_err"
     return
   fi
+  if [ -s "$profile_err" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && warn "$line"
+    done <"$profile_err"
+  fi
+  rm -f "$profile_err"
   ok "Codex runtime profile installed: $installed"
 }
 
@@ -501,12 +540,17 @@ install_codex_rules() {
     return
   fi
 
-  codex_home="${CODEX_HOME:-$HOME/.codex}"
+  codex_home="$CODEX_HOME"
   rules_output="$(mktemp "${TMPDIR:-/tmp}/triad-codex-rules.XXXXXX")" || {
     fail "could not create temporary file for Codex rules install"
     return
   }
-if ! python3 - "$codex_home" "$CODEX_RULES_NAME" "$REPO_ROOT" "$LAUNCHER_DIR" >"$rules_output" 2>&1 <<'PY'
+  rules_err="$(mktemp "${TMPDIR:-/tmp}/triad-codex-rules-err.XXXXXX")" || {
+    fail "could not create temporary file for Codex rules stderr"
+    rm -f "$rules_output"
+    return
+  }
+if ! python3 - "$codex_home" "$CODEX_RULES_NAME" "$REPO_ROOT" "$LAUNCHER_DIR" >"$rules_output" 2>"$rules_err" <<'PY'
 from pathlib import Path
 import shlex
 import sys
@@ -598,14 +642,25 @@ rules_path.write_text("\n".join(lines), encoding="utf-8")
 print(rules_path)
 PY
   then
+    rules_fail_output="$(
+      cat "$rules_output"
+      cat "$rules_err"
+    )"
     while IFS= read -r line; do
       [ -n "$line" ] && fail "$line"
-    done <"$rules_output"
-    rm -f "$rules_output"
+    done <<EOF
+$rules_fail_output
+EOF
+    rm -f "$rules_output" "$rules_err"
     return
   fi
+  if [ -s "$rules_err" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && warn "$line"
+    done <"$rules_err"
+  fi
   installed="$(sed -n '1p' "$rules_output")"
-  rm -f "$rules_output"
+  rm -f "$rules_output" "$rules_err"
   ok "Codex command rules installed: $installed"
 }
 

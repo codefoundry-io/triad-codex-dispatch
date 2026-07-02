@@ -107,9 +107,38 @@ def test_distribution_docs_name_all_user_home_write_targets():
         "migration/COMPANY-SETUP.ko.md",
     ]:
         text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "$CODEX_HOME/agents" in text
         assert "~/.codex/agents" in text
         assert "~/.config/triad-codex-dispatch" in text
         assert "~/.local/bin" in text
+
+
+def test_install_docs_state_auth_assumption_and_target_choices():
+    for rel in [
+        "README.md",
+        "migration/COMPANY-SETUP.md",
+        "migration/COMPANY-SETUP.ko.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "OAuth logged" in text or "OAuth login" in text
+        assert "`codex`, `claude`, and `agy`" in text or "`codex`, `claude`, `agy`" in text
+        assert "does not perform OAuth/login" in text or "OAuth/login 설정을 대신하지" in text
+        assert "User-home install is the default and recommended path" in text or "사용자 홈 설치가 기본이자 권장 경로" in text
+        assert "Workspace-contained install is advanced only" in text or "workspace-contained 설치는 advanced 옵션" in text
+        assert "logged-in folder-scoped `CODEX_HOME`" in text or "이미 로그인된" in text
+        compact = " ".join(text.split())
+        assert "`CODEX_HOME`, `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`, and `PATH`" in compact or "`CODEX_HOME`, `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`, `PATH`" in compact
+        assert "codex plugin marketplace add" in text
+        assert "codex plugin add" in text
+        assert "classifier patches" in text or "classifier patch" in text
+        assert ".triad-codex-home/" in text
+        assert ".triad-config/" in text
+        assert ".triad-bin/" in text
+
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert ".triad-codex-home/" in gitignore
+    assert ".triad-config/" in gitignore
+    assert ".triad-bin/" in gitignore
 
 
 def test_distribution_docs_explain_bootstrap_pinned_paths():
@@ -324,6 +353,53 @@ def test_docs_explain_user_layer_command_rules_install():
     assert "python3 /path/to/triad-codex-dispatch/bin/gemini_wrapper.py" in rules
 
 
+def test_docs_explain_pre_release_gate():
+    for rel in [
+        "README.md",
+        "migration/COMPANY-SETUP.md",
+        "migration/COMPANY-SETUP.ko.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "Pre-Release Gate" in text or "배포 전 Gate" in text
+        assert "bash <<'TRIAD_RELEASE_GATE'" in text
+        assert "set -euo pipefail" in text
+        assert "release_base=\"${RELEASE_BASE:-origin/main}\"" in text
+        assert "python3 -m pytest -q tests/ -p no:cacheprovider" in text
+        assert "bash -n scripts/bootstrap.sh" in text
+        assert "\ngit diff --check\n" in text
+        assert "git diff --cached --check" in text
+        assert "git diff --check \"$release_base\"...HEAD" in text
+        assert "tmp_root=\"$(mktemp -d \"${TMPDIR:-/tmp}/triad-codex-dispatch-release-check.XXXXXX\")\"" in text
+        assert "trap 'rm -rf \"$tmp_root\"' EXIT" in text
+        assert "tmp_root=\"$(cd \"$tmp_root\" && pwd -P)\"" in text
+        assert "mkdir -p \"$tmp_root/bin\"" in text
+        assert 'case "$release_base" in' in text
+        assert "origin/*) git fetch --prune origin ;;" in text
+        assert "git rev-parse --verify -q \"$release_base^{commit}\"" in text
+        assert "release base not found: $release_base; run git fetch or set RELEASE_BASE" in text
+        assert "git status --short > \"$tmp_root/git-status.txt\"" in text
+        assert "--untracked-files=no" not in text
+        assert "if test -s \"$tmp_root/git-status.txt\"; then" in text
+        assert "cat \"$tmp_root/git-status.txt\" >&2" in text
+        assert "release gate requires a clean worktree, including untracked files" in text
+        assert "TRIAD_RELEASE_GATE" in text
+        assert "git fetch --prune origin" in text
+        assert "TRIAD_BOOTSTRAP_SKIP_AUTH=1" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1" in text
+        assert "TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never" in text
+        assert "TRIAD_BOOTSTRAP_BIN_DIR=\"$tmp_root/bin\"" in text
+        assert "CODEX_HOME=\"$tmp_root/codex\"" in text
+        assert "HOME=\"$tmp_root/home\"" in text
+        assert "XDG_CONFIG_HOME=\"$tmp_root/config\"" in text
+        assert "PATH=\"$tmp_root/bin:$PATH\"" in text
+        assert "triad-cross-family-review" in text
+        assert "Claude SAFE" in text or "Claude가 SAFE" in text
+        assert "agy SAFE" in text or "agy가 SAFE" in text
+        assert "fresh Codex SAFE" in text or "fresh Codex가 SAFE" in text
+        assert "Do not push" in text or "push하지 않는다" in text
+
+
 def test_git_marketplace_update_docs_readd_when_ref_changes():
     for rel in [
         "README.md",
@@ -340,6 +416,10 @@ def test_git_marketplace_update_docs_readd_when_ref_changes():
         )
         assert "git fetch --tags origin <release-ref>" in text
         assert "git checkout --detach FETCH_HEAD" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1" in text
+        assert "TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never" in text
+        assert "TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check" not in text
         assert "does not change" in compact or "바꾸지 않는다" in compact
         assert "moving branch" in compact
 

@@ -14,10 +14,16 @@ the internal marketplace source.
 - Repair agents: not run from the plugin cache. The retained-evidence supported
   path is personal-scope installation.
 - Fallback: `scripts/bootstrap.sh --check` copies `agents/*.toml` into
-  `~/.codex/agents/`, the personal scope already verified spawnable. See
+  `$CODEX_HOME/agents/`, or `~/.codex/agents/` when `CODEX_HOME` is unset, the
+  personal scope already verified spawnable. See
   `docs/references/spike-d-plugin-agent-distribution-decision.md`.
 
 ## Install
+
+Install assumes the three required CLIs are already installed and OAuth logged
+in: `codex`, `claude`, and `agy`. This installer does not perform OAuth/login
+setup. Business-tier `gemini` is optional unless the team enables
+`TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`.
 
 For a local clone:
 
@@ -49,6 +55,19 @@ scripts/bootstrap.sh --check
 codex --profile triad-codex-dispatch --search
 ```
 
+Install target:
+
+- **User-home install is the default and recommended path.** Leave `CODEX_HOME`
+  unset. Bootstrap writes repair agents, profile, and rules under `~/.codex/`;
+  classifier patches under `~/.config/triad-codex-dispatch/`; and launchers
+  under `~/.local/bin` unless `TRIAD_BOOTSTRAP_BIN_DIR` is set.
+- **Workspace-contained install is advanced only.** Use it only if the team
+  already manages a logged-in folder-scoped `CODEX_HOME`. Set `CODEX_HOME`,
+  `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`, and `PATH` consistently before
+  `codex plugin marketplace add`, `codex plugin add`, bootstrap, and every later
+  `codex --profile triad-codex-dispatch` session. `.triad-codex-home/`,
+  `.triad-config/`, and `.triad-bin/` are ignored local runtime folders.
+
 The plugin install uses the marketplace snapshot. Bootstrap still reads
 `scripts/`, `bin/`, and `agents/` from the local checkout. Keep that checkout
 detached at the fetched `<release-ref>` snapshot before running bootstrap. Keep
@@ -57,11 +76,8 @@ from this absolute checkout path.
 Use `main` as `<release-ref>` after this branch is merged; use
 `distribution-layer` when validating the current branch directly.
 
-Baseline user prerequisites: this distribution is for heavy triad users who
-already operate the CLI family. `codex`, `claude`, and `agy` must be installed
-and authenticated; business-tier `gemini` is optional unless the team enables
-`TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Bootstrap probes those auth states unless
-`TRIAD_BOOTSTRAP_SKIP_AUTH=1` is set for CI or scheduled updater jobs.
+Bootstrap probes the required auth states unless `TRIAD_BOOTSTRAP_SKIP_AUTH=1`
+is set for CI or scheduled updater jobs.
 
 Linux/WSL2 prerequisites: OpenAI Codex sandbox docs
 (`https://developers.openai.com/codex/concepts/sandboxing`) say to install
@@ -120,6 +136,64 @@ Open a new Codex thread after installation so plugin skills load from the plugin
 cache. Trust the workspace only when developing from this repo or relying on
 repo-local `.agents/skills/`; project-local skills are trust-gated.
 
+## Pre-Release Gate
+
+Before publishing a release ref or pushing `main`, run the full local gate from
+the checkout that will be distributed:
+
+```bash
+bash <<'TRIAD_RELEASE_GATE'
+set -euo pipefail
+
+release_base="${RELEASE_BASE:-origin/main}"
+tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/triad-codex-dispatch-release-check.XXXXXX")"
+trap 'rm -rf "$tmp_root"' EXIT
+tmp_root="$(cd "$tmp_root" && pwd -P)"
+mkdir -p "$tmp_root/bin"
+
+case "$release_base" in
+  origin/*) git fetch --prune origin ;;
+esac
+
+if ! git rev-parse --verify -q "$release_base^{commit}" >/dev/null; then
+  printf '%s\n' "release base not found: $release_base; run git fetch or set RELEASE_BASE" >&2
+  exit 1
+fi
+
+git diff --check
+git diff --cached --check
+git diff --check "$release_base"...HEAD
+git status --short > "$tmp_root/git-status.txt"
+if test -s "$tmp_root/git-status.txt"; then
+  cat "$tmp_root/git-status.txt" >&2
+  printf '%s\n' "release gate requires a clean worktree, including untracked files" >&2
+  exit 1
+fi
+
+python3 -m pytest -q tests/ -p no:cacheprovider
+bash -n scripts/bootstrap.sh
+TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
+TRIAD_BOOTSTRAP_BIN_DIR="$tmp_root/bin" \
+CODEX_HOME="$tmp_root/codex" \
+HOME="$tmp_root/home" \
+XDG_CONFIG_HOME="$tmp_root/config" \
+PATH="$tmp_root/bin:$PATH" \
+scripts/bootstrap.sh --check
+TRIAD_RELEASE_GATE
+```
+
+Then run `triad-cross-family-review` on the exact diff or release candidate.
+Refresh your chosen base first, for example with `git fetch --prune origin`, or
+set `RELEASE_BASE` when the release branch should be compared against a base
+other than `origin/main`.
+Do not push the release until the independent reviewers are unanimous:
+`Claude SAFE`, `agy SAFE`, and `fresh Codex SAFE`. If any reviewer returns a
+blocking question, update the implementation or docs, rerun the gate above, and
+rerun the 3-way review.
+
 ## Recommended Codex User Settings
 
 Skills do not bypass the sandbox. Per the OpenAI Codex docs, a skill is loaded
@@ -140,7 +214,8 @@ Do **not** set `sandbox_mode = "danger-full-access"` for this toolkit.
 
 The user-home writes this distribution layer may need are bootstrap targets:
 
-- `~/.codex/agents/` for personal-scope repair agents.
+- `$CODEX_HOME/agents/`, or `~/.codex/agents/` when `CODEX_HOME` is unset, for
+  personal-scope repair agents.
 - `~/.config/triad-codex-dispatch/` for classifier patches.
 - `~/.local/bin/` for wrapper launchers, unless
   `TRIAD_BOOTSTRAP_BIN_DIR` points somewhere else on `PATH`.
@@ -177,7 +252,8 @@ network_access = false
 ```
 
 Use absolute paths in manual TOML; do not rely on shell expansion inside TOML.
-Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`.
+Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`, or use
+the absolute `CODEX_HOME` path when the team sets `CODEX_HOME`.
 
 Run bootstrap with `codex --profile triad-codex-dispatch-install --search` or
 approve `scripts/bootstrap.sh --check` once from a normal session. Do not keep
@@ -354,10 +430,10 @@ the Gemini Policy Engine file for read-only mode, rejects read-only
 before relying on Gemini read-only enforcement. Individual Gemini CLI users
 should use agy.
 
-Do not keep install/update targets such as `~/.codex/agents` or `~/.local/bin`
-writable in the day-to-day runtime profile. Repair-agent TOMLs and wrapper
-launchers are installed by bootstrap/update, then only read during normal
-dispatch.
+Do not keep install/update targets such as `$CODEX_HOME/agents` (default
+`~/.codex/agents`) or `~/.local/bin` writable in the day-to-day runtime profile.
+Repair-agent TOMLs and wrapper launchers are installed by bootstrap/update, then
+only read during normal dispatch.
 
 Replace `/path/to/triad-codex-dispatch` with the local checkout used by bootstrap
 launchers. Keep only that `bin/_logs` runtime artifact directory writable, not
@@ -388,6 +464,9 @@ Local clone:
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 ```
 
@@ -400,6 +479,9 @@ git checkout --detach FETCH_HEAD
 codex plugin marketplace remove triad-codex-dispatch-local
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 scripts/bootstrap.sh --check
 ```
 
@@ -461,7 +543,8 @@ setup must provide the Codex Linux/WSL2 sandbox prerequisite `bubblewrap` /
 - Writable classifier extension JSON at
   `~/.config/triad-codex-dispatch/classifier-patches.json`, or
   `TRIAD_CLASSIFIER_EXTENSION` if set.
-- Personal-scope repair agents under `~/.codex/agents/`.
+- Personal-scope repair agents under `$CODEX_HOME/agents/`, or
+  `~/.codex/agents/` when `CODEX_HOME` is unset.
 
 If `~/.local/bin` is not on `PATH`, either add it before running bootstrap or set
 `TRIAD_BOOTSTRAP_BIN_DIR` to a directory already on `PATH`.

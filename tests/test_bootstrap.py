@@ -76,8 +76,13 @@ def _run_bootstrap(
     if extra:
         path_parts.append(extra)
     path_parts.extend([str(python_bin), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+    base_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "CODEX_HOME" and not key.startswith("TRIAD_")
+    }
     env = {
-        **os.environ,
+        **base_env,
         "HOME": str(tmp_path / "home"),
         "XDG_CONFIG_HOME": str(tmp_path / "xdg-config"),
         "PATH": os.pathsep.join(path_parts),
@@ -137,6 +142,98 @@ def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
     assert (repo_root / "bin" / "_logs").is_dir()
     assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
     assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
+
+
+def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
+    codex_home = tmp_path / "custom-codex-home"
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
+        assert (codex_home / "agents" / f"{name}.toml").is_file()
+    assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
+    assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "CODEX_HOME": "~/custom-codex-home",
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    codex_home = Path(env["HOME"]) / "custom-codex-home"
+    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
+        assert (codex_home / "agents" / f"{name}.toml").is_file()
+    assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
+    assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
+    assert not (Path.cwd() / "~").exists()
+
+
+def test_check_supports_workspace_contained_install_targets(tmp_path):
+    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    workspace_codex = repo_root / ".triad-codex-home"
+    workspace_config = repo_root / ".triad-config"
+    workspace_bin = repo_root / ".triad-bin"
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        repo_root=repo_root,
+        pre_path=(workspace_bin,),
+        env_overrides={
+            "CODEX_HOME": str(workspace_codex),
+            "XDG_CONFIG_HOME": str(workspace_config),
+            "TRIAD_BOOTSTRAP_BIN_DIR": str(workspace_bin),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (workspace_bin / "claude_wrapper.py").is_file()
+    assert (workspace_config / "triad-codex-dispatch" / "classifier-patches.json").is_file()
+    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
+        assert (workspace_codex / "agents" / f"{name}.toml").is_file()
+    assert (workspace_codex / "triad-codex-dispatch.config.toml").is_file()
+    assert (workspace_codex / "rules" / "triad-codex-dispatch.rules").is_file()
+    assert not (Path(env["HOME"]) / ".codex").exists()
+    assert not (Path(env["HOME"]) / ".config" / "triad-codex-dispatch").exists()
+
+
+def test_check_ignores_python_stderr_when_parsing_install_paths(tmp_path):
+    codex_home = tmp_path / "custom-codex-home"
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        python_script=(
+            "printf 'python startup warning\\n' >&2\n"
+            f"exec {sys.executable} \"$@\""
+        ),
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "python startup warning" in result.stderr
+    assert f"Codex runtime profile installed: {codex_home}" in result.stdout
+    assert f"Codex command rules installed: {codex_home / 'rules' / 'triad-codex-dispatch.rules'}" in result.stdout
+    assert (launcher_bin / "claude_wrapper.py").is_file()
+    assert (codex_home / "agents" / "claude-wrapper-repair.toml").is_file()
+    assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
+    assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
 
 
 def test_check_warns_when_gemini_binary_is_missing(tmp_path):
@@ -248,6 +345,18 @@ def test_check_rejects_relative_launcher_dir_override(tmp_path):
 
     assert result.returncode != 0
     assert "TRIAD_BOOTSTRAP_BIN_DIR must be an absolute path" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_check_rejects_relative_codex_home_override(tmp_path):
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"CODEX_HOME": "relative/codex-home"},
+    )
+
+    assert result.returncode != 0
+    assert "CODEX_HOME must be an absolute path" in result.stderr
     assert not any(launcher_bin.iterdir())
     assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
 
