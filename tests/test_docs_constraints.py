@@ -5,6 +5,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_READMES = ("README.md", "README.ko.md")
+DETAILED_SETUP_DOCS = (
+    "migration/COMPANY-SETUP.md",
+    "migration/COMPANY-SETUP.ko.md",
+)
+SETUP_DOCS = PUBLIC_READMES + DETAILED_SETUP_DOCS
 
 
 def _tracked_files() -> list[Path]:
@@ -99,11 +105,7 @@ def test_distribution_repo_does_not_ship_duplicate_repo_local_skills():
 
 
 def test_distribution_docs_name_all_user_home_write_targets():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "$CODEX_HOME/agents" in text
         assert "~/.codex/agents" in text
@@ -111,12 +113,42 @@ def test_distribution_docs_name_all_user_home_write_targets():
         assert "~/.local/bin" in text
 
 
+def test_public_readmes_are_split_public_and_user_facing():
+    en = (ROOT / "README.md").read_text(encoding="utf-8")
+    ko = (ROOT / "README.ko.md").read_text(encoding="utf-8")
+
+    assert "[한국어 README](README.ko.md)" in en
+    assert "[English README](README.md)" in ko
+    assert len(en.splitlines()) <= 220
+    assert len(ko.splitlines()) <= 220
+
+    for text in (en, ko):
+        assert "https://github.com/codefoundry-io/triad-codex-dispatch.git" in text
+        assert "codex plugin marketplace add ." in text
+        assert "codex plugin add triad-codex-dispatch@triad-codex-dispatch-local" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1" in text
+        assert "TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never" in text
+        assert "codex --profile triad-codex-dispatch --search" in text
+        assert "`codex`" in text
+        assert "`claude`" in text
+        assert "`agy`" in text
+        assert "OAuth login" in text
+        assert "OS package" in text
+        assert "CODEX_HOME" in text
+        assert "TRIAD_BOOTSTRAP_BIN_DIR" in text
+        assert "TRIAD_WRAPPER_ALLOWED_ROOTS" in text
+        assert "skills.config" in text
+        assert "public" in text.lower()
+        assert "COMPANY-SETUP" not in text
+        assert "<internal" not in text
+        assert "com.company" not in text
+        assert "사내" not in text
+        assert "Internal Git marketplace" not in text
+
+
 def test_install_docs_state_auth_assumption_and_target_choices():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "OAuth logged" in text or "OAuth login" in text
         assert "`codex`, `claude`, and `agy`" in text or "`codex`, `claude`, `agy`" in text
@@ -140,35 +172,40 @@ def test_install_docs_state_auth_assumption_and_target_choices():
 
 
 def test_readme_remove_docs_cover_default_and_workspace_targets():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "Default user-home removal" in text
-    assert "기본 user-home 설치 삭제" in text
-    assert "codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local" in text
-    assert "codex plugin marketplace remove triad-codex-dispatch-local" in text
-    assert "~/.codex/agents/claude-wrapper-repair.toml" in text
-    assert "~/.codex/agents/gemini-wrapper-repair.toml" in text
-    assert "~/.codex/agents/agy-wrapper-repair.toml" in text
-    assert "~/.codex/triad-codex-dispatch.config.toml" in text
-    assert "~/.codex/rules/triad-codex-dispatch.rules" in text
-    assert "~/.local/bin/claude_wrapper.py" in text
-    assert "~/.local/bin/gemini_wrapper.py" in text
-    assert "~/.local/bin/antigravity_wrapper.py" in text
-    assert "~/.config/triad-codex-dispatch" in text
-    assert "TRIAD_BOOTSTRAP_BIN_DIR" in text
-    assert "CODEX_HOME" in text
-    assert "XDG_CONFIG_HOME" in text
-    assert ".triad-codex-home/" in text
-    assert ".triad-config/" in text
-    assert ".triad-bin/" in text
-    assert "launchctl bootout" in text
+    expected = [
+        "codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local",
+        "codex plugin marketplace remove triad-codex-dispatch-local",
+        "~/.codex/agents/claude-wrapper-repair.toml",
+        "~/.codex/agents/gemini-wrapper-repair.toml",
+        "~/.codex/agents/agy-wrapper-repair.toml",
+        "~/.codex/triad-codex-dispatch.config.toml",
+        "~/.codex/rules/triad-codex-dispatch.rules",
+        "~/.local/bin/claude_wrapper.py",
+        "~/.local/bin/gemini_wrapper.py",
+        "~/.local/bin/antigravity_wrapper.py",
+        "~/.config/triad-codex-dispatch",
+        "TRIAD_BOOTSTRAP_BIN_DIR",
+        "CODEX_HOME",
+    ]
+
+    en = (ROOT / "README.md").read_text(encoding="utf-8")
+    ko = (ROOT / "README.ko.md").read_text(encoding="utf-8")
+    assert "Default user-home removal" in en
+    assert "기본 user-home 설치 삭제" in ko
+    for text in (en, ko):
+        for phrase in expected:
+            assert phrase in text
+
+    for rel in DETAILED_SETUP_DOCS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "XDG_CONFIG_HOME" in text
+        assert ".triad-codex-home/" in text
+        assert ".triad-config/" in text
+        assert ".triad-bin/" in text
 
 
 def test_distribution_docs_explain_bootstrap_pinned_paths():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "TRIAD_CLASSIFIER_EXTENSION" in text
         assert "bootstrap" in text
@@ -178,11 +215,7 @@ def test_distribution_docs_explain_bootstrap_pinned_paths():
 
 
 def test_distribution_docs_document_bounded_runtime_artifacts():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "bin/_logs/<cli>/" in text
         assert "100" in text
@@ -193,21 +226,13 @@ def test_distribution_docs_document_bounded_runtime_artifacts():
 
 def test_distribution_docs_use_codex_specific_profile_name():
     forbidden = "triad-dispatch.config.toml"
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert forbidden not in text
 
 
 def test_runtime_convenience_profile_keeps_install_targets_read_only():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "/Users/YOUR_USER" not in text
         assert "YOUR_USER" not in text
@@ -241,11 +266,7 @@ def test_runtime_convenience_profile_keeps_install_targets_read_only():
 
 
 def test_docs_use_bash_compatible_triad_entrypoint_snippets():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "cat >> ~/.zshrc" not in text
         assert "source ~/.zshrc" not in text
@@ -292,9 +313,7 @@ def test_repair_named_agents_use_scoped_permission_profile():
             assert "replace that value with `read-only`" in data["developer_instructions"]
 
     for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
+        *DETAILED_SETUP_DOCS,
         "migration/AGENTS.recommended.md",
         "docs/specs/2026-07-01-codex-led-triad-dispatch-design.md",
     ]:
@@ -312,11 +331,7 @@ def test_repair_named_agents_use_scoped_permission_profile():
 
 
 def test_docs_explain_profile_file_layering():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "$CODEX_HOME/<name>.config.toml" in text
         assert "top-level" in text
@@ -327,11 +342,7 @@ def test_docs_explain_profile_file_layering():
 
 
 def test_docs_explain_user_layer_command_rules_install():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1" in text
         assert "TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never" in text
@@ -386,11 +397,7 @@ def test_docs_explain_user_layer_command_rules_install():
 
 
 def test_docs_explain_pre_release_gate():
-    for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
-    ]:
+    for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "Pre-Release Gate" in text or "배포 전 Gate" in text
         assert "bash <<'TRIAD_RELEASE_GATE'" in text
@@ -434,9 +441,7 @@ def test_docs_explain_pre_release_gate():
 
 def test_git_marketplace_update_docs_readd_when_ref_changes():
     for rel in [
-        "README.md",
-        "migration/COMPANY-SETUP.md",
-        "migration/COMPANY-SETUP.ko.md",
+        *DETAILED_SETUP_DOCS,
         "docs/specs/2026-07-01-codex-led-triad-dispatch-design.md",
     ]:
         text = (ROOT / rel).read_text(encoding="utf-8")
