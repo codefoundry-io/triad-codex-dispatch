@@ -123,13 +123,19 @@ def test_public_readmes_are_split_public_and_user_facing():
     assert len(ko.splitlines()) <= 220
 
     for text in (en, ko):
-        assert "https://github.com/codefoundry-io/triad-codex-dispatch.git" in text
-        assert "codex plugin marketplace add ." in text
-        assert "codex plugin add triad-codex-dispatch@triad-codex-dispatch-local" in text
+        assert "https://github.com/codefoundry-io/triad-codex-dispatch" in text
+        assert "codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main" in text
+        assert "codex plugin add triad-codex-dispatch@triad-codex-dispatch --json" in text
+        assert "jq -r '.installedPath'" in text
+        assert '"$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --check' in text
+        assert "codex plugin marketplace upgrade triad-codex-dispatch" in text
         assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in text
         assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1" in text
         assert "TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never" in text
         assert "codex --profile triad-codex-dispatch --search" in text
+        assert "git clone" not in text
+        assert "git pull" not in text
+        assert "codex plugin marketplace add ." not in text
         assert "`codex`" in text
         assert "`claude`" in text
         assert "`agy`" in text
@@ -173,8 +179,8 @@ def test_install_docs_state_auth_assumption_and_target_choices():
 
 def test_readme_remove_docs_cover_default_and_workspace_targets():
     expected = [
-        "codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local",
-        "codex plugin marketplace remove triad-codex-dispatch-local",
+        "codex plugin remove triad-codex-dispatch@triad-codex-dispatch",
+        "codex plugin marketplace remove triad-codex-dispatch",
         "~/.codex/agents/claude-wrapper-repair.toml",
         "~/.codex/agents/gemini-wrapper-repair.toml",
         "~/.codex/agents/agy-wrapper-repair.toml",
@@ -446,7 +452,7 @@ def test_git_marketplace_update_docs_readd_when_ref_changes():
     ]:
         text = (ROOT / rel).read_text(encoding="utf-8")
         compact = " ".join(text.split())
-        assert "marketplace remove triad-codex-dispatch-local" in text
+        assert "marketplace remove triad-codex-dispatch" in text
         assert (
             "marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>"
             in compact

@@ -33,7 +33,7 @@ For a local clone:
 ```bash
 cd /path/to/triad-codex-dispatch
 codex plugin marketplace add .
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -50,7 +50,7 @@ cd triad-codex-dispatch
 git fetch --tags origin <release-ref>
 git checkout --detach FETCH_HEAD
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -497,7 +497,7 @@ Local clone:
 ```bash
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -510,9 +510,9 @@ Internal Git marketplace:
 cd /path/to/triad-codex-dispatch
 git fetch --tags origin <release-ref>
 git checkout --detach FETCH_HEAD
-codex plugin marketplace remove triad-codex-dispatch-local
+codex plugin marketplace remove triad-codex-dispatch
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -535,8 +535,8 @@ checkout.
 Remove the installed plugin and marketplace source:
 
 ```bash
-codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
-codex plugin marketplace remove triad-codex-dispatch-local
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+codex plugin marketplace remove triad-codex-dispatch
 ```
 
 Optional cleanup for bootstrap-installed files:
@@ -631,7 +631,7 @@ admin verifies the current Codex fleet-management keys:
 features.plugins = true
 features.plugin_sharing = false
 
-[plugins.sources.triad-codex-dispatch-local]
+[plugins.sources.triad-codex-dispatch]
 source = "<internal-git-url>"
 ref = "<release-ref>"
 ```

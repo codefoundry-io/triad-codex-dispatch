@@ -42,20 +42,23 @@ The installer does not perform OAuth login and does not install OS packages.
 
 ## Install
 
-Use the public repository clone as the stable checkout. Keep it after install;
-the generated launchers call wrapper files from this checkout.
+Install directly from the public GitHub repository. No local clone is required
+for normal users.
+
+Repository: https://github.com/codefoundry-io/triad-codex-dispatch
 
 ```bash
-git clone https://github.com/codefoundry-io/triad-codex-dispatch.git
-cd triad-codex-dispatch
+codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 
-codex plugin marketplace add .
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+TRIAD_PLUGIN_DIR="$(
+  codex plugin add triad-codex-dispatch@triad-codex-dispatch --json |
+    jq -r '.installedPath'
+)"
 
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
+"$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --check
 ```
 
 Then start a new Codex session:
@@ -72,6 +75,8 @@ Important install behavior:
 - Bootstrap writes classifier patches under `~/.config/triad-codex-dispatch/`.
 - Bootstrap writes wrapper launchers under `~/.local/bin` unless
   `TRIAD_BOOTSTRAP_BIN_DIR` is set.
+- The generated wrapper launchers call files from the installed plugin cache.
+  Rerun bootstrap after every plugin update so those paths stay current.
 - Existing Codex sessions may not see newly installed plugin skills or custom
   agents. Start a new session after install or update.
 
@@ -117,14 +122,17 @@ only when you need additional trusted roots.
 ## Update
 
 ```bash
-cd /path/to/triad-codex-dispatch
-git pull --ff-only
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin marketplace upgrade triad-codex-dispatch
+
+TRIAD_PLUGIN_DIR="$(
+  codex plugin add triad-codex-dispatch@triad-codex-dispatch --json |
+    jq -r '.installedPath'
+)"
 
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
+"$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --check
 ```
 
 Start a new Codex session after updating.
@@ -134,8 +142,8 @@ Start a new Codex session after updating.
 Default user-home removal:
 
 ```bash
-codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
-codex plugin marketplace remove triad-codex-dispatch-local
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+codex plugin marketplace remove triad-codex-dispatch
 
 rm -f ~/.codex/agents/claude-wrapper-repair.toml
 rm -f ~/.codex/agents/gemini-wrapper-repair.toml
@@ -158,23 +166,25 @@ The shipped repair agents are repair-only and must not recursively dispatch.
 Do not add triad dispatch skills to those repair agents.
 
 If you create your own Codex custom subagent that should call triad dispatch
-skills, opt in explicitly with Codex `skills.config`:
+skills, opt in explicitly with Codex `skills.config`. Replace
+`/absolute/plugin/cache/path` with the `TRIAD_PLUGIN_DIR` value from install or
+update output.
 
 ```toml
 [[skills.config]]
-path = "/path/to/triad-codex-dispatch/skills/triad-claude-dispatch/SKILL.md"
+path = "/absolute/plugin/cache/path/skills/triad-claude-dispatch/SKILL.md"
 enabled = true
 
 [[skills.config]]
-path = "/path/to/triad-codex-dispatch/skills/triad-antigravity-dispatch/SKILL.md"
+path = "/absolute/plugin/cache/path/skills/triad-antigravity-dispatch/SKILL.md"
 enabled = true
 
 [[skills.config]]
-path = "/path/to/triad-codex-dispatch/skills/triad-gemini-dispatch/SKILL.md"
+path = "/absolute/plugin/cache/path/skills/triad-gemini-dispatch/SKILL.md"
 enabled = true
 
 [[skills.config]]
-path = "/path/to/triad-codex-dispatch/skills/triad-cross-family-review/SKILL.md"
+path = "/absolute/plugin/cache/path/skills/triad-cross-family-review/SKILL.md"
 enabled = true
 ```
 
@@ -183,7 +193,8 @@ After editing custom-agent TOML files, start a new Codex session.
 ## Notes
 
 - This plugin avoids `danger-full-access`.
-- Generated command rules allow only this checkout's wrapper launchers.
+- Generated command rules allow only wrapper launchers installed from the plugin
+  cache.
 - Repair-agent permissions are declared TOML grants, not a proof that a broader
   parent session or managed runtime override cannot allow more.
 - Detailed design and evidence live under `docs/`.

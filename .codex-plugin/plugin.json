@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Codex-led triad dispatch skills and wrapper runbooks for Claude, Antigravity, Gemini, and cross-family review.",
   "author": {
-    "name": "Internal Triad Maintainers"
+    "name": "Triad Codex Dispatch Maintainers"
   },
   "keywords": [
     "codex",
@@ -18,7 +18,7 @@
     "displayName": "Triad Codex Dispatch",
     "shortDescription": "Dispatch Claude and Google-family legs from a Codex leader.",
     "longDescription": "Codex-led triad dispatch runbooks for single-shot Claude, Antigravity, Gemini business-tier, and cross-family review workflows. Bootstrap supplies local wrapper PATH checks and repair-agent fallback installation.",
-    "developerName": "Internal Triad Maintainers",
+    "developerName": "Triad Codex Dispatch Maintainers",
     "category": "Productivity",
     "capabilities": [
       "Interactive",

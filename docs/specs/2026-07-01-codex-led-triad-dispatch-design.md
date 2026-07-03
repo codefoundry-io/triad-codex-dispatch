@@ -334,7 +334,7 @@ Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
    currently configured marketplace snapshot. It does not change a pinned
    `--ref`; when moving to a different release ref, remove/re-add the marketplace
    source with the new ref, then reinstall the plugin:
-   `codex plugin marketplace remove triad-codex-dispatch-local` followed by
+   `codex plugin marketplace remove triad-codex-dispatch` followed by
    `codex plugin marketplace add <internal-git-url-or-owner/repo> --ref
    <release-ref>`. The bootstrap checkout must also advance to the same fetched
    snapshot with `git fetch --tags origin <release-ref>` and

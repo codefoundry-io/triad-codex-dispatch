@@ -32,7 +32,7 @@ business-tier `gemini`는 팀이 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`을 켠 경�
 ```bash
 cd /path/to/triad-codex-dispatch
 codex plugin marketplace add .
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -49,7 +49,7 @@ cd triad-codex-dispatch
 git fetch --tags origin <release-ref>
 git checkout --detach FETCH_HEAD
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -482,7 +482,7 @@ repair verification은 원래 wrapper의 `--cwd`를 제거하고 toolkit checkou
 ```bash
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -495,9 +495,9 @@ scripts/bootstrap.sh --check
 cd /path/to/triad-codex-dispatch
 git fetch --tags origin <release-ref>
 git checkout --detach FETCH_HEAD
-codex plugin marketplace remove triad-codex-dispatch-local
+codex plugin marketplace remove triad-codex-dispatch
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
-codex plugin add triad-codex-dispatch@triad-codex-dispatch-local
+codex plugin add triad-codex-dispatch@triad-codex-dispatch
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -519,8 +519,8 @@ local checkout을 최신 snapshot으로 이동시키는 단계는 위의 `git fe
 설치된 plugin과 marketplace source를 제거한다.
 
 ```bash
-codex plugin remove triad-codex-dispatch@triad-codex-dispatch-local
-codex plugin marketplace remove triad-codex-dispatch-local
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+codex plugin marketplace remove triad-codex-dispatch
 ```
 
 bootstrap이 설치한 파일은 필요하면 지운다.
@@ -613,7 +613,7 @@ repair agent가 `~/.config/triad-codex-dispatch/classifier-patches.json`을 수�
 features.plugins = true
 features.plugin_sharing = false
 
-[plugins.sources.triad-codex-dispatch-local]
+[plugins.sources.triad-codex-dispatch]
 source = "<internal-git-url>"
 ref = "<release-ref>"
 ```

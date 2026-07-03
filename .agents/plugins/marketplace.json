@@ -1,7 +1,7 @@
 {
-  "name": "triad-codex-dispatch-local",
+  "name": "triad-codex-dispatch",
   "interface": {
-    "displayName": "Triad Codex Dispatch Local"
+    "displayName": "Triad Codex Dispatch"
   },
   "plugins": [
     {
