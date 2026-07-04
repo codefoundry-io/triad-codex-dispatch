@@ -119,8 +119,8 @@ def test_public_readmes_are_split_public_and_user_facing():
 
     assert "[한국어 README](README.ko.md)" in en
     assert "[English README](README.md)" in ko
-    assert len(en.splitlines()) <= 220
-    assert len(ko.splitlines()) <= 220
+    assert len(en.splitlines()) <= 250
+    assert len(ko.splitlines()) <= 250
 
     for text in (en, ko):
         assert "https://github.com/codefoundry-io/triad-codex-dispatch" in text
@@ -142,7 +142,13 @@ def test_public_readmes_are_split_public_and_user_facing():
         assert "OAuth login" in text
         assert "OS package" in text
         assert "CODEX_HOME" in text
+        assert "XDG_CONFIG_HOME" in text
         assert "TRIAD_BOOTSTRAP_BIN_DIR" in text
+        assert "User scope" in text
+        assert "Workspace scope" in text
+        assert ".triad-codex-home" in text
+        assert ".triad-config" in text
+        assert ".triad-bin" in text
         assert "TRIAD_WRAPPER_ALLOWED_ROOTS" in text
         assert "skills.config" in text
         assert "public" in text.lower()

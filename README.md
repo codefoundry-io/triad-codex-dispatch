@@ -47,6 +47,23 @@ for normal users.
 
 Repository: https://github.com/codefoundry-io/triad-codex-dispatch
 
+Choose one install scope before running install/update/remove commands:
+
+- User scope: recommended default. Leave `CODEX_HOME`, `XDG_CONFIG_HOME`, and
+  `TRIAD_BOOTSTRAP_BIN_DIR` unset.
+- Workspace scope: use only when you want plugin cache, profile, rules,
+  classifier patches, and launchers under the current workspace. Run from that
+  workspace and keep the same environment when starting Codex.
+
+```bash
+# Workspace scope only. Skip this block for user scope.
+mkdir -p .triad-codex-home .triad-config .triad-bin
+export CODEX_HOME="$PWD/.triad-codex-home"
+export XDG_CONFIG_HOME="$PWD/.triad-config"
+export TRIAD_BOOTSTRAP_BIN_DIR="$PWD/.triad-bin"
+export PATH="$TRIAD_BOOTSTRAP_BIN_DIR:$PATH"
+```
+
 ```bash
 codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 
@@ -69,12 +86,13 @@ codex --profile triad-codex-dispatch --search
 
 Important install behavior:
 
-- Default install target is your user home. Leave `CODEX_HOME` unset unless you
-  intentionally manage a separate Codex home.
-- Bootstrap writes repair agents, profile, and command rules under `~/.codex/`.
-- Bootstrap writes classifier patches under `~/.config/triad-codex-dispatch/`.
-- Bootstrap writes wrapper launchers under `~/.local/bin` unless
+- User scope writes repair agents, profile, and command rules under
+  `~/.codex/`.
+- User scope writes classifier patches under `~/.config/triad-codex-dispatch/`.
+- User scope writes wrapper launchers under `~/.local/bin` unless
   `TRIAD_BOOTSTRAP_BIN_DIR` is set.
+- Workspace scope writes those same artifacts under `.triad-codex-home/`,
+  `.triad-config/`, and `.triad-bin/`.
 - The generated wrapper launchers call files from the installed plugin cache.
   Rerun bootstrap after every plugin update so those paths stay current.
 - Existing Codex sessions may not see newly installed plugin skills or custom
@@ -83,7 +101,8 @@ Important install behavior:
 ## Recommended Shell Entry
 
 Add a command that always starts Codex with the triad profile from the current
-workspace:
+workspace. For workspace scope, export the same scope variables before using
+this command.
 
 ```bash
 TRIAD_SHELL_RC="${HOME}/.bashrc"
@@ -120,6 +139,8 @@ their process working directory by default. Set `TRIAD_WRAPPER_ALLOWED_ROOTS`
 only when you need additional trusted roots.
 
 ## Update
+
+For workspace scope, export the same scope variables from install first.
 
 ```bash
 codex plugin marketplace upgrade triad-codex-dispatch
@@ -159,6 +180,20 @@ rm -rf ~/.config/triad-codex-dispatch
 
 If you installed with a custom `CODEX_HOME`, remove the agent/profile/rules
 files from that directory instead of `~/.codex`.
+
+Workspace scope removal:
+
+```bash
+export CODEX_HOME="$PWD/.triad-codex-home"
+export XDG_CONFIG_HOME="$PWD/.triad-config"
+export TRIAD_BOOTSTRAP_BIN_DIR="$PWD/.triad-bin"
+export PATH="$TRIAD_BOOTSTRAP_BIN_DIR:$PATH"
+
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+codex plugin marketplace remove triad-codex-dispatch
+
+rm -rf .triad-codex-home .triad-config .triad-bin
+```
 
 ## Custom Subagents
 

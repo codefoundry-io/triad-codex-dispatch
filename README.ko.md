@@ -42,6 +42,23 @@ public GitHub repository에서 바로 설치합니다. 일반 사용자는 local
 
 Repository: https://github.com/codefoundry-io/triad-codex-dispatch
 
+설치/업데이트/삭제 명령을 실행하기 전에 설치 scope를 하나 고르세요.
+
+- User scope: 권장 기본값입니다. `CODEX_HOME`, `XDG_CONFIG_HOME`,
+  `TRIAD_BOOTSTRAP_BIN_DIR`를 지정하지 않습니다.
+- Workspace scope: plugin cache, profile, rules, classifier patch, launcher를
+  현재 workspace 아래에 두고 싶을 때만 씁니다. 해당 workspace에서 실행하고, Codex를
+  시작할 때도 같은 환경변수를 유지하세요.
+
+```bash
+# Workspace scope 전용입니다. User scope면 이 블록을 건너뜁니다.
+mkdir -p .triad-codex-home .triad-config .triad-bin
+export CODEX_HOME="$PWD/.triad-codex-home"
+export XDG_CONFIG_HOME="$PWD/.triad-config"
+export TRIAD_BOOTSTRAP_BIN_DIR="$PWD/.triad-bin"
+export PATH="$TRIAD_BOOTSTRAP_BIN_DIR:$PATH"
+```
+
 ```bash
 codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 
@@ -64,11 +81,12 @@ codex --profile triad-codex-dispatch --search
 
 설치 시 중요한 점:
 
-- 기본 설치 대상은 사용자 홈입니다. 별도 Codex home을 직접 관리하는 경우가 아니면
-  `CODEX_HOME`을 지정하지 마세요.
-- repair agent, profile, command rules는 `~/.codex/` 아래에 설치됩니다.
-- classifier patch는 `~/.config/triad-codex-dispatch/` 아래에 저장됩니다.
-- wrapper launcher는 기본적으로 `~/.local/bin`에 설치됩니다.
+- User scope는 repair agent, profile, command rules를 `~/.codex/` 아래에
+  설치합니다.
+- User scope는 classifier patch를 `~/.config/triad-codex-dispatch/` 아래에 저장합니다.
+- User scope는 wrapper launcher를 기본적으로 `~/.local/bin`에 설치합니다.
+- Workspace scope는 같은 산출물을 `.triad-codex-home/`, `.triad-config/`,
+  `.triad-bin/` 아래에 둡니다.
 - 생성된 wrapper launcher는 설치된 plugin cache의 파일을 호출합니다. plugin을 업데이트한
   뒤에는 bootstrap을 다시 실행해서 launcher 경로를 최신 상태로 맞추세요.
 - 기존 Codex session은 새 plugin skill이나 custom agent를 못 볼 수 있습니다. 설치나
@@ -77,6 +95,7 @@ codex --profile triad-codex-dispatch --search
 ## 권장 실행 명령
 
 현재 workspace에서 항상 triad profile로 Codex를 시작하는 명령을 추가합니다.
+Workspace scope라면 이 명령을 쓰기 전에 같은 scope 환경변수를 먼저 export하세요.
 
 ```bash
 TRIAD_SHELL_RC="${HOME}/.bashrc"
@@ -113,6 +132,8 @@ directory를 기본 trusted root로 봅니다. 추가 trusted root가 필요할 
 `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정하세요.
 
 ## 업데이트
+
+Workspace scope로 설치했다면 설치 때 쓴 scope 환경변수를 먼저 다시 export하세요.
 
 ```bash
 codex plugin marketplace upgrade triad-codex-dispatch
@@ -152,6 +173,20 @@ rm -rf ~/.config/triad-codex-dispatch
 
 custom `CODEX_HOME`으로 설치했다면 agent/profile/rules 파일은 `~/.codex`가 아니라
 그 `CODEX_HOME`에서 지우세요.
+
+Workspace scope 삭제:
+
+```bash
+export CODEX_HOME="$PWD/.triad-codex-home"
+export XDG_CONFIG_HOME="$PWD/.triad-config"
+export TRIAD_BOOTSTRAP_BIN_DIR="$PWD/.triad-bin"
+export PATH="$TRIAD_BOOTSTRAP_BIN_DIR:$PATH"
+
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+codex plugin marketplace remove triad-codex-dispatch
+
+rm -rf .triad-codex-home .triad-config .triad-bin
+```
 
 ## Custom Subagent
 
