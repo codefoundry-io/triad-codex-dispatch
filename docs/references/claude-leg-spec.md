@@ -6,16 +6,8 @@ repo: `skills/triad-claude-dispatch/references/claude-headless-spec.md`.
 `code.claude.com/docs/en/{headless,cli-reference,model-config,env-vars}.md` +
 Agent SDK `structured-outputs`. Extraction date 2026-07-01.
 
-> **ERRATA (2026-07-01):** the IMPLEMENTED `claude_wrapper.py` does **not**
-> include `--add-dir`. Large-packet file-IPC uses `--cwd <repo-root>` + a path
-> reference inside the (argv) prompt — the read-only leg's Read tool opens the
-> file itself. Every `--add-dir` mention below describes the original design and
-> is superseded by the `--cwd` + path-reference mechanism. (Adding `--add-dir`
-> passthrough remains a possible future enhancement if a leg must read files
-> outside `--cwd`.)
->
 > **ERRATA (2026-07-02):** no-prompt Codex rules require the wrapper command's
-> first argv token to be an absolute launcher/check-out path. Dispatch skills
+> first argv token to be an absolute launcher path. Dispatch skills
 > must not wrap the wrapper in `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`,
 > heredoc command substitution, redirection, or inline env assignment. Long
 > prompts use wrapper `--prompt-file /absolute/path`.
@@ -58,7 +50,6 @@ claude -p '<INSTRUCTION>' \
   [--model <alias>] \
   [--effort <low|medium|high|xhigh|max>] \
   [--json-schema '<schema>'] \
-  [--add-dir <abs-dir> ...] \
   [--append-system-prompt '<...>'] \
   [--fallback-model <alias,alias>] \
   [--bare]
@@ -94,8 +85,9 @@ non-prompting mode.
   the deterministic non-interactive read-only mode. `--allowedTools` feeds the
   allow-set. (`auto` is a looser alternative; `dontAsk` + explicit allowlist is
   more predictable → chosen default.)
-- `--add-dir <dir>` grants extra readable/writable roots (CLAUDE.md is NOT
-  discovered from them). Used for review packets (§9) and workspace-write cwd.
+- The wrapper uses `--cwd <repo-root>` for repository context. Large review
+  packets are passed as absolute or repo-relative paths inside the prompt; the
+  read-only leg opens them with the allowed `Read` tool.
 
 ---
 
@@ -154,7 +146,7 @@ Run with `--output-format json`. Single top-level result object. Extractor reads
 |---|---|
 | `ok` (0) | exit 0, `is_error=false`, `.result` present (or `.structured_output` when schema) |
 | `extraction-error` (1) | exit 0 / `is_error=false` but no `.result` and no `.structured_output` (empty answer) → repair |
-| schema fail (66) | `subtype == "error_max_structured_output_retries"` (structured-output retries exhausted). NB: Claude has no submit-time schema *rejection*, so class `schema-rejected`(67) is **N/A** for this leg |
+| `schema-fail` (66) | `subtype == "error_max_structured_output_retries"` (structured-output retries exhausted). NB: Claude has no submit-time schema *rejection*, so class `schema-rejected`(67) is **N/A** for this leg |
 | `oauth-env` (65, terminal) | `is_error=true` + `api_error_status ∈ {401,403}`, or stream error category `authentication_failed` / `oauth_org_not_allowed`. **Surface for re-login; never repair.** |
 | `cli-subscription-cap` (65, terminal) | error category `billing_error`, or 429 tied to quota/subscription |
 | `server-capacity` (64, retryable) | error category `overloaded` / `server_error`, or `api_error_status ∈ {500,503,529}`. Framework backoff applies |
@@ -184,7 +176,7 @@ Run with `--output-format json`. Single top-level result object. Extractor reads
   `TRIAD_ALLOW_PYDANTIC_IMPORT=1` is set, because loading a schema module imports
   Python code and no-prompt dispatch may run the wrapper outside the Codex
   sandbox.
-- Failure: `subtype == error_max_structured_output_retries` → schema fail (rc 66).
+- Failure: `subtype == error_max_structured_output_retries` → `schema-fail` (rc 66).
 - Supported schema features: `object/array/string/number/boolean/null`, `enum`,
   `const`, `required`, nested objects, `$ref`.
 
@@ -211,9 +203,9 @@ Run with `--output-format json`. Single top-level result object. Extractor reads
 Because piped stdin is capped at 10 MB and is treated as *context* (not the sole
 instruction), large review/consult packets must NOT go through giant stdin:
 
-1. Leader/wrapper writes the packet to a file under a run dir.
-2. Pass `--add-dir <that dir>` and reference the file path inside the argv
-   instruction (e.g. "Read `<path>` and review it").
+1. Leader/wrapper writes the packet to a file under the repo/run dir.
+2. Invoke the wrapper with `--cwd <repo-root>` and reference the packet path
+   inside the argv prompt (e.g. "Read `<path>` and review it").
 3. Claude reads the file with its `Read` tool (allowed in the read-only policy).
 
 This is the same file-IPC-for-LARGE-packets contract the framework already uses.
@@ -241,8 +233,7 @@ claude -p 'Extract all TODOs.' --output-format json --no-session-persistence \
 # Cross-family review leg (large packet via file-IPC)
 claude -p 'Read _runs/reviews/<id>/packet.md and review it; frame suspect decisions as questions.' \
   --output-format json --no-session-persistence --effort high \
-  --permission-mode dontAsk --allowedTools "Read,Grep" \
-  --add-dir /abs/_runs/reviews/<id>
+  --permission-mode dontAsk --allowedTools "Read,Grep"
 ```
 
 ---

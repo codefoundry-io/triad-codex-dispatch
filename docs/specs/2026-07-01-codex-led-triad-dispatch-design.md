@@ -119,17 +119,18 @@ re-authored for Codex:
    run-log JSON. Add a `claude_wrapper.py`; adapt `_common.py` for the claude
    envelope + a namespaced classifier path.
 2. **Codex leader-side skills (`skills/`) — re-authored.** `SKILL.md` runbooks
-   (Bash-invoke wrapper → grep classification → branch → on
+   (invoke the absolute launcher directly → grep classification → branch → on
    `unknown`/`extraction-error`/`timeout` spawn the repair **named subagent** →
    cleanup). One per leg + cross-family review.
 3. **Codex repair named subagents (`.codex/agents/` or shipped) — re-authored.**
    TOML-defined named agents (per §2.1) that web-search + patch the classifier
    extension JSON + re-run with `--repair-mode`, writing a file-based response.
 
-Shared classification token set (unchanged):
+Shared classification token set:
 `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env |
-schema-rejected | timeout | extraction-error | unknown | …`. Exit codes reuse
-`_common`'s scheme.
+schema-fail | schema-rejected | timeout | extraction-error |
+fanout-spawn-error | config-conflict | task-blocked | unknown | …`.
+Exit codes reuse `_common`'s scheme.
 
 ---
 
@@ -144,7 +145,11 @@ Live verification (evidence: `docs/references/google-family-agy-readonly.md`):
 - **Read-only heavy-file / consult dispatches use agy `--sandbox read-only`, NOT
   gemini plan mode.** agy is Go — no Node/V8 heap OOM (the crash that kills gemini
   plan mode on heavy files). Verified: a read-only write attempt is blocked and
-  agy's settings restore byte-exactly (per-call deny transaction).
+  agy's settings restore byte-exactly (per-call deny transaction). Identical
+  read-only calls share a settings lease so multiple project consults can run
+  concurrently; workspace-write remains exclusive. Shared read-only holder
+  liveness is determined by per-holder flock files, not PID-only checks, so a
+  crashed sibling is pruned before the last live holder restores settings.
 - **Read-only is ALWAYS per-call — never a global policy.** A global read-only
   policy would kill the leg's code-agent role. The same leg does write/code work
   under `--sandbox workspace-write`. Mirrors codex's per-call `--sandbox`.
@@ -361,8 +366,8 @@ Ship as a Codex plugin + marketplace (§2.3), with the Spike D fallback:
    `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never`. When
    `TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1` is set, bootstrap also installs or
    refreshes `$CODEX_HOME/rules/triad-codex-dispatch.rules` with user-specific
-   launcher/check-out paths. Those rules allow only absolute launcher and
-   absolute checkout `bin/*.py` wrapper prefixes, refuse to overwrite an
+   launcher paths. Those rules allow only absolute launcher wrapper prefixes,
+   refuse to overwrite an
    unmanaged rules file, and deliberately avoid bare wrapper names, `python3`,
    `/usr/bin/env`, and broad shell entrypoints such as `bash -lc` and `zsh -lc`.
 

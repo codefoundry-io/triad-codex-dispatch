@@ -27,7 +27,7 @@ standard "call claude once" path — the mirror of the Claude-led toolkit's
 ## Hard rules
 
 1. **Literal absolute-wrapper invocation.** Resolve `claude_wrapper.py` once,
-   then run the absolute launcher/check-out path as the first argv token. Do
+   then run the absolute launcher path as the first argv token. Do
    not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`, command
    substitution, redirection, or inline env assignment; Codex command rules
    match argv prefixes and those shell forms miss the no-prompt allowlist.
@@ -99,7 +99,7 @@ use for research/consult/review). `--model` takes an alias only (no dated IDs).
 structured output (validated, `structured_output` → local pydantic check), and
 requires `TRIAD_ALLOW_PYDANTIC_IMPORT=1` because it imports Python code.
 
-### Step 2 — Run via Bash; capture rc, stdout, stderr
+### Step 2 — Run the direct wrapper command; capture rc, stdout, stderr
 
 Wrapper stderr contains a 1-line summary
 `[wrapper] claude <classification> exit=<int> vendor=<int> elapsed=<s>` and, on
@@ -117,21 +117,23 @@ CLS=$(printf '%s' "$SUMMARY" | sed -E 's/.*\[wrapper\] claude ([a-z-]+) .*/\1/')
 ```
 
 Token set: `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env
-| schema-rejected | timeout | extraction-error | unknown`. Or branch on wrapper
-exit: `0` ok / `1` cli-fail / `2` timeout / `3` arg / `4` binary-missing /
-`64` server-cap-exhausted / `65` terminal / `66` schema fail / `67` schema-rejected.
+| schema-fail | schema-rejected | timeout | extraction-error | fanout-spawn-error
+| config-conflict | task-blocked | unknown`. Or branch on wrapper exit: `0` ok / `1` cli-fail /
+`2` timeout / `3` arg / `4` binary-missing / `64` server-cap-exhausted /
+`65` terminal / `66` schema fail / `67` schema-rejected.
 
 ### Step 4 — Branch on classification
 
 | classification (rc) | Leader action |
 |---|---|
 | `ok` (0) | Return wrapper stdout. With `--pydantic`, stdout is the validated JSON object. |
-| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` | Surface to user with cause (quota / prompt too large / re-login). **NOT** repair territory. Auth is user-managed. |
+| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` / `fanout-spawn-error` / `task-blocked` | Surface to user with cause (quota / prompt too large / re-login / subagent spawn failure / tool permission denial). **NOT** repair territory. Auth is user-managed. |
+| `config-conflict` (65) | Local config/settings conflict. Wait briefly and re-dispatch once if it is a lock contention; if repeated or parse/config shaped, surface the config cause. **NOT** repair territory. |
 | `server-capacity` exhausted (64) | Wait + retry, or surface. Wrapper already retried per backoff. |
 | `unknown` (1) | **Step 5 — repair subagent (MANDATORY + concurrent; Hard rule 6).** |
 | `extraction-error` (1) | **Step 5 — repair subagent.** rc=0 but the extractor found no answer (empty envelope / masked error). |
 | `timeout` (2) | **Step 5 — repair subagent** (route for uniformity; likely ESCALATE). Wrapper fail-fasts (no retry on timeout). |
-| schema fail (66) / schema-rejected (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed / structured-output retries exhausted (the usual case for the claude leg — `claude --json-schema` retries then fails). `67` = a submit-time schema refusal (codex-style; not normally produced by claude). |
+| `schema-fail` (66) / `schema-rejected` (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed / structured-output retries exhausted (the usual case for the claude leg — `claude --json-schema` retries then fails). `67` = a submit-time schema refusal (codex-style; not normally produced by claude). |
 | arg (3) / binary missing (4) | Surface to user with cause. |
 
 ### Step 5 — Repair via the `claude-wrapper-repair` named subagent
@@ -175,7 +177,7 @@ Input:
     "patch":     "<'<file:line> — entry added', or null when ESCALATE>",
     "reason":    "<one-line semantic summary>",
     "attempts":  "<int 1-3>",
-    "per_attempt_log": "<array of {n, hypothesis, source, patch, py_compile, rerun}>"
+    "per_attempt_log": "<array of {n, hypothesis, source, patch, json_validation, rerun}>"
   },
   "task": "Extract the literal error -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (claude envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
 }

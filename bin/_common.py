@@ -69,8 +69,55 @@ def map_classification_to_exit(cls: str) -> int:
         "oauth-env": EXIT_TERMINAL,
         "timeout": EXIT_TIMEOUT,
         "extraction-error": EXIT_CLI_FAIL,
+        "schema-fail": EXIT_SCHEMA_FAIL,
+        "schema-rejected": EXIT_SCHEMA_REJECTED,
+        "fanout-spawn-error": EXIT_TERMINAL,
+        "config-conflict": EXIT_TERMINAL,
+        "task-blocked": EXIT_TERMINAL,
         "unknown": EXIT_CLI_FAIL,
     }.get(cls, EXIT_CLI_FAIL)
+
+
+def _redact_prompt_args(cmd: list[str]) -> list[str]:
+    """Keep argv shape in durable audit logs without storing prompt payloads."""
+    redacted: list[str] = []
+    redact_next: str | None = None
+    for arg in cmd:
+        if redact_next is not None:
+            if redact_next == "prompt":
+                redacted.append(f"<redacted:{len(arg)} chars>")
+            else:
+                redacted.append("<redacted:prompt-file-path>")
+            redact_next = None
+            continue
+        if arg in {"-p", "--prompt"}:
+            redacted.append(arg)
+            redact_next = "prompt"
+            continue
+        if arg == "--prompt-file":
+            redacted.append(arg)
+            redact_next = "prompt-file"
+            continue
+        if arg.startswith("--prompt="):
+            value = arg.split("=", 1)[1]
+            redacted.append(f"--prompt=<redacted:{len(value)} chars>")
+            continue
+        if arg.startswith("--prompt-file="):
+            redacted.append("--prompt-file=<redacted:prompt-file-path>")
+            continue
+        redacted.append(arg)
+    if redact_next is not None:
+        redacted.append("<redacted:missing-value>")
+    return redacted
+
+
+def _json_len(value: Any) -> int:
+    if value is None:
+        return 0
+    try:
+        return len(json.dumps(value, ensure_ascii=False))
+    except (TypeError, ValueError):
+        return len(str(value))
 
 
 # ─── Pattern lists (seed — living value, Step D maintenance updates) ──────
@@ -98,6 +145,8 @@ CLI_SUB_CAP_PATTERNS: tuple[str, ...] = (
     "weekly limit reached",
     "subscription limit reached",
     "usage limit reached",
+    "ineligibletiererror",
+    "migrate to antigravity",
 )
 
 TOKEN_LIMIT_PATTERNS: tuple[str, ...] = (
@@ -383,7 +432,7 @@ def _classifier_extension_path() -> Path:
     (tests / custom location)."""
     override = os.environ.get("TRIAD_CLASSIFIER_EXTENSION")
     if override:
-        return Path(override)
+        return Path(override).expanduser()
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "triad-codex-dispatch" / "classifier-patches.json"
 
@@ -846,17 +895,25 @@ def extract_gemini_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
         except Exception as e:
             return "", f"stdout is not valid JSON: {e}"
 
-    # stdout empty — look for trailing JSON in stderr
-    last_brace = stderr.rfind("{")
-    if last_brace != -1:
+    # stdout empty — look for a trailing JSON object in stderr. Do not use
+    # rfind("{"): Gemini errors are nested as {"error": {"message": ...}}, so
+    # the last brace starts the inner object, not the envelope.
+    decoder = json.JSONDecoder()
+    starts = [idx for idx, ch in enumerate(stderr) if ch == "{"]
+    for start in reversed(starts):
+        candidate = stderr[start:].strip()
         try:
-            obj = json.loads(stderr[last_brace:].strip())
-            err = obj.get("error", {})
-            if isinstance(err, dict):
-                return "", err.get("message", str(err))
-            return "", str(err)
-        except Exception:
-            pass
+            obj, end = decoder.raw_decode(candidate)
+        except ValueError:
+            continue
+        if candidate[end:].strip():
+            continue
+        if not isinstance(obj, dict):
+            continue
+        err = obj.get("error", {})
+        if isinstance(err, dict):
+            return "", err.get("message", str(err))
+        return "", str(err)
     return "", "empty stdout and no parseable error in stderr"
 
 
@@ -901,6 +958,8 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
         obj = json.loads(s)
     except Exception as e:
         return "", f"stdout is not valid JSON: {e}"
+    if not isinstance(obj, dict):
+        return "", "stdout JSON is not an object"
 
     subtype = obj.get("subtype", "")
     if subtype == "error_max_structured_output_retries":
@@ -923,6 +982,13 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
         if result:
             return "", f"{prefix}: {result}"
         return "", prefix
+
+    permission_denials = obj.get("permission_denials")
+    if permission_denials and not result.strip():
+        return "", (
+            "task-blocked: permission_denials: "
+            f"{json.dumps(permission_denials, ensure_ascii=False)}"
+        )
 
     # permission_denials 안 entry 박힘 = tool block 발견 (objective signal —
     # claude worker 의 본 본질, leader 의 본 frame X). caller (SKILL) 가
@@ -1150,6 +1216,89 @@ def run_cli_with_retry(
         inject_schema_to_prompt(prompt, pydantic_cls) if pydantic_cls else prompt
     )
 
+    def promote_schema_fail(r: RunResult) -> RunResult:
+        r.exit_code = EXIT_SCHEMA_FAIL
+        r.classification = "schema-fail"
+        r.final_answer = ""
+        log(
+            f"[wrapper] {cli} schema-fail "
+            f"exit={r.exit_code} vendor={r.vendor_exit_code} "
+            f"elapsed={r.elapsed_s:.1f}s"
+        )
+        return r
+
+    terminal_classes = (
+        "cli-subscription-cap",
+        "token-limit",
+        "oauth-env",
+        "fanout-spawn-error",
+        "config-conflict",
+        "task-blocked",
+    )
+
+    def promote_terminal(r: RunResult, cls: str) -> RunResult:
+        r.exit_code = EXIT_TERMINAL
+        r.classification = cls
+        r.final_answer = ""
+        log(
+            f"[wrapper] {cli} {cls} "
+            f"exit={r.exit_code} vendor={r.vendor_exit_code} "
+            f"elapsed={r.elapsed_s:.1f}s"
+        )
+        return r
+
+    def promote_claude_extraction(r: RunResult, ext_err: str) -> Optional[RunResult]:
+        if ext_err.startswith("schema-retries-exhausted:"):
+            log(f"answer extraction error: {ext_err}")
+            r.extraction_error = ext_err
+            return promote_schema_fail(r)
+        if ext_err.startswith("task-blocked:"):
+            log(f"answer extraction error: {ext_err}")
+            r.extraction_error = ext_err
+            return promote_terminal(r, "task-blocked")
+        if ext_err.startswith("is_error=true"):
+            cls = classify(
+                "claude",
+                stderr=ext_err,
+                stdout="",
+                exit_code=EXIT_CLI_FAIL,
+                vendor_exit_code=r.vendor_exit_code,
+            )
+            if cls in terminal_classes:
+                log(f"answer extraction error: {ext_err}")
+                r.extraction_error = ext_err
+                return promote_terminal(r, cls)
+        return None
+
+    def promote_extraction_classification(
+        r: RunResult, ext_err: str
+    ) -> Optional[RunResult]:
+        if cli == "claude":
+            promoted = promote_claude_extraction(r, ext_err)
+            if promoted is not None:
+                return promoted
+        cls = classify(
+            cli,
+            stderr=ext_err,
+            stdout="",
+            exit_code=EXIT_CLI_FAIL,
+            vendor_exit_code=r.vendor_exit_code,
+        )
+        if cls in terminal_classes:
+            r.extraction_error = ext_err
+            return promote_terminal(r, cls)
+        if cls == "schema-rejected":
+            r.exit_code = EXIT_SCHEMA_REJECTED
+            r.classification = cls
+            r.final_answer = ""
+            log(
+                f"[wrapper] {cli} {cls} "
+                f"exit={r.exit_code} vendor={r.vendor_exit_code} "
+                f"elapsed={r.elapsed_s:.1f}s"
+            )
+            return r
+        return None
+
     schema_repair_attempt = 0
     while True:
         cmd = cmd_builder(effective_prompt)
@@ -1172,21 +1321,20 @@ def run_cli_with_retry(
                 r.mode = "normal"
             result = r
             cls = r.classification
+            if cli == "claude":
+                _answer, ext_err = extract_claude_answer(r.stdout, r.stderr)
+                if ext_err:
+                    promoted = promote_claude_extraction(r, ext_err)
+                    if promoted is not None:
+                        return promoted
             if cls == "ok":
                 break
-            if cls in ("cli-subscription-cap", "token-limit", "oauth-env",
-                       "fanout-spawn-error", "config-conflict"):
-                r.exit_code = EXIT_TERMINAL
+            if cls in terminal_classes:
                 # Re-emit summary so the [wrapper] line's exit token matches
                 # the wrapper's actual final rc (65). Without this the line
                 # carries _run_once's stale rc=1 which contradicts the
                 # wrapper's $? (2026-05-03 later-3 fault test exposed).
-                log(
-                    f"[wrapper] {cli} {cls} "
-                    f"exit={r.exit_code} vendor={r.vendor_exit_code} "
-                    f"elapsed={r.elapsed_s:.1f}s"
-                )
-                return r
+                return promote_terminal(r, cls)
             if cls == "schema-rejected":
                 r.exit_code = EXIT_SCHEMA_REJECTED
                 log(
@@ -1232,6 +1380,9 @@ def run_cli_with_retry(
             log(f"answer extraction error: {ext_err}")
             result.extraction_error = ext_err
             result.final_answer = ""
+            promoted = promote_extraction_classification(result, ext_err)
+            if promoted is not None:
+                return promoted
             if result.exit_code == EXIT_OK:
                 # Vendor returned rc=0 but extractor found no answer (empty
                 # JSON envelope, missing last-message file, etc.). Promote
@@ -1263,8 +1414,7 @@ def run_cli_with_retry(
         log(f"schema validation failed: {validated_or_err}")
 
         if schema_repair_attempt >= 1 or repair_mode:
-            result.exit_code = EXIT_SCHEMA_FAIL
-            return result
+            return promote_schema_fail(result)
 
         # 1 retry — augment prompt with the failure notice and loop.
         schema_repair_attempt += 1
@@ -1288,16 +1438,15 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
 
     A per-CLI lock file serializes append + rotation across processes.
     `final_answer_head` caps at 500 chars; full answer flows to caller via
-    `result.final_answer`.
+    `result.final_answer`. Prompt text and prompt-bearing argv values are
+    intentionally not persisted here; failure repair data lives in run-logs.
     """
     log_dir = _LOG_DIR / cli
     log_dir.mkdir(parents=True, exist_ok=True)
-    ok = result.exit_code == EXIT_OK
     rec: dict = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "cli": cli,
-        "cmd": cmd,
-        "prompt_head": prompt[:200],
+        "cmd": _redact_prompt_args(cmd),
         "prompt_len": len(prompt),
         "vendor_exit_code": result.vendor_exit_code,
         "exit_code": result.exit_code,
@@ -1306,18 +1455,17 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
         "mode": result.mode,
         "repair_attempt": result.repair_attempt,
         "schema_repair_attempt": result.schema_repair_attempt,
-        "stderr": result.stderr,
+        "stderr_head": result.stderr[:500],
+        "stderr_len": len(result.stderr),
         "final_answer_head": (result.final_answer or "")[:500],
         "final_answer_len": len(result.final_answer or ""),
-        "validated": result.validated,
+        "validated_present": result.validated is not None,
+        "validated_len": _json_len(result.validated),
         "extraction_error": result.extraction_error,
         "validation_error": result.validation_error,
+        "stdout_head": result.stdout[:500],
+        "stdout_len": len(result.stdout),
     }
-    if ok:
-        rec["stdout_head"] = result.stdout[:500]
-        rec["stdout_len"] = len(result.stdout)
-    else:
-        rec["stdout"] = result.stdout
     path = log_dir / "audit.jsonl"
     lock_path = log_dir / ".audit.lock"
     with lock_path.open("a", encoding="utf-8") as lock:
@@ -1427,6 +1575,7 @@ def emit_run_log(
         "vendor_cmd": vendor_cmd,
         "prompt_head": prompt[:200],
         "prompt_len": len(prompt),
+        "prompt": prompt,
         "exit_code": result.exit_code,
         "vendor_exit_code": result.vendor_exit_code,
         "classification": result.classification,
@@ -1441,19 +1590,22 @@ def emit_run_log(
     with path.open("w", encoding="utf-8") as f:
         json.dump(rec, f, ensure_ascii=False, indent=2)
 
-    _prune_run_logs(runs_dir)
+    _prune_run_logs(runs_dir, preserve=path)
 
     return path
 
 
-def _prune_run_logs(runs_dir: Path) -> None:
+def _prune_run_logs(runs_dir: Path, preserve: Optional[Path] = None) -> None:
     """Best-effort prune: enforce file count + total byte caps.
 
     Race-tolerant — parallel writes that all hit the cap may all attempt to
     prune; duplicate unlink attempts are absorbed by try/except. Worst case =
-    slight over-prune, never data loss for the latest writer (its own file
-    is freshly written and last by mtime).
+    slight over-prune. `preserve`, when provided, is never deleted by this
+    writer; a single large fresh run-log is repair IPC and must survive even if
+    it alone exceeds the byte cap.
     """
+    preserve_resolved = preserve.resolve(strict=False) if preserve else None
+
     # Race-resilient listing: a concurrent unlink (or a dangling symlink) makes
     # p.stat() raise mid-sort. Materialize (path, mtime) per-file, skipping any
     # entry that vanishes — a single bad entry must NOT abort the whole prune
@@ -1486,6 +1638,8 @@ def _prune_run_logs(runs_dir: Path) -> None:
     for f in files:
         if over_count <= 0 and over_bytes <= 0:
             break
+        if preserve_resolved is not None and f.resolve(strict=False) == preserve_resolved:
+            continue
         try:
             sz = f.stat().st_size
             f.unlink()
@@ -1513,12 +1667,13 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     """Next-run cleanup of stale run-logs (the owner's "다음 run 에 클린업").
 
     Removes `_logs/<cli>/runs/*.json` (run-logs AND their `.repair.json` pairs)
-    whose mtime is older than `age_floor_s`. Called at the START of every normal
-    (non-repair-mode) dispatch, so a SUBSEQUENT run cleans up the residue a
-    prior run left on failure — including failure classes (terminal / server-cap
-    / schema-rejected / fanout-partial / task-blocked) whose dispatch path never
-    reaches the SKILL's Step 5d `rm`. The cap-based `_prune_run_logs` remains the
-    over-cap failsafe; this is the time-based next-run sweep.
+    plus repair temp prompt files (`*.prompt.tmp`) whose mtime is older than
+    `age_floor_s`. Called at the START of every normal (non-repair-mode)
+    dispatch, so a SUBSEQUENT run cleans up the residue a prior run left on
+    failure — including failure classes (terminal / server-cap / schema-rejected
+    / fanout-partial / task-blocked) whose dispatch path never reaches the
+    SKILL's Step 5d `rm`. The cap-based `_prune_run_logs` remains the over-cap
+    failsafe; this is the time-based next-run sweep.
 
     The age floor is what makes this concurrency-safe under 4-way parallel
     dispatch: a live sibling's run-log is freshly written (< floor) so it is
@@ -1528,7 +1683,7 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     runs_dir = _LOG_DIR / cli / "runs"
     cutoff = time.time() - max(0, age_floor_s)
     try:
-        entries = list(runs_dir.glob("*.json"))
+        entries = list(runs_dir.glob("*.json")) + list(runs_dir.glob("*.prompt.tmp"))
     except Exception:
         return
     for p in entries:

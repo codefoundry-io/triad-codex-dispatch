@@ -79,17 +79,25 @@ Classification mapping:
 - `oauth-env`: auth failed, org not allowed, login/token errors.
 - `cli-subscription-cap`: billing/quota/rate-limit subscription failures.
 - `server-capacity`: overloaded/server retry exhaustion.
-- `schema-rejected`: invalid `--json-schema` or structured-output retry failure.
+- `schema-fail`: post-hoc pydantic validation failure or Claude structured-output
+  retry exhaustion.
+- `schema-rejected`: submit-time schema refusal.
 - `task-blocked`: permission denial / tool blocked with no usable result.
+- `fanout-spawn-error`: Codex leader could not spawn a required reviewer/repair subagent.
+- `config-conflict`: local config/settings lock contention or conflicting runtime
+  config. Lock-shaped conflicts may wait briefly and re-dispatch once; repeated
+  or parse/config-shaped conflicts are surfaced. Never route to repair.
 - `extraction-error`: rc 0 but no `.result`/`.structured_output`.
 - `unknown`: nonzero rc with no known pattern.
 
-Run-log schema stays identical: `cli`, `wrapper_cmd`, `vendor_cmd`, `prompt_head`, `prompt_len`, `exit_code`, `vendor_exit_code`, `classification`, `mode`, `elapsed_s`, `stderr`, `stdout`, `final_answer`, `extraction_error`, `validation_error`.
+Run-log schema: `cli`, `wrapper_cmd`, `vendor_cmd`, `prompt_head`, `prompt_len`,
+`prompt`, `exit_code`, `vendor_exit_code`, `classification`, `mode`, `elapsed_s`,
+`stderr`, `stdout`, `final_answer`, `extraction_error`, `validation_error`.
 
 ## Codex Leader Artifacts
 
 Each dispatch skill keeps the existing operational pattern:
-- invoke wrapper through Bash only;
+- invoke the absolute wrapper launcher directly, without shell wrapping;
 - read the last `[wrapper] <cli> <classification> ...` line;
 - branch on the fixed token set;
 - extract `run-log: <path>`;
@@ -102,9 +110,9 @@ The skills should be Codex `SKILL.md` files with imperative steps and optional `
 
 Preferred design: Codex named subagents.
 
-Add config snippets declaring `claude-wrapper-repair`, `gemini-wrapper-repair`, and `agy-wrapper-repair` with high reasoning, live web search, and a permission profile that can write only:
-- the wrapper run-log output path;
-- `~/.config/triad-codex-dispatch/classifier-patches.json`.
+Add config snippets declaring `claude-wrapper-repair`, `gemini-wrapper-repair`, and `agy-wrapper-repair` with high reasoning, live web search, and a permission profile that can write only to:
+- the classifier config directory (`~/.config/triad-codex-dispatch/` by default);
+- the bounded `bin/_logs/<cli>/` IPC area for run logs, `.repair.json`, and temporary repair prompt files.
 
 The skill asks Codex to spawn the named repair agent, continue foreground work, then `wait_agent` and read `<run_log>.repair.json`.
 

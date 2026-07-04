@@ -95,6 +95,57 @@ def test_gemini_dispatch_skills_do_not_offer_yolo_or_plan_modes():
     assert "[--approval-mode default|auto_edit|plan|yolo]" not in text
     assert "[--approval-mode default|auto_edit]" in text
     assert "plan/yolo" in text.lower()
+    assert "Defaults: `--sandbox read-only`" in text
+    assert "Defaults: no `--sandbox`" not in text
+
+
+def test_gemini_readonly_caveat_is_visible_at_point_of_use():
+    gemini = (ROOT / "skills/triad-gemini-dispatch/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    cross = (ROOT / "skills/triad-cross-family-review/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in (gemini, cross):
+        compact = " ".join(text.lower().split())
+        assert "write-attempt" in compact
+        assert "business-tier" in compact
+        assert "unverified" in compact or "not live-verified" in compact
+
+
+def test_cross_family_skill_keeps_release_gate_stricter_than_advisory_degraded_mode():
+    text = (ROOT / "skills/triad-cross-family-review/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    compact = " ".join(text.lower().split())
+    assert "release gate" in compact
+    assert "all three" in compact
+    assert "claude safe" in compact
+    assert "agy safe" in compact
+    assert "fresh codex safe" in compact
+    assert "do not merge" in compact
+
+
+def test_cross_family_review_loop_has_circuit_breaker():
+    text = (ROOT / "skills/triad-cross-family-review/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    compact = " ".join(text.lower().split())
+    assert "triad_review_max_rounds" in compact
+    assert "default 2" in compact
+    assert "stop" in compact
+    assert "owner decision" in compact
+
+
+def test_agy_read_only_shared_lease_is_documented():
+    for rel in [
+        "docs/references/google-family-agy-readonly.md",
+        "docs/specs/2026-07-01-codex-led-triad-dispatch-design.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "read-only calls share" in text
+        assert "workspace-write remains exclusive" in text
 
 
 def test_distribution_repo_does_not_ship_duplicate_repo_local_skills():
@@ -158,6 +209,41 @@ def test_public_readmes_are_split_public_and_user_facing():
         assert "사내" not in text
         assert "Internal Git marketplace" not in text
 
+    assert "Conservative install" in en
+    assert "No-prompt install" in en
+    assert "보수적 설치" in ko
+    assert "no-prompt 설치" in ko
+
+
+def test_public_readmes_disclose_runtime_logs_and_never_policy_scope():
+    en = (ROOT / "README.md").read_text(encoding="utf-8")
+    ko = (ROOT / "README.ko.md").read_text(encoding="utf-8")
+    en_compact = " ".join(en.split())
+    ko_compact = " ".join(ko.split())
+
+    assert "Runtime Logs And Local Data" in en
+    assert "bin/_logs/<cli>/" in en
+    assert "audit.jsonl" in en
+    assert "failure run logs" in en_compact.lower()
+    assert "structured-output presence/length only" in en
+    assert "sensitive" in en.lower()
+    assert "`approval_policy=never` applies to the whole triad Codex session" in en
+    assert "Do not run unrelated work in that session" in en
+    assert "Antigravity settings" in en
+    assert "Avoid editing agy permissions" in en
+
+    assert "Runtime Log 및 Local Data" in ko
+    assert "bin/_logs/<cli>/" in ko
+    assert "audit.jsonl" in ko
+    assert "failure run log" in ko_compact
+    assert "structured-output 존재 여부와 길이만" in ko
+    assert "민감" in ko
+    assert "approval_policy=never" in ko
+    assert "triad Codex session 전체" in ko
+    assert "관련 없는 작업" in ko
+    assert "Antigravity settings" in ko
+    assert "agy permission" in ko
+
 
 def test_install_docs_state_auth_assumption_and_target_choices():
     for rel in DETAILED_SETUP_DOCS:
@@ -207,6 +293,8 @@ def test_readme_remove_docs_cover_default_and_workspace_targets():
     for text in (en, ko):
         for phrase in expected:
             assert phrase in text
+        assert "custom `TRIAD_BOOTSTRAP_BIN_DIR`" in text or "custom `TRIAD_BOOTSTRAP_BIN_DIR`" in text
+        assert "custom `XDG_CONFIG_HOME`" in text or "custom `XDG_CONFIG_HOME`" in text
 
     for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -214,16 +302,87 @@ def test_readme_remove_docs_cover_default_and_workspace_targets():
         assert ".triad-codex-home/" in text
         assert ".triad-config/" in text
         assert ".triad-bin/" in text
+        assert "~/.codex/triad-codex-dispatch.config.toml" in text
+        assert "~/.codex/rules/triad-codex-dispatch.rules" in text
+        assert "rm -f ~/.codex/triad-codex-dispatch.config.toml" in text
+        assert "rm -f ~/.codex/rules/triad-codex-dispatch.rules" in text
 
 
-def test_distribution_docs_explain_bootstrap_pinned_paths():
+def test_distribution_docs_explain_bootstrap_pinned_launcher_paths():
     for rel in DETAILED_SETUP_DOCS:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "TRIAD_CLASSIFIER_EXTENSION" in text
         assert "bootstrap" in text
         assert "pinned" in text or "고정" in text
-        assert "checkout" in text
-        assert "absolute checkout path" in " ".join(text.split())
+        compact = " ".join(text.split())
+        assert "absolute launcher path" in compact or "absolute launcher" in compact
+        assert "absolute checkout path" not in compact
+
+
+def test_dispatch_skills_use_launcher_paths_not_checkout_paths():
+    for rel in [
+        "skills/triad-claude-dispatch/SKILL.md",
+        "skills/triad-antigravity-dispatch/SKILL.md",
+        "skills/triad-gemini-dispatch/SKILL.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        compact = " ".join(text.split())
+        assert "launcher/check-out path" not in text
+        assert "check-out path" not in text
+        assert "absolute launcher path" in compact
+        assert "Run via Bash" not in text
+
+
+def test_dispatch_docs_include_shared_classifier_terminal_tokens():
+    required = [
+        "schema-fail",
+        "fanout-spawn-error",
+        "config-conflict",
+        "task-blocked",
+    ]
+    for rel in [
+        "skills/triad-claude-dispatch/SKILL.md",
+        "skills/triad-antigravity-dispatch/SKILL.md",
+        "skills/triad-gemini-dispatch/SKILL.md",
+        "docs/specs/2026-07-01-codex-led-triad-dispatch-design.md",
+        "docs/superpowers/plans/2026-07-01-claude-leg.md",
+        "docs/references/codex-draft-plan.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        for token in required:
+            assert token in text
+
+
+def test_dispatch_docs_route_config_conflict_as_retry_not_repair():
+    for rel in [
+        "skills/triad-claude-dispatch/SKILL.md",
+        "skills/triad-antigravity-dispatch/SKILL.md",
+        "skills/triad-gemini-dispatch/SKILL.md",
+        "docs/references/codex-draft-plan.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "config-conflict" in text
+        assert "re-dispatch once" in text
+        assert "NOT** repair territory" in text or "Never route to repair" in text
+
+
+def test_dispatch_design_docs_do_not_describe_bash_invoked_wrappers():
+    for rel in [
+        "docs/specs/2026-07-01-codex-led-triad-dispatch-design.md",
+        "docs/references/codex-draft-plan.md",
+        "docs/superpowers/plans/2026-07-01-claude-leg.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "Bash-invoke wrapper" not in text
+        assert "Run via Bash" not in text
+
+
+def test_public_readmes_describe_command_rules_as_launcher_rules():
+    for rel in PUBLIC_READMES:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "wrapper launchers installed from the plugin cache" not in text
+        assert "launcher files installed" in text or "설치된 launcher 파일" in text
+        assert "plugin cache" in text
 
 
 def test_distribution_docs_document_bounded_runtime_artifacts():
@@ -234,6 +393,9 @@ def test_distribution_docs_document_bounded_runtime_artifacts():
         assert "20 MB" in text
         assert "10 MB" in text
         assert "audit.jsonl" in text
+        assert "prompt_head" in text
+        assert "prompt_len" in text
+        assert "*.prompt.tmp" in text
 
 
 def test_distribution_docs_use_codex_specific_profile_name():
@@ -311,18 +473,26 @@ def test_repair_named_agents_use_scoped_permission_profile():
         assert permissions["network"]["enabled"] is True
         assert "subprocess.run(argv, shell=False" in data["developer_instructions"]
         assert 'cwd="__TRIAD_REPO_ROOT__"' in data["developer_instructions"]
+        assert "TRIAD_WRAPPER_ALLOWED_ROOTS=\"__TRIAD_REPO_ROOT__\"" in data["developer_instructions"]
+        assert "env=verify_env" in data["developer_instructions"]
+        assert "Do not inherit the caller workspace's `TRIAD_WRAPPER_ALLOWED_ROOTS`" in data["developer_instructions"]
         assert "original_args_after_argv0_normalized" in data["developer_instructions"]
         assert "REMOVE any original separated `--cwd <path>`" in data["developer_instructions"]
         assert "REMOVE any original equals-form `--cwd=<path>`" in data["developer_instructions"]
+        assert "`--prompt-file <path>`" in data["developer_instructions"]
+        assert "`--prompt-file=<path>`" in data["developer_instructions"]
+        assert "run-log `prompt` field" in data["developer_instructions"]
+        assert "temporary prompt file" in data["developer_instructions"]
+        assert "same runs directory as `output_path`" in data["developer_instructions"]
+        assert ".prompt.tmp" in data["developer_instructions"]
         assert "do not apply `shlex.quote` to argv items" in data["developer_instructions"]
         assert "shlex.quote" in data["developer_instructions"]
         compact_instructions = " ".join(data["developer_instructions"].split())
         assert "NEVER invoke triad dispatch skills" in compact_instructions
         assert "spawn another repair agent recursively" in compact_instructions
-        if rel == "agents/agy-wrapper-repair.toml":
-            assert "`--sandbox workspace-write`" in data["developer_instructions"]
-            assert "`--sandbox=workspace-write`" in data["developer_instructions"]
-            assert "replace that value with `read-only`" in data["developer_instructions"]
+        assert "`--sandbox workspace-write`" in data["developer_instructions"]
+        assert "`--sandbox=workspace-write`" in data["developer_instructions"]
+        assert "replace that value with `read-only`" in data["developer_instructions"]
 
     for rel in [
         *DETAILED_SETUP_DOCS,
@@ -340,6 +510,15 @@ def test_repair_named_agents_use_scoped_permission_profile():
     assert "custom agents" in evidence
     assert "configuration layers" in evidence
     assert "Boundary" in evidence
+
+    for rel in [
+        "migration/AGENTS.recommended.md",
+        "docs/references/codex-draft-plan.md",
+    ]:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "write access only to:" not in text
+        assert "bounded `bin/_logs" in text
+        assert "classifier" in text
 
 
 def test_docs_explain_profile_file_layering():
@@ -471,6 +650,25 @@ def test_git_marketplace_update_docs_readd_when_ref_changes():
         assert "TRIAD_BOOTSTRAP_SKIP_AUTH=1 scripts/bootstrap.sh --check" not in text
         assert "does not change" in compact or "바꾸지 않는다" in compact
         assert "moving branch" in compact
+
+
+def test_codex_plugin_cli_evidence_is_retained_for_public_install_surface():
+    evidence = (ROOT / "docs/references/codex-plugin-cli-evidence.md").read_text(
+        encoding="utf-8"
+    )
+    assert "codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main --json" in evidence
+    assert "codex plugin add triad-codex-dispatch@triad-codex-dispatch --json" in evidence
+    assert '"installedPath"' in evidence
+    assert '"authPolicy": "ON_INSTALL"' in evidence
+    assert '"visibility": "PUBLIC"' in evidence
+    assert '"defaultBranchRef": {"name": "main"}' in evidence
+    assert "does not perform OAuth/login" in evidence
+
+    for rel in DETAILED_SETUP_DOCS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "docs/references/codex-plugin-cli-evidence.md" in text
+        assert "authPolicy" in text
+        assert "vendor CLI upgrade" in text or "vendor CLI upgrade" in text
 
 
 def test_spike_d_docs_do_not_cite_unretained_negative_spawn_claim():

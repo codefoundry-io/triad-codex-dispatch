@@ -193,6 +193,17 @@ def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
 
 
+def test_default_agy_auth_probe_uses_wrapper_pty_path():
+    text = BOOTSTRAP.read_text(encoding="utf-8")
+
+    assert (
+        'run_auth_probe "agy" '
+        '"${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-antigravity_wrapper.py --prompt '
+        in text
+    )
+    assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-agy -p' not in text
+
+
 def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     result, env, _launcher_bin = _run_bootstrap(
         tmp_path,
@@ -497,6 +508,46 @@ def test_check_can_install_optional_codex_command_rules(tmp_path):
     assert launcher_text.startswith("#!")
     assert "TRIAD_REQUIRE_PINNED_VENDOR" in launcher_text
     assert "TRIAD_CLAUDE_BIN" in launcher_text
+    gemini_launcher_text = (launcher_bin / "gemini_wrapper.py").read_text(
+        encoding="utf-8"
+    )
+    assert "TRIAD_REQUIRE_PINNED_VENDOR" in gemini_launcher_text
+    assert "TRIAD_GEMINI_BIN" in gemini_launcher_text
+
+
+def test_check_refuses_to_overwrite_unmanaged_launcher(tmp_path):
+    custom_bin = tmp_path / "custom-bin"
+    custom_bin.mkdir()
+    custom_launcher = custom_bin / "claude_wrapper.py"
+    custom_launcher.write_text(
+        "#!/usr/bin/env bash\necho custom claude wrapper\n",
+        encoding="utf-8",
+    )
+    custom_launcher.chmod(custom_launcher.stat().st_mode | stat.S_IEXEC)
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        pre_path=(custom_bin,),
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(custom_bin)},
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite unmanaged launcher" in result.stderr
+    assert custom_launcher.read_text(encoding="utf-8") == (
+        "#!/usr/bin/env bash\necho custom claude wrapper\n"
+    )
+
+
+def test_optional_gemini_launcher_does_not_require_missing_pinned_binary(tmp_path):
+    result, _env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        fake_names=("codex", "claude", "agy"),
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    text = (launcher_bin / "gemini_wrapper.py").read_text(encoding="utf-8")
+    assert "TRIAD_REQUIRE_PINNED_VENDOR" not in text
+    assert "TRIAD_GEMINI_BIN" not in text
 
 
 def test_check_refuses_to_overwrite_unmanaged_codex_command_rules(tmp_path):

@@ -266,6 +266,11 @@ def main() -> int:
 
     deny_rules = _agy_settings.build_deny_rules(sandbox_mode) if sandbox_mode else []
     agy_sandbox = sandbox_mode is not None  # both modes pass agy --sandbox (terminal ring)
+    try:
+        settings_lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
+    except ValueError:
+        _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
+        return _common.EXIT_ARG_ERROR
 
     sentinel = _make_sentinel(prompt, 0)
     eff_prompt = inject_schema_to_prompt(prompt, pydantic_cls) if pydantic_cls else prompt
@@ -281,11 +286,34 @@ def main() -> int:
     )
 
     start = time.monotonic()
-    with _agy_settings.agy_settings_guard(deny_rules):
-        r = _run_agy_with_retry(cmd, prompt, args.timeout,
-                                expected_sentinel=sentinel, cwd=cwd,
-                                sandbox=agy_sandbox, model=args.model,
-                                repair_mode=args.repair_mode, pydantic_cls=pydantic_cls)
+    r: AgyResult | None = None
+    try:
+        with _agy_settings.agy_settings_guard(
+            deny_rules,
+            lock_timeout=settings_lock_timeout,
+        ):
+            r = _run_agy_with_retry(cmd, prompt, args.timeout,
+                                    expected_sentinel=sentinel, cwd=cwd,
+                                    sandbox=agy_sandbox, model=args.model,
+                                    repair_mode=args.repair_mode,
+                                    pydantic_cls=pydantic_cls)
+    except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as e:
+        prior = r
+        extraction_error = f"agy settings/config conflict: {e}"
+        _common.log(extraction_error)
+        if prior is not None:
+            extraction_error = (
+                f"{e}; completed vendor result suppressed because the agy "
+                f"settings transaction did not release cleanly"
+            )
+        r = AgyResult(
+            None,
+            "config-conflict",
+            _common.EXIT_TERMINAL,
+            prior.vendor_exit_code if prior is not None else -1,
+            scrubbed_output=prior.scrubbed_output if prior is not None else "",
+            extraction_error=extraction_error,
+        )
     elapsed = time.monotonic() - start
 
     # Build a RunResult for the shared audit / run-log / debug helpers.

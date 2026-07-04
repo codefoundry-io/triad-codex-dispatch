@@ -26,3 +26,9 @@ def test_is_error_still_surfaces():
     ans, err = extract_claude_answer(json.dumps(env), "")
     assert ans == ""
     assert "is_error=true" in err and "401" in err
+
+
+def test_non_object_json_envelope_is_extraction_error():
+    ans, err = extract_claude_answer(json.dumps(["not", "an", "object"]), "")
+    assert ans == ""
+    assert "stdout JSON is not an object" in err

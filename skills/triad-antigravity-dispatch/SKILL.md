@@ -40,7 +40,7 @@ needs.
 ## Hard rules
 
 1. **Literal absolute-wrapper invocation.** Resolve `antigravity_wrapper.py`
-   once, then run the absolute launcher/check-out path as the first argv token.
+   once, then run the absolute launcher path as the first argv token.
    Do not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`,
    command substitution, redirection, or inline env assignment; Codex command
    rules match argv prefixes and those shell forms miss the no-prompt allowlist.
@@ -122,7 +122,7 @@ Flags:
 - `--timeout` — seconds (default 600); the wrapper sets `--print-timeout` offset
   internally (`max(timeout - 10, 5)s`).
 
-### Step 2 — Run via Bash; capture rc, stdout, stderr
+### Step 2 — Run the direct wrapper command; capture rc, stdout, stderr
 
 The wrapper drives agy through a PTY (agy drops stdout on a non-TTY; no
 `--output-format json`). Stderr contains a 1-line summary:
@@ -141,9 +141,10 @@ CLS=$(printf '%s' "$SUMMARY" | sed -E 's/.*\[wrapper\] antigravity ([a-z-]+) .*/
 ```
 
 Token set: `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env
-| schema-rejected | timeout | extraction-error | unknown`. Exit codes: `0` ok /
-`1` cli-fail / `2` timeout / `3` arg / `4` binary-missing / `64`
-server-cap-exhausted / `65` terminal / `66` schema fail / `67` schema-rejected.
+| schema-fail | schema-rejected | timeout | extraction-error | fanout-spawn-error
+| config-conflict | task-blocked | unknown`. Exit codes: `0` ok / `1` cli-fail / `2` timeout /
+`3` arg / `4` binary-missing / `64` server-cap-exhausted / `65` terminal /
+`66` schema fail / `67` schema-rejected.
 
 **agy-specific exit note:** `ANTIGRAVITY_VENDOR_EXIT_MAP[0] = extraction-error`
 fires ONLY on the **no-answer path**. A rc=0 agy call with a non-empty extracted
@@ -157,12 +158,13 @@ entry classify it `extraction-error` (not `ok`) → repair. So do not expect
 | classification (rc) | Leader action |
 |---|---|
 | `ok` (0) | Return wrapper stdout. With `--pydantic`, stdout is the validated JSON object. |
-| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` | Surface to user with cause (quota / prompt too large / re-login). **NOT** repair territory. Auth is user-managed. |
+| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` / `fanout-spawn-error` / `task-blocked` | Surface to user with cause (quota / prompt too large / re-login / subagent spawn failure / tool permission denial). **NOT** repair territory. Auth is user-managed. |
+| `config-conflict` (65) | Local agy settings/config conflict. Wait briefly and re-dispatch once if it is a settings-lock contention; if repeated, surface the config-lock cause and ask the user to let other agy work finish. **NOT** repair territory. |
 | `server-capacity` exhausted (64) | Wait + retry, or surface. Wrapper already retried per backoff. |
 | `unknown` (1) | **Step 5 — repair subagent (MANDATORY + concurrent; Hard rule 6).** |
 | `extraction-error` (1) | **Step 5 — repair subagent.** rc=0 but the extractor found no sentinel / empty answer body. |
 | `timeout` (2) | **Step 5 — repair subagent** (route for uniformity; likely ESCALATE). Wrapper fail-fasts (no retry on timeout). |
-| schema fail (66) / schema-rejected (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (agy has no native schema mode — the wrapper injects the schema into the prompt and validates the reply). `67` = a submit-time schema refusal (codex-style; not produced by agy). |
+| `schema-fail` (66) / `schema-rejected` (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (agy has no native schema mode — the wrapper injects the schema into the prompt and validates the reply). `67` = a submit-time schema refusal (codex-style; not produced by agy). |
 | arg (3) / binary missing (4) | Surface to user with cause. |
 
 ### Step 5 — Repair via the `agy-wrapper-repair` named subagent
@@ -206,7 +208,7 @@ Input:
     "patch":     "<'<file:line> — entry added', or null when ESCALATE>",
     "reason":    "<one-line semantic summary>",
     "attempts":  "<int 1-3>",
-    "per_attempt_log": "<array of {n, hypothesis, source, patch, py_compile, rerun}>"
+    "per_attempt_log": "<array of {n, hypothesis, source, patch, json_validation, rerun}>"
   },
   "task": "Extract the literal error from the PTY transcript -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (antigravity envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
 }

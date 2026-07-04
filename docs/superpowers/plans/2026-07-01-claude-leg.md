@@ -16,7 +16,7 @@
 - **Read-only default:** `--sandbox read-only` ⇒ `--permission-mode dontAsk --allowedTools "Read,Glob,Grep"`. `--search` adds `WebSearch,WebFetch`.
 - **Auth is user-managed:** the wrapper never touches login/keys.
 - **Classify from the JSON envelope, not the exit code** (`claude -p` has no documented exit-code taxonomy).
-- **Shared classification token set** (unchanged): `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env | schema-rejected | timeout | extraction-error | unknown`.
+- **Shared classification token set:** `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env | schema-fail | schema-rejected | timeout | extraction-error | fanout-spawn-error | config-conflict | task-blocked | unknown`.
 - **Reasoning enum (owner default):** mirror codex `{low,medium,high,xhigh}` for `--reasoning`; claude's extra `max` is NOT exposed in v1.
 - **Classifier path (owner default):** isolate to `~/.config/triad-codex-dispatch/classifier-patches.json` (+ import helper, out of scope for this plan).
 

@@ -154,6 +154,47 @@ def test_prompt_file_must_stay_under_allowed_runtime_root(tmp_path):
     assert "--prompt-file must be under an allowed runtime root" in r.stderr
 
 
+def test_repair_replay_prompt_file_needs_repo_scoped_allowed_root(tmp_path):
+    workspace = tmp_path / "workspace"
+    repo = tmp_path / "repo"
+    prompt_file = repo / "bin" / "_logs" / "claude" / "runs" / "replay.prompt.tmp"
+    workspace.mkdir()
+    prompt_file.parent.mkdir(parents=True)
+    prompt_file.write_text("repair replay prompt", encoding="utf-8")
+    base_env = dict(
+        os.environ,
+        PATH=_fake_claude_on_path(tmp_path) + os.pathsep + os.environ["PATH"],
+    )
+
+    denied = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "bin/claude_wrapper.py"),
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=dict(base_env, TRIAD_WRAPPER_ALLOWED_ROOTS=str(workspace)),
+    )
+    assert denied.returncode == 3
+    assert "--prompt-file must be under an allowed runtime root" in denied.stderr
+
+    allowed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "bin/claude_wrapper.py"),
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=dict(base_env, TRIAD_WRAPPER_ALLOWED_ROOTS=str(repo)),
+    )
+    assert allowed.returncode == 0
+    assert "FAKE-OK" in allowed.stdout
+
+
 def test_cwd_must_stay_under_allowed_runtime_root(tmp_path):
     allowed = tmp_path / "allowed"
     outside = tmp_path / "outside"

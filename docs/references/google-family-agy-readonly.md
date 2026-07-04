@@ -37,7 +37,10 @@ The agy wrapper's `--sandbox read-only` applies
 `_READ_ONLY_DENY = ["write_file(*)", "command(*)", "unsandboxed(*)",
 "execute_url(*)", "mcp(*)"]` as a per-call `permissions.deny` transaction on
 `~/.gemini/antigravity-cli/settings.json`, then restores byte-exactly
-(flock-serialized, `.agybak` crash-recovery).
+(flock-protected settings transitions, `.agybak` crash-recovery). Identical
+read-only calls share the active deny lease; workspace-write remains exclusive.
+Read-only holder liveness is tracked by per-holder flock files, not PID-only
+checks, so crashed sibling calls are pruned before the last live holder restores.
 
 **E2E verification (2026-07-01):** a `--sandbox read-only` **write attempt was
 BLOCKED** (no file created) and the agy settings md5 was **identical

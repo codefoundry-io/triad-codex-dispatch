@@ -71,10 +71,16 @@ codex --profile triad-codex-dispatch --search
   `TRIAD_BOOTSTRAP_BIN_DIR`, `PATH`를 일관되게 설정한다. 이 repo는 `.triad-codex-home/`,
   `.triad-config/`, `.triad-bin/`을 ignore한다.
 
-plugin 설치는 marketplace snapshot을 쓰지만, bootstrap은 local checkout의
-`scripts/`, `bin/`, `agents/`를 읽는다. bootstrap 실행 전 local checkout도 같은
-`<release-ref>` snapshot에 detached 상태로 맞춘다. 설치 후에도 이 checkout을
-유지한다. wrapper launcher는 이 absolute checkout path의 `bin/*.py`를 실행한다.
+plugin 설치는 marketplace snapshot을 쓴다. bootstrap은 `TRIAD_PLUGIN_DIR`로 받은
+설치된 plugin cache의 `scripts/`, `bin/`, `agents/`를 읽는다. 설치 후에도 이 cache를
+유지한다. wrapper launcher는 absolute launcher path를 가지며, 그 cache의
+`bin/*.py`를 실행한다. launcher는 확인된 `claude`, `agy`, 선택적 `gemini` binary
+경로도 고정하므로 plugin update뿐 아니라 vendor CLI upgrade나 이동 후에도 bootstrap을
+다시 실행한다. `codex plugin marketplace add`, `codex plugin add --json`,
+`.installedPath` key, public repo visibility, 기본 `main` branch에 대한 retained
+evidence는 `docs/references/codex-plugin-cli-evidence.md`에 둔다. `codex plugin add
+--json`이 marketplace metadata인 `authPolicy: "ON_INSTALL"`을 표시할 수 있지만,
+bootstrap은 CLI OAuth/login을 수행하지 않는다.
 `<release-ref>`는 merge 후에는 `main`, 현재 branch를 직접 검증할 때는
 `distribution-layer`로 둔다.
 
@@ -301,7 +307,7 @@ scripts/bootstrap.sh --check
 없으면 `~/.codex/triad-codex-dispatch.config.toml`을 쓴다. bootstrap이 만든 marker가
 있는 profile만 갱신하며, 사용자가 직접 만든 unmanaged profile이 이미 있으면
 `refusing to overwrite unmanaged Codex profile`로 실패하고 덮어쓰지 않는다. 또한
-사용자의 실제 launcher/check-out 경로가 들어간
+사용자의 실제 absolute launcher path가 들어간
 `$CODEX_HOME/rules/triad-codex-dispatch.rules`를 쓴다. `CODEX_HOME`이 없으면
 `~/.codex/rules/triad-codex-dispatch.rules`를 쓴다.
 
@@ -529,14 +535,17 @@ bootstrap이 설치한 파일은 필요하면 지운다.
 rm -f ~/.codex/agents/claude-wrapper-repair.toml
 rm -f ~/.codex/agents/gemini-wrapper-repair.toml
 rm -f ~/.codex/agents/agy-wrapper-repair.toml
+rm -f ~/.codex/triad-codex-dispatch.config.toml
+rm -f ~/.codex/rules/triad-codex-dispatch.rules
 rm -f ~/.local/bin/claude_wrapper.py
 rm -f ~/.local/bin/gemini_wrapper.py
 rm -f ~/.local/bin/antigravity_wrapper.py
 ```
 
 bootstrap에서 `TRIAD_BOOTSTRAP_BIN_DIR`를 지정했다면 `~/.local/bin` 대신 그
-디렉터리에서 launcher를 지운다. classifier directory는 로컬에서 학습된 routing을
-버리려는 게 확실할 때만 지운다.
+디렉터리에서 launcher를 지운다. custom `CODEX_HOME`을 썼다면 agent/profile/rules
+파일은 `~/.codex`가 아니라 그 디렉터리에서 지운다. classifier directory는 로컬에서
+학습된 routing을 버리려는 게 확실할 때만 지운다.
 
 ```bash
 rm -rf ~/.config/triad-codex-dispatch
@@ -576,14 +585,20 @@ fleet setup이 사용자가 Codex를 시작하기 전에 Codex Linux/WSL2 sandbo
 Runtime telemetry는 wrapper family별 `bin/_logs/<cli>/` 아래에 생긴다.
 
 - `audit.jsonl`은 active file이 10 MB를 넘으면 rotate하고, CLI당 archive는
-  최대 5개 / 50 MB까지만 유지한다.
+  최대 5개 / 50 MB까지만 유지한다. redacted argv, prompt length, status,
+  stdout/stderr 앞 500자, structured-output 존재 여부와 길이만 저장하며 전체
+  prompt text나 전체 structured-output payload는 저장하지 않는다.
 - 실패 IPC run log는 `bin/_logs/<cli>/runs/*.json`에 생긴다. 파일명에는 UTC
   timestamp, process id, 8자 random UUID suffix가 들어가 병렬 실행에서도
-  유니크하다.
+  유니크하다. 실패 run log에는 `prompt_head`, `prompt_len`, 전체 `prompt`
+  필드가 들어가 long prompt-file 호출을 repair verification에서 재구성할 수
+  있다.
 - dispatch skill은 repair agent가 끝난 뒤 run log와 대응되는 `.repair.json`을
-  지운다.
+  지운다. repair verification은 run log 옆에 임시 `*.prompt.tmp` 파일을 만들 수
+  있다.
 - wrapper failsafe는 run log를 CLI당 100개 / 20 MB로 제한하고, 다음 normal
-  dispatch 시작 시 7200초보다 오래된 run log와 `.repair.json`을 sweep한다.
+  dispatch 시작 시 7200초보다 오래된 run log, `.repair.json`, `*.prompt.tmp`를
+  sweep한다.
 
 repair agent가 `~/.config/triad-codex-dispatch/classifier-patches.json`을 수정할
 때는 classifier JSON 옆 advisory lock file을 사용하도록 지시되어 있어 병렬 repair

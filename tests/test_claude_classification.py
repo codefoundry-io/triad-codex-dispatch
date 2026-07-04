@@ -45,6 +45,30 @@ def test_is_error_maps_to_oauth_env(tmp_path):
     )
 
 
+def test_is_error_success_envelope_maps_to_oauth_env(tmp_path):
+    """Claude can emit auth errors in an rc=0 success envelope; still terminal."""
+    r = _run(tmp_path, fake_mode="is_error_success")
+    assert r.returncode == 65, (
+        f"rc=0 is_error envelope must be terminal EXIT_TERMINAL=65; got {r.returncode}"
+    )
+    assert _cls(r.stderr) == "oauth-env", (
+        f"rc=0 is_error envelope should classify as oauth-env; got {_cls(r.stderr)!r}\n"
+        f"stderr={r.stderr!r}"
+    )
+
+
+def test_permission_denial_envelope_is_task_blocked_not_repair(tmp_path):
+    """Claude permission_denials with no usable result should not route to repair."""
+    r = _run(tmp_path, fake_mode="permission_denied")
+    assert r.returncode == 65, (
+        f"permission denial envelope must be terminal EXIT_TERMINAL=65; got {r.returncode}"
+    )
+    assert _cls(r.stderr) == "task-blocked", (
+        f"permission denial should classify as task-blocked; got {_cls(r.stderr)!r}\n"
+        f"stderr={r.stderr!r}"
+    )
+
+
 def test_empty_stdout_is_extraction_error(tmp_path):
     """empty mode (fake_claude) — no stdout at all.
 
@@ -72,4 +96,43 @@ def test_structured_output_ok(tmp_path):
     )
     assert '"todos"' in r.stdout, (
         f"stdout should contain '\"todos\"'; got {r.stdout!r}"
+    )
+
+
+def test_structured_output_retries_are_schema_fail_not_repair(tmp_path):
+    """Claude schema retry exhaustion is a schema failure, not repair-agent territory."""
+    r = _run(tmp_path, fake_mode="schema_retries")
+    assert r.returncode == 66, (
+        f"schema retry exhaustion must exit 66; got rc={r.returncode}\n"
+        f"stderr={r.stderr!r}"
+    )
+    assert _cls(r.stderr) == "schema-fail", (
+        f"schema retry exhaustion should classify as schema-fail; got {_cls(r.stderr)!r}\n"
+        f"stderr={r.stderr!r}"
+    )
+
+
+def test_structured_output_retries_are_schema_fail_even_with_nonzero_vendor_rc(tmp_path):
+    """Classify Claude schema retry envelopes from stdout even if vendor rc is generic nonzero."""
+    r = _run(tmp_path, fake_mode="schema_retries_nonzero")
+    assert r.returncode == 66, (
+        f"schema retry envelope must exit 66 even with vendor rc=1; got rc={r.returncode}\n"
+        f"stderr={r.stderr!r}"
+    )
+    assert _cls(r.stderr) == "schema-fail", (
+        f"schema retry envelope should classify as schema-fail; got {_cls(r.stderr)!r}\n"
+        f"stderr={r.stderr!r}"
+    )
+
+
+def test_structured_output_retries_override_capacity_stderr(tmp_path):
+    """Claude schema retry envelopes are schema failures even if stderr has retryable words."""
+    r = _run(tmp_path, fake_mode="schema_retries_server_stderr")
+    assert r.returncode == 66, (
+        f"schema retry envelope must exit 66 instead of capacity retry-give-up; got rc={r.returncode}\n"
+        f"stderr={r.stderr!r}"
+    )
+    assert _cls(r.stderr) == "schema-fail", (
+        f"schema retry envelope should classify as schema-fail; got {_cls(r.stderr)!r}\n"
+        f"stderr={r.stderr!r}"
     )

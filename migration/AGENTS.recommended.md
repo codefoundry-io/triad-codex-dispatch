@@ -40,10 +40,10 @@ IPC area, Python runtime, and resolved vendor CLI executable directories, not
 workspace. Repair verification strips the original wrapper `--cwd` and runs
 from the toolkit checkout; it checks classifier routing, not caller-repo
 behavior.
-The generated profile grants write access only to:
-
-- `~/.config/triad-codex-dispatch/classifier-patches.json`
-- the requested `<run_log>.repair.json` response file
+The generated profile grants write access to the classifier config directory and
+the bounded `bin/_logs/<cli>/` IPC area. That log area contains run logs,
+requested `<run_log>.repair.json` response files, and temporary `.prompt.tmp`
+files used for repair verification.
 
 Classifier patch edits must use the adjacent advisory lock file. Runtime
 artifacts under `bin/_logs/<cli>/` are bounded by the wrapper, but normal

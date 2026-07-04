@@ -64,6 +64,34 @@ path_has_dir() {
   esac
 }
 
+launcher_is_managed() {
+  launcher="$1"
+  wrapper="$2"
+  if [ ! -e "$launcher" ]; then
+    return 0
+  fi
+  python3 - "$launcher" "$wrapper" <<'PY'
+from pathlib import Path
+import sys
+
+MARKER = "# triad-codex-dispatch managed launcher"
+path = Path(sys.argv[1])
+wrapper = sys.argv[2]
+try:
+    text = path.read_text(encoding="utf-8")
+except UnicodeDecodeError:
+    raise SystemExit(1)
+
+legacy_generated = (
+    "triad-codex-dispatch" in text
+    and f"/bin/{wrapper}" in text
+    and "os.execv(" in text
+    and "TRIAD_REQUIRE_PINNED_VENDOR" in text
+)
+raise SystemExit(0 if MARKER in text or legacy_generated else 1)
+PY
+}
+
 is_expected_wrapper() {
   resolved="$1"
   target="$2"
@@ -222,7 +250,7 @@ check_auth() {
 
   run_auth_probe "codex" "${TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex doctor}"
   run_auth_probe "claude" "${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude -p 'Return exactly OK.' --output-format json --permission-mode dontAsk --allowedTools Read}"
-  run_auth_probe "agy" "${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-agy -p 'Return exactly OK.'}"
+  run_auth_probe "agy" "${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-antigravity_wrapper.py --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
   if command -v gemini >/dev/null 2>&1; then
     if [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
       run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p 'Return exactly OK.'}"
@@ -265,6 +293,10 @@ install_launchers() {
     launcher="$LAUNCHER_DIR/$wrapper"
     if [ ! -f "$target" ]; then
       fail "missing wrapper: $target"
+      continue
+    fi
+    if ! launcher_is_managed "$launcher" "$wrapper"; then
+      fail "refusing to overwrite unmanaged launcher: $launcher"
       continue
     fi
     escaped_target="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$target")" || {
@@ -319,9 +351,12 @@ PY
     }
     {
       printf '#!%s\n' "$python_exe"
+      printf '# triad-codex-dispatch managed launcher\n'
       printf 'import os\n'
       printf 'import sys\n'
-      printf 'os.environ["TRIAD_REQUIRE_PINNED_VENDOR"] = "1"\n'
+      if [ "$wrapper" != "gemini_wrapper.py" ] || [ -n "$vendor_path" ]; then
+        printf 'os.environ["TRIAD_REQUIRE_PINNED_VENDOR"] = "1"\n'
+      fi
       if [ -n "$vendor_path" ]; then
         printf 'os.environ[%s] = %s\n' "$escaped_vendor_env" "$escaped_vendor_path"
       fi

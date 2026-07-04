@@ -33,7 +33,7 @@ is deprecated (IneligibleTierError → Antigravity).
 ## Hard rules
 
 1. **Literal absolute-wrapper invocation.** Resolve `gemini_wrapper.py` once,
-   then run the absolute launcher/check-out path as the first argv token. Do
+   then run the absolute launcher path as the first argv token. Do
    not invoke through `bash -lc`, `zsh -lc`, `python3`, `/usr/bin/env`, command
    substitution, redirection, or inline env assignment; Codex command rules
    match argv prefixes and those shell forms miss the no-prompt allowlist.
@@ -68,7 +68,10 @@ is deprecated (IneligibleTierError → Antigravity).
    heavy files (gemini-cli issues #11321 / #18331 / #26588), so read-only now
    routes through the per-call Policy Engine
    (`--policy bin/policies/gemini-readonly.toml`), which denies mutation + shell
-   tools for that call only without the Node OOM.
+   tools for that call only without the Node OOM. Business-tier Gemini
+   read-only remains unverified until the owner runs a write-attempt check in
+   that account; if the write-attempt has not been run, prefer agy for gated
+   release review.
 8. **No plan/yolo approval modes.** The wrapper argparse accepts only
    `--approval-mode default|auto_edit`. `plan` is replaced by the per-call
    read-only policy above, and `yolo` is not a permitted mode in this repo.
@@ -107,7 +110,7 @@ For a long prompt, write a UTF-8 prompt file first and pass its absolute path:
   [--timeout <seconds>]
 ```
 
-Defaults: no `--sandbox` (no policy attached). `--sandbox read-only` attaches
+Defaults: `--sandbox read-only` attaches
 `bin/policies/gemini-readonly.toml` via the Policy Engine for that call only
 (`--policy` flag; see Hard rule 7 — `plan` is not a supported wrapper mode).
 `--sandbox workspace-write` = write-enabled code-agent; run the wrapper from the
@@ -122,7 +125,7 @@ drives structured output (validated,
 `structured_output` → local pydantic check), and requires
 `TRIAD_ALLOW_PYDANTIC_IMPORT=1` because it imports Python code.
 
-### Step 2 — Run via Bash; capture rc, stdout, stderr
+### Step 2 — Run the direct wrapper command; capture rc, stdout, stderr
 
 Wrapper stderr contains a 1-line summary
 `[wrapper] gemini <classification> exit=<int> vendor=<int> elapsed=<s>` and, on
@@ -140,10 +143,11 @@ CLS=$(printf '%s' "$SUMMARY" | sed -E 's/.*\[wrapper\] gemini ([a-z-]+) .*/\1/')
 ```
 
 Token set: `ok | server-capacity | cli-subscription-cap | token-limit |
-oauth-env | schema-rejected | timeout | extraction-error | unknown`. Or branch
-on wrapper exit: `0` ok / `1` cli-fail / `2` timeout / `3` arg /
-`4` binary-missing / `64` server-cap-exhausted / `65` terminal / `66` schema
-fail / `67` schema-rejected.
+oauth-env | schema-fail | schema-rejected | timeout | extraction-error |
+fanout-spawn-error | config-conflict | task-blocked | unknown`. Or branch on wrapper exit:
+`0` ok / `1` cli-fail / `2` timeout / `3` arg / `4` binary-missing /
+`64` server-cap-exhausted / `65` terminal / `66` schema fail /
+`67` schema-rejected.
 
 **Gemini envelope note:** `gemini -p … --output-format json` returns a single
 JSON object `{response, stats, error}`. Classify from stderr AND the `error`
@@ -155,12 +159,13 @@ the output classification from the `[wrapper]` summary line.
 | classification (rc) | Leader action |
 |---|---|
 | `ok` (0) | Return wrapper stdout. With `--pydantic`, stdout is the validated JSON object. |
-| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` | Surface to user with cause (quota / prompt too large / re-login or business-tier auth expired). **NOT** repair territory. Auth is user-managed. |
+| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` / `fanout-spawn-error` / `task-blocked` | Surface to user with cause (quota / prompt too large / re-login or business-tier auth expired / subagent spawn failure / tool permission denial). **NOT** repair territory. Auth is user-managed. |
+| `config-conflict` (65) | Local config/settings conflict. Wait briefly and re-dispatch once if it is a lock contention; if repeated or parse/config shaped, surface the config cause. **NOT** repair territory. |
 | `server-capacity` exhausted (64) | Wait + retry, or surface. Wrapper already retried per backoff. |
 | `unknown` (1) | **Step 5 — repair subagent (MANDATORY + concurrent; Hard rule 6).** |
 | `extraction-error` (1) | **Step 5 — repair subagent.** rc=0 but the extractor found no answer (empty envelope / masked error). |
 | `timeout` (2) | **Step 5 — repair subagent** (route for uniformity; likely ESCALATE). Wrapper fail-fasts (no retry on timeout). |
-| schema fail (66) / schema-rejected (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (gemini's `{response}` validated against the injected schema). `67` = a submit-time schema refusal (codex-style; not produced by gemini). |
+| `schema-fail` (66) / `schema-rejected` (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (gemini's `{response}` validated against the injected schema). `67` = a submit-time schema refusal (codex-style; not produced by gemini). |
 | arg (3) / binary missing (4) | Surface to user with cause. |
 
 ### Step 5 — Repair via the `gemini-wrapper-repair` named subagent
@@ -204,7 +209,7 @@ Input:
     "patch":     "<'<file:line> — entry added', or null when ESCALATE>",
     "reason":    "<one-line semantic summary>",
     "attempts":  "<int 1-3>",
-    "per_attempt_log": "<array of {n, hypothesis, source, patch, py_compile, rerun}>"
+    "per_attempt_log": "<array of {n, hypothesis, source, patch, json_validation, rerun}>"
   },
   "task": "Extract the literal error from the gemini envelope (stderr + error field) -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (gemini envelope, key 'gemini') -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
 }

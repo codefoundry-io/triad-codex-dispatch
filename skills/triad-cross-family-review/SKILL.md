@@ -33,7 +33,9 @@ same packet catch failure modes a single family (or the author) would miss.
    model is available; if it is not available, log the fallback instead of
    inventing a model name. For business-tier gemini, pass an owner-verified
    `TRIAD_GOOGLE_REVIEW_MODEL` when configured; otherwise use the CLI default and
-   log that the business-tier model is unpinned.
+   log that the business-tier model is unpinned. Business-tier Gemini read-only
+   is unverified until the owner has run a write-attempt check in that account;
+   use agy for release gating when that write-attempt evidence is absent.
 3. **codex (fresh)** — a FRESH codex reviewer for independence: use Codex
    multi-agent `spawn_agent` to start a fresh subagent with the same packet,
    produced and saved BEFORE it sees the other legs' outputs. The leader does
@@ -56,10 +58,12 @@ same packet catch failure modes a single family (or the author) would miss.
 3. **Frame suspect decisions as QUESTIONS.** Each reviewer is asked to surface
    its doubts as questions ("why is X safe when Y?"), not verdicts — questions
    expose hidden assumptions; bare "LGTM/NAK" hides them.
-4. **Fix → re-confirm loop until unanimous SAFE.** Consolidate the questions,
+4. **Fix → re-confirm loop with a circuit breaker.** Consolidate the questions,
    the leader fixes the real issues, then RE-RUN the three reviewers on the fix.
-   Repeat until all three return no blocking questions. One family's unresolved
-   blocking question = NOT SAFE to merge.
+   Repeat until all three return no blocking questions, but stop after
+   `TRIAD_REVIEW_MAX_ROUNDS` (default 2) full review rounds. One family's
+   unresolved blocking question = NOT SAFE to merge. If the round budget is
+   exhausted, stop and record an owner decision instead of looping.
 5. **File-IPC for the packet.** Pre-assemble ONE review packet at
    `_runs/reviews/<id>/packet.md` under the repo root (the diff + intent + the
    suspect decisions). Each leg reads ONLY that file by **referencing its path
@@ -74,6 +78,11 @@ same packet catch failure modes a single family (or the author) would miss.
    with the multi-agent `spawn_agent` tool using `fork_context=false`. Do not
    shell out to a second Codex CLI process from this repo. If `spawn_agent` is
    unavailable, log the Codex-family reviewer as unavailable for that round.
+7. **Release gate is stricter than advisory review.** For pre-release or merge
+   gating, all three families must be present and return **Claude SAFE**,
+   **agy SAFE** (or owner-verified business-tier Gemini SAFE), and
+   **fresh Codex SAFE**. If any family is unavailable or NOT-SAFE, do not merge;
+   degraded two-family mode is advisory only.
 
 ## Flow
 
@@ -118,7 +127,10 @@ questions → proceed to merge.
 
 For each real blocking question, the leader fixes it (or justifies why it is a
 non-issue, recorded). Then RE-RUN Step 2 on the fixed change. Loop until the
-verdict is **unanimous SAFE**. Only then is the change merge-eligible.
+verdict is **unanimous SAFE**, but stop after `TRIAD_REVIEW_MAX_ROUNDS`
+(default 2) full rounds. If a reviewer still blocks after that, do not keep
+dispatching; record the remaining questions and get an owner decision. Only a
+unanimous SAFE verdict is merge-eligible.
 
 ### Step 5 — Cleanup
 

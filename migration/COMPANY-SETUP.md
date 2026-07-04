@@ -71,11 +71,17 @@ Install target:
   `codex --profile triad-codex-dispatch` session. `.triad-codex-home/`,
   `.triad-config/`, and `.triad-bin/` are ignored local runtime folders.
 
-The plugin install uses the marketplace snapshot. Bootstrap still reads
-`scripts/`, `bin/`, and `agents/` from the local checkout. Keep that checkout
-detached at the fetched `<release-ref>` snapshot before running bootstrap. Keep
-that checkout in place after install: the wrapper launchers execute `bin/*.py`
-from this absolute checkout path.
+The plugin install uses the marketplace snapshot. Bootstrap reads `scripts/`,
+`bin/`, and `agents/` from the installed plugin cache returned as
+`TRIAD_PLUGIN_DIR`. Keep that cache in place after install: the wrapper
+launchers have absolute launcher paths and execute `bin/*.py` from that cache.
+The launchers also pin resolved `claude`, `agy`, and optional `gemini` binary
+paths, so rerun bootstrap after vendor CLI upgrades or moves, not only after
+plugin updates. Retained evidence for `codex plugin marketplace add`, `codex
+plugin add --json`, the `.installedPath` key, public repo visibility, and the
+default `main` branch is in `docs/references/codex-plugin-cli-evidence.md`.
+`codex plugin add --json` may report `authPolicy: "ON_INSTALL"` from marketplace
+metadata; bootstrap still does not perform OAuth/login for the CLIs.
 Use `main` as `<release-ref>` after this branch is merged; use
 `distribution-layer` when validating the current branch directly.
 
@@ -308,7 +314,7 @@ refreshes only a bootstrap-managed profile and fails with
 without the triad marker. It also writes
 `$CODEX_HOME/rules/triad-codex-dispatch.rules`, or
 `~/.codex/rules/triad-codex-dispatch.rules` when `CODEX_HOME` is unset, with the
-user's actual launcher and checkout paths.
+user's actual absolute launcher path for each wrapper.
 
 This profile is the explicit external-CLI consent boundary for heavy triad
 users. Starting Codex with it means normal dispatch may send relevant prompts,
@@ -545,14 +551,18 @@ Optional cleanup for bootstrap-installed files:
 rm -f ~/.codex/agents/claude-wrapper-repair.toml
 rm -f ~/.codex/agents/gemini-wrapper-repair.toml
 rm -f ~/.codex/agents/agy-wrapper-repair.toml
+rm -f ~/.codex/triad-codex-dispatch.config.toml
+rm -f ~/.codex/rules/triad-codex-dispatch.rules
 rm -f ~/.local/bin/claude_wrapper.py
 rm -f ~/.local/bin/gemini_wrapper.py
 rm -f ~/.local/bin/antigravity_wrapper.py
 ```
 
 If bootstrap used `TRIAD_BOOTSTRAP_BIN_DIR`, remove launchers from that
-directory instead of `~/.local/bin`. Only delete the classifier directory if the
-team intentionally wants to discard learned local routing:
+directory instead of `~/.local/bin`. If bootstrap used a custom `CODEX_HOME`,
+remove the agent/profile/rules files from that directory instead of `~/.codex`.
+Only delete the classifier directory if the team intentionally wants to discard
+learned local routing:
 
 ```bash
 rm -rf ~/.config/triad-codex-dispatch
@@ -591,15 +601,19 @@ If `~/.local/bin` is not on `PATH`, either add it before running bootstrap or se
 Runtime telemetry lives under `bin/_logs/<cli>/` for each wrapper family:
 
 - `audit.jsonl` rotates after the active file exceeds 10 MB and keeps at most
-  five archives / 50 MB per CLI.
+  five archives / 50 MB per CLI. It stores redacted argv, prompt length, status,
+  500-character stdout/stderr heads, and structured-output presence/length only;
+  it does not store full prompt text or full structured-output payloads.
 - Failure IPC run logs live in `bin/_logs/<cli>/runs/*.json`. Names include UTC
   timestamp, process id, and an 8-character random UUID suffix for parallel
-  uniqueness.
+  uniqueness. Failure run logs include `prompt_head`, `prompt_len`, and the full
+  `prompt` field so repair verification can rebuild long prompt-file calls.
 - The dispatch skills delete the run log and matching `.repair.json` after the
-  repair agent returns.
+  repair agent returns. Repair verification may also create temporary
+  `*.prompt.tmp` files beside the run logs.
 - Wrapper failsafes cap run logs at 100 files / 20 MB per CLI and sweep stale
-  run logs plus `.repair.json` files older than 7200 seconds on the next normal
-  dispatch.
+  run logs, `.repair.json` files, and `*.prompt.tmp` files older than 7200
+  seconds on the next normal dispatch.
 
 Repair agents that patch
 `~/.config/triad-codex-dispatch/classifier-patches.json` are instructed to use

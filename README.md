@@ -72,6 +72,9 @@ TRIAD_PLUGIN_DIR="$(
     jq -r '.installedPath'
 )"
 
+# No-prompt install for this plugin's target users.
+# Conservative install: remove the three env lines below and run only bootstrap;
+# Codex may ask for external-CLI approvals.
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
@@ -95,8 +98,15 @@ Important install behavior:
   `.triad-config/`, and `.triad-bin/`.
 - The generated wrapper launchers call files from the installed plugin cache.
   Rerun bootstrap after every plugin update so those paths stay current.
+- The launchers pin resolved vendor CLI paths. Rerun bootstrap after upgrading
+  or moving `claude`, `agy`, or optional `gemini`.
 - Existing Codex sessions may not see newly installed plugin skills or custom
   agents. Start a new session after install or update.
+- agy calls may transact against Antigravity CLI runtime settings under
+  `~/.gemini/antigravity-cli/`; that is provider runtime state, not a bootstrap
+  install target.
+- `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
+  does not perform CLI OAuth/login.
 
 ## Recommended Shell Entry
 
@@ -180,6 +190,10 @@ rm -rf ~/.config/triad-codex-dispatch
 
 If you installed with a custom `CODEX_HOME`, remove the agent/profile/rules
 files from that directory instead of `~/.codex`.
+If you used a custom `TRIAD_BOOTSTRAP_BIN_DIR`, remove the three wrapper
+launchers from that directory instead of `~/.local/bin`. For custom `XDG_CONFIG_HOME`,
+remove `triad-codex-dispatch/` under that config directory instead of
+`~/.config/triad-codex-dispatch`.
 
 Workspace scope removal:
 
@@ -201,35 +215,30 @@ The shipped repair agents are repair-only and must not recursively dispatch.
 Do not add triad dispatch skills to those repair agents.
 
 If you create your own Codex custom subagent that should call triad dispatch
-skills, opt in explicitly with Codex `skills.config`. Replace
-`/absolute/plugin/cache/path` with the `TRIAD_PLUGIN_DIR` value from install or
-update output.
-
-```toml
-[[skills.config]]
-path = "/absolute/plugin/cache/path/skills/triad-claude-dispatch/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/absolute/plugin/cache/path/skills/triad-antigravity-dispatch/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/absolute/plugin/cache/path/skills/triad-gemini-dispatch/SKILL.md"
-enabled = true
-
-[[skills.config]]
-path = "/absolute/plugin/cache/path/skills/triad-cross-family-review/SKILL.md"
-enabled = true
-```
+skills, opt in explicitly with Codex `skills.config` entries pointing at the
+needed `SKILL.md` files under the `TRIAD_PLUGIN_DIR` value from install/update.
 
 After editing custom-agent TOML files, start a new Codex session.
+
+## Runtime Logs And Local Data
+
+Runtime telemetry is local under the installed plugin's `bin/_logs/<cli>/`.
+`audit.jsonl` keeps redacted argv, prompt length, status, 500-character
+stdout/stderr heads, and structured-output presence/length only. Failure run
+logs keep full prompts and vendor transcripts for repair replay, then skills
+delete them after repair; a failsafe caps stale run logs. Treat these files as
+sensitive and remove `bin/_logs/` when needed.
+
+`approval_policy=never` applies to the whole triad Codex session, not only this
+plugin. Do not run unrelated work in that session. Antigravity settings under
+`~/.gemini/antigravity-cli/` are transacted during agy calls. Avoid editing agy permissions during triad calls or running another Antigravity settings change at the same time.
 
 ## Notes
 
 - This plugin avoids `danger-full-access`.
-- Generated command rules allow only wrapper launchers installed from the plugin
-  cache.
+- Generated command rules allow only launcher files installed under
+  `~/.local/bin` or `TRIAD_BOOTSTRAP_BIN_DIR`; those launchers call the installed
+  plugin cache.
 - Repair-agent permissions are declared TOML grants, not a proof that a broader
   parent session or managed runtime override cannot allow more.
 - Detailed design and evidence live under `docs/`.
