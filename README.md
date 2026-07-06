@@ -24,132 +24,96 @@ reaches out to the other families for you.
 
 - Codex plugin skills under `skills/`.
 - Wrapper launchers for Claude, agy, and Gemini.
+- A generated Codex profile on the Codex permission-profile system
+  (`default_permissions = "triad_leader"`, extending `:workspace`; no legacy
+  `sandbox_mode` keys) plus command rules for the wrapper launchers — both
+  installed by default.
 - No in-session repair agents. When a dispatch hits a classifier gap, the SKILL
   surfaces a ready-to-paste top-level `codex exec -s read-only` analyzer command
   you run in a fresh terminal; it proposes ONE classifier entry, which the
   deterministic `bin/apply_patch.py` validates and applies. There is no
   write-capable in-session repair worker.
-- A generated Codex profile on the Codex permission-profile system
-  (`default_permissions = "triad_leader"`, extending `:workspace`; no legacy
-  `sandbox_mode` keys) plus command rules for the wrapper launchers.
 - An optional managed `codex-triad` shell entry
   (`TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`) — the required start for the
   no-prompt posture.
 
-## Requirements
+## Required (~2 minutes)
 
-Install and log in before running bootstrap:
+Three steps get you a working install with sane, prompting defaults. Everything
+past this section is optional.
 
-- `codex`
-- `claude` — Claude Code `>= 2.1.170`; bootstrap warns on older versions.
-- `agy`
+1. **Native vendor logins.** Install and log in to the leader `codex` and the
+   workers you will use — the toolkit issues/refreshes no credentials:
+   - `codex` — install, then `codex login`.
+   - `agy` — install + OAuth sign-in (the Google-family worker for individual
+     users).
+   - `claude` — Claude Code `>= 2.1.170`; bootstrap warns on older versions.
 
-Optional:
+   You also need the host tools `git`, `jq`, and `python3 >= 3.12`, and
+   `~/.local/bin` on `PATH` (or set `TRIAD_BOOTSTRAP_BIN_DIR` to a directory
+   already on `PATH`). `gemini` is optional — see
+   [Optional / Advanced](#optional--advanced).
 
-- `gemini`, only for business, Vertex, or API-key Gemini accounts. Individual
-  Google-family users should use `agy`.
+2. **Add the plugin.** No local clone is required for normal users.
 
-Host tools:
+   ```bash
+   codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 
-- `git`, `jq`, and `python3 >= 3.12`
-- Linux/WSL2: install `bubblewrap` (`bwrap`) for Codex sandbox support.
-- Make sure `~/.local/bin` is on `PATH`, or set `TRIAD_BOOTSTRAP_BIN_DIR` to a
-  directory already on `PATH`.
+   TRIAD_PLUGIN_DIR="$(
+     codex plugin add triad-codex-dispatch@triad-codex-dispatch --json |
+       jq -r '.installedPath'
+   )"
+   ```
 
-The installer does not perform OAuth login and does not install OS packages.
+3. **Run bootstrap (0 env vars).** A plain `--install` installs the runtime
+   profile + command rules + wrapper launchers — the recommended setup:
 
-## Setup checklist (do these in order)
+   ```bash
+   "$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --install
+   ```
 
-The split is **manual login (human) → config (script) → manual repair (human)**;
-the wrapper NEVER manages tokens (a deliberate safety boundary — see
-[SECURITY.md](SECURITY.md)).
+   The generated profile keeps `approval_policy=on-request`, so Codex **asks
+   before each external-CLI wrapper call** — the safe default. `--install` also
+   runs LIVE vendor auth probes (`codex login status`, plus one minimal
+   "Return exactly OK." call each to `claude` and `agy`, and `gemini` when
+   installed); set `TRIAD_BOOTSTRAP_SKIP_AUTH=1` to skip them (CI / scheduled
+   jobs only).
 
-1. **Manual login (human)** — native login to the leader `codex` and the workers
-   `agy`, `claude` (and `gemini` only for business/Vertex/API-key accounts). The
-   toolkit issues/refreshes no credentials; `--install` runs live auth probes.
-2. **Config (script)** — `scripts/bootstrap.sh --install` with your env gates
-   (see Install) writes the profile, command rules, and launchers, and pins
-   `features.multi_agent = false`; the no-prompt posture adds the managed
-   `codex-triad` shell entry.
-3. **Repair (manual, human)** — on a novel `unknown` error the SKILL surfaces a
-   top-level `codex exec -s read-only` analyzer you paste into a fresh terminal
-   (read-only; cannot write), whose proposal you pipe to `bin/apply_patch.py`
-   (the single deterministic writer). Manual BY DESIGN — the run-log reader has
-   no write authority.
+   > **Placement invariant (hard).** Run bootstrap from your project workspace,
+   > not from a directory that contains the install targets. Bootstrap writes the
+   > profile + command rules under `$CODEX_HOME` (default `~/.codex/`), classifier
+   > patches under `~/.config/triad-codex-dispatch/`, and launchers under
+   > `~/.local/bin` (or `TRIAD_BOOTSTRAP_BIN_DIR`). Those targets — and everything
+   > they exec (the plugin cache, the `python3` runtime) — must live outside all
+   > sandbox-writable roots; bootstrap hard-fails if any resolves inside the
+   > directory it runs from (for example `$HOME`).
 
-## Install
+   Then start a new Codex session from the target workspace:
 
-Install directly from the public GitHub repository. No local clone is required
-for normal users.
+   ```bash
+   codex --profile triad-codex-dispatch --search
+   ```
 
-Repository: https://github.com/codefoundry-io/triad-codex-dispatch
+That is the whole required path. Repair is a manual, read-only step surfaced only
+when needed (see [Custom Subagents](#custom-subagents) and [Security](#security)).
 
-**Placement invariant (hard).** Bootstrap writes the generated profile and
-command rules under `$CODEX_HOME` (default `~/.codex/`);
-classifier patches under `~/.config/triad-codex-dispatch/`; and wrapper
-launchers under `~/.local/bin` (or `TRIAD_BOOTSTRAP_BIN_DIR`). These install
-targets — and everything they execute: the installed plugin cache and the
-`python3` runtime — must live outside all sandbox-writable roots. Bootstrap
-hard-fails when any of them resolves inside the directory it is run from,
-including when you run bootstrap from a directory that contains the targets
-(for example `$HOME`). Run bootstrap from your project workspace and keep
-`CODEX_HOME` / `XDG_CONFIG_HOME` / `TRIAD_BOOTSTRAP_BIN_DIR` overrides outside
-every Codex workspace.
+## Optional / Advanced
 
-```bash
-codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
+Nothing in this section is needed for a normal individual install. Reach for a
+subsection only when its "do this ONLY if…" line applies to you.
 
-TRIAD_PLUGIN_DIR="$(
-  codex plugin add triad-codex-dispatch@triad-codex-dispatch --json |
-    jq -r '.installedPath'
-)"
+### No-prompt posture (heavy users)
 
-# Conservative install — the default posture: approval_policy stays
-# on-request, so Codex asks before each external-CLI wrapper call.
-TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
-TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
-"$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --install
-```
-
-`--check` is a deprecated alias for `--install`, kept for one release.
-
-`--install` runs LIVE vendor auth probes: `codex login status`, plus one
-minimal "Return exactly OK." call each to `claude` and `agy` (and `gemini`
-when installed). Set `TRIAD_BOOTSTRAP_SKIP_AUTH=1` to skip them (CI or
-scheduled jobs only).
-
-Then start a new Codex session from the target workspace:
-
-```bash
-codex --profile triad-codex-dispatch --search
-```
-
-Important install behavior:
-
-- The generated wrapper launchers call files from the installed plugin cache.
-  Rerun bootstrap after every plugin update so those paths stay current.
-- The launchers pin resolved vendor CLI paths. Rerun bootstrap after upgrading
-  or moving `claude`, `agy`, or optional `gemini`.
-- Existing Codex sessions may not see newly installed plugin skills or custom
-  agents. Start a new session after install or update.
-- agy calls may transact against Antigravity CLI runtime settings under
-  `~/.gemini/antigravity-cli/`; that is provider runtime state, not a bootstrap
-  install target.
-- `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
-  does not perform CLI OAuth/login.
-
-## No-Prompt Opt-In (Heavy Users)
-
-No-prompt install: add `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the
-managed shell entry to the conservative install above.
+*Do this ONLY if you want Codex to stop prompting before each wrapper call.* This
+is the one setting that trades away the safety prompt, so it stays opt-in: add
+`TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the managed shell entry to the
+bootstrap command.
 
 > **Warning — session-wide scope.**
-> `approval_policy=never` applies to the whole triad Codex session, not only
-> this plugin. Do not run unrelated work in that session.
+> `approval_policy=never` applies to the whole triad Codex session, not only this
+> plugin. Do not run unrelated work in that session.
 
 ```bash
-TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
-TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
 TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 "$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --install
@@ -157,10 +121,10 @@ TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
 
 The ONLY supported start for the no-prompt posture is the managed `codex-triad`
 function that `TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1` appends to your shell RC
-(default `~/.bashrc`; `~/.zshrc` for zsh; `TRIAD_BOOTSTRAP_SHELL_RC`
-overrides). It pins the wrapper-containment envs (these gate path/pydantic
-handling in the wrapper process; they are not a claim of OS-level confinement —
-see [SECURITY.md](SECURITY.md)):
+(default `~/.bashrc`; `~/.zshrc` for zsh; `TRIAD_BOOTSTRAP_SHELL_RC` overrides).
+It pins the wrapper-containment envs (these gate path/pydantic handling in the
+wrapper process; they are not a claim of OS-level confinement — see
+[SECURITY.md](SECURITY.md)):
 
 ```bash
 codex-triad() {
@@ -174,6 +138,56 @@ codex-triad() {
 Open a new terminal (or source your shell RC), then run `codex-triad` from the
 target workspace. Never start the no-prompt profile with a bare
 `codex --profile ...` line: it lacks the pinned wrapper containment envs.
+
+### Enterprise Gemini worker
+
+*Do this ONLY if you have a business / Vertex / API-key Gemini account.* Install
+`gemini` and log in; individual Google-family users should use `agy` instead. Set
+`TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1` if a team wants bootstrap to require it.
+
+### Opt out of the default profile or rules
+
+*Do this ONLY if you do not want the profile and/or command rules installed.*
+The profile and rules install by default; suppress either with an explicit `=0`
+or the `SKIP` escape:
+
+```bash
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=0 \
+TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0 \
+"$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --install
+# equivalently: TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE=1 / _SKIP_CODEX_RULES=1
+```
+
+### Linux / WSL2 sandbox support
+
+*Do this ONLY on Linux or WSL2.* Install `bubblewrap` (`bwrap`) for Codex sandbox
+support. The installer does not install OS packages.
+
+### Read the security model
+
+*Do this ONLY if you want the full threat model before relying on the toolkit.*
+See [SECURITY.md](SECURITY.md) — the durable control is privilege separation, not
+model trust (summarized under [Security](#security) below).
+
+### Company / fleet setup
+
+*Do this ONLY if you are configuring a managed fleet, not an individual install.*
+See `migration/COMPANY-SETUP.md`.
+
+### Notes on re-running bootstrap
+
+- `--check` is a deprecated alias for `--install`, kept for one release.
+- The generated wrapper launchers call files from the installed plugin cache;
+  rerun bootstrap after every plugin update so those paths stay current.
+- The launchers pin resolved vendor CLI paths; rerun bootstrap after upgrading or
+  moving `claude`, `agy`, or optional `gemini`.
+- Existing Codex sessions may not see newly installed plugin skills; start a new
+  session after install or update.
+- agy calls may transact against Antigravity CLI runtime settings under
+  `~/.gemini/antigravity-cli/`; that is provider runtime state, not a bootstrap
+  install target.
+- `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
+  does not perform CLI OAuth/login.
 
 ## Use
 
@@ -267,9 +281,8 @@ TRIAD_PLUGIN_DIR="$(
     jq -r '.installedPath'
 )"
 
-# Re-use the same env flags you installed with (incl. the no-prompt opt-in).
-TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
-TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+# A plain --install re-applies the default profile + rules; re-add any opt-in
+# env flags you installed with (e.g. the no-prompt posture).
 "$TRIAD_PLUGIN_DIR/scripts/bootstrap.sh" --install
 ```
 
@@ -362,8 +375,9 @@ This distribution ships no repair subagents. Classifier repair runs as a
 top-level `codex exec -s read-only` analyzer the SKILL surfaces for you to paste
 into a fresh terminal — it only reads (a nested codex under the session sandbox
 cannot initialize, and top-level it is hard read-only), and the deterministic
-`bin/apply_patch.py` is the only writer. The generated profile also pins
-`[features] multi_agent = false` so no stray codex subagent can be spawned.
+`bin/apply_patch.py` is the only writer. The privilege separation — the run-log
+reader has no write authority — is what closes the confused-deputy path;
+`triad-cross-family-review`'s fresh-codex reviewer leg remains available.
 
 If you create your own Codex custom subagent that should call triad dispatch
 skills, opt in explicitly with Codex `skills.config` entries pointing at the

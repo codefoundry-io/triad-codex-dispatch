@@ -1,5 +1,10 @@
 # Company Setup: Triad Codex Dispatch
 
+> **Nothing below is needed for a normal individual install.** A single user
+> follows the "Required (~2 minutes)" section of the [README](../README.md) —
+> native logins, `codex plugin add`, and `scripts/bootstrap.sh --install` with 0
+> env vars. This document is only for administrators configuring a managed fleet.
+
 This repo distributes the Codex-led triad dispatch toolkit as a Codex plugin plus
 a bootstrap installer. Run the plugin commands from the repo root after cloning or
 after adding the internal marketplace source; run bootstrap itself from OUTSIDE

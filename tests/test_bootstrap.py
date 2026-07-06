@@ -147,19 +147,26 @@ def _assert_no_repair_agents_installed(codex_home: Path) -> None:
         assert not list(agents_dir.glob("*-wrapper-repair.toml"))
 
 
-def _assert_profile_disables_multi_agent(profile_path: Path) -> None:
-    # A [features] table with multi_agent = false in the generated PROFILE
-    # (not a global ~/.codex/config.toml edit): triad spawns no codex subagents,
-    # so disabling multi-agent prevents a stray spawn from reintroducing the
-    # confused-deputy repair path.
+def _assert_profile_does_not_disable_multi_agent(profile_path: Path) -> None:
+    # The generated PROFILE must NOT set [features] multi_agent = false. That
+    # backstop was over-broad: triad-cross-family-review's codex-host copy uses
+    # codex multi-agent spawn_agent for its fresh-codex reviewer leg, so
+    # disabling multi-agent breaks a legitimate subagent use. The confused-
+    # deputy it defended against is already closed by removing the write-
+    # capable repair agents (see _assert_no_repair_agents_installed) — nothing
+    # left to defend, so the setting is removed.
     data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
-    assert data["features"]["multi_agent"] is False
+    assert "multi_agent" not in data.get("features", {})
 
 
-def test_check_installs_no_repair_agents_and_writes_classifier_file(tmp_path):
-    # Repair agents are no longer installed (privilege-separation redesign): the
-    # write-capable confused-deputy is removed. The launcher + classifier + log
-    # dir install path is otherwise unchanged.
+def test_default_install_installs_profile_rules_and_prompts_by_default(tmp_path):
+    # Default-ON: a plain --install with 0 env vars installs BOTH the runtime
+    # profile and the command rules (the recommended setup), and the launcher +
+    # classifier + log dir install path is unchanged. Repair agents are still
+    # never installed (privilege-separation redesign). Crucially the generated
+    # profile still PROMPTS by default (approval_policy=on-request): defaulting
+    # profile+rules ON must NOT silently auto-approve — the no-prompt `never`
+    # posture stays opt-in.
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -172,12 +179,52 @@ def test_check_installs_no_repair_agents_and_writes_classifier_file(tmp_path):
         / "classifier-patches.json"
     ).read_text(encoding="utf-8") == "{}\n"
     assert (repo_root / "bin" / "_logs").is_dir()
-    assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
-    assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
+    # profile + rules now install by DEFAULT (no env var)
+    profile = home / ".codex" / "triad-codex-dispatch.config.toml"
+    assert profile.is_file()
+    assert (home / ".codex" / "rules" / "triad-codex-dispatch.rules").is_file()
+    # SAFETY: the default profile still prompts (does not auto-approve)
+    data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    assert data["approval_policy"] == "on-request"
+    _assert_profile_does_not_disable_multi_agent(profile)
     # The old "start a new Codex session so custom agents reload" line is gone:
     # nothing custom-agent-shaped is installed anymore.
     assert "custom agents reload" not in result.stdout
     assert "repair agents installed to personal Codex scope" not in result.stdout
+
+
+def test_profile_opted_out_via_explicit_zero(tmp_path):
+    # Default-ON opt-out path 1: an explicit ...=0 on both suppresses the
+    # profile and rules while the rest of the install still succeeds.
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
+        },
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    home = Path(env["HOME"])
+    assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
+    assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
+    assert (launcher_bin / "claude_wrapper.py").is_file()
+
+
+def test_profile_opted_out_via_skip_flag(tmp_path):
+    # Default-ON opt-out path 2: the ...SKIP_...=1 escape suppresses the profile
+    # and rules while the rest of the install still succeeds.
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_SKIP_CODEX_RULES": "1",
+        },
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    home = Path(env["HOME"])
+    assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
+    assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
+    assert (launcher_bin / "claude_wrapper.py").is_file()
 
 
 def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
@@ -194,7 +241,7 @@ def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     _assert_no_repair_agents_installed(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
-    _assert_profile_disables_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
+    _assert_profile_does_not_disable_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
 
@@ -267,7 +314,7 @@ def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     codex_home = Path(env["HOME"]) / "custom-codex-home"
     _assert_no_repair_agents_installed(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
-    _assert_profile_disables_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
+    _assert_profile_does_not_disable_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path.cwd() / "~").exists()
 
@@ -300,7 +347,7 @@ def test_check_supports_workspace_contained_install_targets(tmp_path):
     assert (workspace_config / "triad-codex-dispatch" / "classifier-patches.json").is_file()
     _assert_no_repair_agents_installed(workspace_codex)
     assert (workspace_codex / "triad-codex-dispatch.config.toml").is_file()
-    _assert_profile_disables_multi_agent(workspace_codex / "triad-codex-dispatch.config.toml")
+    _assert_profile_does_not_disable_multi_agent(workspace_codex / "triad-codex-dispatch.config.toml")
     assert (workspace_codex / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path(env["HOME"]) / ".codex").exists()
     assert not (Path(env["HOME"]) / ".config" / "triad-codex-dispatch").exists()
@@ -328,7 +375,7 @@ def test_check_ignores_python_stderr_when_parsing_install_paths(tmp_path):
     assert (launcher_bin / "claude_wrapper.py").is_file()
     _assert_no_repair_agents_installed(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
-    _assert_profile_disables_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
+    _assert_profile_does_not_disable_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
 
 
@@ -481,10 +528,11 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "sandbox_mode" not in data
     assert "sandbox_workspace_write" not in data
     assert data["default_permissions"] == "triad_leader"
-    # Privilege-separation redesign: a profile-scoped [features] table disables
-    # multi-agent so no stray codex subagent can be spawned (the old confused-
-    # deputy repair path).
-    assert data["features"]["multi_agent"] is False
+    # The over-broad [features] multi_agent = false backstop is REMOVED: it
+    # disabled triad-cross-family-review's legitimate codex-host spawn_agent
+    # fresh-codex reviewer leg, while defending against a confused-deputy path
+    # already closed by removing the write-capable repair agents.
+    assert "multi_agent" not in data.get("features", {})
     leader = data["permissions"]["triad_leader"]
     assert leader["extends"] == ":workspace"
     fs = leader["filesystem"]

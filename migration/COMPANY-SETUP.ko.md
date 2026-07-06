@@ -1,5 +1,10 @@
 # 회사 설치 가이드: Triad Codex Dispatch
 
+> **아래 내용은 일반 개인 설치에는 전혀 필요 없다.** 개인 사용자는
+> [README](../README.ko.md) 의 "필수 설정 (~2분)" 만 따르면 된다 — native 로그인,
+> `codex plugin add`, 그리고 env var 0개의 `scripts/bootstrap.sh --install`. 이
+> 문서는 managed fleet 을 구성하는 관리자만을 위한 것이다.
+
 이 저장소는 Codex 리더용 triad dispatch 툴킷을 Codex 플러그인과
 bootstrap installer로 배포한다. plugin 명령은 clone한 저장소 루트에서 실행하고,
 bootstrap 자체는 checkout 밖에서 실행한다 (아래 배치 불변식 참고).

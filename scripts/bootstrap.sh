@@ -36,19 +36,23 @@ allow-listed launchers and everything they exec must live outside all
 sandbox-writable roots (see the header of this script). Bootstrap hard-fails
 otherwise.
 
-Set TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 to also install/update the optional
-runtime Codex profile at $CODEX_HOME/triad-codex-dispatch.config.toml.
-The profile uses the Codex permission-profile system
-(default_permissions = "triad_leader"); it never emits legacy sandbox_mode /
-[sandbox_workspace_write], which would disable permission profiles and
-neutralize the triad_leader profile's scoping. It also pins
-[features] multi_agent = false so no stray codex subagent can be spawned. It
-defaults to approval_policy=on-request. Set TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never
-only for explicitly approved heavy-user no-prompt deployments.
+By DEFAULT, --install installs/updates the runtime Codex profile at
+$CODEX_HOME/triad-codex-dispatch.config.toml AND the user-layer command rules at
+$CODEX_HOME/rules/triad-codex-dispatch.rules — so a plain --install with 0 env
+vars yields the recommended setup. The profile uses the Codex permission-profile
+system (default_permissions = "triad_leader"); it never emits legacy sandbox_mode
+/ [sandbox_workspace_write], which would disable permission profiles and
+neutralize the triad_leader profile's scoping. It defaults to
+approval_policy=on-request (Codex prompts before each external-CLI wrapper call).
+Set TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never only for explicitly approved
+heavy-user no-prompt deployments — that is the ONLY setting that trades away the
+safety prompt, and it stays opt-in.
 
-Set TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 to install/update user-layer Codex
-rules at $CODEX_HOME/rules/triad-codex-dispatch.rules. The generated rules
-allow only this checkout's authenticated absolute wrapper launchers.
+To opt OUT of the default profile install, set
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=0 (or TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE=1).
+To opt OUT of the default command rules, set TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0
+(or TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1). The generated rules allow only this
+checkout's authenticated absolute wrapper launchers.
 
 Set TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 to append the managed codex-triad
 shell function to your shell RC (idempotent; TRIAD_BOOTSTRAP_SHELL_RC overrides
@@ -575,16 +579,20 @@ PY
   fi
 }
 
-# Privilege-separation redesign (2026-07-05): the write-capable in-session repair
-# agents were the confused deputy — a subagent spawned from an untrusted vendor
-# run-log that inherited the leader sandbox AND carried a classifier/`bin/_logs`
-# write grant. They are gone. Codex-host repair is a top-level, hard-read-only
-# `codex exec -s read-only` analyzer the owner pastes into a FRESH terminal (a
-# nested codex under the session sandbox cannot initialize); the SKILL Step 5
-# surfaces the ready-to-run command, and the deterministic `bin/apply_patch.py`
-# is the only writer. Bootstrap installs NO $CODEX_HOME/agents/*-wrapper-repair.toml.
-install_repair_agents() {
-  ok "codex-host repair = a top-level read-only analyzer the owner runs in a fresh terminal (see the dispatch SKILL Step 5); no write-capable repair agents are installed"
+# The profile + command rules install by DEFAULT (a plain --install with 0 env
+# vars yields the recommended setup). want_codex_profile / want_codex_rules
+# encode that default-ON with two opt-outs each: an explicit ...=0, or the
+# ...SKIP_... escape. The approval-policy prompt is NOT affected by these — it
+# stays on-request unless TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never is set
+# separately, so defaulting the profile ON never silently auto-approves.
+want_codex_profile() {
+  [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE:-0}" != "1" ] \
+    && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-1}" != "0" ]
+}
+
+want_codex_rules() {
+  [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_RULES:-0}" != "1" ] \
+    && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES:-1}" != "0" ]
 }
 
 ensure_log_dir() {
@@ -597,7 +605,7 @@ ensure_log_dir() {
 }
 
 install_codex_runtime_profile() {
-  if [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-0}" != "1" ]; then
+  if ! want_codex_profile; then
     return
   fi
 
@@ -653,13 +661,6 @@ approval_policy = "{approval_policy}"
 approvals_reviewer = "user"
 default_permissions = "triad_leader"
 
-# triad spawns no codex subagents; disabling multi-agent prevents a stray spawn
-# from reintroducing the confused-deputy repair path (the write-capable in-session
-# repair worker was removed — codex-host repair is now a top-level read-only
-# analyzer the owner runs in a fresh terminal; see the dispatch SKILL Step 5).
-[features]
-multi_agent = false
-
 [permissions.triad_leader]
 description = "Triad leader session: workspace writes plus triad runtime dirs; network on."
 extends = ":workspace"
@@ -699,7 +700,7 @@ EOF
 }
 
 install_codex_rules() {
-  if [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES:-0}" != "1" ]; then
+  if ! want_codex_rules; then
     return
   fi
 
@@ -1063,14 +1064,13 @@ if [ "$errors" -ne 0 ]; then
   fail "required prerequisite checks failed; skipping installation steps"
   exit 1
 fi
-if [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-0}" = "1" ] \
+if want_codex_profile \
   && [ "$CODEX_PROFILE_APPROVAL_POLICY" = "never" ] \
-  && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES:-0}" != "1" ]; then
-  warn "approval_policy=never without TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 can auto-deny sandbox escapes; install rules too for no-prompt dispatch"
+  && ! want_codex_rules; then
+  warn "approval_policy=never with the command rules opted out can auto-deny sandbox escapes; keep the default rules install for no-prompt dispatch"
 fi
 check_legacy_sandbox_config
 install_launchers
-install_repair_agents
 ensure_log_dir
 ensure_classifier
 install_codex_runtime_profile
