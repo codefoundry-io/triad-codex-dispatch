@@ -1,8 +1,9 @@
 # Company Setup: Triad Codex Dispatch
 
 This repo distributes the Codex-led triad dispatch toolkit as a Codex plugin plus
-a bootstrap check. Run commands from the repo root after cloning or after adding
-the internal marketplace source.
+a bootstrap installer. Run the plugin commands from the repo root after cloning or
+after adding the internal marketplace source; run bootstrap itself from OUTSIDE
+the checkout (see the placement invariant below).
 
 ## Verified Distribution Path
 
@@ -13,13 +14,12 @@ the internal marketplace source.
   plugin `skills/` package mirror.
 - Repair agents: not run from the plugin cache. The retained-evidence supported
   path is personal-scope installation.
-- Fallback: `scripts/bootstrap.sh --check` copies `agents/*.toml` into
+- Fallback: `scripts/bootstrap.sh --install` copies `agents/*.toml` into
   `$CODEX_HOME/agents/`, or `~/.codex/agents/` when `CODEX_HOME` is unset, the
   personal scope already verified spawnable. The installed TOMLs are official
   Codex custom agents, but shipped repair agents do not enable triad dispatch
   skills because they must not recursively dispatch. Use `skills.config` only
-  for custom subagents that intentionally call triad dispatch skills. See
-  `docs/references/spike-d-plugin-agent-distribution-decision.md`.
+  for custom subagents that intentionally call triad dispatch skills.
 
 ## Install
 
@@ -34,12 +34,18 @@ For a local clone:
 cd /path/to/triad-codex-dispatch
 codex plugin marketplace add .
 codex plugin add triad-codex-dispatch@triad-codex-dispatch
+cd /path/to/your/workspace   # bootstrap must run OUTSIDE the checkout
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
-codex --profile triad-codex-dispatch --search
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
+
+`--check` is a deprecated alias for `--install`, kept for one release. After
+install, open a new terminal (or source your shell RC) and start `codex-triad`
+from the target workspace; do not start the no-prompt profile with a bare
+`codex --profile ...` line.
 
 For an internal Git marketplace, keep a local checkout for bootstrap and replace
 the source with the owner-approved internal source:
@@ -51,11 +57,12 @@ git fetch --tags origin <release-ref>
 git checkout --detach FETCH_HEAD
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch
+cd /path/to/your/workspace   # bootstrap must run OUTSIDE the checkout
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
-codex --profile triad-codex-dispatch --search
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
 
 Install target:
@@ -64,12 +71,20 @@ Install target:
   unset. Bootstrap writes Codex custom repair agents, profile, and rules under
   `~/.codex/`; classifier patches under `~/.config/triad-codex-dispatch/`; and
   launchers under `~/.local/bin` unless `TRIAD_BOOTSTRAP_BIN_DIR` is set.
-- **Workspace-contained install is advanced only.** Use it only if the team
-  already manages a logged-in folder-scoped `CODEX_HOME`. Set `CODEX_HOME`,
-  `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`, and `PATH` consistently before
-  `codex plugin marketplace add`, `codex plugin add`, bootstrap, and every later
-  `codex --profile triad-codex-dispatch` session. `.triad-codex-home/`,
-  `.triad-config/`, and `.triad-bin/` are ignored local runtime folders.
+- **Custom-root install is advanced only.** Use it only if the team already
+  manages a logged-in folder-scoped `CODEX_HOME` that lives outside every Codex
+  workspace. Set `CODEX_HOME`, `XDG_CONFIG_HOME`, `TRIAD_BOOTSTRAP_BIN_DIR`,
+  and `PATH` consistently before `codex plugin marketplace add`,
+  `codex plugin add`, bootstrap, and every later
+  `codex --profile triad-codex-dispatch` session.
+- **Placement invariant (hard).** The install targets — launchers,
+  `CODEX_HOME`, the classifier directory — and everything they execute (the
+  plugin cache/checkout and the `python3` runtime) must live outside all
+  sandbox-writable roots. Bootstrap hard-fails when any of them resolves inside
+  the directory it is run from, including when bootstrap is run from a
+  directory that contains the targets (for example `$HOME` or the checkout
+  itself). There is no workspace-scope install: never point `CODEX_HOME`,
+  `XDG_CONFIG_HOME`, or `TRIAD_BOOTSTRAP_BIN_DIR` inside a workspace.
 
 The plugin install uses the marketplace snapshot. Bootstrap reads `scripts/`,
 `bin/`, and `agents/` from the installed plugin cache returned as
@@ -77,16 +92,15 @@ The plugin install uses the marketplace snapshot. Bootstrap reads `scripts/`,
 launchers have absolute launcher paths and execute `bin/*.py` from that cache.
 The launchers also pin resolved `claude`, `agy`, and optional `gemini` binary
 paths, so rerun bootstrap after vendor CLI upgrades or moves, not only after
-plugin updates. Retained evidence for `codex plugin marketplace add`, `codex
-plugin add --json`, the `.installedPath` key, public repo visibility, and the
-default `main` branch is in `docs/references/codex-plugin-cli-evidence.md`.
+plugin updates.
 `codex plugin add --json` may report `authPolicy: "ON_INSTALL"` from marketplace
 metadata; bootstrap still does not perform OAuth/login for the CLIs.
-Use `main` as `<release-ref>` after this branch is merged; use
-`distribution-layer` when validating the current branch directly.
+Use `main` or a pinned release tag as `<release-ref>`.
 
-Bootstrap probes the required auth states unless `TRIAD_BOOTSTRAP_SKIP_AUTH=1`
-is set for CI or scheduled updater jobs.
+Bootstrap probes the required auth states with LIVE vendor calls — `codex
+login status`, plus a minimal one-line "Return exactly OK." prompt each to
+`claude` and `agy` (and `gemini` when installed or required) — unless
+`TRIAD_BOOTSTRAP_SKIP_AUTH=1` is set for CI or scheduled updater jobs.
 
 Linux/WSL2 prerequisites: OpenAI Codex sandbox docs
 (`https://developers.openai.com/codex/concepts/sandboxing`) say to install
@@ -105,41 +119,36 @@ triad wrapper commands always run outside the sandbox without another prompt.
 That is implemented by the generated Codex profile plus user-layer
 `prefix_rule` allowlist, not by `danger-full-access`.
 
-For original-toolkit-style day-to-day UX, make the triad profile the command the
+For original-toolkit-style day-to-day UX, make `codex-triad` the command the
 user actually starts. Otherwise a plain `codex` session may not use the generated
-`approval_policy = "never"` profile and will keep prompting. Add one of these
-shell functions during initial setup. The function pins the wrapper trusted root
-to the directory where the user starts Codex:
+`approval_policy = "never"` profile and will keep prompting.
+`TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1` appends a managed `codex-triad()`
+function to the user's shell RC — default `~/.bashrc`, `~/.zshrc` for zsh
+users, `TRIAD_BOOTSTRAP_SHELL_RC` overrides the file. The entry is
+marker-fenced and idempotent: re-running `--install` refreshes it, `--remove`
+strips it, and bootstrap refuses to modify an unmanaged `codex-triad`
+definition (remove that manually, then re-run `--install`). The appended
+function pins the wrapper trusted root to the directory where the user starts
+Codex, plus the hardened wrapper mode and the enforced Claude sandbox:
 
 ```bash
-TRIAD_SHELL_RC="${HOME}/.bashrc"
-case "${SHELL:-}" in
-  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
-esac
-cat >> "$TRIAD_SHELL_RC" <<'EOF'
-# Recommended: explicit triad entrypoint.
 codex-triad() {
   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
+  TRIAD_WRAPPER_HARDENED=1 \
+  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \
     command codex --profile triad-codex-dispatch --search "$@"
 }
-
-# Optional for dedicated triad machines: make plain `codex` use the triad profile.
-# codex() {
-#   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
-#     command codex --profile triad-codex-dispatch --search "$@"
-# }
-EOF
-. "$TRIAD_SHELL_RC"
-codex-triad
 ```
 
-Use the plain `codex` function only on machines where the heavy-user external-CLI
-posture is the desired default. Existing Codex sessions must be restarted after
-profile, rules, custom-agent, or `skills.config` changes.
-The snippet sources the chosen RC file for the current terminal. On stock
-Ubuntu, login shells normally source `~/.bashrc` through `~/.profile`; on
-minimal or custom images, add the same source line to the login shell startup
-file if a new terminal does not expose `codex-triad`.
+`codex-triad` is the only supported start for the no-prompt posture. A bare
+`codex --profile triad-codex-dispatch` start is prompt-mode only and must not
+be used with the `never` profile: it runs without the pinned containment envs.
+Existing Codex sessions must be restarted after profile, rules, custom-agent,
+or `skills.config` changes.
+The managed entry becomes available in new terminals. On stock Ubuntu, login
+shells normally source `~/.bashrc` through `~/.profile`; on minimal or custom
+images, add the same source line to the login shell startup file if a new
+terminal does not expose `codex-triad`.
 
 Open a new Codex session/thread after installation so plugin skills and
 custom-agent TOMLs load from the plugin cache and `$CODEX_HOME/agents`. Existing
@@ -180,10 +189,12 @@ bash <<'TRIAD_RELEASE_GATE'
 set -euo pipefail
 
 release_base="${RELEASE_BASE:-origin/main}"
+repo_root="$(pwd -P)"
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/triad-codex-dispatch-release-check.XXXXXX")"
 trap 'rm -rf "$tmp_root"' EXIT
 tmp_root="$(cd "$tmp_root" && pwd -P)"
 mkdir -p "$tmp_root/bin"
+mkdir -p "$tmp_root/ws"
 
 case "$release_base" in
   origin/*) git fetch --prune origin ;;
@@ -206,6 +217,9 @@ fi
 
 python3 -m pytest -q tests/ -p no:cacheprovider
 bash -n scripts/bootstrap.sh
+# Bootstrap runs from an empty scratch workspace: the workspace-escape guard
+# hard-fails when any install target resolves inside the invocation directory.
+cd "$tmp_root/ws"
 TRIAD_BOOTSTRAP_SKIP_AUTH=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
@@ -215,7 +229,7 @@ CODEX_HOME="$tmp_root/codex" \
 HOME="$tmp_root/home" \
 XDG_CONFIG_HOME="$tmp_root/config" \
 PATH="$tmp_root/bin:$PATH" \
-scripts/bootstrap.sh --check
+"$repo_root/scripts/bootstrap.sh" --install
 TRIAD_RELEASE_GATE
 ```
 
@@ -232,19 +246,30 @@ rerun the 3-way review.
 
 Skills do not bypass the sandbox. Per the OpenAI Codex docs, a skill is loaded
 as reusable instructions, and any local commands it causes Codex to run inherit
-the active sandbox and approval policy. Keep the normal local-work posture:
+the active sandbox and approval policy.
+
+This toolkit standardizes on the Codex permission-profile system
+(`default_permissions` plus `[permissions.<name>]` tables). Do **not** keep
+legacy `sandbox_mode` / `[sandbox_workspace_write]` keys in any loaded config
+layer: legacy sandbox settings disable permission profiles and neutralize the
+repair agents' `default_permissions = "triad_repair"` scoping. Bootstrap warns
+when it finds them in `$CODEX_HOME/config.toml`. Keep the normal local-work
+posture:
 
 ```toml
 # ~/.codex/config.toml
 approval_policy = "on-request"
 approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
+default_permissions = "workspace_local"
 
-[sandbox_workspace_write]
-network_access = false
+[permissions.workspace_local]
+extends = ":workspace"
+
+[permissions.workspace_local.network]
+enabled = false
 ```
 
-Do **not** set `sandbox_mode = "danger-full-access"` for this toolkit.
+Do **not** use `danger-full-access` permissions for this toolkit.
 
 The user-home writes this distribution layer may need are bootstrap targets:
 
@@ -255,34 +280,28 @@ The user-home writes this distribution layer may need are bootstrap targets:
   `TRIAD_BOOTSTRAP_BIN_DIR` points somewhere else on `PATH`.
 
 Default recommendation: leave those outside the sandbox and approve
-`scripts/bootstrap.sh --check` when it requests the personal-scope write. This
-keeps network access approval-based:
+`scripts/bootstrap.sh --install` when it requests the personal-scope write.
+This keeps network access approval-based.
 
-```toml
-# ~/.codex/config.toml
-approval_policy = "on-request"
-approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
-
-[sandbox_workspace_write]
-network_access = false
-```
-
-If a team wants bootstrap to run unattended, add only those exact writable roots:
+If a team wants bootstrap to run unattended, add only those exact writable
+roots to a dedicated install profile:
 
 ```toml
 # ~/.codex/triad-codex-dispatch-install.config.toml
 approval_policy = "on-request"
 approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
+default_permissions = "triad_install"
 
-[sandbox_workspace_write]
-writable_roots = [
-  "/absolute/home/path/.codex/agents",
-  "/absolute/home/path/.config/triad-codex-dispatch",
-  "/absolute/home/path/.local/bin",
-]
-network_access = false
+[permissions.triad_install]
+extends = ":workspace"
+
+[permissions.triad_install.filesystem]
+"/absolute/home/path/.codex/agents" = "write"
+"/absolute/home/path/.config/triad-codex-dispatch" = "write"
+"/absolute/home/path/.local/bin" = "write"
+
+[permissions.triad_install.network]
+enabled = false
 ```
 
 Use absolute paths in manual TOML; do not rely on shell expansion inside TOML.
@@ -290,7 +309,7 @@ Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`, or use
 the absolute `CODEX_HOME` path when the team sets `CODEX_HOME`.
 
 Run bootstrap with `codex --profile triad-codex-dispatch-install --search` or
-approve `scripts/bootstrap.sh --check` once from a normal session. Do not keep
+approve `scripts/bootstrap.sh --install` once from a normal session. Do not keep
 `~/.local/bin` writable in the day-to-day runtime profile; it is only needed
 while installing or refreshing launcher scripts.
 
@@ -298,13 +317,15 @@ If the team intentionally wants fewer prompts for vendor CLI calls, use a
 separate trusted-workspace convenience profile and make the egress tradeoff
 explicit:
 
-For deployment to heavy triad users, generate the no-prompt wrapper setup:
+For deployment to heavy triad users, generate the no-prompt wrapper setup
+(run from your workspace, not from the checkout):
 
 ```bash
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
 
 That writes `$CODEX_HOME/triad-codex-dispatch.config.toml`, or
@@ -321,84 +342,75 @@ users. Starting Codex with it means normal dispatch may send relevant prompts,
 repo snippets, review packets, and failure logs to the already-authenticated
 `claude`, `agy`, and optional `gemini` CLIs. With
 `--sandbox workspace-write`, the selected external CLI may also edit/write
-inside the wrapper's trusted runtime root. Wrappers trust their process working
-directory by default and reject `--cwd` and `--prompt-file` outside that root
-unless the user predeclares another trusted root with
-`TRIAD_WRAPPER_ALLOWED_ROOTS`. With
+inside the wrapper's `--cwd` runtime root. **Path containment is OPT-IN, not a
+default:** by default (unhardened) the wrappers do NOT constrain `--cwd` /
+`--prompt-file`, so the boundary rests on the Codex profile + rules + the
+isolated `--cwd` worktree. To make the wrappers REJECT a `--cwd` / `--prompt-file`
+that resolves outside a declared root, start Codex through the managed
+`codex-triad` shell entry (it pins `TRIAD_WRAPPER_HARDENED=1` +
+`TRIAD_WRAPPER_ALLOWED_ROOTS` — the hardened path; see the `codex-triad` shell
+entry below), or set `TRIAD_WRAPPER_ALLOWED_ROOTS` yourself before starting
+Codex. With
 `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the generated rules, matching
 wrapper commands always run outside the sandbox without another approval prompt.
 This is the packaged deployment path.
 
 To get the same day-to-day UX as the source toolkit, start Codex through the
-profile every time. The recommended shell setup is:
-
-```bash
-TRIAD_SHELL_RC="${HOME}/.bashrc"
-case "${SHELL:-}" in
-  */zsh) TRIAD_SHELL_RC="${HOME}/.zshrc" ;;
-esac
-cat >> "$TRIAD_SHELL_RC" <<'EOF'
-codex-triad() {
-  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
-    command codex --profile triad-codex-dispatch --search "$@"
-}
-# Optional on dedicated triad machines:
-# codex() {
-#   TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \
-#     command codex --profile triad-codex-dispatch --search "$@"
-# }
-EOF
-. "$TRIAD_SHELL_RC"
-```
-
-Then use `codex-triad` for triad work, or enable the optional plain `codex` function
-when this posture should be the machine default.
+managed `codex-triad` entry every time (installed by
+`TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`; see the shell-entry section above).
 
 For a conservative install that keeps per-call approval prompts, omit the
-approval override:
+approval override (run from your workspace, not from the checkout):
 
 ```bash
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
-scripts/bootstrap.sh --check
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
 
 The no-prompt deployment path still does not use `danger-full-access`.
 
-The manual equivalent is:
+The manual equivalent of the generated profile is (top-level keys, on the
+permission-profile system — no legacy `sandbox_mode` keys):
 
 ```toml
 # ~/.codex/triad-codex-dispatch.config.toml
 # Explicit external-CLI consent profile for heavy triad users.
 approval_policy = "on-request"
 approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
+default_permissions = "triad_leader"
 
-[sandbox_workspace_write]
-writable_roots = [
-  "/absolute/home/path/.config/triad-codex-dispatch",
-  "/path/to/triad-codex-dispatch/bin/_logs",
-]
-network_access = true
+[permissions.triad_leader]
+description = "Triad leader session: workspace writes plus triad runtime dirs; network on."
+extends = ":workspace"
+
+[permissions.triad_leader.filesystem]
+"/absolute/home/path/.config/triad-codex-dispatch" = "write"
+"/path/to/triad-codex-dispatch/bin/_logs" = "write"
+
+[permissions.triad_leader.network]
+enabled = true
 ```
+
+`TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` swaps `approval_policy` to
+`"never"`; the generated default stays `on-request`.
 
 Use absolute paths in manual TOML; do not rely on shell expansion inside TOML.
 Replace `/absolute/home/path` with the value of `printf '%s\n' "$HOME"`, and
 replace `/path/to/triad-codex-dispatch` with the local checkout used by
 bootstrap launchers.
 
-Start that profile with:
-
-```bash
-codex --profile triad-codex-dispatch --search
-```
+Start that profile with the managed `codex-triad` entry when
+`approval_policy = "never"` is installed; the bare
+`codex --profile triad-codex-dispatch --search` start is prompt-mode
+(`on-request`) only.
 
 If the profile is already installed and only the no-prompt rules need refresh,
-run:
+run (from your workspace, not from the checkout):
 
 ```bash
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
-scripts/bootstrap.sh --check
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
 
 Bootstrap refreshes only a bootstrap-managed rules file and refuses to overwrite
@@ -429,13 +441,17 @@ path.
 For long prompts, write an absolute prompt file under the active workspace, for
 example `$PWD/_runs/prompts/<id>.txt`, and pass
 `--prompt-file /absolute/path/to/prompt.txt`; do not use heredoc command
-substitution in the wrapper command. Wrappers reject `--prompt-file` and `--cwd`
-outside the trusted root. By default that root is the wrapper process working
-directory, so workspace-write dispatch works without extra env when the leader
-runs the wrapper from the target workspace. The `codex-triad` shell function
-still exports the starting directory as a convenience; set
-`TRIAD_WRAPPER_ALLOWED_ROOTS` before starting Codex only when additional trusted
-workspace roots are required.
+substitution in the wrapper command. Path containment for `--prompt-file` /
+`--cwd` is OPT-IN: the wrappers reject a path that resolves outside the trusted
+root(s) ONLY when `TRIAD_WRAPPER_ALLOWED_ROOTS` is set. Without it there is no
+such rejection — by default (unhardened) the wrappers do not constrain
+`--prompt-file` / `--cwd`, so rely on the isolated `--cwd` worktree + the Codex
+profile/rules for the boundary. The managed `codex-triad` shell entry is the
+hardened path: it pins `TRIAD_WRAPPER_HARDENED=1` + `TRIAD_WRAPPER_ALLOWED_ROOTS`
+(and `TRIAD_CLAUDE_ENFORCE_SANDBOX=1`) so the wrappers enforce the root boundary.
+Start Codex through `codex-triad` (installed with
+`TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`), or set `TRIAD_WRAPPER_ALLOWED_ROOTS`
+yourself, whenever you want the wrappers to enforce it.
 Structured-output `--pydantic module:Class` remains available, but wrappers
 reject it unless `TRIAD_ALLOW_PYDANTIC_IMPORT=1` is set because loading the class
 imports Python code outside the Codex sandbox.
@@ -459,8 +475,12 @@ workspace material to external CLIs, local rules cannot bypass it.
 
 The provider sandboxes are not interchangeable. Codex uses the generated
 `workspace-write` profile plus launcher-only `prefix_rule`s for no-prompt
-dispatch. Claude read-only dispatch maps to `--permission-mode dontAsk` with
-`Read,Glob,Grep` and optional `WebSearch,WebFetch`. Antigravity uses a
+dispatch. Claude read-only dispatch synthesizes `--tools "Read,Glob,Grep"`
+(a real tool-surface restriction — `--allowedTools` only pre-approves and is
+NOT used) plus `--strict-mcp-config`, `--setting-sources user` (the
+dispatched-into repo's hooks/CLAUDE.md are not loaded), and `--permission-mode
+dontAsk`; workspace-write synthesizes `acceptEdits` and requires an isolated
+`--cwd`. Antigravity uses a
 settings transaction plus `agy --sandbox`. Gemini business-tier dispatch uses
 the Gemini Policy Engine file for read-only mode, rejects read-only
 `auto_edit`, and requires a company business-tier write-attempt verification
@@ -484,16 +504,12 @@ declared TOML grant boundary, not proof that a broader parent session or
 managed runtime override cannot allow more. Bootstrap injects absolute
 filesystem grants for the toolkit checkout, classifier directory, Python
 runtime, and resolved vendor CLI executable directories; the repair profile does
-not use `:workspace_roots`. The
-repo keeps named-agent spawnability evidence separate from official Codex
-permission-profile evidence in
-`docs/references/spike-d-plugin-agent-distribution-decision.md` and
-`docs/references/codex-permission-profile-evidence.md`.
+not use `:workspace_roots`.
 Repair verification strips the original wrapper `--cwd` and runs from the
 toolkit checkout; it verifies classifier routing without granting write or read
 access to the caller's source tree.
 If `TRIAD_CLASSIFIER_EXTENSION` should point somewhere else, set it before
-running bootstrap and re-run `scripts/bootstrap.sh --check`; the repair-agent
+running bootstrap and re-run `scripts/bootstrap.sh --install`; the repair-agent
 permissions are pinned at bootstrap install time.
 
 ## Update
@@ -504,10 +520,12 @@ Local clone:
 cd /path/to/triad-codex-dispatch
 git pull --ff-only
 codex plugin add triad-codex-dispatch@triad-codex-dispatch
+cd /path/to/your/workspace   # bootstrap must run OUTSIDE the checkout
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
 
 Internal Git marketplace:
@@ -519,10 +537,12 @@ git checkout --detach FETCH_HEAD
 codex plugin marketplace remove triad-codex-dispatch
 codex plugin marketplace add <internal-git-url-or-owner/repo> --ref <release-ref>
 codex plugin add triad-codex-dispatch@triad-codex-dispatch
+cd /path/to/your/workspace   # bootstrap must run OUTSIDE the checkout
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 \
 TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 \
+TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 \
 TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never \
-scripts/bootstrap.sh --check
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --install
 ```
 
 `codex plugin marketplace upgrade` refreshes the configured source; it does not
@@ -538,14 +558,22 @@ checkout.
 
 ## Remove
 
-Remove the installed plugin and marketplace source:
+Run the managed uninstall first (the script lives in the checkout/plugin
+cache), then remove the installed plugin and marketplace source:
 
 ```bash
+/path/to/triad-codex-dispatch/scripts/bootstrap.sh --remove
+
 codex plugin remove triad-codex-dispatch@triad-codex-dispatch
 codex plugin marketplace remove triad-codex-dispatch
 ```
 
-Optional cleanup for bootstrap-installed files:
+`--remove` (alias `--uninstall`) deletes the wrapper launchers, the
+personal-scope repair agents, the managed profile and command rules, and the
+managed `codex-triad` shell entry; it preserves learned classifier patches and
+leaves unmanaged files in place.
+
+Manual equivalent for bootstrap-installed files:
 
 ```bash
 rm -f ~/.codex/agents/claude-wrapper-repair.toml
@@ -573,16 +601,25 @@ installed plugin cache only after no dispatch is running.
 
 ## What Bootstrap Checks
 
-`scripts/bootstrap.sh --check` verifies or installs toolkit-managed items only.
+`scripts/bootstrap.sh --install` verifies or installs toolkit-managed items only.
 Bootstrap does not install OS packages; on Ubuntu 20.04 or WSL2 hosts, fleet
 setup must provide the Codex Linux/WSL2 sandbox prerequisite `bubblewrap` /
 `bwrap` before users start Codex.
 
 - Required binaries: `codex`, `claude`, `agy`, `python3 >= 3.12`, and `jq`.
 - Optional binary: `gemini`, unless `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`.
-- Auth probes for Codex, Claude, and agy. Gemini auth is optional unless
-  `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Set `TRIAD_BOOTSTRAP_SKIP_AUTH=1` only
-  for hermetic CI tests or scheduled updater jobs.
+- Claude Code version against the minimum `2.1.170` (warn-only when older or
+  undetectable).
+- The workspace-escape placement guard (hard-fail): every install target, the
+  plugin cache/checkout, and the `python3` runtime must resolve outside the
+  directory bootstrap is run from.
+- Legacy `sandbox_mode` / `[sandbox_workspace_write]` keys in
+  `$CODEX_HOME/config.toml` (warn: they disable permission profiles).
+- Auth probes for Codex, Claude, and agy — LIVE vendor calls: `codex login
+  status` plus a one-line "Return exactly OK." prompt each. Gemini auth is
+  optional unless `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1`. Set
+  `TRIAD_BOOTSTRAP_SKIP_AUTH=1` only for hermetic CI tests or scheduled
+  updater jobs.
 - Wrapper launchers for `claude_wrapper.py`, `gemini_wrapper.py`, and
   `antigravity_wrapper.py` when the wrapper commands do not resolve to this
   checkout. Launchers are small executable scripts, not symlinks; bootstrap
@@ -592,6 +629,9 @@ setup must provide the Codex Linux/WSL2 sandbox prerequisite `bubblewrap` /
   `TRIAD_CLASSIFIER_EXTENSION` if set.
 - Personal-scope repair agents under `$CODEX_HOME/agents/`, or
   `~/.codex/agents/` when `CODEX_HOME` is unset.
+- The managed `codex-triad` shell entry when
+  `TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1` is set (idempotent refresh; removed
+  by `--remove`).
 
 If `~/.local/bin` is not on `PATH`, either add it before running bootstrap or set
 `TRIAD_BOOTSTRAP_BIN_DIR` to a directory already on `PATH`.

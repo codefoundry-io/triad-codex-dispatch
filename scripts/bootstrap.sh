@@ -1,31 +1,82 @@
 #!/usr/bin/env bash
+# Workspace-escape invariant (HARD):
+#   Allow-listed files and everything they exec must live OUTSIDE all
+#   sandbox-writable roots.
+# The generated exec-policy rules run the wrapper launchers outside the Codex
+# sandbox WITHOUT prompting. That is only safe when the launchers, the pinned
+# python3 runtime, the checkout bin/ wrappers they exec, and the Codex policy
+# surface (CODEX_HOME rules/profiles/agents) plus the classifier patch dir are
+# NOT writable from inside a sandboxed session. A workspace-writable launcher
+# (or exec target) is a promptless sandbox-escape chain: the sandbox rewrites
+# the allow-listed file, then asks Codex to run it outside the sandbox.
+# check_workspace_escape enforces this against the workspace bootstrap is run
+# from ($PWD, the sandbox-writable root) and hard-fails on violation.
 set -u
 
 usage() {
   cat <<'EOF'
-Usage: scripts/bootstrap.sh --check
+Usage: scripts/bootstrap.sh --install
+       scripts/bootstrap.sh --remove
 
-Checks local prerequisites for triad-codex-dispatch and installs local launcher
-scripts plus personal-scope Codex custom repair agents when needed.
+--install checks local prerequisites for triad-codex-dispatch and installs
+local launcher scripts. It installs NO in-session repair agents: codex-host
+repair is a top-level read-only analyzer the owner runs in a fresh terminal
+(see the dispatch SKILL Step 5). (--check is a deprecated alias for --install,
+kept for one release.)
+
+--remove uninstalls the managed artifacts: wrapper launchers, the optional
+runtime profile and command rules, and the managed codex-triad shell entry. It
+also deletes any legacy personal-scope repair-agent TOMLs left by an older
+install. Learned classifier patches are preserved.
 
 Assumes codex, claude, and agy are already installed and OAuth logged in.
 
+Install targets must resolve OUTSIDE the workspace bootstrap runs from:
+allow-listed launchers and everything they exec must live outside all
+sandbox-writable roots (see the header of this script). Bootstrap hard-fails
+otherwise.
+
 Set TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 to also install/update the optional
 runtime Codex profile at $CODEX_HOME/triad-codex-dispatch.config.toml.
-That profile defaults to approval_policy=on-request. Set
-TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never only for explicitly approved
-heavy-user no-prompt deployments.
+The profile uses the Codex permission-profile system
+(default_permissions = "triad_leader"); it never emits legacy sandbox_mode /
+[sandbox_workspace_write], which would disable permission profiles and
+neutralize the triad_leader profile's scoping. It also pins
+[features] multi_agent = false so no stray codex subagent can be spawned. It
+defaults to approval_policy=on-request. Set TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never
+only for explicitly approved heavy-user no-prompt deployments.
 
 Set TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 to install/update user-layer Codex
 rules at $CODEX_HOME/rules/triad-codex-dispatch.rules. The generated rules
 allow only this checkout's authenticated absolute wrapper launchers.
+
+Set TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 to append the managed codex-triad
+shell function to your shell RC (idempotent; TRIAD_BOOTSTRAP_SHELL_RC overrides
+the RC file path). codex-triad pins TRIAD_WRAPPER_ALLOWED_ROOTS,
+TRIAD_WRAPPER_HARDENED=1, and TRIAD_CLAUDE_ENFORCE_SANDBOX=1 — it is the only
+supported no-prompt start; do not start no-prompt dispatch with a bare codex
+invocation.
 EOF
 }
 
-if [ "${1:-}" != "--check" ]; then
-  usage >&2
-  exit 2
-fi
+MODE=""
+CHECK_ALIAS_USED=0
+case "${1:-}" in
+  --install)
+    MODE="install"
+    ;;
+  --check)
+    MODE="install"
+    CHECK_ALIAS_USED=1
+    ;;
+  --remove | --uninstall)
+    MODE="remove"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RAW_REPO_ROOT="${TRIAD_BOOTSTRAP_REPO_ROOT:-$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)}"
@@ -41,6 +92,16 @@ AUTH_TIMEOUT="${TRIAD_BOOTSTRAP_AUTH_TIMEOUT:-30}"
 CODEX_PROFILE_NAME="${TRIAD_CODEX_PROFILE_NAME:-triad-codex-dispatch}"
 CODEX_PROFILE_APPROVAL_POLICY="${TRIAD_CODEX_PROFILE_APPROVAL_POLICY:-on-request}"
 CODEX_RULES_NAME="${TRIAD_CODEX_RULES_NAME:-triad-codex-dispatch.rules}"
+CLAUDE_MIN_VERSION="2.1.170"
+SHELL_ENTRY_BEGIN="# >>> triad-codex-dispatch codex-triad >>>"
+SHELL_ENTRY_END="# <<< triad-codex-dispatch codex-triad <<<"
+SHELL_RC="${TRIAD_BOOTSTRAP_SHELL_RC:-}"
+if [ -z "$SHELL_RC" ]; then
+  case "${SHELL:-}" in
+    */zsh) SHELL_RC="$HOME/.zshrc" ;;
+    *) SHELL_RC="$HOME/.bashrc" ;;
+  esac
+fi
 
 errors=0
 
@@ -138,6 +199,133 @@ PY
     ok "python3 >= 3.12"
   else
     fail "python3 >= 3.12 required"
+  fi
+}
+
+check_claude_version() {
+  if ! command -v claude >/dev/null 2>&1; then
+    return
+  fi
+  claude_version_raw="$(claude --version 2>/dev/null || true)"
+  claude_version_parsed="$(python3 - "$claude_version_raw" "$CLAUDE_MIN_VERSION" <<'PY'
+import re
+import sys
+
+raw, minimum = sys.argv[1], sys.argv[2]
+match = re.search(r"\d+(?:\.\d+)+", raw)
+if match is None:
+    raise SystemExit(2)
+found = [int(part) for part in match.group(0).split(".")]
+want = [int(part) for part in minimum.split(".")]
+width = max(len(found), len(want))
+found += [0] * (width - len(found))
+want += [0] * (width - len(want))
+print(match.group(0))
+raise SystemExit(0 if found >= want else 1)
+PY
+)"
+  claude_version_rc="$?"
+  if [ "$claude_version_rc" -eq 0 ] && [ -n "$claude_version_parsed" ]; then
+    ok "claude version $claude_version_parsed >= minimum $CLAUDE_MIN_VERSION"
+  elif [ "$claude_version_rc" -eq 1 ] && [ -n "$claude_version_parsed" ]; then
+    warn "claude version $claude_version_parsed is older than minimum $CLAUDE_MIN_VERSION; upgrade claude before dispatching the claude leg"
+  else
+    warn "could not determine claude version (output: $claude_version_raw)"
+  fi
+}
+
+# MUST-land 1 (workspace-escape guard). See the header invariant: allow-listed
+# files and everything they exec must live outside all sandbox-writable roots.
+# Hard-fails when any install target (or the checkout / python runtime the
+# launchers exec) resolves inside the workspace bootstrap runs from ($PWD).
+check_workspace_escape() {
+  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$CODEX_HOME" "$(dirname -- "$CLASSIFIER_PATH")" "$REPO_ROOT" <<'PY'
+from pathlib import Path
+import os
+import sys
+
+pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, repo_root_raw = sys.argv[1:]
+workspace = Path(pwd_raw).resolve()
+
+
+def _fs_case_insensitive(probe):
+    # A case-insensitive filesystem (macOS APFS default) resolves an upper- and
+    # lower-cased variant of the same existing path to ONE inode; a case-sensitive
+    # FS (Linux ext4) does not. This decides whether the containment compare below
+    # must case-fold. Without it, Path.is_relative_to compares case-sensitively,
+    # so on macOS a mixed-case install target (WS vs ws) slipped past the guard
+    # and installed into the sandbox-writable workspace (finding #2, 2026-07-05).
+    # os.path.normcase is NOT usable here: it only folds case on Windows (nt) and
+    # is a no-op on Darwin/Linux, so it would not have closed the macOS bypass.
+    # Known Minor edge (re-confirm 2026-07-05, all 3 legs rated non-blocking): a
+    # non-round-trip Unicode casing char in the workspace path (e.g. 'ß'.upper()
+    # == 'SS', length changes) makes os.path.exists(up) miss, so this returns
+    # False (exact compare) and could miss a mixed-case escape — but only on a
+    # case-insensitive FS with a non-ASCII install path AND an attacker-crafted
+    # target; realistic install paths are ASCII, and is_expected_wrapper /
+    # launcher-managed checks are additional barriers. Defense-in-depth edge, not
+    # the sole gate.
+    s = str(probe)
+    try:
+        up, lo = s.upper(), s.lower()
+        if not (os.path.exists(up) and os.path.exists(lo)):
+            return False
+        return os.path.samestat(os.stat(up), os.stat(lo))
+    except OSError:
+        return False
+
+
+_CASE_INSENSITIVE = _fs_case_insensitive(workspace)
+
+
+def _within(target, root):
+    t = os.path.normpath(str(target))
+    r = os.path.normpath(str(root))
+    if _CASE_INSENSITIVE:
+        t, r = t.lower(), r.lower()
+    # exact match OR a path-boundary-anchored prefix (so /a/ws-dispatch is NOT
+    # treated as inside /a/ws — the trailing sep prevents the sibling-prefix trap).
+    return t == r or t.startswith(r.rstrip(os.sep) + os.sep)
+
+
+targets = (
+    ("launcher directory (TRIAD_BOOTSTRAP_BIN_DIR)", Path(launcher_raw)),
+    ("CODEX_HOME", Path(codex_home_raw)),
+    (
+        "classifier directory (TRIAD_CLASSIFIER_EXTENSION / XDG_CONFIG_HOME)",
+        Path(classifier_dir_raw),
+    ),
+    ("plugin/checkout root (TRIAD_BOOTSTRAP_REPO_ROOT)", Path(repo_root_raw)),
+    ("python3 runtime", Path(sys.executable)),
+)
+failures = []
+for label, target in targets:
+    resolved = target.expanduser().resolve()
+    if _within(resolved, workspace):
+        failures.append(
+            f"workspace-escape guard: {label} resolves inside the "
+            f"sandbox-writable workspace: {resolved} (workspace root {workspace})"
+        )
+for line in failures:
+    print(line)
+raise SystemExit(1 if failures else 0)
+PY
+)"
+  if [ "$?" -ne 0 ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && fail "$line"
+    done <<EOF
+$workspace_guard_output
+EOF
+    fail "invariant: allow-listed launchers and everything they exec must live outside all sandbox-writable roots; run bootstrap from a directory that does not contain the install targets, or point the TRIAD_BOOTSTRAP_* / CODEX_HOME overrides outside this workspace"
+  fi
+}
+
+check_legacy_sandbox_config() {
+  base_config="$CODEX_HOME/config.toml"
+  if [ -f "$base_config" ] \
+    && grep -Eq '^[[:space:]]*sandbox_mode[[:space:]]*=|^\[sandbox_workspace_write\]' "$base_config"; then
+    warn "legacy sandbox settings (sandbox_mode / [sandbox_workspace_write]) found in $base_config; any loaded config layer with them disables permission profiles, neutralizing the triad_leader profile's default_permissions scoping — migrate the base config to permission profiles"
   fi
 }
 
@@ -248,14 +436,14 @@ check_auth() {
     return
   fi
 
-  run_auth_probe "codex" "${TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex doctor}"
-  run_auth_probe "claude" "${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude -p 'Return exactly OK.' --output-format json --permission-mode dontAsk --allowedTools Read}"
-  run_auth_probe "agy" "${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-antigravity_wrapper.py --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
+  run_auth_probe "codex" "${TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex login status}"
+  run_auth_probe "claude" "${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-\"$LAUNCHER_DIR/claude_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
+  run_auth_probe "agy" "${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-\"$LAUNCHER_DIR/antigravity_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
   if command -v gemini >/dev/null 2>&1; then
     if [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
-      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p 'Return exactly OK.'}"
+      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-\"$LAUNCHER_DIR/gemini_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
     else
-      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p 'Return exactly OK.'}" optional
+      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-\"$LAUNCHER_DIR/gemini_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}" optional
     fi
   elif [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
     fail "missing required binary: gemini"
@@ -387,101 +575,16 @@ PY
   fi
 }
 
+# Privilege-separation redesign (2026-07-05): the write-capable in-session repair
+# agents were the confused deputy — a subagent spawned from an untrusted vendor
+# run-log that inherited the leader sandbox AND carried a classifier/`bin/_logs`
+# write grant. They are gone. Codex-host repair is a top-level, hard-read-only
+# `codex exec -s read-only` analyzer the owner pastes into a FRESH terminal (a
+# nested codex under the session sandbox cannot initialize); the SKILL Step 5
+# surfaces the ready-to-run command, and the deterministic `bin/apply_patch.py`
+# is the only writer. Bootstrap installs NO $CODEX_HOME/agents/*-wrapper-repair.toml.
 install_repair_agents() {
-  src="$REPO_ROOT/agents"
-  dest="$CODEX_HOME/agents"
-  classifier_dir="$(dirname -- "$CLASSIFIER_PATH")"
-  python_info="$(python3 - <<'PY'
-from pathlib import Path
-import sys
-
-print(Path(sys.executable).resolve())
-print(Path(sys.executable).resolve().parent)
-print(Path(sys.base_prefix).resolve())
-print(Path(sys.prefix).resolve())
-PY
-)" || {
-    fail "could not resolve python3 runtime paths"
-    return
-  }
-  python_exe="$(printf '%s\n' "$python_info" | sed -n '1p')"
-  python_exe_dir="$(printf '%s\n' "$python_info" | sed -n '2p')"
-  python_root="$(printf '%s\n' "$python_info" | sed -n '3p')"
-  python_prefix="$(printf '%s\n' "$python_info" | sed -n '4p')"
-  mkdir -p "$dest" || {
-    fail "could not create Codex agents directory: $dest"
-    return
-  }
-
-  repair_agent_errors_before="$errors"
-  for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
-    file="$src/$name.toml"
-    if [ ! -f "$file" ]; then
-      fail "missing repair agent source: $file"
-      continue
-    fi
-    python3 - "$file" "$dest/$name.toml" "$REPO_ROOT" "$CLASSIFIER_PATH" "$classifier_dir" "$python_exe" "$python_exe_dir" "$python_root" "$python_prefix" <<'PY' || fail "could not install repair agent: $name"
-from pathlib import Path
-import re
-import shutil
-import sys
-
-src, dest, repo_root, classifier_path, classifier_dir, python_exe, python_exe_dir, python_root, python_prefix = map(Path, sys.argv[1:])
-
-def toml_string(path: Path) -> str:
-    return str(path).replace("\\", "\\\\").replace('"', '\\"')
-
-text = src.read_text(encoding="utf-8")
-seen_filesystem_keys = {
-    toml_string(repo_root),
-    toml_string(repo_root / "bin" / "_logs"),
-    toml_string(classifier_dir),
-}
-
-def read_grant_lines(paths):
-    lines = []
-    for path in paths:
-        key = toml_string(path)
-        if key in seen_filesystem_keys:
-            continue
-        seen_filesystem_keys.add(key)
-        lines.append(f'"{key}" = "read"')
-    return "\n".join(lines)
-
-python_roots = []
-for candidate in (python_exe_dir, python_root, python_prefix):
-    if candidate not in python_roots:
-        python_roots.append(candidate)
-python_root_lines = read_grant_lines(python_roots)
-vendor_roots = []
-for executable in ("claude", "agy", "gemini", "node"):
-    found = shutil.which(executable)
-    if not found:
-        continue
-    for candidate in (Path(found).parent, Path(found).resolve().parent):
-        if candidate not in vendor_roots:
-            vendor_roots.append(candidate)
-vendor_root_lines = read_grant_lines(vendor_roots)
-for old, new in {
-    "__TRIAD_REPO_ROOT__": toml_string(repo_root),
-    "__TRIAD_CLASSIFIER_PATH__": toml_string(classifier_path),
-    "__TRIAD_CLASSIFIER_DIR__": toml_string(classifier_dir),
-    "__TRIAD_PYTHON3__": toml_string(python_exe),
-}.items():
-    text = text.replace(old, new)
-text = text.replace('"__TRIAD_PYTHON_READ_ROOTS__" = "read"', python_root_lines)
-text = text.replace('"__TRIAD_VENDOR_READ_ROOTS__" = "read"', vendor_root_lines)
-unresolved = sorted(set(re.findall(r"__TRIAD_[A-Z0-9_]+__", text)))
-if unresolved:
-    raise SystemExit(f"unresolved repair-agent placeholders: {', '.join(unresolved)}")
-dest.write_text(text, encoding="utf-8")
-PY
-  done
-  if [ "$errors" -ne "$repair_agent_errors_before" ]; then
-    return
-  fi
-  ok "repair agents installed to personal Codex scope: $dest"
-  warn "start a new Codex session/thread after bootstrap so custom agents reload"
+  ok "codex-host repair = a top-level read-only analyzer the owner runs in a fresh terminal (see the dispatch SKILL Step 5); no write-capable repair agents are installed"
 }
 
 ensure_log_dir() {
@@ -537,20 +640,36 @@ if profile_path.exists():
 
 profile_path.write_text(
     f"""{MARKER}
-# Generated by scripts/bootstrap.sh --check.
+# Generated by scripts/bootstrap.sh --install.
 # Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 to refresh.
 # Explicit external-CLI consent profile: triad dispatch may send relevant
 # prompt/repo review material to authenticated claude, agy, and gemini CLIs.
+# Permission-profile system (developers.openai.com/codex/permissions).
+# Do NOT reintroduce legacy sandbox_mode / [sandbox_workspace_write] in this
+# or any loaded config layer: legacy sandbox settings disable
+# default_permissions, which would neutralize the triad_leader permission
+# profile's scoping.
 approval_policy = "{approval_policy}"
 approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
+default_permissions = "triad_leader"
 
-[sandbox_workspace_write]
-network_access = true
-writable_roots = [
-  {toml_string(classifier_dir)},
-  {toml_string(log_dir)},
-]
+# triad spawns no codex subagents; disabling multi-agent prevents a stray spawn
+# from reintroducing the confused-deputy repair path (the write-capable in-session
+# repair worker was removed — codex-host repair is now a top-level read-only
+# analyzer the owner runs in a fresh terminal; see the dispatch SKILL Step 5).
+[features]
+multi_agent = false
+
+[permissions.triad_leader]
+description = "Triad leader session: workspace writes plus triad runtime dirs; network on."
+extends = ":workspace"
+
+[permissions.triad_leader.filesystem]
+{toml_string(classifier_dir)} = "write"
+{toml_string(log_dir)} = "write"
+
+[permissions.triad_leader.network]
+enabled = true
 """,
     encoding="utf-8",
 )
@@ -647,7 +766,7 @@ if rules_path.exists():
 
 lines = [
     MARKER,
-    "# Generated by scripts/bootstrap.sh --check.",
+    "# Generated by scripts/bootstrap.sh --install.",
     "# Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 to refresh.",
     "# These rules intentionally allow wrapper-specific command prefixes only.",
     "# They do not allow broad shell entrypoints such as bash -lc or zsh -lc.",
@@ -708,6 +827,174 @@ EOF
   ok "Codex command rules installed: $installed"
 }
 
+# Strips the managed codex-triad block (markers inclusive) from a shell RC
+# file. Used for both idempotent refresh (--install) and uninstall (--remove).
+strip_managed_shell_entry() {
+  python3 - "$1" "$SHELL_ENTRY_BEGIN" "$SHELL_ENTRY_END" <<'PY'
+from pathlib import Path
+import sys
+
+path, begin, end = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+kept = []
+skipping = False
+for line in lines:
+    stripped = line.rstrip("\n")
+    if stripped == begin:
+        skipping = True
+        continue
+    if stripped == end:
+        skipping = False
+        continue
+    if not skipping:
+        kept.append(line)
+path.write_text("".join(kept), encoding="utf-8")
+PY
+}
+
+# MUST-land 6: the managed codex-triad shell function is the pinned no-prompt
+# entry. It pins the engine's product-mode envs so no-prompt dispatch always
+# runs with wrapper containment + hardened wrapper mode + enforced claude
+# sandbox. A bare `codex --profile ...` start is NOT a supported no-prompt
+# path and is never emitted by this bootstrap as the primary start.
+install_shell_entry() {
+  if [ "${TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY:-0}" != "1" ]; then
+    return
+  fi
+  rc_file="$SHELL_RC"
+  rc_dir="$(dirname -- "$rc_file")"
+  mkdir -p "$rc_dir" || {
+    fail "could not create shell RC directory: $rc_dir"
+    return
+  }
+  if [ -e "$rc_file" ] && grep -Fq "$SHELL_ENTRY_BEGIN" "$rc_file" 2>/dev/null; then
+    strip_managed_shell_entry "$rc_file" || {
+      fail "could not refresh managed codex-triad shell entry in $rc_file"
+      return
+    }
+  elif [ -e "$rc_file" ] && grep -q "codex-triad" "$rc_file" 2>/dev/null; then
+    fail "refusing to modify unmanaged codex-triad shell entry in $rc_file; remove it manually, then re-run --install"
+    return
+  fi
+  {
+    printf '%s\n' "$SHELL_ENTRY_BEGIN"
+    printf '# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;\n'
+    printf '# removed by --remove. Pinned no-prompt posture: wrapper root\n'
+    printf '# containment + hardened wrapper mode + enforced claude sandbox.\n'
+    printf 'codex-triad() {\n'
+    printf '  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\\n'
+    printf '  TRIAD_WRAPPER_HARDENED=1 \\\n'
+    printf '  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \\\n'
+    printf '    command codex --profile %s --search "$@"\n' "$CODEX_PROFILE_NAME"
+    printf '}\n'
+    printf '%s\n' "$SHELL_ENTRY_END"
+  } >>"$rc_file" || {
+    fail "could not append codex-triad shell entry to $rc_file"
+    return
+  }
+  ok "codex-triad shell entry installed: $rc_file"
+}
+
+report_no_prompt_posture() {
+  posture="TRIAD_WRAPPER_ALLOWED_ROOTS (workspace pin) + TRIAD_WRAPPER_HARDENED=1 + TRIAD_CLAUDE_ENFORCE_SANDBOX=1"
+  if [ -e "$SHELL_RC" ] && grep -q "codex-triad()" "$SHELL_RC" 2>/dev/null; then
+    if grep -q "TRIAD_WRAPPER_HARDENED=1" "$SHELL_RC" 2>/dev/null \
+      && grep -q "TRIAD_CLAUDE_ENFORCE_SANDBOX=1" "$SHELL_RC" 2>/dev/null \
+      && grep -q "TRIAD_WRAPPER_ALLOWED_ROOTS" "$SHELL_RC" 2>/dev/null; then
+      ok "no-prompt entry verified: codex-triad pins $posture ($SHELL_RC)"
+    else
+      warn "codex-triad entry in $SHELL_RC does not pin the product-mode envs ($posture); remove the stale entry, then re-run --install with TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1"
+    fi
+  else
+    printf 'next step: start Codex through the codex-triad shell function; it pins %s.\n' "$posture"
+    printf 'install it with TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1; a bare profile start is not a supported no-prompt path.\n'
+  fi
+}
+
+expand_user_path() {
+  python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser())' "$1"
+}
+
+run_remove() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    fail "missing required binary: python3"
+    return
+  fi
+  LAUNCHER_DIR="$(expand_user_path "$RAW_LAUNCHER_DIR")"
+  CODEX_HOME="$(expand_user_path "$RAW_CODEX_HOME")"
+  CLASSIFIER_PATH="$(expand_user_path "$RAW_CLASSIFIER_PATH")"
+
+  if [ -e "$SHELL_RC" ] && grep -Fq "$SHELL_ENTRY_BEGIN" "$SHELL_RC" 2>/dev/null; then
+    if strip_managed_shell_entry "$SHELL_RC"; then
+      ok "removed managed codex-triad shell entry from $SHELL_RC"
+    else
+      fail "could not remove managed codex-triad shell entry from $SHELL_RC"
+    fi
+  elif [ -e "$SHELL_RC" ] && grep -q "codex-triad" "$SHELL_RC" 2>/dev/null; then
+    warn "leaving unmanaged codex-triad entry in place: $SHELL_RC (not installed by bootstrap)"
+  else
+    ok "no codex-triad shell entry to remove: $SHELL_RC"
+  fi
+
+  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+    launcher="$LAUNCHER_DIR/$wrapper"
+    if [ ! -e "$launcher" ]; then
+      continue
+    fi
+    if launcher_is_managed "$launcher" "$wrapper"; then
+      if rm -f "$launcher"; then
+        ok "removed launcher: $launcher"
+      else
+        fail "could not remove launcher: $launcher"
+      fi
+    else
+      warn "leaving unmanaged launcher in place: $launcher"
+    fi
+  done
+
+  for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
+    agent_file="$CODEX_HOME/agents/$name.toml"
+    if [ ! -e "$agent_file" ]; then
+      continue
+    fi
+    if rm -f "$agent_file"; then
+      ok "removed repair agent: $agent_file"
+    else
+      fail "could not remove repair agent: $agent_file"
+    fi
+  done
+
+  profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
+  if [ -e "$profile_path" ]; then
+    if grep -Fq "# triad-codex-dispatch managed runtime profile" "$profile_path" 2>/dev/null; then
+      if rm -f "$profile_path"; then
+        ok "removed Codex runtime profile: $profile_path"
+      else
+        fail "could not remove Codex runtime profile: $profile_path"
+      fi
+    else
+      warn "leaving unmanaged Codex profile in place: $profile_path"
+    fi
+  fi
+
+  rules_path="$CODEX_HOME/rules/$CODEX_RULES_NAME"
+  if [ -e "$rules_path" ]; then
+    if grep -Fq "# triad-codex-dispatch managed command rules" "$rules_path" 2>/dev/null; then
+      if rm -f "$rules_path"; then
+        ok "removed Codex command rules: $rules_path"
+      else
+        fail "could not remove Codex command rules: $rules_path"
+      fi
+    else
+      warn "leaving unmanaged Codex rules file in place: $rules_path"
+    fi
+  fi
+
+  if [ -e "$CLASSIFIER_PATH" ]; then
+    ok "classifier patches preserved (learned classifications): $CLASSIFIER_PATH — remove manually to reset"
+  fi
+}
+
 ensure_classifier() {
   dir="$(dirname -- "$CLASSIFIER_PATH")"
   mkdir -p "$dir" || {
@@ -737,7 +1024,22 @@ PY
   fi
 }
 
-printf 'triad-codex-dispatch bootstrap check\n'
+if [ "$CHECK_ALIAS_USED" -eq 1 ]; then
+  warn "--check is deprecated; use --install (--check remains an alias for one release)"
+fi
+
+if [ "$MODE" = "remove" ]; then
+  printf 'triad-codex-dispatch bootstrap remove\n'
+  run_remove
+  if [ "$errors" -eq 0 ]; then
+    ok "bootstrap remove completed"
+    exit 0
+  fi
+  printf '[error] bootstrap remove failed with %s issue(s)\n' "$errors" >&2
+  exit 1
+fi
+
+printf 'triad-codex-dispatch bootstrap install\n'
 check_binary codex
 check_binary claude
 check_binary agy
@@ -748,8 +1050,12 @@ else
 fi
 check_python
 check_binary jq
+check_claude_version
 if [ "$errors" -eq 0 ]; then
   canonicalize_path_inputs
+fi
+if [ "$errors" -eq 0 ]; then
+  check_workspace_escape
 fi
 printf 'repo root: %s\n' "$REPO_ROOT"
 printf 'reminder: trust this workspace in Codex before relying on project-local skills.\n'
@@ -762,19 +1068,22 @@ if [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-0}" = "1" ] \
   && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES:-0}" != "1" ]; then
   warn "approval_policy=never without TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 can auto-deny sandbox escapes; install rules too for no-prompt dispatch"
 fi
+check_legacy_sandbox_config
 install_launchers
 install_repair_agents
 ensure_log_dir
 ensure_classifier
 install_codex_runtime_profile
 install_codex_rules
+install_shell_entry
 check_auth
+report_no_prompt_posture
 
 if [ "$errors" -eq 0 ]; then
-  ok "bootstrap check passed"
+  ok "bootstrap install passed"
   exit 0
 fi
 
 fail_count="$errors"
-printf '[error] bootstrap check failed with %s issue(s)\n' "$fail_count" >&2
+printf '[error] bootstrap install failed with %s issue(s)\n' "$fail_count" >&2
 exit 1

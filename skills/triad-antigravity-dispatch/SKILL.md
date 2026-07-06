@@ -13,11 +13,24 @@ standard "call agy once" path — the Google-family mirror of `triad-claude-disp
 deprecated (`IneligibleTierError` → "migrate to the Antigravity suite"); agy is its
 successor. Use agy for all individual-tier Google-family calls.
 
-**agy is the Google-family search/research specialist.** Its `read_url` and
-`search_web` tools are native and always allowed (even under `--sandbox
-read-only`). Include agy when the dispatch needs a separate Google-family
-web-grounded leg; the Codex leader uses `codex --search` for its own direct web
-needs.
+**agy is the Google-family search/research specialist — the toolkit's
+external-documentation research leg.** Its `read_url` and `search_web` tools are
+native and always allowed (even under `--sandbox read-only`). When a dispatch or a
+review needs grounding in **vendor / API / CLI documentation** — the OpenAI
+developer docs, the Google / Gemini docs, a CLI's reference pages, a library
+README, a recent changelog or issue — send that doc-reading to agy. Two reasons:
+
+- **Grounding.** A 3-way dispatch or a cross-family review is only as good as the
+  facts under it; agy pulls the current vendor/API/CLI source instead of the leader
+  answering from stale memory.
+- **Context hygiene.** Fetching a long doc page into the Codex leader's own context
+  pollutes it. Doing the doc-read in the agy worker keeps the raw page OUT of the
+  leader's context — the leader gets back the grounded answer, not the whole page.
+
+Include agy when the dispatch needs a separate Google-family web-grounded leg or
+vendor-doc grounding; the Codex leader uses `codex --search` for its own direct web
+needs. This is a routing / role note, not a new capability, and no model name is
+pinned (agy uses the vendor default).
 
 ## Use when
 
@@ -48,29 +61,34 @@ needs.
    working directory set to the same trusted workspace passed as `--cwd`. If
    `TRIAD_WRAPPER_ALLOWED_ROOTS` is unset, wrappers trust the process working
    directory by default; set the env var only for extra roots.
-2. **Path-based repair input.** Pass the run-log file *path* to the repair
-   subagent, never its content (JSON-in-JSON / utf-8 / ANSI / large pty transcript
-   corrupt on inline embedding).
-3. **Cleanup after dispatch.** `rm -f <run-log-path> <run-log-path>.repair.json`
-   once the repair subagent returns (REPAIRED or ESCALATE). The wrapper failsafe
-   is for orphans, not normal cleanup.
+2. **Path-based repair input.** The repair analyzer reads the run-log *path*,
+   never its content pasted inline (JSON-in-JSON / utf-8 / ANSI / large pty
+   transcript corrupt on inline embedding). Step 5 surfaces a command that
+   substitutes the path.
+3. **Cleanup after dispatch.** `rm -f <run-log-path>` once the failure has been
+   surfaced (the run-log is transient repair IPC). The wrapper failsafe is for
+   orphans, not normal cleanup.
 4. **Repair ONLY on `unknown` / `extraction-error` / `timeout`.** Other
-   classifications carry actionable meaning at the wrapper layer — spawning the
-   repair agent on them wastes its 3-attempt budget.
+   classifications carry actionable meaning at the wrapper layer — surfacing the
+   repair command on them wastes the owner's time.
 5. **Test isolation — production-shape prompt only.** No meta/test framing, no
    "this is a verification" / "treat as fake" disclaimers, even for a sample
    dispatch. The prompt the leg sees must look exactly like a real request.
-6. **Repair dispatch is MANDATORY + non-deferrable — spawn it, never skip.** When
-   Step 4 routes a failure to repair, you MUST spawn the `agy-wrapper-repair`
-   named subagent. Surfacing the failure to the user does NOT discharge this —
-   surfacing and repairing are SEPARATE obligations. "I have other work", "the
-   call already failed", "looks like a one-off" are NEVER valid reasons to skip.
-   The payoff is FUTURE routing (framework completeness), so spawn it CONCURRENTLY
-   with your foreground work (`spawn_agent` then continue; `wait_agent` + read the
-   response file when you need the outcome). Skipping it is a silent regression
-   that lets the same vendor error keep failing un-routed on every later call.
-7. **No `--search` flag.** Unlike the claude leg, agy has NO `--search` flag —
-   its web tools (`read_url`, `search_web`) are native and always active. Do not
+6. **On a repair-routed classification, SURFACING the failure + the ready-to-paste
+   top-level analyzer command is MANDATORY.** codex-host does NOT spawn an
+   in-session repair worker — the write-capable subagent was the confused deputy
+   (a subagent driven by an untrusted vendor run-log, inheriting the leader
+   sandbox and a classifier/`bin/_logs` write grant). A hard-safe codex analyzer
+   only runs top-level, in a FRESH terminal (a nested codex under the session
+   sandbox cannot initialize; top-level is hard read-only + spike-verified
+   2026-07-05). "I have other work", "the call already failed", "looks like a
+   one-off" are NEVER valid reasons to skip the surface. The payoff is FUTURE
+   routing (framework completeness): a surfaced-and-run analyzer grows the
+   classifier so the same vendor error auto-routes next time. Skipping the surface
+   is a silent regression.
+7. **No `--search` flag.** agy has NO `--search` flag — its web tools
+   (`read_url`, `search_web`) are native and always active; the only wrapper
+   with an opt-in web flag is the codex leader's own `codex --search`. Do not
    fabricate a `--search` argument; argparse will reject it.
 
 ## Flow
@@ -91,7 +109,9 @@ substitution, or a shell wrapper. For short prompts, pass `--prompt` directly:
   [--timeout <seconds>]
 ```
 
-For a long prompt, write a UTF-8 prompt file first and pass its absolute path:
+For a long prompt (≥50K chars, or any multi-KB packet), write a UTF-8 prompt
+file first and pass its absolute path (when `TRIAD_WRAPPER_ALLOWED_ROOTS` is
+set, the file must resolve inside an allowed root):
 
 ```bash
 /Users/YOUR_USER/.local/bin/antigravity_wrapper.py \
@@ -109,6 +129,10 @@ Flags:
   `.agybak` crash-recovery). Blocks `write_file(*)`, `command(*)`,
   `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`. `read_url`/`search_web` remain
   allowed. Pass `--sandbox` flag to agy (OS-ring sandbox) as well.
+  On hardened installs (`TRIAD_WRAPPER_HARDENED=1`, the public product's
+  bootstrap posture), a call that OMITS `--sandbox` defaults to `--sandbox
+  read-only` — a raw wrapper call is never write-capable by omission; write
+  access must be requested explicitly.
 - `--sandbox workspace-write` — write-capable in the worktree `--cwd`; dangerous
   paths and destructive commands denied. Requires `--cwd`; run the wrapper from
   that same directory unless `TRIAD_WRAPPER_ALLOWED_ROOTS` declares extra roots.
@@ -161,77 +185,87 @@ entry classify it `extraction-error` (not `ok`) → repair. So do not expect
 | terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` / `fanout-spawn-error` / `task-blocked` | Surface to user with cause (quota / prompt too large / re-login / subagent spawn failure / tool permission denial). **NOT** repair territory. Auth is user-managed. |
 | `config-conflict` (65) | Local agy settings/config conflict. Wait briefly and re-dispatch once if it is a settings-lock contention; if repeated, surface the config-lock cause and ask the user to let other agy work finish. **NOT** repair territory. |
 | `server-capacity` exhausted (64) | Wait + retry, or surface. Wrapper already retried per backoff. |
-| `unknown` (1) | **Step 5 — repair subagent (MANDATORY + concurrent; Hard rule 6).** |
-| `extraction-error` (1) | **Step 5 — repair subagent.** rc=0 but the extractor found no sentinel / empty answer body. |
-| `timeout` (2) | **Step 5 — repair subagent** (route for uniformity; likely ESCALATE). Wrapper fail-fasts (no retry on timeout). |
+| `unknown` (1) | **Step 5 — surface the top-level read-only analyzer command (MANDATORY; Hard rule 6).** |
+| `extraction-error` (1) | **Step 5 — surface the analyzer command.** rc=0 but the extractor found no sentinel / empty answer body. |
+| `timeout` (2) | **Step 5 — surface the analyzer command** (route for uniformity; likely escalate). Wrapper fail-fasts (no retry on timeout). |
 | `schema-fail` (66) / `schema-rejected` (67) | Surface, fix the class/schema, re-dispatch. **NOT** repair territory. `66` = post-hoc pydantic validation failed (agy has no native schema mode — the wrapper injects the schema into the prompt and validates the reply). `67` = a submit-time schema refusal (codex-style; not produced by agy). |
 | arg (3) / binary missing (4) | Surface to user with cause. |
 
-### Step 5 — Repair via the `agy-wrapper-repair` named subagent
+### Step 5 — Surface the top-level read-only analyzer command (do NOT spawn)
 
-Verified mechanism: bootstrap installs the repair agent as an official Codex
-custom agent under `$CODEX_HOME/agents` / `~/.codex/agents`. The leader spawns
-the agent, continues foreground work, then waits. If `spawn_agent` reports an
-unknown agent type after install/update, start a new Codex session/thread; the
-current session may not hot-reload custom-agent TOMLs.
-The bootstrap-installed repair agent carries `default_permissions =
-"triad_repair"`: the generated TOML profile grants read access to the toolkit
-checkout, write access only to the classifier config and bounded `bin/_logs` IPC
-area, read access to Python/vendor executable paths needed for verification, and
-network for verification. This is the declared profile grant boundary; a broader
-parent session or managed runtime override may still allow more.
+On `unknown` / `extraction-error` / `timeout` the leader spawns NOTHING and
+writes nothing. It extracts the run-log path and REPORTS to the user: the
+classification, the run-log path, and a **ready-to-paste command to run in a
+FRESH terminal** (NOT this codex session — a nested codex cannot initialize under
+the session sandbox, so the analyzer only inits when launched top-level; top-level
+it is hard read-only and a write is DENIED — spike-verified 2026-07-05).
 
-#### 5a. Extract the run-log path + derive the output path
+The analyzer is READ-ONLY: it reads the run-log and the local classification
+framework, then returns ONE inline JSON proposal. It has NO write authority; the
+deterministic `bin/apply_patch.py` (which re-validates the proposal — exit 3 if
+invalid) is the ONLY writer. The `< /dev/null` is MANDATORY (else codex blocks on
+stdin and hangs).
+
+#### 5a. Extract the run-log path + shell-quote the substituted paths
 
 ```bash
 RUN_LOG_PATH=$(grep -oE 'run-log: [^[:space:]]+' <stderr-text> | tail -1 | awk '{print $2}')
 [ -f "$RUN_LOG_PATH" ] || { echo "run-log path missing"; exit 1; }
-OUTPUT_PATH="${RUN_LOG_PATH}.repair.json"
+# Shell-quote BOTH values the surfaced command interpolates. The owner's install
+# path can legitimately contain a single quote (e.g. /Users/O'Brien/…); pasted raw
+# into the single-quoted prompt string below it would terminate the quote and the
+# path remainder would run as a shell command. printf %q makes each value a safe,
+# paste-proof shell token. (The run-log basename is wrapper-generated + metacharacter
+# -free — this guards the OWNER-PATH quote, which is real code-exec-on-paste.)
+RUN_LOG_Q=$(printf '%q' "$RUN_LOG_PATH")
+PLUGIN_ROOT_Q=$(printf '%q' "<PLUGIN_ROOT>")
 ```
 
-#### 5b. Spawn the named subagent (concurrent), then wait
+#### 5b. Surface the command (substitute `$PLUGIN_ROOT_Q`, `$RUN_LOG_Q`; CLI = `antigravity`)
 
-Use Codex multi-agent: `spawn_agent` the role **`agy-wrapper-repair`**, then
-continue any foreground work, then `wait_agent` and read `OUTPUT_PATH`. Give it a
-JSON-shaped task with `run_log_path` + `output_path` + the output contract:
+Report the classification + run-log path to the user, then give them this
+ready-to-paste command. Substitute the `%q`-quoted values from 5a (NOT the raw
+paths). Run it in a FRESH terminal, NOT this codex session:
 
-```
-You are a repair agent with a file-based response contract. Read the run-log, run the repair workflow, then write your JSON response to output_path. Return ONLY a single token: `done` (file written) or `error: <one-line reason>`. Do NOT include the JSON in your reply.
-
-Input:
-{
-  "run_log_path": "<RUN_LOG_PATH>",
-  "output_path": "<OUTPUT_PATH>",
-  "output_schema": {
-    "outcome":   "<'REPAIRED' if the framework now classifies the error, else 'ESCALATE'>",
-    "downstream":"<'ok' | 'terminal:<class>' | 'retry-exhausted' | 'timeout' | null>",
-    "patch":     "<'<file:line> — entry added', or null when ESCALATE>",
-    "reason":    "<one-line semantic summary>",
-    "attempts":  "<int 1-3>",
-    "per_attempt_log": "<array of {n, hypothesis, source, patch, json_validation, rerun}>"
-  },
-  "task": "Extract the literal error from the PTY transcript -> date-anchored web search -> add ONE entry to the bootstrap-configured classifier extension JSON (antigravity envelope) -> re-run with --repair-mode. 3-attempt ceiling, then escalate."
-}
-```
-
-#### 5c. Read the file-based output + branch
+The prompt body stays a SINGLE-quoted literal (it contains JSON `"…"`); the
+`%q` values expand UNQUOTED — `-C $PLUGIN_ROOT_Q` and, in the prompt, spliced
+via close/reopen `'…at '$RUN_LOG_Q' (use…'`. `printf %q` output is built for an
+unquoted context (a surrounding `"…"` would keep its escape backslashes literal),
+so do NOT wrap `$PLUGIN_ROOT_Q` / `$RUN_LOG_Q` in double quotes. This makes a
+quote in the owner path (e.g. `/Users/O'Brien/…`) unable to break out of the literal.
 
 ```bash
-[ -f "$OUTPUT_PATH" ] || { echo "agent did not write output_path"; exit 1; }
-OUTCOME=$(jq -r '.outcome' "$OUTPUT_PATH"); DOWNSTREAM=$(jq -r '.downstream // empty' "$OUTPUT_PATH"); REASON=$(jq -r '.reason' "$OUTPUT_PATH")
+# Run in a FRESH terminal — grows the classifier for this error. Read-only analyzer; it cannot write.
+# $PLUGIN_ROOT_Q / $RUN_LOG_Q are the printf %q results from 5a (paste-proof against a quote in the owner path).
+# NOTE: %q values expand UNQUOTED (no surrounding double quotes) — that is how %q escaping is meant to be used.
+P=$(codex exec -s read-only --skip-git-repo-check --ephemeral -c approval_policy=never \
+      -C $PLUGIN_ROOT_Q \
+      'You are a READ-ONLY repair analyzer. Read the run-log at '$RUN_LOG_Q' (use your read tools).
+You may read the engine module in bin/ to see the classification framework: the valid classification tokens are
+the keys of map_classification_to_exit(); the pattern-list names are the *_PATTERNS constants.
+Decide the classification from the run-log + that local framework. Network is OFF — do not web-search;
+if you cannot classify from local evidence, escalate. Return ONLY one inline JSON object as your
+entire final message (no prose, no code fence):
+{"outcome":"propose"|"escalate","reason":"<one line>","proposal":<object|null>}
+where proposal (present iff propose) = {"classification":"<token>","reason":"<one line>", and EITHER
+"vendor_exit_code":<int> XOR ("pattern_list":"<NAME>","substring":"<literal>")}. You do NOT apply —
+the caller does.' < /dev/null)
+if printf '%s' "$P" | jq -e '.outcome=="propose"' >/dev/null 2>&1; then
+  printf '%s' "$P" | jq -c '.proposal' | python3 $PLUGIN_ROOT_Q/bin/apply_patch.py --cli antigravity
+else
+  printf 'escalated: %s\n' "$(printf '%s' "$P" | jq -r '.reason')"
+fi
 ```
 
-| OUTCOME | DOWNSTREAM | Next action |
-|---|---|---|
-| REPAIRED | ok | Re-run the original wrapper call. |
-| REPAIRED | terminal:`<class>` | Surface to user with REASON; framework now catches future calls. |
-| REPAIRED | retry-exhausted / timeout | Wait+retry or surface; patch is in place. |
-| ESCALATE | (omit) | Surface the per-attempt log + REASON; manual diagnosis. |
+- `propose` → the piped `apply_patch.py` validates + applies ONE classifier entry
+  (exit 0 applied, exit 3 rejected as invalid). Future calls auto-route.
+- `escalate` → the analyzer could not classify from local evidence; surface the
+  reason for manual diagnosis.
 
-#### 5d. Cleanup
+#### 5c. Cleanup
 
 ```bash
-rm -f "$RUN_LOG_PATH" "$OUTPUT_PATH"
+rm -f "$RUN_LOG_PATH"
 ```
 
 ## Outputs
@@ -239,14 +273,16 @@ rm -f "$RUN_LOG_PATH" "$OUTPUT_PATH"
 - `ok`: wrapper stdout (raw answer or pydantic-validated JSON).
 - terminal: `{ class, reason, action_required }`.
 - server-cap-exhausted: transient overload — leader-policy retry or surface.
-- repair-cycle: ok-path after re-run, OR ESCALATE per-attempt log.
+- repair-cycle: surfaced top-level analyzer proposes → `apply_patch.py` applies
+  the classifier entry (future auto-routing), OR escalate (surface reason).
 
 ## See also
 
 - `bin/antigravity_wrapper.py` + `bin/_agy_settings.py` — the leg contract, PTY
   transport, and per-call deny transaction.
+- `bin/apply_patch.py` — the deterministic, zero-LLM classifier-patch applier
+  (the ONLY writer; re-validates every proposal).
 - `docs/references/google-family-agy-readonly.md` — live verification: gemini
   individual tier deprecated, agy read-only e2e verified.
-- `agents/agy-wrapper-repair.toml` — the named repair subagent (developer_instructions).
 - `triad-claude-dispatch` — the Anthropic-family leg.
 - `triad-cross-family-review` — composes agy + claude + codex reviewers.

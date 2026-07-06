@@ -1,9 +1,12 @@
-"""Shared helpers for subprocess wrappers.
+"""Shared helpers for codex/gemini subprocess wrappers.
 
 Framework — vendor-JSON IO + 5-class classification + noise-tag extraction
 + pydantic schema validation (optional) with 1 schema-repair retry.
 
 Per-CLI vendor JSON modes (always on):
+- Codex: `codex exec --json -o <last_msg> --ephemeral -c approval_policy=never`
+  (config-alive 2026-05-30: no `--ignore-user-config`; approval pinned)
+  → stdout = JSONL events stream (vendor schema), stderr ≈ 39 B (vendor quiet).
 - Gemini: `gemini -p ... --output-format json`
   → stdout = single JSON object {response, stats, error}, stderr ≈ 189 B.
 
@@ -51,11 +54,11 @@ EXIT_CLI_FAIL = 1
 EXIT_TIMEOUT = 2
 EXIT_ARG_ERROR = 3
 EXIT_BINARY_MISSING = 4
-EXIT_RATE_GIVE_UP = 64   # transient retry exhausted -> Codex repair subagent
-EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env -> user escalate
+EXIT_RATE_GIVE_UP = 64   # transient retry exhausted → Sonnet repair sub-agent
+EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env → user escalate
 EXIT_SCHEMA_FAIL = 66    # pydantic validation failed even after 1 retry
 EXIT_SCHEMA_REJECTED = 67  # codex refused --output-schema at submit (massage/strict-rule drift)
-EXIT_FANOUT_PARTIAL = 68   # --task fan-out incomplete (partial / zero / fewer-than-requested subagents) - surfaced, never silent
+EXIT_FANOUT_PARTIAL = 68   # --task fan-out incomplete (partial / zero / fewer-than-requested subagents) — surfaced, never silent
 EXIT_TASK_BLOCKED = 69   # --task code: codex self-reported BLOCKED / NEEDS_CONTEXT (no edit to commit)
 
 
@@ -78,48 +81,6 @@ def map_classification_to_exit(cls: str) -> int:
     }.get(cls, EXIT_CLI_FAIL)
 
 
-def _redact_prompt_args(cmd: list[str]) -> list[str]:
-    """Keep argv shape in durable audit logs without storing prompt payloads."""
-    redacted: list[str] = []
-    redact_next: str | None = None
-    for arg in cmd:
-        if redact_next is not None:
-            if redact_next == "prompt":
-                redacted.append(f"<redacted:{len(arg)} chars>")
-            else:
-                redacted.append("<redacted:prompt-file-path>")
-            redact_next = None
-            continue
-        if arg in {"-p", "--prompt"}:
-            redacted.append(arg)
-            redact_next = "prompt"
-            continue
-        if arg == "--prompt-file":
-            redacted.append(arg)
-            redact_next = "prompt-file"
-            continue
-        if arg.startswith("--prompt="):
-            value = arg.split("=", 1)[1]
-            redacted.append(f"--prompt=<redacted:{len(value)} chars>")
-            continue
-        if arg.startswith("--prompt-file="):
-            redacted.append("--prompt-file=<redacted:prompt-file-path>")
-            continue
-        redacted.append(arg)
-    if redact_next is not None:
-        redacted.append("<redacted:missing-value>")
-    return redacted
-
-
-def _json_len(value: Any) -> int:
-    if value is None:
-        return 0
-    try:
-        return len(json.dumps(value, ensure_ascii=False))
-    except (TypeError, ValueError):
-        return len(str(value))
-
-
 # ─── Pattern lists (seed — living value, Step D maintenance updates) ──────
 # Lowercase substring match. Terminal-first ordering when classifying.
 
@@ -128,6 +89,13 @@ SERVER_CAPACITY_PATTERNS: tuple[str, ...] = (
     "resource_exhausted",
     "ratelimitexceeded",
     "model overloaded",
+    "overloaded_error",  # 2026-07-05: Anthropic 529 overload api_error_status enum,
+    # surfaced by extract_claude_answer into the claude is_error ext_err blob
+    # (`is_error=true (api_error_status=overloaded_error): ...`). Retry-eligible.
+    # Specific vendor enum token — passes the false-positive guard (unlike bare
+    # `"529"`). `rate_limit_error` (429) deliberately NOT added: it is ambiguous
+    # between a transient rate limit (retry) and a subscription cap (terminal),
+    # and mis-routing it either way costs a wasted cycle.
     # `"503"`, `"429"` removed 2026-05-03 (later-2): standalone numeric matched
     # natural occurrences in answer text (line numbers, byte counts, timestamps,
     # spec docs e.g. "see RFC 429"). The phrase forms below already cover real
@@ -145,8 +113,11 @@ CLI_SUB_CAP_PATTERNS: tuple[str, ...] = (
     "weekly limit reached",
     "subscription limit reached",
     "usage limit reached",
-    "ineligibletiererror",
-    "migrate to antigravity",
+    "no longer supported for gemini code assist for individuals",
+    # L10 union (twin→SoT 2026-07-05): the raw error CLASS token — distinctive,
+    # exception-name form, FP-safe. (Twin's third token "migrate to antigravity"
+    # was DROPPED: prose form could match ordinary migration discussions.)
+    "ineligibletiererror",  # 2026-06-30: IneligibleTierError — Gemini Code Assist individuals tier discontinued 2026-06-18; user must migrate to Antigravity. github.com/google-gemini/gemini-cli/discussions/28017
 )
 
 TOKEN_LIMIT_PATTERNS: tuple[str, ...] = (
@@ -199,12 +170,10 @@ OAUTH_ENV_PATTERNS: tuple[str, ...] = (
     # SERVER_CAPACITY_PATTERNS and `"oauth"`/`"unauthorized"` in this list.
     "401 unauthorized",
     "http 401",
-    # 2026-07-01 (Task 5): real claude `is_error=true / api_error_status=401`
-    # capture (spike-e-claude-findings.md §2). Phrase is distinctive and
-    # FP-safe: it appears exclusively in the claude vendor envelope's `result`
-    # field on an auth-401 failure. Never added bare `"401"` or `"oauth"` —
-    # those were removed for FP reasons above. This form does not match any
-    # known capacity/tool-block stderr pattern.
+    # 2026-07-01 (twin, L9 port 2026-07-05): real claude `is_error=true /
+    # api_error_status=401` capture. Phrase is distinctive and FP-safe: it
+    # appears exclusively in the claude vendor envelope's `result` field on an
+    # auth-401 failure. Never add bare "401" / "oauth" (removed above for FP).
     "invalid authentication credentials",
     # `"unauthorized"` removed 2026-05-03: matched `[LocalAgentExecutor]
     # Blocked call: Unauthorized tool call: ...` (1/152 false positive in
@@ -224,34 +193,39 @@ OAUTH_ENV_PATTERNS: tuple[str, ...] = (
     "please authenticate",
 )
 
-# Stderr 의 semantic 분류 (도구 미설치 / vendor warning / 정상 동작 등) 은
-# leader (Bash tool 통해 stderr mirror 받는 AI) 의 책임. wrapper 는 raw stderr
-# 만 audit 에 박고, leader 가 직접 판단 + 사용자 alert. dispatch SKILL (Step C)
-# 의 description 에 stderr 해석 가이드 명시 예정.
+# SEMANTIC classification of stderr (tool-not-installed / vendor warning /
+# normal chatter) is the LEADER's job (the AI that receives the mirrored
+# stderr via its shell tool). The wrapper only records raw stderr into the
+# audit log; the leader judges it and alerts the user. The dispatch SKILLs
+# carry the stderr-interpretation guidance.
 
 
 # ─── Vendor exit code maps (EMPIRICAL ONLY) ───────────────────────────────
-# 실측 검증된 exit code 만 박음. 실측 안 된 code = "unknown" → 수리공 dispatch
-# (수리공이 WebSearch + 분석 + python source 즉시 patch 로 entry 추가).
+# ONLY empirically observed exit codes are entered. An unobserved code =>
+# "unknown" => repair-agent dispatch (the repair agent web-searches, analyzes,
+# and patches an entry into this map).
 # Tier 1 docs (Gemini PR #13728: 41/42/52/53/130, Codex mintlify: 2/3/4/130)
-# 는 우리 환경에서 trigger 시켜본 적 없으므로 박지 않음 — Step A3 검증 후 추가.
+# never triggered in this environment, so NOT entered — add after observing.
 
 GEMINI_VENDOR_EXIT_MAP: dict[int, str] = {
     0: "ok",
-    # 41/42/52/53/130 = docs 만 (PR #13728 / headless docs) — 실측 후 추가.
+    # 41/42/52/53/130 = docs-only so far (anthropics/claude-code#13728 /
+    # headless docs) — add after empirical observation.
 }
 
 CODEX_VENDOR_EXIT_MAP: dict[int, str] = {
     0: "ok",
-    # 130 = Issue #4721 미해결 가능 — 실측 후 추가.
-    # 2/3/4 = mintlify 출처만, 공식 미확정 — 실측 후 추가.
+    # 130 = possibly anthropics/claude-code#4721 (unresolved) — add after observing.
+    # 2/3/4 = third-party (mintlify) sources only, not officially confirmed —
+    # add after empirical observation.
 }
 
 CLAUDE_VENDOR_EXIT_MAP: dict[int, str] = {
     0: "ok",
-    # claude `--print` 의 본 추가 vendor exit code 는 실측 후 추가.
-    # `is_error: true` 안 박혀있는 ENV/AUTH fail 은 rc=0 (envelope-only signal).
-    # extract_claude_answer 가 본 envelope 분석 → extraction-error 전파.
+    # Further claude `--print` vendor exit codes: add after observing.
+    # An ENV/AUTH failure carrying `is_error: true` still exits rc=0
+    # (envelope-only signal); extract_claude_answer analyzes the envelope
+    # and propagates extraction-error.
 }
 
 ANTIGRAVITY_VENDOR_EXIT_MAP: dict[int, str] = {
@@ -284,20 +258,21 @@ AUDIT_ARCHIVE_MAX_BYTES = AUDIT_ROTATE_BYTES * AUDIT_MAX_ARCHIVES
 
 
 # ─── Run-log policy (per-execution artifact, dispatch-SKILL input) ────────
-# audit.jsonl 와 별개로 _logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json 에 호출당
-# 1 파일. 실패 호출만 (rc != 0) — 성공은 dispatch agent 안 부르므로 불필요.
-# Dispatch SKILL 이 path 만 prompt 에 박고 agent 가 Read tool 로 가져감 →
-# 대용량 vendor stdout / 한글 / 특수문자 escape 격리.
+# Separate from audit.jsonl: one file per FAILED call (rc != 0) at
+# _logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json — successes never dispatch the
+# repair agent, so no file. The dispatch SKILL passes only the PATH in the
+# agent prompt and the agent fetches it with its Read tool, isolating large
+# vendor stdout / non-ASCII / special-char escaping from prompt transport.
 # 2-layer cleanup:
-#   Primary  = dispatch SKILL 이 agent 호출 종료 직후 rm
-#   Failsafe = 본 함수가 매 write 후 dir cap 초과 시 oldest 부터 unlink
+#   Primary  = the dispatch SKILL rm's it right after the repair agent returns
+#   Failsafe = this function unlinks oldest-first when the dir cap is exceeded
 _RUN_LOG_MAX_FILES = 100
 _RUN_LOG_MAX_BYTES = 20 * 1024 * 1024  # 20 MB total cap
 
 
 @dataclass
 class RunResult:
-    exit_code: int                  # wrapper 정렬 (0/1/2/3/4/64/65/66)
+    exit_code: int                  # wrapper-normalized (0/1/2/3/4/64/65/66)
     stdout: str
     stderr: str
     elapsed_s: float
@@ -310,7 +285,7 @@ class RunResult:
     schema_repair_attempt: int = 0
     extraction_error: Optional[str] = None
     validation_error: Optional[str] = None
-    # Vendor raw exit code — 수리공의 WebSearch 검색 키 (실측 안 된 code 시).
+    # Vendor raw exit code — the repair agent's web-search key for unobserved codes.
     vendor_exit_code: int = -1
 
 
@@ -322,107 +297,41 @@ def log(msg: str) -> None:
 
 
 def require_binary(name: str) -> str:
-    env_name = {
-        "claude": "TRIAD_CLAUDE_BIN",
-        "agy": "TRIAD_AGY_BIN",
-        "gemini": "TRIAD_GEMINI_BIN",
-    }.get(name)
-    if env_name:
-        pinned = os.environ.get(env_name)
-        if pinned:
-            path = Path(pinned).expanduser()
-            if not path.is_absolute():
-                log(f"{env_name} must be an absolute path")
-                sys.exit(EXIT_BINARY_MISSING)
-            try:
-                resolved = path.resolve(strict=True)
-            except OSError:
-                log(f"{env_name} does not resolve to an executable: {path}")
-                sys.exit(EXIT_BINARY_MISSING)
-            if not resolved.is_file() or not os.access(resolved, os.X_OK):
-                log(f"{env_name} is not executable: {resolved}")
-                sys.exit(EXIT_BINARY_MISSING)
-            return str(resolved)
-        if os.environ.get("TRIAD_REQUIRE_PINNED_VENDOR") == "1":
-            log(f"{env_name} is required by the bootstrap launcher")
-            sys.exit(EXIT_BINARY_MISSING)
+    """Resolve the vendor binary, honoring an install-time pin (finding #3).
 
+    A codex-host launcher execs the wrapper with
+    `TRIAD_<name.upper()>_BIN=<resolved absolute path>` and
+    `TRIAD_REQUIRE_PINNED_VENDOR=1`, so a workspace-planted `<name>` earlier on
+    PATH cannot shadow the real vendor CLI an allow-listed launcher executes.
+    Lab default (neither env set) = `shutil.which` (PATH), unchanged.
+
+    - a valid pin (absolute, existing, executable) always wins over PATH;
+    - `TRIAD_REQUIRE_PINNED_VENDOR=1` with the pin unset OR invalid fails closed
+      (`EXIT_BINARY_MISSING`) — NEVER a silent PATH fallback (that is the vuln);
+    - an invalid pin WITHOUT the require flag falls through to PATH (lab convenience).
+    """
+    pin = os.environ.get(f"TRIAD_{name.upper()}_BIN")
+    require_pinned = os.environ.get("TRIAD_REQUIRE_PINNED_VENDOR") == "1"
+    if pin:
+        if os.path.isabs(pin) and os.path.isfile(pin) and os.access(pin, os.X_OK):
+            return pin
+        log(
+            f"pinned vendor binary TRIAD_{name.upper()}_BIN is not an executable "
+            f"absolute path: {pin}"
+        )
+        if require_pinned:
+            sys.exit(EXIT_BINARY_MISSING)
+    elif require_pinned:
+        log(
+            f"TRIAD_REQUIRE_PINNED_VENDOR=1 but TRIAD_{name.upper()}_BIN is unset "
+            f"for '{name}' — refusing PATH fallback"
+        )
+        sys.exit(EXIT_BINARY_MISSING)
     path = shutil.which(name)
     if not path:
         log(f"binary '{name}' not found on PATH")
         sys.exit(EXIT_BINARY_MISSING)
-    return str(Path(path).resolve())
-
-
-def _path_is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def runtime_allowed_roots() -> list[Path]:
-    raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
-    if not raw:
-        return [Path.cwd().resolve(strict=True)]
-    roots = []
-    for item in raw.split(os.pathsep):
-        if not item:
-            continue
-        path = Path(item).expanduser()
-        if not path.is_absolute():
-            raise ValueError(
-                "TRIAD_WRAPPER_ALLOWED_ROOTS entries must be absolute paths"
-            )
-        roots.append(path.resolve(strict=False))
-
-    result: list[Path] = []
-    seen: set[str] = set()
-    for root in roots:
-        text = str(root)
-        if text in seen:
-            continue
-        seen.add(text)
-        result.append(root)
-    return result
-
-
-def _ensure_within_runtime_roots(path: Path, label: str) -> Path:
-    resolved = path.resolve(strict=True)
-    roots = runtime_allowed_roots()
-    if not any(_path_is_within(resolved, root) for root in roots):
-        allowed = ", ".join(str(root) for root in roots)
-        raise ValueError(f"{label} must be under an allowed runtime root: {allowed}")
-    return resolved
-
-
-def load_prompt_text(prompt: Optional[str], prompt_file: Optional[str]) -> str:
-    """Load the wrapper prompt from argv text or an absolute UTF-8 file."""
-    if prompt is not None:
-        return prompt
-    if not prompt_file:
-        raise ValueError("either --prompt or --prompt-file is required")
-    path = Path(prompt_file).expanduser()
-    if not path.is_absolute():
-        raise ValueError("--prompt-file must be an absolute path")
-    resolved = _ensure_within_runtime_roots(path, "--prompt-file")
-    if not resolved.is_file():
-        raise ValueError(f"--prompt-file must be a file: {resolved}")
-    return resolved.read_text(encoding="utf-8")
-
-
-def validate_wrapper_cwd(cwd: Optional[str]) -> Optional[str]:
-    """Validate a vendor cwd without expanding the no-prompt trust boundary."""
-    if not cwd:
-        return None
-    path = Path(cwd).expanduser()
-    if not path.is_absolute():
-        raise ValueError("--cwd must be an absolute path")
-    resolved = _ensure_within_runtime_roots(path, "--cwd")
-    if not resolved.is_dir():
-        raise ValueError(f"--cwd must be an existing directory: {resolved}")
-    return str(resolved)
+    return path
 
 
 def _classifier_extension_path() -> Path:
@@ -432,9 +341,9 @@ def _classifier_extension_path() -> Path:
     (tests / custom location)."""
     override = os.environ.get("TRIAD_CLASSIFIER_EXTENSION")
     if override:
-        return Path(override).expanduser()
+        return Path(override)
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "triad-codex-dispatch" / "classifier-patches.json"
+    return Path(base) / "triad-dispatch" / "classifier-patches.json"
 
 
 def _load_classifier_extension() -> dict:
@@ -477,6 +386,153 @@ def _load_classifier_extension() -> dict:
     return clean
 
 
+# ─── Product hardening mode (L8 twin→SoT port, owner adjudications 2026-07-05) ───
+# The lab (SoT callers, skill contracts) runs UNRESTRICTED by default; the
+# public codex-host product's bootstrap sets TRIAD_WRAPPER_HARDENED=1, which
+# activates: allowed-roots containment (required), the pydantic import gate,
+# and audit prompt redaction. Each control also has an individual env so it
+# can be engaged on its own (set TRIAD_WRAPPER_ALLOWED_ROOTS to enforce
+# containment; TRIAD_AUDIT_REDACT_PROMPTS=1 to redact) — per-product defaults,
+# one engine.
+
+def _wrapper_hardened() -> bool:
+    return os.environ.get("TRIAD_WRAPPER_HARDENED") == "1"
+
+
+def _audit_redact_enabled() -> bool:
+    return _wrapper_hardened() or os.environ.get("TRIAD_AUDIT_REDACT_PROMPTS") == "1"
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+
+def runtime_allowed_roots() -> list[Path]:
+    """Containment roots for --cwd / --prompt-file. Env unset → NO containment
+    in the lab (callers own isolation per the SKILL contracts); under
+    TRIAD_WRAPPER_HARDENED=1 the env is REQUIRED (refuse rather than guess —
+    the public product's bootstrap pins it; a hardened run without pinned
+    roots must not silently fall back to cwd)."""
+    raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
+    if not raw:
+        if _wrapper_hardened():
+            raise ValueError(
+                "TRIAD_WRAPPER_HARDENED=1 requires TRIAD_WRAPPER_ALLOWED_ROOTS "
+                "(colon-separated absolute paths)")
+        return []
+    roots = []
+    for item in raw.split(os.pathsep):
+        if not item:
+            continue
+        path = Path(item).expanduser()
+        if not path.is_absolute():
+            raise ValueError(
+                "TRIAD_WRAPPER_ALLOWED_ROOTS entries must be absolute paths")
+        roots.append(path.resolve(strict=False))
+    result: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        text = str(root)
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(root)
+    return result
+
+
+def _ensure_within_runtime_roots(path: Path, label: str) -> Path:
+    resolved = path.resolve(strict=True)
+    roots = runtime_allowed_roots()
+    if not roots:
+        return resolved          # lab default: no containment
+    if not any(_path_is_within(resolved, root) for root in roots):
+        allowed = ", ".join(str(root) for root in roots)
+        raise ValueError(f"{label} must be under an allowed runtime root: {allowed}")
+    return resolved
+
+
+def load_prompt_text(prompt: Optional[str], prompt_file: Optional[str]) -> str:
+    """Load the wrapper prompt from argv text or an absolute UTF-8 file.
+
+    argparse enforces the XOR at the CLI; this re-check is defense-in-depth
+    for direct callers."""
+    if prompt is not None and prompt_file:
+        raise ValueError("--prompt and --prompt-file are mutually exclusive")
+    if prompt is not None:
+        return prompt
+    if not prompt_file:
+        raise ValueError("either --prompt or --prompt-file is required")
+    path = Path(prompt_file).expanduser()
+    if not path.is_absolute():
+        raise ValueError("--prompt-file must be an absolute path")
+    resolved = _ensure_within_runtime_roots(path, "--prompt-file")
+    if not resolved.is_file():
+        raise ValueError(f"--prompt-file must be a file: {resolved}")
+    return resolved.read_text(encoding="utf-8")
+
+
+
+def validate_wrapper_cwd(cwd: Optional[str]) -> Optional[str]:
+    """Validate a vendor cwd without expanding the no-prompt trust boundary."""
+    if not cwd:
+        return None
+    path = Path(cwd).expanduser()
+    if not path.is_absolute():
+        raise ValueError("--cwd must be an absolute path")
+    resolved = _ensure_within_runtime_roots(path, "--cwd")
+    if not resolved.is_dir():
+        raise ValueError(f"--cwd must be an existing directory: {resolved}")
+    return str(resolved)
+
+
+
+def _redact_prompt_args(cmd: list[str]) -> list[str]:
+    """Keep argv shape in durable audit logs without storing prompt payloads."""
+    redacted: list[str] = []
+    redact_next: str | None = None
+    for arg in cmd:
+        if redact_next is not None:
+            if redact_next == "prompt":
+                redacted.append(f"<redacted:{len(arg)} chars>")
+            else:
+                redacted.append("<redacted:prompt-file-path>")
+            redact_next = None
+            continue
+        if arg in {"-p", "--prompt"}:
+            redacted.append(arg)
+            redact_next = "prompt"
+            continue
+        if arg == "--prompt-file":
+            redacted.append(arg)
+            redact_next = "prompt-file"
+            continue
+        if arg.startswith("--prompt="):
+            value = arg.split("=", 1)[1]
+            redacted.append(f"--prompt=<redacted:{len(value)} chars>")
+            continue
+        if arg.startswith("--prompt-file="):
+            redacted.append("--prompt-file=<redacted:prompt-file-path>")
+            continue
+        redacted.append(arg)
+    if redact_next is not None:
+        redacted.append("<redacted:missing-value>")
+    return redacted
+
+
+
+def _json_len(value: Any) -> int:
+    if value is None:
+        return 0
+    try:
+        return len(json.dumps(value, ensure_ascii=False))
+    except (TypeError, ValueError):
+        return len(str(value))
+
 def classify(
     cli: str,
     stderr: str,
@@ -484,10 +540,10 @@ def classify(
     exit_code: int,
     vendor_exit_code: Optional[int] = None,
 ) -> str:
-    """5분류 + ok. Layer order:
-      L1 — vendor exit code map (실측 검증된 raw code 만)
-      L2 — substring fallback (5분류 pattern lists)
-      L3 — "unknown" (수리공 dispatch 신호)
+    """Failure classes + ok. Layer order:
+      L1 — vendor exit code map (empirically observed raw codes only)
+      L2 — substring fallback (the per-class pattern lists)
+      L3 — "unknown" (repair-agent dispatch signal)
 
     `vendor_exit_code` is the raw CLI subprocess exit (e.g. 7, 130). When
     omitted, falls back to `exit_code` for legacy callers, but L1 is
@@ -510,7 +566,7 @@ def classify(
     # 2026-05-03 (later-3) framework gap fix.
     if exit_code == EXIT_TIMEOUT:
         return "timeout"
-    # L1 — vendor exit code map (실측 only). Use vendor_exit_code when
+    # L1 — vendor exit code map (empirical only). Use vendor_exit_code when
     # available; legacy callers fall back to exit_code (dead-code path).
     raw = vendor_exit_code if vendor_exit_code is not None else exit_code
     _ext = _load_classifier_extension().get(cli, {})
@@ -536,8 +592,20 @@ def classify(
     else:
         vmap = CODEX_VENDOR_EXIT_MAP
     vmap = {**_ext_vmap, **vmap}
+    # A vmap entry of "extraction-error" is a WEAK no-answer fallback (e.g.
+    # ANTIGRAVITY_VENDOR_EXIT_MAP[0], 2026-06-25 repair patch): the specific
+    # L2 classes (agy auth banner / capacity / sub-cap / token-limit / oauth)
+    # must keep winning — an early return here swallowed ALL of them on the
+    # agy no-answer path (t14/t15/f9 regression found on the 2026-07-04
+    # backport pass). The weak entry replaces only the terminal "unknown", so
+    # a pattern-less no-sentinel answer still routes to repair as
+    # extraction-error instead of unknown.
+    _weak_fallback = None
     if raw in vmap and vmap[raw] != "ok":
-        return vmap[raw]
+        if vmap[raw] == "extraction-error":
+            _weak_fallback = "extraction-error"
+        else:
+            return vmap[raw]
     # L2 — substring fallback
     # Order rationale: terminal user-action class (cli-sub-cap) first (most
     # specific phrases, near-zero false positive). Then transient
@@ -572,8 +640,9 @@ def classify(
         return "fanout-spawn-error"
     if any(p in stderr_blob for p in _p("CONFIG_CONFLICT_PATTERNS", CONFIG_CONFLICT_PATTERNS)):
         return "config-conflict"
-    # L3 — 수리공 dispatch 신호
-    return "unknown"
+    # L3 — weak vmap fallback (extraction-error) wins over the repair-dispatch
+    # "unknown" ONLY when no L2 class matched.
+    return _weak_fallback or "unknown"
 
 
 # ─── Pydantic helpers (NEW) ───────────────────────────────────────────────
@@ -586,11 +655,13 @@ def load_pydantic_class(spec: str):
     """
     if not PYDANTIC_OK:
         raise RuntimeError("pydantic not installed — `pip3 install --user pydantic`")
-    if os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
+    if _wrapper_hardened() and os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
+        # Hardened installs (public codex-host product) must opt in explicitly:
+        # --pydantic imports arbitrary Python outside the vendor sandbox.
         raise PermissionError(
-            "--pydantic imports Python code outside the Codex sandbox; set "
-            "TRIAD_ALLOW_PYDANTIC_IMPORT=1 only for trusted schema modules"
-        )
+            "--pydantic imports Python code outside the sandbox; under "
+            "TRIAD_WRAPPER_HARDENED=1 set TRIAD_ALLOW_PYDANTIC_IMPORT=1 only "
+            "for trusted schema modules")
     if ":" in spec:
         mod_path, cls_name = spec.rsplit(":", 1)
     else:
@@ -789,7 +860,8 @@ def extract_codex_fanout(stdout: str) -> Tuple[list[dict], bool]:
     """Extract per-subagent raw messages from a codex --json collab stream.
 
     Returns (agents, complete). `agents` is a list of {thread_id, message}
-    for each subagent that reached a TERMINAL state (completed or failed),
+    for each subagent that reached a TERMINAL state (completed / errored /
+    interrupted / shutdown / not_found — the codex-rs exec_events wire enum),
     de-duplicated by thread_id (last terminal state wins, since `wait` then
     `close_agent` re-emit the same state). A failed thread's `message` may be
     absent and is recorded as "".
@@ -824,10 +896,16 @@ def extract_codex_fanout(stdout: str) -> Tuple[list[dict], bool]:
                 continue
             seen.add(tid)
             status = st.get("status")
-            if status in ("pending_init", "in_progress", None):
+            # Wire enum (codex-rs exec_events, verified rust-v0.135.0 and
+            # v0.142.5): pending_init | running | interrupted | completed |
+            # errored | shutdown | not_found. "running" is the in-flight
+            # value ("in_progress"/"failed" never appear on the wire — the
+            # pre-2026-07-04 skip set matched a nonexistent token, so a
+            # running snapshot was mis-recorded as terminal).
+            if status in ("pending_init", "running", None):
                 continue  # not yet terminal — a later event may supersede it
             by_thread[tid] = {"thread_id": tid, "message": st.get("message") or ""}
-            final_status[tid] = status  # last terminal status wins (completed OR failed)
+            final_status[tid] = status  # last terminal status wins (completed OR errored/…)
     # complete iff at least one thread was referenced AND every referenced thread
     # reached a "completed" terminal state. Zero agents (fan-out ignored) or any
     # non-completed/never-terminated thread → False. (no-silent-partial)
@@ -897,7 +975,8 @@ def extract_gemini_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
 
     # stdout empty — look for a trailing JSON object in stderr. Do not use
     # rfind("{"): Gemini errors are nested as {"error": {"message": ...}}, so
-    # the last brace starts the inner object, not the envelope.
+    # the last brace starts the INNER object, not the envelope (L5 twin→SoT
+    # port, 2026-07-05 — reverse-scan raw_decode picks the outer envelope).
     decoder = json.JSONDecoder()
     starts = [idx for idx, ch in enumerate(stderr) if ch == "{"]
     for start in reversed(starts):
@@ -935,17 +1014,18 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
       - permission_denials non-empty → ext_err = denial summary (objective signal)
       - JSON parse fail / empty stdout → ext_err = parse description
 
-    Markdown fence-strip safety: `--print` 안 fence X (envelope = raw JSON)
-    이지만 `--agent` mode 안 fence wrap 가능 (haiku 패턴 — singleshot.md
-    Empirical observations 박힘). 본 helper 가 안전 fence-strip.
+    Markdown fence-strip safety: `--print` emits no fence (envelope = raw
+    JSON) but `--agent` mode can fence-wrap (haiku pattern, recorded in the
+    empirical observations). This helper strips a fence safely.
     """
     s = (stdout or "").strip()
     if not s:
-        # stdout empty — claude 의 본 envelope 항상 stdout (rc=0 케이스).
-        # stderr 은 progress / warning 만. envelope 부재 = abnormal.
+        # stdout empty — claude's envelope always arrives on stdout (rc=0
+        # case); stderr carries only progress/warnings. A missing envelope
+        # is abnormal.
         return "", "empty stdout — claude envelope missing"
 
-    # Fence-strip safety (--agent mode 안 markdown wrap 가능).
+    # Fence-strip safety (--agent mode can markdown-wrap the envelope).
     if s.startswith("```"):
         nl = s.find("\n")
         if nl != -1:
@@ -974,9 +1054,10 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
         result = json.dumps(result, ensure_ascii=False)
 
     if is_error:
-        # vendor returned envelope with is_error=true. result field 안
-        # 본 자세한 message 박힘 (e.g. "Not logged in · Please run /login",
-        # API error description 등). repair-agent 가 본 message 으로 분류.
+        # Vendor returned an envelope with is_error=true. The result field
+        # carries the detailed message (e.g. "Not logged in · Please run
+        # /login", an API error description). The repair agent classifies
+        # from this message.
         api_status = obj.get("api_error_status")
         prefix = f"is_error=true (api_error_status={api_status})"
         if result:
@@ -990,10 +1071,11 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
             f"{json.dumps(permission_denials, ensure_ascii=False)}"
         )
 
-    # permission_denials 안 entry 박힘 = tool block 발견 (objective signal —
-    # claude worker 의 본 본질, leader 의 본 frame X). caller (SKILL) 가
-    # 본 신호로 추가 분석. extraction-error 으로 surface 박지 X (정상 답 안
-    # tool block 표시) — answer 우선 return, denials 별 audit 박을 방법 후속.
+    # A permission_denials entry = a tool block was observed (an objective
+    # signal from the claude worker, not the leader's framing). With a
+    # NON-EMPTY result the answer is returned first and denials are never
+    # surfaced as failure; the EMPTY-result + denials case above promotes to
+    # task-blocked (owner adjudication 2026-07-05 — the two rules compose).
     if not result:
         return "", "vendor JSON valid but result field empty"
     return result, None
@@ -1016,6 +1098,83 @@ def scrub_agy_output(raw_bytes: bytes) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "")
     text = _AGY_ANSI_RE.sub("", text)
     return text
+
+
+import glob as _glob
+
+
+_AGY_BRAIN_GLOB = "*/.system_generated/logs/transcript.jsonl"
+
+
+def _agy_brain_dir() -> str:
+    """The agy conversation-store root (override via AGY_BRAIN_DIR for tests)."""
+    return os.environ.get(
+        "AGY_BRAIN_DIR",
+        os.path.expanduser("~/.gemini/antigravity-cli/brain"),
+    )
+
+
+def snapshot_agy_transcripts(brain_dir: str | None = None) -> dict:
+    """{transcript_path: mtime} for every conversation transcript, BEFORE a run.
+
+    Paired with extract_agy_answer_from_transcript to identify THIS call's new
+    conversation (single-flight). Missing brain dir -> {} (first-ever run)."""
+    base = brain_dir or _agy_brain_dir()
+    out: dict = {}
+    for pth in _glob.glob(os.path.join(base, _AGY_BRAIN_GLOB)):
+        try:
+            out[pth] = os.path.getmtime(pth)
+        except OSError:
+            continue
+    return out
+
+
+def extract_agy_answer_from_transcript(
+    brain_dir: str | None,
+    before: dict,
+    sentinel: str | None = None,
+) -> Optional[str]:
+    """Read this call's final answer from agy's own transcript.jsonl (P4.5,
+    spike-verified 2026-07-05) — the robust, sentinel-INDEPENDENT transport:
+    agy has no native JSON/-o-file output (issues #76/#7 OPEN on 1.0.16), but
+    every run writes a per-conversation transcript whose last
+    `PLANNER_RESPONSE/MODEL/DONE` record carries the COMPLETE, ANSI-free answer
+    (cleaner than pty-scrub, which also captures the thinking-stream).
+
+    `before` = snapshot_agy_transcripts() taken BEFORE the run; the new/updated
+    transcript (newest mtime not seen, or bumped) is THIS call's. Returns the
+    answer text (trailing `<<<sentinel>>>` stripped if present) or None when no
+    new transcript / no DONE record exists (caller falls back to pty extract)."""
+    base = brain_dir or _agy_brain_dir()
+    after = snapshot_agy_transcripts(base)
+    fresh = [pth for pth, mt in after.items()
+             if pth not in before or mt > before.get(pth, 0.0)]
+    if not fresh:
+        return None
+    fresh.sort(key=lambda pth: after[pth], reverse=True)
+    tpath = fresh[0]
+    final = None
+    try:
+        for line in open(tpath, encoding="utf-8").read().splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if (rec.get("type") == "PLANNER_RESPONSE"
+                    and rec.get("source") == "MODEL"
+                    and rec.get("status") == "DONE"):
+                final = rec
+    except OSError:
+        return None
+    if final is None:
+        return None
+    content = (final.get("content") or "").rstrip()
+    if sentinel:
+        marker = f"<<<{sentinel}>>>"
+        idx = content.rfind(marker)
+        if idx != -1:
+            content = content[:idx].rstrip()
+    return content or None
 
 
 def extract_antigravity_answer(
@@ -1171,8 +1330,9 @@ def _run_once(
         cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
     )
 
-    # 1줄 deterministic 요약 (leader / 사용자 즉시 가시화). stderr 의 semantic
-    # 분류 (도구 미설치 / vendor warning) 은 leader 가 raw stderr mirror 보고 판단.
+    # One-line deterministic summary (immediately visible to leader/user).
+    # SEMANTIC stderr classification (tool-not-installed / vendor warning)
+    # stays the leader's judgment over the mirrored raw stderr.
     log(
         f"[wrapper] {cli} {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "
@@ -1327,6 +1487,24 @@ def run_cli_with_retry(
                     promoted = promote_claude_extraction(r, ext_err)
                     if promoted is not None:
                         return promoted
+                    # Finding #1 (2026-07-05): a claude API error envelope
+                    # (is_error=true, rc=0) is classified "ok" by the rc-based
+                    # `classify` above (cls = r.classification). promote_claude_
+                    # extraction returns None for a NON-terminal re-classification
+                    # (server-capacity is retryable, not terminal), so cls stayed
+                    # "ok" and the loop broke BELOW before the server-cap retry —
+                    # a retryable overload surfaced as extraction-error with zero
+                    # retries. Propagate a retryable re-classification into cls
+                    # (and r.classification, so a retry-exhaust returns a consistent
+                    # rc=64/server-capacity result) to engage the retry branch.
+                    if ext_err.startswith("is_error=true"):
+                        recls = classify(
+                            "claude", stderr=ext_err, stdout="",
+                            exit_code=EXIT_CLI_FAIL,
+                            vendor_exit_code=r.vendor_exit_code,
+                        )
+                        if recls == "server-capacity":
+                            r.classification = cls = "server-capacity"
             if cls == "ok":
                 break
             if cls in terminal_classes:
@@ -1346,6 +1524,11 @@ def run_cli_with_retry(
             if cls == "server-capacity":
                 if attempt < max_retries:
                     wait = SERVER_CAP_BACKOFF_S[attempt]
+                    # Test seam (mirrors agy's AGY_NO_BACKOFF): zero the backoff so
+                    # the retry PATH can be verified without the (15,45)s wall.
+                    # Off by default — consumers keep the real backoff.
+                    if os.environ.get("TRIAD_SERVER_CAP_NO_BACKOFF") == "1":
+                        wait = 0
                     log(
                         f"server-capacity (attempt {attempt+1}/{max_retries+1}); "
                         f"sleep {wait}s"
@@ -1429,7 +1612,12 @@ def run_cli_with_retry(
 
 # ─── Audit log ────────────────────────────────────────────────────────────
 
-_LOG_DIR = Path(__file__).resolve().parent / "_logs"
+# TRIAD_DISPATCH_LOG_DIR overrides the log root (audit + run-logs; the --debug
+# markdown dir is separate). Default = wrapper-adjacent _logs/. Consumers/tests point it
+# at a temp dir so an installed plugin dir is never mutated (plugin roots are
+# ephemeral per the Claude Code plugin docs).
+_LOG_DIR = Path(os.environ.get("TRIAD_DISPATCH_LOG_DIR")
+                or Path(__file__).resolve().parent / "_logs")
 _DEBUG_DIR = Path(__file__).resolve().parent / "_debug"
 
 
@@ -1438,15 +1626,19 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
 
     A per-CLI lock file serializes append + rotation across processes.
     `final_answer_head` caps at 500 chars; full answer flows to caller via
-    `result.final_answer`. Prompt text and prompt-bearing argv values are
-    intentionally not persisted here; failure repair data lives in run-logs.
+    `result.final_answer`.
     """
     log_dir = _LOG_DIR / cli
     log_dir.mkdir(parents=True, exist_ok=True)
+    ok = result.exit_code == EXIT_OK
     rec: dict = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "cli": cli,
-        "cmd": _redact_prompt_args(cmd),
+        # Prompt custody (adjudication 2026-07-05): lab default = full evidence;
+        # hardened/redact mode strips prompt-bearing argv + prompt text (length
+        # only) so a public install's durable audit never stores prompts.
+        "cmd": _redact_prompt_args(cmd) if _audit_redact_enabled() else cmd,
+        "prompt_head": "<redacted>" if _audit_redact_enabled() else prompt[:200],
         "prompt_len": len(prompt),
         "vendor_exit_code": result.vendor_exit_code,
         "exit_code": result.exit_code,
@@ -1455,17 +1647,18 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
         "mode": result.mode,
         "repair_attempt": result.repair_attempt,
         "schema_repair_attempt": result.schema_repair_attempt,
-        "stderr_head": result.stderr[:500],
-        "stderr_len": len(result.stderr),
+        "stderr": result.stderr,
         "final_answer_head": (result.final_answer or "")[:500],
         "final_answer_len": len(result.final_answer or ""),
-        "validated_present": result.validated is not None,
-        "validated_len": _json_len(result.validated),
+        "validated": result.validated,
         "extraction_error": result.extraction_error,
         "validation_error": result.validation_error,
-        "stdout_head": result.stdout[:500],
-        "stdout_len": len(result.stdout),
     }
+    if ok:
+        rec["stdout_head"] = result.stdout[:500]
+        rec["stdout_len"] = len(result.stdout)
+    else:
+        rec["stdout"] = result.stdout
     path = log_dir / "audit.jsonl"
     lock_path = log_dir / ".audit.lock"
     with lock_path.open("a", encoding="utf-8") as lock:
@@ -1534,6 +1727,440 @@ def _prune_audit_archives(log_dir: Path) -> None:
             continue
 
 
+# ─── Deterministic classifier-patch applier (repair read-only redesign) ────
+# The repair sub-agent is a READ-ONLY analyzer: it returns a structured patch
+# PROPOSAL and has ZERO write authority. This function is the SINGLE trusted
+# write path to the classifier extension JSON — validate against the enum +
+# pattern-name SoT + literal bounds, then flock + atomic-write. No LLM in the
+# write path; safe-by-construction against classifier-poisoning.
+#
+#   CLASSIFICATION_TOKENS = the classify() result enum (keys of the
+#     map_classification_to_exit dict — the single source of truth).
+#   PATTERN_LIST_NAMES    = the built-in pattern-list constant names an
+#     extension may extend (a proposal's pattern_list must be one of these).
+
+CLASSIFICATION_TOKENS: frozenset[str] = frozenset(
+    (
+        "ok",
+        "server-capacity",
+        "cli-subscription-cap",
+        "token-limit",
+        "oauth-env",
+        "timeout",
+        "extraction-error",
+        "schema-fail",
+        "schema-rejected",
+        "fanout-spawn-error",
+        "config-conflict",
+        "task-blocked",
+        "unknown",
+    )
+)
+# Assert the enum stays in lock-step with map_classification_to_exit() — the SoT.
+# `.get(cls, ...)` there means every literal branch is a valid classification;
+# a drift here (token added to one and not the other) fails fast at import.
+assert all(
+    map_classification_to_exit(_t) is not None for _t in CLASSIFICATION_TOKENS
+), "CLASSIFICATION_TOKENS drifted from map_classification_to_exit"
+
+PATTERN_LIST_NAMES: frozenset[str] = frozenset(
+    (
+        "SERVER_CAPACITY_PATTERNS",
+        "CLI_SUB_CAP_PATTERNS",
+        "TOKEN_LIMIT_PATTERNS",
+        "OAUTH_ENV_PATTERNS",
+        "SCHEMA_REJECTED_PATTERNS",
+        "FANOUT_SPAWN_PATTERNS",
+        "CONFIG_CONFLICT_PATTERNS",
+        "AGY_AUTH_BANNER_PATTERNS",
+    )
+)
+
+# The meaningful-failure subset a repair PROPOSAL may target. `ok` = success →
+# mapping a real failure to it SUPPRESSES failures; `unknown` = the default/meta
+# bucket, never a useful patch target. (fix1 round, review BLOCKER.)
+REPAIR_CLASSIFICATION_TOKENS: frozenset[str] = frozenset(
+    CLASSIFICATION_TOKENS - {"ok", "unknown"}
+)
+
+# Each pattern-list name → the canonical classification classify() returns when
+# that list matches. An EXACT mirror of classify() (see the L2 substring block):
+#   AGY_AUTH_BANNER → oauth-env, CLI_SUB_CAP → cli-subscription-cap,
+#   SERVER_CAPACITY → server-capacity, TOKEN_LIMIT → token-limit,
+#   OAUTH_ENV → oauth-env, SCHEMA_REJECTED → schema-rejected,
+#   FANOUT_SPAWN → fanout-spawn-error, CONFIG_CONFLICT → config-conflict.
+# A pattern proposal's `classification` must equal PATTERN_LIST_CLASS[pattern_list]
+# (else appending the substring would make classify() return a DIFFERENT class
+# than the proposal claims). Locked in step with PATTERN_LIST_NAMES at import.
+PATTERN_LIST_CLASS: dict[str, str] = {
+    "SERVER_CAPACITY_PATTERNS": "server-capacity",
+    "CLI_SUB_CAP_PATTERNS": "cli-subscription-cap",
+    "TOKEN_LIMIT_PATTERNS": "token-limit",
+    "OAUTH_ENV_PATTERNS": "oauth-env",
+    "SCHEMA_REJECTED_PATTERNS": "schema-rejected",
+    "FANOUT_SPAWN_PATTERNS": "fanout-spawn-error",
+    "CONFIG_CONFLICT_PATTERNS": "config-conflict",
+    "AGY_AUTH_BANNER_PATTERNS": "oauth-env",
+}
+assert (
+    set(PATTERN_LIST_CLASS.keys()) == set(PATTERN_LIST_NAMES)
+), "PATTERN_LIST_CLASS drifted from PATTERN_LIST_NAMES (classify() mirror broke)"
+assert all(
+    _c in CLASSIFICATION_TOKENS for _c in PATTERN_LIST_CLASS.values()
+), "PATTERN_LIST_CLASS maps to a class not in CLASSIFICATION_TOKENS"
+
+# Bound on a proposed substring literal — long enough for real vendor phrases,
+# short enough that a poisoned proposal cannot smuggle a huge blob into the
+# classifier or bloat the extension file.
+_MAX_SUBSTRING_LEN = 200
+# Floor on a proposed substring length (after lowercase-normalize). A defensible
+# floor that rejects the pathological "e"/"the" while allowing real short
+# signatures ("oauth", "quota"). NOT a claim of full semantic specificity — that
+# is the analyzer's + owner's job (see SECURITY.md), only a coarse over-broad guard.
+_MIN_SUBSTRING_LEN = 4
+# Per-cli total entry cap across vendor_exit_map + all pattern lists — bounded
+# growth so a stream of proposals cannot unboundedly bloat the extension.
+_MAX_EXTENSION_ENTRIES = 500
+# Bound on the analyzer's free-text `reason` (untrusted-derived, surfaced into
+# the leader's context — defense-in-depth against an over-long injection blob).
+_MAX_REASON_LEN = 500
+
+# ── fix2/fix3: L1 vendor_exit_map symmetric guard (round-2 + round-3 re-confirm
+# BLOCKERs) ────────────────────────────────────────────────────────────────
+# classify() consults the (extension-merged) vmap BEFORE the L2 substrings and
+# returns immediately, so a poisoned vmap entry has HIGHER blast radius than a
+# poisoned substring — round-1 floored L2, round-2 made L1 symmetric via a
+# hardcoded enumeration (`_GENERIC_EXIT_CODES`). Round-3 found that enumeration
+# LEAKY: it listed 130/137/143 (128+SIGINT/SIGKILL/SIGTERM) but missed the other
+# 128+N signal-death codes — e.g. 139 (SIGSEGV), 141 (SIGPIPE), 134 (SIGABRT) —
+# so a proposal like {"vendor_exit_code": 139, ...} still passed and could
+# poison every future segfault's routing. An enumeration of "the other 128+N
+# codes" can never be complete (any signum 1-31 not yet listed is a fresh gap).
+#
+# Fix: a SOUND RANGE, not an enumeration. A legitimate vendor application-
+# specific exit code lives in [3, 125]. Outside that range is either too
+# generic or reserved/signal-death, and too broad to safely auto-route:
+#   - {0, 1, 2}     = generic (success / general error / misuse-or-EXIT_TIMEOUT)
+#   - {126, 127}    = shell (not-executable / not-found)
+#   - [128, 255]    = signal-death (128+signum, e.g. 130=SIGINT, 137=SIGKILL,
+#                     139=SIGSEGV, 141=SIGPIPE, 143=SIGTERM) or reserved/OOR
+# A vmap PROPOSAL outside [3, 125] is refused — the analyzer must propose a
+# specific stderr `substring` (L2) or escalate. This is the L1 analog of the
+# L2 `_MIN_SUBSTRING_LEN` over-broad floor. (The built-in `<CLI>_VENDOR_EXIT_MAP`
+# dicts are trusted hardcoded maps, NOT proposals — this bounds PROPOSALS only.)
+_VENDOR_EXIT_CODE_MIN = 3
+_VENDOR_EXIT_CODE_MAX = 125
+
+# A vendor's own EXIT CODE cannot mean a WRAPPER-determined status, so a vmap
+# PROPOSAL is restricted to the vendor-exit-DERIVABLE classes. Kept: the vendor-
+# error classes (server-capacity, cli-subscription-cap, token-limit, oauth-env,
+# schema-rejected) + extraction-error (the built-in ANTIGRAVITY_VENDOR_EXIT_MAP[0]
+# weak no-answer fallback legitimately uses it, so it stays a valid vmap class).
+# Excluded (the wrapper/status classes the WRAPPER decides, never a raw vendor
+# exit): timeout (wrapper kills the vendor on its own timeout — exit_code==
+# EXIT_TIMEOUT in classify(), not a vmap code); schema-fail (wrapper pydantic
+# JSON validation — EXIT_SCHEMA_FAIL, not in classify()); task-blocked (codex
+# --task STATUS parse — extract_implementer_status→exit 69); fanout-spawn-error
+# (wrapper fan-out condition via FANOUT_SPAWN_PATTERNS substring); config-conflict
+# (wrapper/config condition via CONFIG_CONFLICT_PATTERNS + agy settings txn).
+# Verified against classify() + the wrapper exit-code semantics (2026-07-06).
+# This applies ONLY to the vendor_exit_map path — the PATTERN path already
+# enforces classification == PATTERN_LIST_CLASS[pattern_list].
+VENDOR_EXIT_PROPOSAL_CLASSES: frozenset[str] = frozenset(
+    REPAIR_CLASSIFICATION_TOKENS
+    - {"timeout", "schema-fail", "task-blocked", "fanout-spawn-error", "config-conflict"}
+)
+assert (
+    VENDOR_EXIT_PROPOSAL_CLASSES <= REPAIR_CLASSIFICATION_TOKENS
+), "VENDOR_EXIT_PROPOSAL_CLASSES must be a subset of REPAIR_CLASSIFICATION_TOKENS"
+
+
+def apply_classifier_patch(cli: str, proposal: dict) -> str:
+    """Validate + atomically merge a repair-analyzer proposal into the classifier
+    extension JSON. The SINGLE trusted write path (zero LLM here).
+
+    proposal = {
+        "classification": <one of REPAIR_CLASSIFICATION_TOKENS>,  # required (NOT ok/unknown)
+        "reason":         <one-line str, <= _MAX_REASON_LEN>,     # required
+        # exactly one target:
+        "vendor_exit_code": <int > 0>,    # append {code: classification} to vendor_exit_map
+        "pattern_list":     <one of PATTERN_LIST_NAMES>,  # + "substring": <bounded str>
+        "substring":        <non-empty bounded literal str, stored LOWERCASED>,
+    }
+
+    Semantic validation (all BEFORE any file write; ValueError on violation):
+      - classification ∈ REPAIR_CLASSIFICATION_TOKENS (ok/unknown rejected — ok
+        would suppress real failures, unknown is the default bucket).
+      - vendor_exit_code must be an int bounded to the application-specific
+        range [3, 125] ({0,1,2}=generic, {126,127}=shell, >=128=signal-death/
+        reserved are too broad to auto-route — the L1 analog of the L2 length
+        floor; a sound range, not an enumeration [fix3]), AND its classification
+        must be vendor-exit-derivable (∈ VENDOR_EXIT_PROPOSAL_CLASSES — a wrapper/
+        status class cannot be inferred from a raw vendor exit code). [fix2]
+      - substring is lowercased (classify() lowercases the blob), then floored at
+        _MIN_SUBSTRING_LEN and required to carry alphanumeric signal — rejects the
+        over-broad "e"/whitespace-only case. (Fine-grained SPECIFICITY rests on the
+        analyzer + owner review, not this coarse floor — see SECURITY.md.)
+      - pattern proposals require classification == PATTERN_LIST_CLASS[pattern_list]
+        (the class that list actually yields in classify()).
+      - reason length <= _MAX_REASON_LEN.
+      - per-cli total entries (vendor_exit_map + all pattern lists) may not exceed
+        _MAX_EXTENSION_ENTRIES (bounded growth).
+
+    Returns "applied" on success. Raises ValueError on ANY invalid field and
+    leaves the extension file UNTOUCHED. A transient read OSError (EACCES/EMFILE/
+    EISDIR — NOT FileNotFoundError) PROPAGATES and preserves the existing file
+    (never laundered into a `{}` reset that os.replace would clobber). Holds
+    fcntl.flock(LOCK_EX) on the `<ext>.lock` sibling for the whole
+    read->validate->merge->write cycle (mirrors audit()); writes atomically via a
+    temp file + os.replace().
+    """
+    # ── Validate the proposal shape BEFORE touching any file ────────────────
+    if not isinstance(cli, str) or not cli.strip():
+        raise ValueError("apply_classifier_patch: cli must be a non-empty str")
+    if not isinstance(proposal, dict):
+        raise ValueError("apply_classifier_patch: proposal must be a dict")
+
+    classification = proposal.get("classification")
+    # SEMANTIC: only a meaningful-failure class is a valid patch target. Reject
+    # `ok` (would suppress real failures) and `unknown` (meta/default bucket).
+    if classification not in REPAIR_CLASSIFICATION_TOKENS:
+        raise ValueError(
+            f"apply_classifier_patch: invalid classification "
+            f"{classification!r} (not in REPAIR_CLASSIFICATION_TOKENS; "
+            f"ok/unknown are not valid patch targets)"
+        )
+
+    vendor_exit_code = proposal.get("vendor_exit_code")
+    pattern_list = proposal.get("pattern_list")
+    substring = proposal.get("substring")
+
+    has_exit = vendor_exit_code is not None
+    has_pattern = pattern_list is not None or substring is not None
+
+    if not has_exit and not has_pattern:
+        raise ValueError(
+            "apply_classifier_patch: proposal has no target "
+            "(need vendor_exit_code or pattern_list+substring)"
+        )
+    if has_exit and has_pattern:
+        raise ValueError(
+            "apply_classifier_patch: proposal targets both vendor_exit_map and "
+            "patterns — supply exactly one"
+        )
+
+    if has_exit:
+        # bool is an int subclass — reject it explicitly (a poisoned True/False)
+        if isinstance(vendor_exit_code, bool) or not isinstance(vendor_exit_code, int):
+            raise ValueError(
+                f"apply_classifier_patch: vendor_exit_code must be an int, "
+                f"got {type(vendor_exit_code).__name__}"
+            )
+        # SEMANTIC: 0 = success (a failure class for it is nonsensical); a vendor
+        # exit code is never negative on a real process.
+        if vendor_exit_code <= 0:
+            raise ValueError(
+                f"apply_classifier_patch: vendor_exit_code must be > 0 "
+                f"(0 = success; got {vendor_exit_code})"
+            )
+        # fix2/fix3 (L1 analog of the L2 _MIN_SUBSTRING_LEN floor): bound the
+        # vendor_exit_code to the application-specific SOUND RANGE [3, 125] —
+        # not an enumeration (fix2's `_GENERIC_EXIT_CODES` listed 130/137/143 but
+        # missed other 128+N signal-death codes like 139/141/134, a structural
+        # leak any enumeration is prone to repeat). {0,1,2}=generic, {126,127}=
+        # shell, >=128=signal-death/reserved are all too broad to safely auto-
+        # route — each would misroute EVERY unrelated future failure carrying
+        # that code (e.g. rc=1, or rc=139 on any future segfault). classify()
+        # consults the vmap BEFORE the L2 substrings and returns immediately, so
+        # a poisoned vmap entry outweighs a poisoned substring. Propose a
+        # specific stderr `substring` (L2) or escalate instead.
+        if not (_VENDOR_EXIT_CODE_MIN <= vendor_exit_code <= _VENDOR_EXIT_CODE_MAX):
+            raise ValueError(
+                f"apply_classifier_patch: vendor_exit_code {vendor_exit_code} is "
+                f"outside the application-specific range "
+                f"[{_VENDOR_EXIT_CODE_MIN}, {_VENDOR_EXIT_CODE_MAX}] — "
+                f"{{0,1,2}}=generic, {{126,127}}=shell, >=128=signal-death/reserved "
+                f"are too broad to safely auto-route (each would misroute unrelated "
+                f"future failures carrying that code). Propose a specific stderr "
+                f"substring instead, or escalate."
+            )
+        # fix2: a vendor's own EXIT CODE cannot mean a WRAPPER-determined status —
+        # restrict a vmap PROPOSAL to the vendor-exit-derivable classes (the PATTERN
+        # path already enforces classification == PATTERN_LIST_CLASS[pattern_list],
+        # so this check applies ONLY here).
+        if classification not in VENDOR_EXIT_PROPOSAL_CLASSES:
+            raise ValueError(
+                f"apply_classifier_patch: classification {classification!r} is not "
+                f"vendor-exit-derivable (a wrapper/status class cannot be inferred "
+                f"from a raw vendor exit code); vmap proposals must be one of "
+                f"{sorted(VENDOR_EXIT_PROPOSAL_CLASSES)}"
+            )
+    else:  # pattern branch
+        if pattern_list not in PATTERN_LIST_NAMES:
+            raise ValueError(
+                f"apply_classifier_patch: invalid pattern_list {pattern_list!r} "
+                f"(not a built-in pattern-list name)"
+            )
+        if not isinstance(substring, str):
+            raise ValueError(
+                f"apply_classifier_patch: substring must be a str, "
+                f"got {type(substring).__name__}"
+            )
+        if not substring:
+            raise ValueError("apply_classifier_patch: substring must be non-empty")
+        if len(substring) > _MAX_SUBSTRING_LEN:
+            raise ValueError(
+                f"apply_classifier_patch: substring exceeds "
+                f"{_MAX_SUBSTRING_LEN} chars ({len(substring)})"
+            )
+        # SEMANTIC: classify() lowercases the blob before substring matching
+        # (see the L2 block). Store the substring lowercased so a mixed-case
+        # proposal actually matches; normalize BEFORE the length floor.
+        substring = substring.lower()
+        # Over-broad guard: reject sub-floor length and all-whitespace/punct
+        # (no alphanumeric signal → would smear across unrelated blobs).
+        if len(substring) < _MIN_SUBSTRING_LEN:
+            raise ValueError(
+                f"apply_classifier_patch: substring too short "
+                f"(< {_MIN_SUBSTRING_LEN} chars after normalize): {substring!r}"
+            )
+        if not any(ch.isalnum() for ch in substring):
+            raise ValueError(
+                f"apply_classifier_patch: substring has no alphanumeric signal "
+                f"(whitespace/punctuation only): {substring!r}"
+            )
+        # SEMANTIC: classification must be the class this list actually yields —
+        # appending to a list whose classify() class differs from the proposal's
+        # `classification` would silently route to a DIFFERENT class than claimed.
+        expected_class = PATTERN_LIST_CLASS[pattern_list]
+        if classification != expected_class:
+            raise ValueError(
+                f"apply_classifier_patch: classification {classification!r} does "
+                f"not match pattern_list {pattern_list!r} "
+                f"(that list classifies as {expected_class!r})"
+            )
+
+    reason = proposal.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("apply_classifier_patch: reason must be a non-empty str")
+    if len(reason) > _MAX_REASON_LEN:
+        raise ValueError(
+            f"apply_classifier_patch: reason exceeds {_MAX_REASON_LEN} chars "
+            f"({len(reason)})"
+        )
+
+    ext_path = _classifier_extension_path()
+    ext_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = ext_path.parent / (ext_path.name + ".lock")
+
+    with lock_path.open("a", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+
+            # Read-or-{} defensively. Order matters (Q6a fix):
+            #   FileNotFoundError → {}   (first patch — no file yet, fine)
+            #   ValueError (corrupt JSON) → {} + a stderr warning (reset)
+            #   any OTHER OSError (EACCES/EMFILE/EISDIR — transient) → PROPAGATE.
+            # A transient OSError must NOT be laundered into `data = {}`: that
+            # would let the os.replace below OVERWRITE a healthy existing file
+            # with a single-entry {}, destroying all prior rules. Propagating
+            # aborts the patch and leaves the file intact.
+            data: dict = {}
+            try:
+                raw = ext_path.read_text(encoding="utf-8")
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    data = parsed
+            except FileNotFoundError:
+                data = {}
+            except ValueError:
+                # Valid-file-but-corrupt-JSON → reset (mirrors _load_classifier_extension).
+                sys.stderr.write(
+                    f"[apply] {cli}: corrupt classifier extension JSON at "
+                    f"{ext_path} — resetting to a fresh entry\n"
+                )
+                data = {}
+
+            # Merge into the per-cli entry (create intermediate keys).
+            entry = data.get(cli)
+            if not isinstance(entry, dict):
+                entry = {}
+
+            # Bounded growth: count the target cli's total entries across
+            # vendor_exit_map + all pattern lists. Reject only when adding a NEW
+            # entry would exceed the cap (an idempotent re-append of an existing
+            # code/substring is fine — it doesn't grow the file).
+            def _cli_entry_count(e: dict) -> int:
+                total = 0
+                vm = e.get("vendor_exit_map")
+                if isinstance(vm, dict):
+                    total += len(vm)
+                ps = e.get("patterns")
+                if isinstance(ps, dict):
+                    for _lst in ps.values():
+                        if isinstance(_lst, list):
+                            total += len(_lst)
+                return total
+
+            if has_exit:
+                vmap = entry.get("vendor_exit_map")
+                if not isinstance(vmap, dict):
+                    vmap = {}
+                is_new = str(vendor_exit_code) not in vmap
+                if is_new and _cli_entry_count(entry) + 1 > _MAX_EXTENSION_ENTRIES:
+                    raise ValueError(
+                        f"apply_classifier_patch: per-cli entry cap reached for "
+                        f"{cli!r} ({_MAX_EXTENSION_ENTRIES}); refusing unbounded growth"
+                    )
+                vmap[str(vendor_exit_code)] = classification
+                entry["vendor_exit_map"] = vmap
+            else:
+                pats = entry.get("patterns")
+                if not isinstance(pats, dict):
+                    pats = {}
+                lst = pats.get(pattern_list)
+                if not isinstance(lst, list):
+                    lst = []
+                is_new = substring not in lst
+                if is_new and _cli_entry_count(entry) + 1 > _MAX_EXTENSION_ENTRIES:
+                    raise ValueError(
+                        f"apply_classifier_patch: per-cli entry cap reached for "
+                        f"{cli!r} ({_MAX_EXTENSION_ENTRIES}); refusing unbounded growth"
+                    )
+                if is_new:
+                    lst.append(substring)
+                pats[pattern_list] = lst
+                entry["patterns"] = pats
+            data[cli] = entry
+
+            # Atomic write: temp file in the SAME dir, JSON-serialize (which is
+            # itself a validation of the merged shape), flush+fsync, os.replace.
+            serialized = json.dumps(data, ensure_ascii=False, indent=2)
+            fd, tmp = tempfile.mkstemp(
+                dir=str(ext_path.parent), prefix=ext_path.name + ".", suffix=".tmp"
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as tf:
+                    tf.write(serialized)
+                    tf.flush()
+                    os.fsync(tf.fileno())
+                os.replace(tmp, ext_path)
+            except Exception:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+        finally:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            except Exception:
+                pass
+
+    log(f"[apply] {cli} {classification} — {reason}")
+    return "applied"
+
+
 # ─── Per-execution run-log (dispatch SKILL input) ─────────────────────────
 
 def emit_run_log(
@@ -1575,7 +2202,6 @@ def emit_run_log(
         "vendor_cmd": vendor_cmd,
         "prompt_head": prompt[:200],
         "prompt_len": len(prompt),
-        "prompt": prompt,
         "exit_code": result.exit_code,
         "vendor_exit_code": result.vendor_exit_code,
         "classification": result.classification,
@@ -1600,18 +2226,18 @@ def _prune_run_logs(runs_dir: Path, preserve: Optional[Path] = None) -> None:
 
     Race-tolerant — parallel writes that all hit the cap may all attempt to
     prune; duplicate unlink attempts are absorbed by try/except. Worst case =
-    slight over-prune. `preserve`, when provided, is never deleted by this
-    writer; a single large fresh run-log is repair IPC and must survive even if
-    it alone exceeds the byte cap.
+    slight over-prune. `preserve` (L6 twin→SoT port, 2026-07-05) is never
+    deleted by this writer: a single large fresh run-log IS the current
+    call's repair IPC and must survive even when it alone exceeds the byte
+    cap (mtime order alone did not protect the only-file case).
     """
     preserve_resolved = preserve.resolve(strict=False) if preserve else None
-
     # Race-resilient listing: a concurrent unlink (or a dangling symlink) makes
     # p.stat() raise mid-sort. Materialize (path, mtime) per-file, skipping any
     # entry that vanishes — a single bad entry must NOT abort the whole prune
     # (the previous `sorted(..., key=p.stat)` form aborted on the first OSError).
     try:
-        entries = list(runs_dir.glob("*.json"))
+        entries = list(runs_dir.glob("*.json")) + list(runs_dir.glob("*.prompt.tmp"))
     except Exception:
         return
     pairs: list[tuple[Path, float]] = []
@@ -1664,16 +2290,16 @@ _STALE_IPC_AGE_FLOOR_S = 7200
 
 
 def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) -> None:
-    """Next-run cleanup of stale run-logs (the owner's "다음 run 에 클린업").
+    """Next-run cleanup of stale run-logs (owner contract: "clean up on the
+    NEXT run", not at exit — a crashed call must leave its evidence).
 
     Removes `_logs/<cli>/runs/*.json` (run-logs AND their `.repair.json` pairs)
-    plus repair temp prompt files (`*.prompt.tmp`) whose mtime is older than
-    `age_floor_s`. Called at the START of every normal (non-repair-mode)
-    dispatch, so a SUBSEQUENT run cleans up the residue a prior run left on
-    failure — including failure classes (terminal / server-cap / schema-rejected
-    / fanout-partial / task-blocked) whose dispatch path never reaches the
-    SKILL's Step 5d `rm`. The cap-based `_prune_run_logs` remains the over-cap
-    failsafe; this is the time-based next-run sweep.
+    whose mtime is older than `age_floor_s`. Called at the START of every normal
+    (non-repair-mode) dispatch, so a SUBSEQUENT run cleans up the residue a
+    prior run left on failure — including failure classes (terminal / server-cap
+    / schema-rejected / fanout-partial / task-blocked) whose dispatch path never
+    reaches the SKILL's Step 5d `rm`. The cap-based `_prune_run_logs` remains the
+    over-cap failsafe; this is the time-based next-run sweep.
 
     The age floor is what makes this concurrency-safe under 4-way parallel
     dispatch: a live sibling's run-log is freshly written (< floor) so it is

@@ -31,7 +31,7 @@ prefix_rule(
     match = [
         "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/claude_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
-        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only --reasoning xhigh",
+        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only --effort xhigh",
         "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox workspace-write --cwd /path/to/workspace",
     ],
     not_match = [

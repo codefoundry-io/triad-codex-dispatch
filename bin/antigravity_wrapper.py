@@ -27,13 +27,7 @@ import json
 import _agy_settings
 import _common
 import _pty
-from _common import (
-    load_prompt_text,
-    load_pydantic_class,
-    inject_schema_to_prompt,
-    validate_response,
-    validate_wrapper_cwd,
-)
+from _common import load_pydantic_class, inject_schema_to_prompt, validate_response
 
 OFFSET_S = 10  # agy --print-timeout = max(timeout - OFFSET, MIN); pty kill is backstop
 MIN_PRINT_TIMEOUT_S = 5
@@ -65,17 +59,7 @@ def _make_sentinel(prompt: str, attempt: int) -> str:
     return f"AGY_DONE_{h}"
 
 
-def _build_cmd(
-    prompt,
-    sentinel,
-    agy_bin,
-    agy_sandbox,
-    model,
-    timeout,
-    *,
-    pydantic=False,
-    cwd=None,
-):
+def _build_cmd(prompt, sentinel, agy_sandbox, model, timeout, *, pydantic=False):
     if pydantic:
         sealed = (
             f"{prompt}\n\n"
@@ -91,10 +75,7 @@ def _build_cmd(
             f"on its own line."
         )
     print_to = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
-    cmd = [agy_bin]
-    if cwd:
-        cmd += ["--new-project", "--add-dir", cwd]
-    cmd += ["-p", sealed, "--print-timeout", f"{print_to}s"]
+    cmd = ["agy", "-p", sealed, "--print-timeout", f"{print_to}s"]
     if agy_sandbox:
         cmd.append("--sandbox")
     if model:
@@ -167,10 +148,23 @@ def _run_agy_with_retry(cmd, prompt, timeout, *, expected_sentinel,
     server_attempt = 0       # server-capacity retry budget (independent)
     schema_repaired = False  # one-shot schema-repair (independent of server-cap + repair_mode)
     while True:
+        # P4.5 transcript-read transport (spike-verified 2026-07-05): snapshot
+        # agy's per-conversation transcript store BEFORE the run so the new
+        # conversation (this call's) is identifiable afterward.
+        _brain_before = _common.snapshot_agy_transcripts()
         result = _pty.run_via_pty(cmd, cwd=cwd, timeout=timeout, env=None)
         scrubbed = _common.scrub_agy_output(result.output_bytes)
-        answer, ext_err = _common.extract_antigravity_answer(
-            scrubbed, result.killed, expected_sentinel)
+        # PRIMARY: read the complete answer from agy's own transcript.jsonl
+        # (sentinel-independent — kills the "long answer drops the trailing
+        # marker" data-loss class). Only on a NON-killed run (a killed/timeout
+        # run has no complete DONE record). FALLBACK to pty-scrub+sentinel.
+        answer = ext_err = None
+        if not result.killed:
+            answer = _common.extract_agy_answer_from_transcript(
+                None, _brain_before, sentinel=expected_sentinel)
+        if answer is None:
+            answer, ext_err = _common.extract_antigravity_answer(
+                scrubbed, result.killed, expected_sentinel)
         if answer is not None and answer.strip():
             if pydantic_cls is None:
                 return AgyResult(answer, "ok", _common.EXIT_OK, result.rc,
@@ -214,13 +208,16 @@ def _server_cap_backoff(attempt: int) -> None:
 def main() -> int:
     p = argparse.ArgumentParser(description="Antigravity (agy) single-shot wrapper")
     prompt_group = p.add_mutually_exclusive_group(required=True)
-    prompt_group.add_argument("--prompt")
-    prompt_group.add_argument("--prompt-file", help="Read user prompt from a UTF-8 file")
+    prompt_group.add_argument("--prompt", help="User prompt")
+    prompt_group.add_argument(
+        "--prompt-file",
+        help="Read the user prompt from a UTF-8 file (L12; containment applies "
+             "under TRIAD_WRAPPER_ALLOWED_ROOTS)")
     p.add_argument("--cwd", default=None)
     p.add_argument("--sandbox", choices=["read-only", "workspace-write"],
-                   default="read-only",
+                   default=None,
                    help="read-only|workspace-write — per-call deny transaction "
-                        "(global settings mutate+restore). Default: read-only.")
+                        "(global settings mutate+restore). Omit = permissive baseline.")
     p.add_argument("--model", default=None)
     p.add_argument("--timeout", type=int, default=600)
     p.add_argument("--repair-mode", action="store_true")
@@ -233,19 +230,25 @@ def main() -> int:
     args = p.parse_args()
 
     try:
-        prompt = load_prompt_text(args.prompt, args.prompt_file)
+        _prompt_text = _common.load_prompt_text(args.prompt, args.prompt_file)
     except Exception as e:
         _common.log(f"prompt load failed: {e}")
         return _common.EXIT_ARG_ERROR
-
-    if not prompt.strip():
-        _common.log("empty prompt")
-        return _common.EXIT_ARG_ERROR
+    args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
-        cwd = validate_wrapper_cwd(args.cwd)
+        args.cwd = _common.validate_wrapper_cwd(args.cwd)
     except Exception as e:
         _common.log(f"--cwd validation failed: {e}")
+        return _common.EXIT_ARG_ERROR
+
+    if args.sandbox is None and _common._wrapper_hardened():
+        # Hardened installs default the Google legs to read-only (raw calls on
+        # a public install must not be write-capable by omission).
+        args.sandbox = "read-only"
+
+    if not args.prompt.strip():
+        _common.log("empty prompt")
         return _common.EXIT_ARG_ERROR
 
     pydantic_cls = None
@@ -260,8 +263,11 @@ def main() -> int:
 
     sandbox_mode = args.sandbox
     if sandbox_mode == "workspace-write":
-        if not cwd:
+        if not args.cwd:
             _common.log("--sandbox workspace-write requires --cwd (isolated worktree)")
+            return _common.EXIT_ARG_ERROR
+        if not os.path.isabs(args.cwd) or not os.path.isdir(args.cwd):
+            _common.log("--sandbox workspace-write --cwd must be an absolute existing directory (isolated worktree)")
             return _common.EXIT_ARG_ERROR
 
     deny_rules = _agy_settings.build_deny_rules(sandbox_mode) if sandbox_mode else []
@@ -272,32 +278,34 @@ def main() -> int:
         _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
         return _common.EXIT_ARG_ERROR
 
-    sentinel = _make_sentinel(prompt, 0)
-    eff_prompt = inject_schema_to_prompt(prompt, pydantic_cls) if pydantic_cls else prompt
-    cmd = _build_cmd(
-        eff_prompt,
-        sentinel,
-        agy_bin,
-        agy_sandbox,
-        args.model,
-        args.timeout,
-        pydantic=pydantic_cls is not None,
-        cwd=cwd,
-    )
+    sentinel = _make_sentinel(args.prompt, 0)
+    eff_prompt = inject_schema_to_prompt(args.prompt, pydantic_cls) if pydantic_cls else args.prompt
+    cmd = _build_cmd(eff_prompt, sentinel, agy_sandbox, args.model, args.timeout,
+                     pydantic=pydantic_cls is not None)
+    # argv[0] = resolved/pinned agy path (finding #3). _build_cmd stays pure ("agy"
+    # literal) so its unit test is unaffected; the pin is substituted here at the
+    # run site so a PATH shadow cannot win when the pty execs argv[0].
+    cmd[0] = agy_bin
 
     start = time.monotonic()
-    r: AgyResult | None = None
+    r: Optional[AgyResult] = None
     try:
         with _agy_settings.agy_settings_guard(
             deny_rules,
             lock_timeout=settings_lock_timeout,
         ):
-            r = _run_agy_with_retry(cmd, prompt, args.timeout,
-                                    expected_sentinel=sentinel, cwd=cwd,
+            r = _run_agy_with_retry(cmd, args.prompt, args.timeout,
+                                    expected_sentinel=sentinel, cwd=args.cwd,
                                     sandbox=agy_sandbox, model=args.model,
                                     repair_mode=args.repair_mode,
                                     pydantic_cls=pydantic_cls)
     except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as e:
+        # Settings-transaction failure (lock timeout / corrupt settings.json /
+        # transient fs error) — surface as classification `config-conflict`
+        # (EXIT_TERMINAL, user escalate), never a traceback. If the vendor run
+        # ALREADY completed and only the transaction release failed, suppress
+        # the completed answer (the deny lease did not close cleanly) but keep
+        # the transcript for the run-log.
         prior = r
         extraction_error = f"agy settings/config conflict: {e}"
         _common.log(extraction_error)
@@ -342,11 +350,11 @@ def main() -> int:
         f"elapsed={elapsed:.1f}s"
     )
 
-    _common.audit("antigravity", cmd, prompt, rr)
+    _common.audit("antigravity", cmd, args.prompt, rr)
     if args.debug:
-        _common.debug_log("antigravity", prompt, rr)
+        _common.debug_log("antigravity", args.prompt, rr)
     run_log_path = _common.emit_run_log(
-        "antigravity", sys.argv, cmd, prompt, rr)
+        "antigravity", sys.argv, cmd, args.prompt, rr)
     if run_log_path is not None:
         _common.log(f"run-log: {run_log_path}")
 

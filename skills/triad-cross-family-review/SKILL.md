@@ -1,6 +1,6 @@
 ---
 name: triad-cross-family-review
-description: Use when the Codex leader is about to merge review-worthy or correctness-critical work and wants a cross-family pre-merge review — three INDEPENDENT reviewers from different model families (claude + a Google-family leg + a fresh codex perspective), each framing suspect decisions as questions, consolidated until the verdict is unanimous SAFE. Triggering signals — before committing/merging a risky change; the user said "크로스 리뷰 돌려줘" / "머지 전에 교차 검증" / "다른 모델들한테 리뷰 받아"; self-rule "review before merge". Composes the dispatch legs (triad-claude-dispatch + triad-antigravity-dispatch/triad-gemini-dispatch); it does NOT itself patch code.
+description: Use when the Codex leader is about to merge review-worthy or correctness-critical work and wants a cross-family pre-merge review — three INDEPENDENT reviewers from different model families (claude + a Google-family leg + a fresh codex perspective), each framing suspect decisions as questions, consolidated until the verdict is unanimous SAFE. Triggering signals — before committing/merging a risky change; the user said "크로스 리뷰 돌려줘" / "머지 전에 교차 검증" / "다른 모델들한테 리뷰 받아"; the standing review rule "review before merge". Composes the dispatch legs (triad-claude-dispatch + triad-antigravity-dispatch/triad-gemini-dispatch); it does NOT itself patch code.
 ---
 
 # triad-cross-family-review
@@ -23,7 +23,7 @@ same packet catch failure modes a single family (or the author) would miss.
 
 1. **claude** — via `triad-claude-dispatch`, `--sandbox read-only` (never let a
    reviewer mutate the tree). Use max-depth review settings:
-   `--reasoning xhigh`.
+   `--effort max` (claude's family-MAX reasoning tier).
 2. **Google family** — via `triad-antigravity-dispatch` (agy, PRIMARY) or, for a
    business-tier gemini account, `triad-gemini-dispatch`. `--sandbox read-only`.
    Runtime selection: `TRIAD_GOOGLE_REVIEW_CLI` env (`antigravity` | `gemini`),
@@ -102,7 +102,7 @@ Fan out — each gets the same packet path and the same framing prompt:
 > separately from minor ones. End with SAFE / NOT-SAFE and, if NOT-SAFE, the
 > blocking questions."
 
-- claude leg: `triad-claude-dispatch` — `--sandbox read-only --reasoning xhigh
+- claude leg: `triad-claude-dispatch` — `--sandbox read-only --effort max
   --cwd <repo-root>`; the packet path is referenced in the prompt (the leg Reads
   it under read-only).
 - Google leg: `triad-antigravity-dispatch` (or `triad-gemini-dispatch`) —

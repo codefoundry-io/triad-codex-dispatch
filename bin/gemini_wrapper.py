@@ -19,7 +19,7 @@ Options:
         with `cls.model_validate_json()`. On validation fail, retry once
         with a clarifying suffix; second failure → exit 66.
   --repair-mode
-        Internal: invoked by Codex repair subagent (server-cap retry=0).
+        Internal: invoked by Sonnet repair sub-agent (server-cap retry=0).
 """
 from __future__ import annotations
 
@@ -29,16 +29,17 @@ import sys
 from pathlib import Path
 
 from _common import (
+    _wrapper_hardened,
+    validate_wrapper_cwd,
+    load_prompt_text,
     EXIT_ARG_ERROR,
     audit,
     debug_log,
     emit_run_log,
     load_pydantic_class,
-    load_prompt_text,
     log,
     require_binary,
     run_cli_with_retry,
-    validate_wrapper_cwd,
 )
 
 
@@ -59,7 +60,11 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Gemini CLI single-shot wrapper")
     prompt_group = p.add_mutually_exclusive_group(required=True)
     prompt_group.add_argument("--prompt", help="User prompt")
-    prompt_group.add_argument("--prompt-file", help="Read user prompt from a UTF-8 file")
+    prompt_group.add_argument(
+        "--prompt-file",
+        help="Read the user prompt from a UTF-8 file (>=50K-char prompts: pass "
+             "a file, not inline argv — L12; containment applies under "
+             "TRIAD_WRAPPER_ALLOWED_ROOTS)")
     p.add_argument(
         "--approval-mode",
         default="default",
@@ -76,10 +81,10 @@ def main() -> int:
     p.add_argument(
         "--sandbox",
         choices=SANDBOX_CHOICES,
-        default="read-only",
+        default=None,
         help="read-only -> attach a per-call Policy Engine deny (write_file/replace/"
              "run_shell_command) INSTEAD of the crashy plan mode; workspace-write -> "
-             "write-enabled (code-agent). Default: read-only.",
+             "write-enabled (code-agent). Default: unset (no policy attached).",
     )
     p.add_argument(
         "--model",
@@ -94,7 +99,7 @@ def main() -> int:
     p.add_argument(
         "--repair-mode",
         action="store_true",
-        help="Internal: invoked by Codex repair subagent (server-cap retry=0)",
+        help="Internal: invoked by Sonnet repair sub-agent (server-cap retry=0)",
     )
     p.add_argument(
         "--debug",
@@ -105,19 +110,20 @@ def main() -> int:
     args = p.parse_args()
 
     try:
-        prompt = load_prompt_text(args.prompt, args.prompt_file)
+        _prompt_text = load_prompt_text(args.prompt, args.prompt_file)
     except Exception as e:
         log(f"prompt load failed: {e}")
         return EXIT_ARG_ERROR
-
-    if not prompt.strip():
-        log("empty prompt")
-        return EXIT_ARG_ERROR
+    args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
-        cwd = validate_wrapper_cwd(args.cwd)
+        args.cwd = validate_wrapper_cwd(args.cwd)
     except Exception as e:
         log(f"--cwd validation failed: {e}")
+        return EXIT_ARG_ERROR
+
+    if not args.prompt.strip():
+        log("empty prompt")
         return EXIT_ARG_ERROR
 
     if args.sandbox == "read-only" and args.approval_mode == "auto_edit":
@@ -127,6 +133,11 @@ def main() -> int:
     if args.sandbox == "read-only" and not _READONLY_POLICY.is_file():
         log(f"read-only policy file missing: {_READONLY_POLICY}")
         return EXIT_ARG_ERROR
+
+    if args.sandbox is None and _wrapper_hardened():
+        # Hardened installs default the Google legs to read-only: a raw call
+        # on a public install must not be write-capable by omission.
+        args.sandbox = "read-only"
 
     gemini_bin = require_binary("gemini")
 
@@ -140,7 +151,7 @@ def main() -> int:
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [
-            gemini_bin,
+            gemini_bin,   # resolved/pinned path (finding #3) — never a bare name
             "-p", effective_prompt,
             "--approval-mode", args.approval_mode,
             "--output-format", "json",
@@ -156,22 +167,22 @@ def main() -> int:
     result = run_cli_with_retry(
         "gemini",
         build_cmd,
-        prompt,
-        cwd=cwd,
+        args.prompt,
+        cwd=args.cwd,
         timeout=args.timeout,
         pydantic_cls=pydantic_cls,
         last_msg_path=None,
         repair_mode=args.repair_mode,
     )
 
-    audit_cmd = build_cmd(prompt)
-    audit("gemini", audit_cmd, prompt, result)
+    audit_cmd = build_cmd(args.prompt)
+    audit("gemini", audit_cmd, args.prompt, result)
 
     if args.debug:
-        debug_log("gemini", prompt, result)
+        debug_log("gemini", args.prompt, result)
 
     # Per-execution run-log (failure only) — dispatch SKILL input artifact.
-    run_log_path = emit_run_log("gemini", sys.argv, audit_cmd, prompt, result)
+    run_log_path = emit_run_log("gemini", sys.argv, audit_cmd, args.prompt, result)
     if run_log_path is not None:
         log(f"run-log: {run_log_path}")
 

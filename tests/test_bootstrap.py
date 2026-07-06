@@ -1,4 +1,5 @@
 import os
+import pytest
 import shutil
 import stat
 import subprocess
@@ -7,15 +8,38 @@ import tomllib
 from pathlib import Path
 
 
+def _fs_case_insensitive(probe: Path) -> bool:
+    """True if probe's filesystem is case-insensitive (macOS APFS default) — an
+    upper- and lower-cased variant of the SAME existing path share one inode. On
+    a case-sensitive FS (Linux ext4) the variant does not exist -> False. Used to
+    gate the case-variant workspace-escape test to the FS class where the bypass
+    is meaningful."""
+    s = str(probe)
+    try:
+        up, lo = s.upper(), s.lower()
+        if not (os.path.exists(up) and os.path.exists(lo)):
+            return False
+        return os.path.samestat(os.stat(up), os.stat(lo))
+    except OSError:
+        return False
+
+
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 
-def _fake_bin(tmp_path: Path, *names: str, python_script: str | None = None) -> Path:
+def _fake_bin(
+    tmp_path: Path,
+    *names: str,
+    python_script: str | None = None,
+    scripts: dict[str, str] | None = None,
+) -> Path:
     bin_dir = tmp_path / "fake-bin"
-    bin_dir.mkdir()
+    bin_dir.mkdir(exist_ok=True)
     for name in names:
         path = bin_dir / name
-        if name == "python3":
+        if scripts and name in scripts:
+            path.write_text(f"#!/usr/bin/env bash\n{scripts[name]}\n", encoding="utf-8")
+        elif name == "python3":
             body = python_script or f"exec {sys.executable} \"$@\""
             path.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8")
         else:
@@ -63,12 +87,19 @@ def _run_bootstrap(
     extra_path=(),
     python_script=None,
     env_overrides=None,
+    arg="--check",
+    cwd=None,
+    fake_scripts=None,
 ):
     if repo_root is None:
         repo_root = _make_repo_root(tmp_path, real_agents=True)
-    fake_bin = _fake_bin(tmp_path, *fake_names, "jq", "python3", python_script=python_script)
+    fake_bin = _fake_bin(
+        tmp_path, *fake_names, "jq", "python3",
+        python_script=python_script,
+        scripts=fake_scripts,
+    )
     launcher_bin = tmp_path / "launchers"
-    launcher_bin.mkdir()
+    launcher_bin.mkdir(exist_ok=True)
     python_bin = Path(sys.executable).parent
     extra = os.pathsep.join(str(p) for p in extra_path)
     path_parts = [str(fake_bin)]
@@ -94,8 +125,8 @@ def _run_bootstrap(
     if env_overrides:
         env.update(env_overrides)
     result = subprocess.run(
-        ["bash", str(BOOTSTRAP), "--check"],
-        cwd=ROOT,
+        ["bash", str(BOOTSTRAP), arg],
+        cwd=str(cwd) if cwd is not None else ROOT,
         text=True,
         capture_output=True,
         env=env,
@@ -103,48 +134,38 @@ def _run_bootstrap(
     return result, env, launcher_bin
 
 
-def _assert_installed_agents_are_repair_only(codex_home: Path) -> None:
+def _assert_no_repair_agents_installed(codex_home: Path) -> None:
+    # Privilege-separation redesign (2026-07-05): the write-capable confused-deputy
+    # repair agents are GONE. Codex-host repair is a top-level read-only analyzer
+    # the owner runs in a FRESH terminal (surfaced by the dispatch SKILL Step 5).
+    # Bootstrap installs NO $CODEX_HOME/agents/*.toml.
+    agents_dir = codex_home / "agents"
     for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        installed = codex_home / "agents" / f"{name}.toml"
-        assert installed.is_file()
-        data = tomllib.loads(installed.read_text(encoding="utf-8"))
-        assert "skills" not in data
-        assert data["default_permissions"] == "triad_repair"
+        assert not (agents_dir / f"{name}.toml").exists()
+    # No stray *-wrapper-repair.toml under agents/ at all.
+    if agents_dir.exists():
+        assert not list(agents_dir.glob("*-wrapper-repair.toml"))
 
 
-def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
+def _assert_profile_disables_multi_agent(profile_path: Path) -> None:
+    # A [features] table with multi_agent = false in the generated PROFILE
+    # (not a global ~/.codex/config.toml edit): triad spawns no codex subagents,
+    # so disabling multi-agent prevents a stray spawn from reintroducing the
+    # confused-deputy repair path.
+    data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+    assert data["features"]["multi_agent"] is False
+
+
+def test_check_installs_no_repair_agents_and_writes_classifier_file(tmp_path):
+    # Repair agents are no longer installed (privilege-separation redesign): the
+    # write-capable confused-deputy is removed. The launcher + classifier + log
+    # dir install path is otherwise unchanged.
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
     assert result.returncode == 0, result.stderr + result.stdout
     home = Path(env["HOME"])
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
-    classifier_dir = Path(env["XDG_CONFIG_HOME"]) / "triad-codex-dispatch"
-    fake_bin = Path(env["PATH"].split(os.pathsep)[0]).resolve()
-    python_exe_dir = Path(sys.executable).resolve().parent
-    python_root = Path(sys.base_prefix).resolve()
-    python_prefix = Path(sys.prefix).resolve()
-    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        installed = home / ".codex" / "agents" / f"{name}.toml"
-        assert installed.is_file()
-        text = installed.read_text(encoding="utf-8")
-        assert "__TRIAD_REPO_ROOT__" not in text
-        assert "__TRIAD_CLASSIFIER_PATH__" not in text
-        assert "__TRIAD_CLASSIFIER_DIR__" not in text
-        assert "__TRIAD_PYTHON3__" not in text
-        assert "__TRIAD_PYTHON_READ_ROOTS__" not in text
-        assert "__TRIAD_VENDOR_READ_ROOTS__" not in text
-        assert str(repo_root) in text
-        assert str(classifier_dir / "classifier-patches.json") in text
-        data = tomllib.loads(text)
-        assert "skills" not in data
-        fs = data["permissions"]["triad_repair"]["filesystem"]
-        assert fs[str(repo_root)] == "read"
-        assert fs[str(repo_root / "bin" / "_logs")] == "write"
-        assert fs[str(classifier_dir)] == "write"
-        assert fs[str(python_exe_dir)] == "read"
-        assert fs[str(python_root)] == "read"
-        assert fs[str(python_prefix)] == "read"
-        assert fs[str(fake_bin)] == "read"
+    _assert_no_repair_agents_installed(home / ".codex")
     assert (
         Path(env["XDG_CONFIG_HOME"])
         / "triad-codex-dispatch"
@@ -153,25 +174,9 @@ def test_check_installs_personal_repair_agents_and_classifier_file(tmp_path):
     assert (repo_root / "bin" / "_logs").is_dir()
     assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
     assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
-    assert (
-        "start a new Codex session/thread after bootstrap so custom agents reload"
-        in result.stdout
-    )
-
-
-def test_check_fails_when_repair_agent_placeholder_is_unresolved(tmp_path):
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
-    agent = repo_root / "agents" / "claude-wrapper-repair.toml"
-    agent.write_text(
-        agent.read_text(encoding="utf-8") + '\nplaceholder = "__TRIAD_UNKNOWN_PLACEHOLDER__"\n',
-        encoding="utf-8",
-    )
-
-    result, _env, _launcher_bin = _run_bootstrap(tmp_path, repo_root=repo_root)
-
-    assert result.returncode != 0
-    assert "unresolved repair-agent placeholders" in result.stderr
-    assert "__TRIAD_UNKNOWN_PLACEHOLDER__" in result.stderr
+    # The old "start a new Codex session so custom agents reload" line is gone:
+    # nothing custom-agent-shaped is installed anymore.
+    assert "custom agents reload" not in result.stdout
     assert "repair agents installed to personal Codex scope" not in result.stdout
 
 
@@ -187,21 +192,65 @@ def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    _assert_installed_agents_are_repair_only(codex_home)
+    _assert_no_repair_agents_installed(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
+    _assert_profile_disables_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
 
 
 def test_default_agy_auth_probe_uses_wrapper_pty_path():
+    # finding #7 re-confirm (2026-07-05, codex leg Q7): the probe must invoke the
+    # wrapper by its ABSOLUTE launcher path ($LAUNCHER_DIR/...), never a bare name.
+    # Bare names PATH-resolve, which (a) risks a bootstrap-ordering miss and (b)
+    # lets a PATH-planted <wrapper>.py shadow the real launcher — the very
+    # PATH-shadow class finding #3 closes for vendor bins. The absolute launcher
+    # path is shadow-proof AND pinned (the launcher exports TRIAD_<CLI>_BIN).
     text = BOOTSTRAP.read_text(encoding="utf-8")
 
+    # Q7 re-confirm round 2 (agy leg): the absolute launcher path must be
+    # SHELL-QUOTED (\"$LAUNCHER_DIR/...\") so a LAUNCHER_DIR containing spaces does
+    # not word-split under the probe's `sh -c`.
     assert (
         'run_auth_probe "agy" '
-        '"${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-antigravity_wrapper.py --prompt '
+        '"${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-\\"$LAUNCHER_DIR/antigravity_wrapper.py\\" --prompt '
         in text
     )
     assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-agy -p' not in text
+    assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-antigravity_wrapper.py' not in text  # bare name gone
+    assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-$LAUNCHER_DIR' not in text  # unquoted path gone (now shell-quoted)
+
+
+def test_default_claude_auth_probe_uses_wrapper_sandbox_path():
+    # finding #7 (2026-07-05): the claude auth probe must route through the wrapper
+    # (claude_wrapper.py --sandbox read-only synthesizes --tools Read,Glob,Grep +
+    # strict-mcp + setting-sources user), NOT a direct `claude -p ... --allowedTools
+    # Read` (pre-approve only — weaker than the wrapper's restrict, and bypasses the
+    # pinned-bin + dispatch security model). Same routing as the agy probe.
+    # Q7 re-confirm: absolute launcher path ($LAUNCHER_DIR/...), not a bare name
+    # (shadow-proof + pinned via the launcher's TRIAD_<CLI>_BIN export).
+    text = BOOTSTRAP.read_text(encoding="utf-8")
+    assert (
+        'run_auth_probe "claude" '
+        '"${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-\\"$LAUNCHER_DIR/claude_wrapper.py\\" --prompt '
+        in text
+    )
+    assert 'TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude -p' not in text
+    assert 'TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude_wrapper.py' not in text  # bare name gone
+    assert 'TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-$LAUNCHER_DIR' not in text  # unquoted path gone (now shell-quoted)
+    assert '--allowedTools Read}' not in text  # the weaker direct posture is gone
+
+
+def test_default_gemini_auth_probe_uses_wrapper_sandbox_path():
+    # finding #7 (+ Q7 re-confirm): the gemini auth probe must route through the
+    # ABSOLUTE launcher path $LAUNCHER_DIR/gemini_wrapper.py --sandbox read-only
+    # (Policy-Engine deny; shadow-proof + pinned), not a direct `gemini -p` or a
+    # bare `gemini_wrapper.py`.
+    text = BOOTSTRAP.read_text(encoding="utf-8")
+    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-\\"$LAUNCHER_DIR/gemini_wrapper.py\\" --prompt ' in text
+    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p' not in text
+    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini_wrapper.py' not in text  # bare name gone
+    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-$LAUNCHER_DIR' not in text  # unquoted path gone (now shell-quoted)
 
 
 def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
@@ -216,13 +265,19 @@ def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     codex_home = Path(env["HOME"]) / "custom-codex-home"
-    _assert_installed_agents_are_repair_only(codex_home)
+    _assert_no_repair_agents_installed(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
+    _assert_profile_disables_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path.cwd() / "~").exists()
 
 
 def test_check_supports_workspace_contained_install_targets(tmp_path):
+    # Install targets contained in the TOOLKIT checkout are still supported
+    # when bootstrap runs from OUTSIDE those directories (cwd=ROOT here).
+    # Running the same layout FROM the containing directory is a promptless
+    # sandbox-escape chain and must hard-fail — see the
+    # test_install_fails_when_*_inside_workspace battery below.
     repo_root = _make_repo_root(tmp_path, real_agents=True)
     workspace_codex = repo_root / ".triad-codex-home"
     workspace_config = repo_root / ".triad-config"
@@ -243,8 +298,9 @@ def test_check_supports_workspace_contained_install_targets(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (workspace_bin / "claude_wrapper.py").is_file()
     assert (workspace_config / "triad-codex-dispatch" / "classifier-patches.json").is_file()
-    _assert_installed_agents_are_repair_only(workspace_codex)
+    _assert_no_repair_agents_installed(workspace_codex)
     assert (workspace_codex / "triad-codex-dispatch.config.toml").is_file()
+    _assert_profile_disables_multi_agent(workspace_codex / "triad-codex-dispatch.config.toml")
     assert (workspace_codex / "rules" / "triad-codex-dispatch.rules").is_file()
     assert not (Path(env["HOME"]) / ".codex").exists()
     assert not (Path(env["HOME"]) / ".config" / "triad-codex-dispatch").exists()
@@ -270,8 +326,9 @@ def test_check_ignores_python_stderr_when_parsing_install_paths(tmp_path):
     assert f"Codex runtime profile installed: {codex_home}" in result.stdout
     assert f"Codex command rules installed: {codex_home / 'rules' / 'triad-codex-dispatch.rules'}" in result.stdout
     assert (launcher_bin / "claude_wrapper.py").is_file()
-    assert (codex_home / "agents" / "claude-wrapper-repair.toml").is_file()
+    _assert_no_repair_agents_installed(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
+    _assert_profile_disables_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
 
 
@@ -401,6 +458,12 @@ def test_check_rejects_relative_codex_home_override(tmp_path):
 
 
 def test_check_can_install_optional_codex_runtime_profile(tmp_path):
+    # MUST-land 5: the generated runtime profile must use the Codex
+    # permission-profile system (default_permissions + [permissions.<name>]).
+    # Legacy sandbox_mode / [sandbox_workspace_write] in ANY loaded config
+    # layer makes Codex ignore default_permissions entirely, which would
+    # neutralize the repair agents' default_permissions="triad_repair"
+    # scoping (developers.openai.com/codex/permissions, checked 2026-07-05).
     result, env, _launcher_bin = _run_bootstrap(
         tmp_path,
         env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
@@ -415,14 +478,23 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "Explicit external-CLI consent profile" in text
     assert data["approval_policy"] == "on-request"
     assert data["approvals_reviewer"] == "user"
-    assert data["sandbox_mode"] == "workspace-write"
-    sandbox = data["sandbox_workspace_write"]
-    assert sandbox["network_access"] is True
-    roots = sandbox["writable_roots"]
-    assert str(Path(env["XDG_CONFIG_HOME"]) / "triad-codex-dispatch") in roots
-    assert str(Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]) / "bin" / "_logs") in roots
-    assert not any(".codex/agents" in root for root in roots)
-    assert not any(".local/bin" in root for root in roots)
+    assert "sandbox_mode" not in data
+    assert "sandbox_workspace_write" not in data
+    assert data["default_permissions"] == "triad_leader"
+    # Privilege-separation redesign: a profile-scoped [features] table disables
+    # multi-agent so no stray codex subagent can be spawned (the old confused-
+    # deputy repair path).
+    assert data["features"]["multi_agent"] is False
+    leader = data["permissions"]["triad_leader"]
+    assert leader["extends"] == ":workspace"
+    fs = leader["filesystem"]
+    classifier_dir = str(Path(env["XDG_CONFIG_HOME"]) / "triad-codex-dispatch")
+    log_dir = str(Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]) / "bin" / "_logs")
+    assert fs[classifier_dir] == "write"
+    assert fs[log_dir] == "write"
+    assert leader["network"]["enabled"] is True
+    assert not any(".codex/agents" in key for key in fs)
+    assert not any(".local/bin" in key for key in fs)
     assert "Codex runtime profile installed" in result.stdout
 
 
@@ -578,3 +650,340 @@ def test_check_rejects_invalid_codex_rules_name(tmp_path):
 
     assert result.returncode != 0
     assert "invalid TRIAD_CODEX_RULES_NAME" in result.stderr
+
+
+# --- MUST-land 1: workspace-escape guard -----------------------------------
+# The generated exec-policy allow-rules run the launcher paths OUTSIDE the
+# sandbox without prompting. If any install target (or the checkout the
+# launchers exec) is writable from inside the Codex workspace bootstrap runs
+# from ($PWD = the sandbox-writable root), a sandboxed session can rewrite an
+# allow-listed file and escape without a prompt. Bootstrap must hard-fail.
+
+
+def test_install_fails_when_codex_home_inside_workspace(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=workspace,
+        env_overrides={"CODEX_HOME": str(workspace / ".triad-codex-home")},
+    )
+
+    assert result.returncode != 0
+    assert "workspace-escape guard" in result.stderr
+    assert "CODEX_HOME" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not (workspace / ".triad-codex-home").exists()
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_install_fails_when_launcher_dir_inside_workspace(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    ws_bin = workspace / ".triad-bin"
+
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=workspace,
+        pre_path=(ws_bin,),
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(ws_bin)},
+    )
+
+    assert result.returncode != 0
+    assert "workspace-escape guard" in result.stderr
+    assert "TRIAD_BOOTSTRAP_BIN_DIR" in result.stderr
+    assert not ws_bin.exists()
+    assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
+
+
+def test_install_fails_when_classifier_dir_inside_workspace(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    result, _env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=workspace,
+        env_overrides={"XDG_CONFIG_HOME": str(workspace / ".triad-config")},
+    )
+
+    assert result.returncode != 0
+    assert "workspace-escape guard" in result.stderr
+    assert "classifier" in result.stderr
+    assert not any(launcher_bin.iterdir())
+
+
+def test_install_fails_when_repo_root_inside_workspace(tmp_path):
+    # The launchers exec <repo_root>/bin/*.py, so a checkout cloned INTO the
+    # workspace is the same promptless escape chain even when the launcher
+    # directory itself lives outside.
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    repo_root = _make_repo_root(workspace, real_agents=True)
+
+    result, _env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=workspace,
+        repo_root=repo_root,
+    )
+
+    assert result.returncode != 0
+    assert "workspace-escape guard" in result.stderr
+    assert "TRIAD_BOOTSTRAP_REPO_ROOT" in result.stderr
+    assert not any(launcher_bin.iterdir())
+
+
+# --- Fast-follow: --install primary, --check deprecated alias ---------------
+
+
+def test_install_flag_is_primary_and_check_is_deprecated_alias(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "--check is deprecated" not in result.stdout
+
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    result2, _env2, _launcher_bin2 = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--check"
+    )
+    assert result2.returncode == 0, result2.stderr + result2.stdout
+    assert "--check is deprecated; use --install" in result2.stdout
+
+    result3, _env3, _launcher_bin3 = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--bogus"
+    )
+    assert result3.returncode == 2
+
+
+def test_install_alias_check_respects_skip_auth_env():
+    # TRIAD_BOOTSTRAP_SKIP_AUTH=1 must keep working on the new --install
+    # path; the harness sets it for every run, so assert the script still
+    # honors it textually AND that no auth probe ran in the alias tests
+    # above (they would fail on the fake CLIs otherwise).
+    text = BOOTSTRAP.read_text(encoding="utf-8")
+    assert "TRIAD_BOOTSTRAP_SKIP_AUTH" in text
+
+
+# --- Fast-follow: auth probe + claude minimum version -----------------------
+
+
+def test_default_codex_auth_probe_uses_login_status():
+    text = BOOTSTRAP.read_text(encoding="utf-8")
+
+    assert "TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex login status" in text
+    assert "codex doctor" not in text
+
+
+def test_claude_version_minimum_warns_on_old_version(tmp_path):
+    # default fake claude prints "claude fake 1.0" -> parsed 1.0 < 2.1.170
+    result, _env, _launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    warn_lines = [
+        line
+        for line in result.stdout.splitlines()
+        if "[warn]" in line and "claude version" in line
+    ]
+    assert warn_lines, result.stdout
+    assert any("2.1.170" in line for line in warn_lines)
+
+
+def test_claude_version_minimum_passes_on_current_version(tmp_path):
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        fake_scripts={"claude": "echo '2.1.170 (Claude Code)'"},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert any(
+        "[ok]" in line and "claude version 2.1.170" in line
+        for line in result.stdout.splitlines()
+    )
+
+
+# --- MUST-land 6: pinned no-prompt entry (codex-triad) -----------------------
+
+
+def test_shell_entry_installs_pinned_codex_triad_function(tmp_path):
+    shell_rc = tmp_path / "shellrc"
+    overrides = {
+        "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+        "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+    }
+
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path, arg="--install", env_overrides=overrides
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    text = shell_rc.read_text(encoding="utf-8")
+    assert text.count("codex-triad()") == 1
+    assert 'TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}"' in text
+    assert "TRIAD_WRAPPER_HARDENED=1" in text
+    assert "TRIAD_CLAUDE_ENFORCE_SANDBOX=1" in text
+    assert 'command codex --profile triad-codex-dispatch --search "$@"' in text
+    # bootstrap verifies the pinned posture and never emits a bare
+    # `codex --profile ...` start as the primary path.
+    assert "no-prompt entry verified" in result.stdout
+    assert "codex --profile" not in result.stdout
+
+    # idempotent re-run: managed block refreshed in place, not duplicated
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    result2, _env2, _launcher_bin2 = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--install", env_overrides=overrides
+    )
+    assert result2.returncode == 0, result2.stderr + result2.stdout
+    assert shell_rc.read_text(encoding="utf-8").count("codex-triad()") == 1
+
+
+def test_shell_entry_refuses_unmanaged_codex_triad_function(tmp_path):
+    shell_rc = tmp_path / "shellrc"
+    unmanaged = 'codex-triad() { command codex --profile old --search "$@"; }\n'
+    shell_rc.write_text(unmanaged, encoding="utf-8")
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "refusing to modify unmanaged codex-triad shell entry" in result.stderr
+    assert shell_rc.read_text(encoding="utf-8") == unmanaged
+
+
+# --- Fast-follow: --remove uninstall path ------------------------------------
+
+
+def test_remove_uninstalls_managed_artifacts_and_shell_entry(tmp_path):
+    shell_rc = tmp_path / "shellrc"
+    overrides = {
+        "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+        "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+        "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+        "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
+    }
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path, arg="--install", env_overrides=overrides
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    home = Path(env["HOME"])
+    classifier = (
+        Path(env["XDG_CONFIG_HOME"]) / "triad-codex-dispatch" / "classifier-patches.json"
+    )
+    assert classifier.is_file()
+    assert (launcher_bin / "claude_wrapper.py").is_file()
+    assert (home / ".codex" / "triad-codex-dispatch.config.toml").is_file()
+
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    result2, _env2, _launcher_bin2 = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--remove", env_overrides=overrides
+    )
+    assert result2.returncode == 0, result2.stderr + result2.stdout
+    for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        assert not (launcher_bin / name).exists()
+    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
+        assert not (home / ".codex" / "agents" / f"{name}.toml").exists()
+    assert not (home / ".codex" / "triad-codex-dispatch.config.toml").exists()
+    assert not (home / ".codex" / "rules" / "triad-codex-dispatch.rules").exists()
+    assert "codex-triad" not in shell_rc.read_text(encoding="utf-8")
+    # learned classifier patches are user data and must survive --remove
+    assert classifier.is_file()
+
+
+def test_remove_leaves_unmanaged_launcher_and_profile_in_place(tmp_path):
+    custom_bin = tmp_path / "custom-bin"
+    custom_bin.mkdir()
+    custom_launcher = custom_bin / "claude_wrapper.py"
+    custom_launcher.write_text(
+        "#!/usr/bin/env bash\necho custom claude wrapper\n", encoding="utf-8"
+    )
+    custom_launcher.chmod(custom_launcher.stat().st_mode | stat.S_IEXEC)
+    profile = tmp_path / "home" / ".codex" / "triad-codex-dispatch.config.toml"
+    profile.parent.mkdir(parents=True)
+    profile.write_text('approval_policy = "never"\n', encoding="utf-8")
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--remove",
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(custom_bin)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert custom_launcher.is_file()
+    assert profile.read_text(encoding="utf-8") == 'approval_policy = "never"\n'
+
+
+# --- MUST-land 5 adjacency: legacy sandbox settings disable profiles ---------
+
+
+def test_install_warns_when_base_config_has_legacy_sandbox_mode(tmp_path):
+    codex_home = tmp_path / "home" / ".codex"
+    codex_home.mkdir(parents=True)
+    (codex_home / "config.toml").write_text(
+        'sandbox_mode = "workspace-write"\n', encoding="utf-8"
+    )
+
+    result, _env, _launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert any(
+        "[warn]" in line and "sandbox_mode" in line
+        for line in result.stdout.splitlines()
+    )
+
+
+def test_install_fails_when_codex_home_inside_workspace_via_case_variant(tmp_path):
+    """macOS case-insensitivity workspace-escape bypass (finding #2, 2026-07-05).
+
+    A CODEX_HOME that resolves INSIDE the sandbox-writable workspace through a
+    case-variant path (WS vs ws) is the SAME promptless escape chain as the
+    plain inside-workspace battery and MUST hard-fail. The guard compared with
+    Path.is_relative_to (case-SENSITIVE), so on a case-insensitive FS (macOS APFS
+    default) a mixed-case install target slipped past the guard and installed
+    into the writable workspace. Skips on a case-sensitive FS (Linux ext4), where
+    the case-variant is genuinely a distinct directory and no bypass exists.
+    """
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    if not _fs_case_insensitive(workspace):
+        pytest.skip(
+            "case-insensitive FS only (macOS APFS); on a case-sensitive FS the "
+            "case-variant path is a distinct directory, so there is no bypass"
+        )
+    # On a case-insensitive FS, ".../WS/..." and ".../ws/..." are the SAME inode:
+    # this target resolves inside the workspace, but its casing differs from the
+    # resolved workspace root, which is exactly what defeated is_relative_to.
+    variant_codex_home = tmp_path / "WS" / ".triad-codex-home"
+
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=workspace,
+        env_overrides={"CODEX_HOME": str(variant_codex_home)},
+    )
+
+    assert result.returncode != 0
+    assert "workspace-escape guard" in result.stderr
+    assert "CODEX_HOME" in result.stderr
+    assert not any(launcher_bin.iterdir())
+    assert not variant_codex_home.exists()
+
+
+def test_migration_rules_claude_examples_use_effort_not_reasoning():
+    # finding #8 (2026-07-05): claude_wrapper takes --effort (low/medium/high/
+    # xhigh/max), NOT codex's --reasoning. A shipped rules example with --reasoning
+    # would be copy-pasted and rejected by argparse. Guard the shipped example.
+    rules = (ROOT / "migration" / "triad-codex-dispatch.rules").read_text(encoding="utf-8")
+    for line in rules.splitlines():
+        if "claude_wrapper.py" in line:
+            assert "--reasoning" not in line, (
+                f"claude_wrapper example must use --effort, not --reasoning: {line.strip()}"
+            )
