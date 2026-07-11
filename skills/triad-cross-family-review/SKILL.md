@@ -47,17 +47,27 @@ the author) would miss.
    adversarial prompt ("assume a subtle coverage gap is present"), and where the
    `spawn_agent` tool exposes a `reasoning_effort` parameter, set it to the
    highest supported tier — the prompt carries the adversarial stance; the
-   parameter (when present) carries the depth.
+   parameter (when present) carries the depth. Prefer defining the reviewer
+   ONCE as a custom agent file (`.codex/agents/reviewer.toml` — per the
+   Codex subagents doc: `name` / `description` / `developer_instructions`,
+   plus `sandbox_mode = "read-only"` and a high `model_reasoning_effort`):
+   the sandbox and the reasoning effort are then CONFIG-pinned for every
+   spawn instead of relying on the prompt, so neither can be forgotten at
+   dispatch time.
 
 ## Hard rules
 
 1. **Read-only reviewers.** The two CLI legs (claude + Google) are dispatched
    `--sandbox read-only`. The fresh-codex `spawn_agent` reviewer is not a CLI
    dispatch, so it carries no `--sandbox` flag — it INHERITS the leader session's
-   sandbox and is otherwise held to read-only only by its prompt (the clause
+   sandbox UNLESS it is spawned from a custom agent file that pins
+   `sandbox_mode = "read-only"` (reviewer #3's recommended setup, which
+   config-enforces the sandbox per spawn), and is otherwise held to read-only
+   only by its prompt (the clause
    below + Step 2: review by reading only, do not modify files), so give it that
-   instruction explicitly; for a release gate, prefer running the review turn
-   under a read-only profile so the inherited sandbox enforces what the prompt
+   instruction explicitly; for a release gate, prefer the custom-agent pin or
+   running the review turn
+   under a read-only profile so the enforced sandbox matches what the prompt
    requests. A reviewer that edits the tree is a bug regardless of the mechanism.
    The reviewer prompt for every leg also says: "Do NOT run scripts/tests, spawn
    subprocesses, invoke vendor CLIs, or modify files; review by reading the packet
@@ -69,6 +79,11 @@ the author) would miss.
    the verdict INLINE as its final message and the leader saves it verbatim; and
    the agy leg may READ official web docs to verify a fact — web reading is
    read-only; code execution is not.
+   Known-harmless artifact of the read-only profile: a reviewer may REPORT
+   that it lacks permission to persist its own session/scratch file. When the
+   verdict still returns complete, treat that specific self-persistence
+   complaint as expected — do NOT widen the sandbox for it, and do NOT
+   normalize OTHER permission failures under this note.
 2. **Independence before consolidation.** Collect all three verdicts BEFORE the
    leader reasons across them. Do not feed one reviewer another's output. The
    fresh-codex verdict is captured first — its file, or the leader saving the
@@ -76,10 +91,22 @@ the author) would miss.
 3. **Frame suspect decisions as QUESTIONS.** Each reviewer is asked to surface
    its doubts as questions ("why is X safe when Y?"), not verdicts — questions
    expose hidden assumptions; bare "LGTM/NAK" hides them.
-4. **Fix → re-confirm loop with a circuit breaker.** Consolidate the questions,
+4. **Fix → re-confirm loop with a circuit breaker — and non-convergence is a
+   STOP, not another round.** Consolidate the questions,
    the leader fixes the real issues, then RE-RUN the three reviewers on the fix.
    Repeat until all three return no blocking questions, but stop after
-   `TRIAD_REVIEW_MAX_ROUNDS` (default 2) full review rounds. One family's
+   `TRIAD_REVIEW_MAX_ROUNDS` (default 2) full review rounds — and stop EARLY,
+   regardless of the budget, when a new round — WITHOUT adding material new
+   evidence — merely flips a prior round's settled decision, contradicts
+   another live leg head-on, or re-litigates an already-adjudicated point:
+   consolidate the conflicting claims into a table (claim / leg / round /
+   evidence) and hand it to the owner for adjudication instead of
+   dispatching again. When a flip or contradiction DOES carry new evidence,
+   adjudicate that evidence with a deterministic probe first (grep the
+   source, read official docs) and let the probe decide whether another
+   round is warranted. Independent legs finding the SAME defect is not a
+   conflict — it is a convergence floor: fix it and run one final confirm.
+   One family's
    unresolved blocking question = NOT SAFE to merge. If the round budget is
    exhausted, stop and record an owner decision instead of looping.
 5. **File-IPC for the packet.** Pre-assemble ONE review packet at
@@ -108,7 +135,8 @@ the author) would miss.
    gate does not pass; degraded two-family mode is advisory only, and merging on
    fewer than three families requires a recorded owner decision (matching the
    Claude-host edition). If read-only enforcement is unavailable for the
-   fresh-codex leg, treat that leg as advisory for release gating too.
+   fresh-codex leg (no custom-agent `sandbox_mode` pin AND no read-only
+   session profile), treat that leg as advisory for release gating too.
 8. **Adversarial framing on EVERY leg, not just the fresh-codex one.** A leg at its
    top reasoning tier still rubber-stamps when its prompt only asks it to "check if
    this looks fine" — the tier is necessary but not sufficient. Give the claude and
@@ -118,6 +146,33 @@ the author) would miss.
    (b) treat a bare "SAFE / none" verdict as a failed review, not a pass. A fast,
    terse SAFE/none from any leg (e.g. a sub-30s pass over a large packet) is a
    rubber-stamp signal — re-dispatch that leg with the adversarial framing.
+9. **Leg orchestration: hub-and-spoke, event-driven waits, no polling.**
+   Subagents do not talk to each other — the leader is the coordinator: it
+   spawns each leg, routes any follow-up instruction, waits for results, and
+   closes finished threads (per the Codex subagents doc; steer a RUNNING leg
+   by asking Codex to send it input rather than respawning it).
+   Each leg prompt states three things up front:
+   how the work is divided, whether the leader waits for all legs before
+   continuing, and exactly what to return — a distilled verdict plus findings
+   with evidence paths, never raw logs (subagents exist to keep noisy
+   intermediate output OFF the main thread: context pollution / context rot).
+   Waiting discipline: prefer ONE generous event-driven wait per leg over
+   short repeated polls. A wait that expires is a wake-up boundary, not
+   evidence the leg failed: inspect that leg's state ONCE, keep a healthy
+   running leg alive through its completion, and move a leg to the
+   degraded-mode handling only on a documented terminal failure or an
+   explicit owner decision to end the wait; never interrupt or respawn a
+   healthy leg because a wait elapsed, and never re-wait a leg whose
+   result already arrived. While legs run, the leader does only
+   review-adjacent prep (fact-check planning, packet hygiene) — unrelated
+   work interleaved into the leader's context pollutes later consolidation.
+   Consolidate once every dispatched leg has either returned a result or
+   been logged as missing via that terminal path (rule 2's independence
+   still applies) — never by silently dropping one. Close completed threads
+   when done so the configured `agents.max_threads` cap stays available,
+   and keep `agents.max_depth` low enough that legs cannot fan out
+   recursively (see the Codex agents config reference for the current
+   defaults).
 
 ## Flow
 
@@ -178,6 +233,21 @@ Fan out — each gets the same packet path and the same framing prompt:
 Gather the three verdicts + their blocking questions. Deduplicate. A question
 raised by any one family is in scope. If all three are SAFE with no blocking
 questions → proceed to merge.
+
+The leader's consolidation role is three duties, in order:
+
+1. **Fact-check every finding against the source before acting on it** —
+   read the cited lines, reproduce the claim with a deterministic probe
+   (grep, official docs). A finding can be plausible and wrong; a reviewer's
+   confidence is not evidence. A probe-refuted finding is closed by
+   recording the probe.
+2. **Classify the round**: CONVERGING (new real findings, or independent
+   legs hitting the SAME defect — fix it and run one final confirm) vs
+   OSCILLATING (verdict flips / head-on contradictions between legs /
+   re-litigation without new evidence).
+3. **On an oscillating round, stop and report to the owner** with the
+   rule-4 conflict table (claim / leg / round / evidence) — the owner
+   adjudicates, never another round.
 
 ### Step 4 — Fix → re-confirm
 

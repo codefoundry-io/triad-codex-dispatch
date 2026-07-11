@@ -1,10 +1,21 @@
 # Changelog
 
-## 0.2.480 — 2026-07-12
+## 0.2.481 — 2026-07-12
 
-**Hardened-audit custody + agy extraction strictness + review-packet
-lifecycle.**
+**Review orchestration discipline** (on top of the prior release's
+hardened-audit custody + agy extraction strictness + review-packet
+lifecycle):
 
+- The cross-family-review skill now spells out the LEADER's
+  consolidation role (fact-check every finding with a deterministic
+  probe, classify the round CONVERGING vs OSCILLATING, and hand an
+  oscillating round's conflict table to the user instead of another
+  round) and hub-and-spoke leg orchestration (one generous
+  event-driven wait per leg — a wait timeout is a wake-up boundary,
+  not a failure; steer a running leg instead of respawning it), and
+  recommends pinning the fresh reviewer as a `.codex/agents/`
+  custom agent with `sandbox_mode = "read-only"` plus a high
+  reasoning effort so both are config-enforced per spawn.
 - Redact mode (hardened default via bootstrap): the durable audit now
   stores `stdout`/`stdout_head`/`stderr` as `"<redacted>"` plus
   lengths on every record and caps `extraction_error` at 500 chars;
