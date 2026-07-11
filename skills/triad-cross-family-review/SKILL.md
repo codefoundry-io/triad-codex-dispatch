@@ -126,6 +126,17 @@ the author) would miss.
 Write `_runs/reviews/<id>/packet.md`: the change (`git diff` scoped to intended
 paths), a 2–3 line intent, and the 2–5 decisions you most want scrutinized.
 
+Where the leader's exec policy permits `python3`, prefer creating `<id>` via the
+bundled lifecycle helper — `python3 <plugin-dir>/skills/triad-cross-family-review/lib/review_scratch.py
+open <abs-repo>/_runs/reviews <slug>` — which also prunes stale packet dirs
+stranded by crashed past reviews (only helper-created dirs whose `.active`
+heartbeat marker carries the helper's provenance magic; 7-day floor,
+`TRIAD_REVIEW_SCRATCH_MAX_AGE_DAYS` overrides; symlinks refused,
+unmanaged/non-date entries never touched). If
+the exec allowlist does not cover the helper, add
+its literal command prefix or fall back to `mkdir -p` + the Step 5 cleanup —
+the helper is a crash backstop, not a new dependency.
+
 ### Step 2 — Dispatch the three reviewers (concurrent)
 
 Fan out — each gets the same packet path and the same framing prompt:
@@ -179,8 +190,14 @@ unanimous SAFE verdict is merge-eligible.
 
 ### Step 5 — Cleanup
 
-`rm -rf _runs/reviews/<id>` once merged (or keep the final packet + verdicts as a
-review record if the change is significant — owner judgment).
+`rm -rf _runs/reviews/<id>` once merged — or, when the helper created the dir,
+`python3 <plugin-dir>/skills/triad-cross-family-review/lib/review_scratch.py close <abs-dir>`
+(`close` acts only on dirs carrying the helper's `.active` marker — an
+arbitrary date-named dir is refused). Keep the final packet + verdicts as a
+review record if the change is significant — owner judgment; note a kept dir
+retains its `.active` heartbeat and a later helper `open` prunes it once the
+heartbeat passes the age floor, so move long-term records outside the packet
+root.
 
 ## Degraded modes (log, not error)
 
