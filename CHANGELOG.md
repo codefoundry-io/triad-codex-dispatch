@@ -1,23 +1,11 @@
 # Changelog
 
-## 0.2.472 — 2026-07-10
+## 0.2.476 — 2026-07-11
 
-**Repair privilege-separation redesign.** The self-improving classifier's
-repair path is now split so the component that reads an untrusted vendor
-run-log has zero write authority:
-
-- This codex-host product ships **no in-session repair worker** (a codex
-  subagent would inherit the leader's sandbox and could not be confined).
-  Repair is a top-level `codex exec -s read-only` analyzer you paste into a
-  fresh terminal — it can only read.
-- The analyzer's proposal is applied ONLY by the **deterministic, zero-LLM**
-  `bin/apply_patch.py`. The generated profile also pins
-  `features.multi_agent = false` as a backstop.
-- Ships a **SECURITY.md** documenting the threat model, the control, and —
-  explicitly — what is NOT the control.
-
-README polish: value-first opening, a copy-runnable first-dispatch example,
-a plugin-only (no-clone) verify path, a troubleshooting + exit-code section,
-and an honest scope-&-limits list.
+**Verified on GPT-5.6.** Version bump only — no functional change.
+Confirmed the codex-led toolkit runs cleanly on the GPT-5.6 model
+family. The cross-family-review codex leg already targets "the highest
+supported reasoning tier," so it tracks GPT-5.6's new `max` tier
+automatically — no edit needed.
 
 Built from the Triad source of truth. Full history: https://github.com/codefoundry-io/triad-codex-dispatch/commits/main (each release commit summarizes its delta).
