@@ -165,8 +165,8 @@ CLS=$(printf '%s' "$SUMMARY" | sed -E 's/.*\[wrapper\] antigravity ([a-z-]+) .*/
 ```
 
 Token set: `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env
-| schema-fail | schema-rejected | timeout | extraction-error | fanout-spawn-error
-| config-conflict | task-blocked | unknown`. Exit codes: `0` ok / `1` cli-fail / `2` timeout /
+| schema-fail | schema-rejected | timeout | extraction-error | vendor-error
+| fanout-spawn-error | config-conflict | task-blocked | unknown`. Exit codes: `0` ok / `1` cli-fail / `2` timeout /
 `3` arg / `4` binary-missing / `64` server-cap-exhausted / `65` terminal /
 `66` schema fail / `67` schema-rejected.
 
@@ -175,14 +175,17 @@ fires ONLY on the **no-answer path**. A rc=0 agy call with a non-empty extracted
 answer returns `ok` and never reaches this mapping. Only when the extractor finds
 no usable answer (rc=0 but the completion sentinel was not written) does the `[0]`
 entry classify it `extraction-error` (not `ok`) → repair. So do not expect
-`extraction-error` on ordinary successful rc=0 calls.
+`extraction-error` on ordinary successful rc=0 calls. A non-empty answer at a
+FAILING vendor rc is `vendor-error` (65) — driver-emitted, never `ok`, never a
+repair route, and never a valid analyzer-proposal class (the answer is kept off
+stdout; a bounded copy rides in the run-log's `extraction_error`).
 
 ### Step 4 — Branch on classification
 
 | classification (rc) | Leader action |
 |---|---|
 | `ok` (0) | Return wrapper stdout. With `--pydantic`, stdout is the validated JSON object. |
-| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` (agy-live) / `fanout-spawn-error` / `task-blocked` (engine-shared tokens, not produced by agy — codex fan-out / claude permission-denial legs) | Surface to user with cause (quota / prompt too large / re-login). **NOT** repair territory. Auth is user-managed. |
+| terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` (agy-live) / `vendor-error` (agy-live) / `fanout-spawn-error` / `task-blocked` (engine-shared tokens, not produced by agy — codex fan-out / claude permission-denial legs) | Surface to user with cause (quota / prompt too large / re-login / vendor-error: agy exited rc≠0 yet produced a non-empty answer — the answer is NOT on stdout but a bounded copy IS in the run-log `extraction_error`; inspect and decide re-dispatch vs accept). **NOT** repair territory. Auth is user-managed. |
 | `config-conflict` (65) | Local agy settings/config conflict. Wait briefly and re-dispatch once if it is a settings-lock contention; if repeated, surface the config-lock cause and ask the user to let other agy work finish. **NOT** repair territory. |
 | `server-capacity` exhausted (64) | Wait + retry, or surface. Wrapper already retried per backoff. |
 | `unknown` (1) | **Step 5 — surface the top-level read-only analyzer command (MANDATORY; Hard rule 6).** |

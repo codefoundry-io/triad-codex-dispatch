@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.476 — 2026-07-11
+## 0.2.478 — 2026-07-11
 
 **Verified on GPT-5.6.** Version bump only — no functional change.
 Confirmed the codex-led toolkit runs cleanly on the GPT-5.6 model
