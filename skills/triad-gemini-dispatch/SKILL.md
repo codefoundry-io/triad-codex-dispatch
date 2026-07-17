@@ -76,7 +76,11 @@ is deprecated (IneligibleTierError → Antigravity).
    Engine (`--policy bin/policies/gemini-readonly.toml`), which denies mutation +
    shell tools for that call only. Business-tier Gemini read-only remains
    unverified until the owner runs a write-attempt check in that account; if the
-   write-attempt has not been run, prefer agy for gated release review.
+   write-attempt has not been run, prefer agy for gated release review **on agy
+   ≤1.1.2 only** — on agy ≥1.1.3 the agy leg's `--sandbox read-only` is VOIDED by
+   the wrapper's skip-perms gate (read-only by INTENT, not an enforced gate; see
+   `triad-antigravity-dispatch` § Headless soft-deny adaptation), so it is NOT
+   the more-trusted release gate there.
 8. **No plan/yolo approval modes.** The wrapper argparse accepts only
    `--approval-mode default|auto_edit`. `plan` is replaced by the per-call
    read-only policy above, and `yolo` is not a permitted mode in this repo.

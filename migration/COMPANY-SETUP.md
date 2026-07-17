@@ -486,7 +486,10 @@ NOT used) plus `--strict-mcp-config`, `--setting-sources user` (the
 dispatched-into repo's hooks/CLAUDE.md are not loaded), and `--permission-mode
 dontAsk`; workspace-write synthesizes `acceptEdits` and requires an isolated
 `--cwd`. Antigravity uses a
-settings transaction plus `agy --sandbox`. Gemini business-tier dispatch uses
+settings transaction plus `agy --sandbox` (ENFORCED on agy ≤1.1.2 only — on
+agy ≥1.1.3 the wrapper inserts `--dangerously-skip-permissions`, which voids
+both, so the agy leg is read-only by INTENT, not enforcement; opt-out
+`AGY_NO_HEADLESS_AUTOAPPROVE=1`). Gemini business-tier dispatch uses
 the Gemini Policy Engine file for read-only mode, rejects read-only
 `auto_edit`, and requires a company business-tier write-attempt verification
 before relying on Gemini read-only enforcement. Individual Gemini CLI users

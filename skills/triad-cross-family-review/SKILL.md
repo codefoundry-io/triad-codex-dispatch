@@ -41,8 +41,14 @@ the author) would miss.
    inventing a model name. For business-tier gemini, pass an owner-verified
    `TRIAD_GOOGLE_REVIEW_MODEL` when configured; otherwise use the CLI default and
    log that the business-tier model is unpinned. Business-tier Gemini read-only
-   is unverified until the owner has run a write-attempt check in that account;
-   use agy for release gating when that write-attempt evidence is absent.
+   is unverified until the owner has run a write-attempt check in that account.
+   **Do NOT treat the agy leg as the more-trusted release gate on agy ≥1.1.3**:
+   its `--sandbox read-only` is VOIDED there by the wrapper's skip-perms gate
+   (see `triad-antigravity-dispatch` § Headless soft-deny adaptation), so on
+   ≥1.1.3 agy is read-only by INTENT only — a business-tier gemini
+   `--sandbox read-only` (Policy-Engine-enforced, once verified) is the STRONGER
+   gate. On agy ≤1.1.2 the agy deny transaction is genuinely enforced and this
+   preference holds.
 3. **codex (fresh)** — a FRESH codex reviewer for independence: use Codex
    multi-agent `spawn_agent` to start a fresh subagent with the same packet,
    produced and saved BEFORE it sees the other legs' outputs. The leader does
@@ -62,7 +68,15 @@ the author) would miss.
 ## Hard rules
 
 1. **Read-only reviewers.** The two CLI legs (claude + Google) are dispatched
-   `--sandbox read-only`. The fresh-codex `spawn_agent` reviewer is not a CLI
+   `--sandbox read-only`. **Caveat — agy ≥1.1.3 is read-only by INTENT, not
+   enforcement**: the wrapper inserts `--dangerously-skip-permissions` on agy
+   ≥1.1.3 (headless soft-deny adaptation), voiding the deny transaction + OS-ring,
+   so a ≥1.1.3 agy Google leg can read outside `--cwd` / exfiltrate over the
+   network when fed an adversarial packet — the `--sandbox read-only` dispatch
+   form below is still correct as an INSTRUCTION but is not enforced containment
+   there (see `triad-antigravity-dispatch` § Headless soft-deny adaptation;
+   opt-out `AGY_NO_HEADLESS_AUTOAPPROVE=1`). Enforced on agy ≤1.1.2 and on gemini.
+   The fresh-codex `spawn_agent` reviewer is not a CLI
    dispatch, so it carries no `--sandbox` flag — it INHERITS the leader session's
    sandbox UNLESS it is spawned from a custom agent file that pins
    `sandbox_mode = "read-only"` (reviewer #3's recommended setup, which

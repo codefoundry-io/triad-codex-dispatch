@@ -127,6 +127,24 @@ set, the file must resolve inside an allowed root):
   [--timeout <seconds>]
 ```
 
+> **⚠️ agy ≥1.1.3 — headless deny model is NEUTERED (read this first).**
+> agy 1.1.3 flipped headless (`-p`) permission policy: a tool needing a
+> confirmation is soft-denied unconditionally, so `permissions.allow` is no
+> longer consulted in print mode and the agy leg is DEAD otherwise. The wrapper
+> therefore inserts `--dangerously-skip-permissions` when `agy --version` ≥
+> 1.1.3 (version-gated, floor — NOT self-adapting: it stays on even after a
+> future release restores the allow-list, until a human narrows the floor;
+> opt-out `AGY_NO_HEADLESS_AUTOAPPROVE=1`).
+> That flag **VOIDS the `--sandbox` deny transaction AND agy's OS-ring** (agy
+> issue #36): on agy ≥1.1.3, `write_file` / `command` (arbitrary shell) /
+> network are ALL auto-approved. So the "Blocks ... / never write-capable"
+> guarantees below hold ONLY for agy ≤1.1.2. On ≥1.1.3 an agy dispatch is
+> read-only by INTENT, not enforcement — an owner-accepted residual for the
+> review use case (network exfil + command-reads-outside-`--cwd` are NOT
+> contained). A strict deployment must set `AGY_NO_HEADLESS_AUTOAPPROVE=1` (agy
+> then unusable headless) or run the ≥1.1.3 dispatch inside an EXTERNAL
+> fs-scoped + network-denied OS sandbox.
+
 Flags:
 - `--sandbox read-only` — per-call `permissions.deny` transaction (global
   `~/.gemini/antigravity-cli/settings.json` mutate+restore, flock-serialized,
@@ -136,7 +154,8 @@ Flags:
   On hardened installs (`TRIAD_WRAPPER_HARDENED=1`, the public product's
   bootstrap posture), a call that OMITS `--sandbox` defaults to `--sandbox
   read-only` — a raw wrapper call is never write-capable by omission; write
-  access must be requested explicitly.
+  access must be requested explicitly. **(All of this is agy ≤1.1.2 only — see
+  the ⚠️ note above; on ≥1.1.3 these denies are voided by the skip-perms gate.)**
 - `--sandbox workspace-write` — write-capable in the worktree `--cwd`; dangerous
   paths and destructive commands denied. Requires `--cwd`; run the wrapper from
   that same directory unless `TRIAD_WRAPPER_ALLOWED_ROOTS` declares extra roots.
@@ -302,6 +321,8 @@ wrapper's age-floor sweep reclaims it.
 - `bin/apply_patch.py` — the deterministic, zero-LLM classifier-patch applier
   (the ONLY writer; re-validates every proposal).
 - `docs/references/google-family-agy-readonly.md` — live verification: gemini
-  individual tier deprecated, agy read-only e2e verified.
+  individual tier deprecated, agy read-only e2e verified **on agy ≤1.1.2** (on
+  ≥1.1.3 the skip-perms gate voids that enforcement — read-only by intent only;
+  see the ⚠️ agy ≥1.1.3 note above).
 - `triad-claude-dispatch` — the Anthropic-family leg.
 - `triad-cross-family-review` — composes agy + claude + codex reviewers.
