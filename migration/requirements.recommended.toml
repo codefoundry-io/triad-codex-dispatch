@@ -1,0 +1,112 @@
+# Recommended /etc/codex/requirements.toml -- triad-codex-dispatch config-layer
+# remediation.
+#
+# Why this exists: the triad-codex-dispatch installer's runtime Codex profile
+# (default_permissions = "triad_leader", installed at
+# $CODEX_HOME/triad-codex-dispatch.config.toml by scripts/bootstrap.sh
+# --install) denies write access to this session's own exec targets --
+# wrapper launchers, the python3 runtime, vendor CLI binaries -- closing the
+# tampered-launcher sandbox-escape chain. But Codex composes config in
+# LAYERS, and permission profiles do not compose with the older sandbox
+# settings: if a TRUSTED project's own .codex/config.toml sets a legacy
+# sandbox_mode key, Codex uses that legacy sandbox for the project instead of
+# default_permissions, which can override the triad_leader exec-target denies
+# above (see https://learn.chatgpt.com/docs/permissions).
+#
+# Installing this file at /etc/codex/requirements.toml is the Codex-documented
+# enforced close for that residual. Scope of what it enforces (stated
+# precisely, not overstated): requirements.toml is a Tier-1 config source
+# (system-wide, root-owned) that outranks every project-local or per-user
+# config layer (see
+# https://learn.chatgpt.com/docs/enterprise/managed-configuration, "Locations
+# and precedence"). Pinning default_permissions + allowed_permission_profiles
+# to triad_leader here forces the permission-profile MODEL machine-wide, so a
+# project can no longer opt back into the legacy sandbox_mode path that would
+# neutralize default_permissions -- THAT legacy-sandbox opt-out is the residual
+# this closes. It does NOT relocate the profile's exec-target deny BODY here:
+# those denies name machine-specific absolute paths (this checkout's bin/, the
+# resolved python3, the resolved vendor CLIs) that differ per install, so the
+# [permissions.triad_leader] body stays in the per-user profile that
+# scripts/bootstrap.sh --install generates
+# ($CODEX_HOME/triad-codex-dispatch.config.toml). A sandboxed session cannot
+# edit that per-user profile (it is outside the session's writable roots), so a
+# per-user body is sound for the threat model; an admin who wants the body
+# itself centrally owned can copy the generated [permissions.triad_leader]
+# block into this file. MULTI-ACCOUNT caveat: this file's SELECTION applies to
+# every account on the machine, but the per-user deny BODY is provisioned only
+# where scripts/bootstrap.sh --install has run. Enforcement is therefore
+# complete only for the accounts (and $CODEX_HOME values) that have the
+# provisioned per-user profile; another account gets the triad_leader SELECTION
+# with no matching body (a missing-profile state -- an availability failure or a
+# fallback, per Codex's missing-profile behavior). For machine-wide BODY
+# enforcement, either provision every affected account or copy the body into
+# this file (above). Requires root (owns /etc/codex/) and Codex >= 0.138.0
+# (the version that introduced allowed_permission_profiles + managed
+# default_permissions in requirements.toml).
+#
+# Codex NEVER reads requirements.toml from $CODEX_HOME (a per-user, non-root
+# path) -- only from /etc/codex/ (Unix system scope), an org-managed cloud
+# config bundle (ChatGPT Business/Enterprise), or macOS MDM. A copy left
+# under $CODEX_HOME is silently inert (Codex never loads it), so
+# scripts/bootstrap.sh --install only WARNS and points here; it never writes
+# this file itself (bootstrap runs unprivileged).
+#
+# Install (root/admin only, from this checkout/plugin cache root). Do NOT
+# overwrite an existing /etc/codex/requirements.toml -- it may already carry
+# unrelated org constraints (approval_policy, sandbox, MCP allowlists, hooks,
+# marketplace). Use a no-clobber copy; if the file already exists, MERGE the
+# two keys below into it by hand instead:
+#   sudo cp -n migration/requirements.recommended.toml /etc/codex/requirements.toml
+# (cp -n silently does nothing if the file exists -- check the result, and if
+# it exists, MERGE by hand rather than "add": SET default_permissions =
+# "triad_leader" by updating the existing key in place (a duplicate key is
+# invalid TOML), and ensure the [allowed_permission_profiles] table lists
+# triad_leader = true (add the table if absent, else add the key to the existing
+# table). If that table already allows OTHER profiles, decide deliberately
+# whether triad_leader should be the SOLE allowed profile -- merely adding
+# triad_leader = true does not remove the others. Preserve every unrelated key
+# already in the file.)
+#
+# Non-root partial mitigation (does not require this file or root): a user
+# can add, to their OWN ~/.codex/config.toml, for one specific sensitive
+# project path:
+#   [projects."/absolute/path/to/sensitive-project"]
+#   trust_level = "untrusted"
+# which stops that project's own .codex/ config layer (including any legacy
+# sandbox_mode key it might set) from loading at all.
+#
+# --- Env-boundary hardening (recommended; user or machine config.toml) ---
+# Separate from the sandbox_mode residual above. The installer's allow-listed
+# launcher runs OUTSIDE the sandbox, so its inherited ENVIRONMENT is a trust
+# boundary: a loader/runtime var (LD_PRELOAD, DYLD_INSERT_LIBRARIES,
+# NODE_OPTIONS for the Node vendors, PYTHONPATH, ...) can run workspace code in
+# an outside-sandbox process. The launcher already CONSTRUCTS a clean env
+# (dropping those vars + pinning PATH) as always-on defense-in-depth, but the
+# NATIVE and more complete close is Codex's own shell_environment_policy: it
+# filters env vars before Codex spawns ANY command, INCLUDING the launcher --
+# which also neutralizes an LD_PRELOAD aimed at the launcher's OWN process,
+# something no launcher-side code can catch (the linker honors it at exec,
+# before any launcher line). Add to ~/.codex/config.toml (per-user) or a
+# machine-wide config layer:
+#   [shell_environment_policy]
+#   inherit = "core"    # OR keep the default and add explicit excludes:
+#   exclude = ["LD_PRELOAD", "LD_*", "DYLD_*", "NODE_OPTIONS", "NODE_PATH",
+#              "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV",
+#              "PERL5LIB", "RUBYOPT", "RUBYLIB"]
+# Verify inherit="core"'s exact kept set against your Codex version before
+# relying on it alone; the explicit `exclude` globs are version-independent.
+#
+# --- Existing-profile users ---
+# The installer's per-user triad_leader profile
+# ($CODEX_HOME/triad-codex-dispatch.config.toml) is ACTIVATED per call via
+# `-p triad-codex-dispatch` (the generated launchers + command rules pass it);
+# it does NOT hijack your global default_permissions, so your own profiles and
+# default are unaffected by --install. ONLY this machine-wide requirements file
+# sets default_permissions globally. If you already manage default_permissions,
+# do NOT overwrite it: keep yours, and just ensure triad_leader appears in the
+# [allowed_permission_profiles] table below so the `-p` activation is permitted.
+
+default_permissions = "triad_leader"
+
+[allowed_permission_profiles]
+triad_leader = true

@@ -25,7 +25,11 @@ the author) would miss.
 
 1. **claude** — via `triad-claude-dispatch`, `--sandbox read-only` (never let a
    reviewer mutate the tree). Use max-depth review settings:
-   `--effort max` (claude's family-MAX reasoning tier).
+   `--effort max` (claude's family-MAX reasoning tier). Here the claude leg is a
+   CLI dispatch, not an in-session Agent, so `--sandbox read-only` MECHANICALLY
+   restricts it to the `Read, Glob, Grep` tool allowlist (the wrapper synthesizes
+   `--tools "Read,Glob,Grep"`) — the no-execute contract is enforced by the tool
+   set, not by the prompt directive alone.
 2. **Google family** — via `triad-antigravity-dispatch` (agy, PRIMARY) or, for a
    business-tier gemini account, `triad-gemini-dispatch`. `--sandbox read-only`.
    Runtime selection: `TRIAD_GOOGLE_REVIEW_CLI` env (`agy` | `antigravity` |

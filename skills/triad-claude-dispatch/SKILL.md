@@ -57,7 +57,11 @@ standard "call claude once" path — the mirror of the Claude-led toolkit's
    classifier/`bin/_logs` write grant). The hard-safe codex analyzer runs only
    top-level, in a fresh terminal: a nested codex under the session sandbox cannot
    initialize, while top-level it is hard read-only (a write is denied,
-   spike-verified). Surface the command on every `unknown` / `extraction-error` /
+   spike-verified). Because this product spawns NO named in-session subagent, it
+   also has no **project-agent shadow** surface (the hazard the claude-host edition
+   closes with a plugin-scoped subagent identity): there is no `subagent_type`
+   value a same-named project agent could override to reach the untrusted run-log
+   with its own tools. Surface the command on every `unknown` / `extraction-error` /
    `timeout` — a surfaced-and-run analyzer grows the classifier so the same vendor
    error auto-routes next time, so skipping it is a silent regression.
 

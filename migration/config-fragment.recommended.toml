@@ -1,0 +1,53 @@
+# Recommended ~/.codex/config.toml fragment -- triad-codex-dispatch native
+# loader-env boundary.
+#
+# What this does: [shell_environment_policy] inherit = "core" tells Codex to
+# start every subprocess it spawns from a small POSITIVE allowlist of
+# environment variables (PATH, HOME, USER, SHELL, TERM, LANG, LC_*) instead of
+# the full inherited environment. Every loader/interpreter injection variable
+# -- LD_PRELOAD, LD_LIBRARY_PATH, LD_AUDIT, DYLD_INSERT_LIBRARIES,
+# DYLD_LIBRARY_PATH, NODE_OPTIONS, NODE_PATH, PYTHONPATH, PYTHONHOME,
+# PYTHONSTARTUP, BASH_ENV, ENV, PERL5LIB, RUBYOPT, RUBYLIB -- is therefore
+# dropped before Codex spawns anything.
+#
+# Why it matters: the triad-codex-dispatch launchers (installed by
+# scripts/bootstrap.sh --install) are allow-listed to run OUTSIDE the Codex
+# sandbox, so their inherited ENVIRONMENT is a trust boundary. A poisoned
+# loader var (e.g. an LD_PRELOAD from an un-audited project direnv) would make
+# an outside-sandbox process load workspace code. The launcher already
+# CONSTRUCTS a clean env (dropping those vars + pinning PATH) as always-on
+# defense-in-depth, but that scrub runs as the launcher's FIRST lines -- it
+# cannot neutralize an LD_PRELOAD / DYLD_* aimed at the launcher's OWN process,
+# which the dynamic linker honors at exec, before any launcher code runs. Only
+# the boundary that SPAWNS the launcher (Codex's shell_environment_policy) can
+# close that. This fragment is the NATIVE and complete close.
+#
+# Codex's default is inherit = "all", which strips only variable names
+# containing KEY / SECRET / TOKEN -- so loader vars pass through UNSCRUBBED by
+# default. See the Codex config reference, "Shell environment policy":
+# https://learn.chatgpt.com/docs/config-file/config-advanced
+#
+# How it is installed: scripts/bootstrap.sh --install MERGES this fragment into
+# your ~/.codex/config.toml automatically, wrapped in provenance markers:
+#   # >>> triad-codex-dispatch managed shell_environment_policy >>>
+#   [shell_environment_policy]
+#   inherit = "core"
+#   # <<< triad-codex-dispatch managed shell_environment_policy <<<
+# The merge preserves every other key in your config.toml (it appends the
+# marker block; it never rewrites the rest of the file) and writes a .bak
+# backup first. --remove strips exactly that marker block back out. Re-running
+# --install is a no-op once the block is present.
+#
+# If you ALREADY have your own [shell_environment_policy] table, --install does
+# NOT overwrite it -- it warns and leaves yours in place. To harden it by hand,
+# set inherit = "core" (below), OR keep your inherit setting and add explicit
+# excludes (version-independent):
+#   [shell_environment_policy]
+#   exclude = ["LD_*", "DYLD_*", "NODE_OPTIONS", "NODE_PATH", "PYTHONPATH",
+#              "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "PERL5LIB",
+#              "RUBYOPT", "RUBYLIB"]
+# Verify inherit="core"'s exact kept set against your Codex version before
+# relying on it alone; the explicit `exclude` globs are version-independent.
+
+[shell_environment_policy]
+inherit = "core"

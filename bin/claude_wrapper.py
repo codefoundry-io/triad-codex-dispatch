@@ -74,7 +74,8 @@ PERMISSION_FORBIDDEN = ("bypassPermissions",)
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Claude CLI single-shot wrapper")
+    p = argparse.ArgumentParser(description="Claude CLI single-shot wrapper",
+                                allow_abbrev=False)
     prompt_group = p.add_mutually_exclusive_group(required=True)
     prompt_group.add_argument("--prompt", help="User prompt")
     prompt_group.add_argument(
