@@ -90,6 +90,17 @@ def main() -> int:
     )
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
     p.add_argument(
+        "--model",
+        default=None,
+        help="Model for the session — claude CLI --model passthrough (an alias "
+             "for the latest, or a full model name). FREE STRING, never enum-"
+             "pinned (models rot; 'no model names in code' rule — the NAME is "
+             "supplied at dispatch, only the flag lives here). Omit = vendor "
+             "default. Guidance (owner 2026-07-18): a fable-class model for "
+             "long-running leader/worker operation; opus-4.8 with --effort xhigh "
+             "for review legs.",
+    )
+    p.add_argument(
         "--effort",
         default=None,
         choices=EFFORT_CHOICES,
@@ -188,6 +199,8 @@ def main() -> int:
             "-p", effective_prompt,
             "--output-format", "json",
         ]
+        if args.model:
+            cmd += ["--model", args.model]
         if args.effort:
             cmd += ["--effort", args.effort]
         if args.fallback_model:

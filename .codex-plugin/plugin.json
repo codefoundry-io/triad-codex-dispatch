@@ -1,6 +1,6 @@
 {
   "name": "triad-codex-dispatch",
-  "version": "0.2.521",
+  "version": "0.2.524",
   "description": "Codex-led triad dispatch skills and wrapper runbooks for Claude, Antigravity, Gemini (enterprise tier), and cross-family review.",
   "author": {
     "name": "codefoundry-io"

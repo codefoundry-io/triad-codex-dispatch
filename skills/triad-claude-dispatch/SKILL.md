@@ -77,6 +77,7 @@ substitution, or a shell wrapper. For short prompts, pass `--prompt` directly:
 /Users/YOUR_USER/.local/bin/claude_wrapper.py \
   --prompt 'Read _runs/reviews/<id>/packet.md and review it.' \
   --sandbox read-only \
+  [--model <alias-or-name>] \
   [--effort low|medium|high|xhigh|max] \
   [--fallback-model <alias>] \
   [--pydantic module:Class] \
@@ -93,6 +94,7 @@ set, the file must resolve inside an allowed root):
 /Users/YOUR_USER/.local/bin/claude_wrapper.py \
   --prompt-file /absolute/path/to/prompt.txt \
   --sandbox read-only \
+  [--model <alias-or-name>] \
   [--effort low|medium|high|xhigh|max] \
   [--fallback-model <alias>] \
   [--pydantic module:Class] \
