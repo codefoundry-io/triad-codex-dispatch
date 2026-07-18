@@ -260,12 +260,21 @@ The leader's consolidation role is three duties, in order:
    confidence is not evidence. A probe-refuted finding is closed by
    recording the probe.
 2. **Classify the round**: CONVERGING (new real findings, or independent
-   legs hitting the SAME defect — fix it and run one final confirm) vs
-   OSCILLATING (verdict flips / head-on contradictions between legs /
-   re-litigation without new evidence).
-3. **On an oscillating round, stop and report to the owner** with the
-   rule-4 conflict table (claim / leg / round / evidence) — the owner
-   adjudicates, never another round.
+   legs hitting the SAME defect — fix it and run one final confirm),
+   **CONFLICTED** (legs contradict HEAD-ON on the SAME decision — one leg
+   approves what another requires changed, or two demand mutually
+   exclusive changes — and BOTH sides survive the duty-1 probe; owner
+   directive 2026-07-18), or OSCILLATING (verdict flips / re-litigation
+   without new evidence).
+3. **On a CONFLICTED item or an oscillating round, CALL THE OWNER
+   IMMEDIATELY** with the rule-4 conflict table (claim / leg / round /
+   evidence + the leader's fact-check) — the owner adjudicates. The
+   leader never self-adjudicates a compromise between live contradicting
+   legs, however plausible the middle path, and never spends another
+   round on the conflicted item; non-conflicted findings keep their fix
+   loop running in parallel while the call is pending. Probe-refuted
+   sides, complementary findings, and same-defect convergence are NOT
+   conflicts.
 
 ### Step 4 — Fix → re-confirm
 
