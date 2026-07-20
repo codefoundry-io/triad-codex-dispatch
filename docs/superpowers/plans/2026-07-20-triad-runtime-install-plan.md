@@ -166,7 +166,8 @@ def setup_main(args: argparse.Namespace) -> int:
 def doctor_main(args: argparse.Namespace) -> int:
     findings = static_findings(Path(args.workspace).expanduser().resolve())
     if not args.live:
-        print("static doctor: no provider probes run")
+        if not args.json:
+            print("static doctor: no provider probes run")
         return emit_report({"mode": "static", "findings": findings}, args.json)
     return live_doctor(Path(args.workspace).expanduser().resolve(), findings, args.timeout, args.json)
 
@@ -309,9 +310,11 @@ git commit -m "feat: make bootstrap installation deterministic"
 **Interfaces:**
 - Produces: `verify_execpolicy(codex_bin: Path, rules_path: Path, launcher_dir: Path) -> list[str]`
 - Produces internal bounded local runner: `_run_execpolicy_check(codex_bin: Path, rules_path: Path, command: Sequence[str]) -> ProbeResult`
-- Produces: `live_probe_argv(paths: RuntimePaths, provider: str, timeout_seconds: int) -> list[str]`
+- Produces: `live_probe_argv(paths: RuntimePaths, provider: str, timeout_seconds: int, workspace: Path) -> list[str]`
+- Produces: `live_probe_environment(workspace: Path) -> dict[str, str]`, with owner-controlled hardening and Google bounds overriding caller values.
 - Produces: `live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_json: bool) -> int`
-- Produces: installer-owned runtime context for the absolute Codex executable, sibling launcher directory, rules path/enabled posture, and install-time Gemini vendor availability; caller environment and mutable `PATH` cannot override it.
+- Produces internal `emit_live_report(workspace: Path, findings: list[str], probes: list[dict[str, object]], as_json: bool) -> int` so static-integrity failure emits a terminal zero-probe report.
+- Produces: installer-owned runtime context for the absolute Codex executable, sibling launcher directory, absolute profile path, absolute rules path, explicit rules-enabled posture, and install-time Gemini vendor availability; caller environment and mutable `PATH` cannot override it.
 - Produces: `live_outer_timeout(provider: str, provider_timeout_seconds: int) -> int`, including bounded route preflight and cleanup overhead.
 - Produces internal CLI: `verify-execpolicy --codex-bin ABSOLUTE --rules ABSOLUTE --launcher-dir ABSOLUTE`
 - `RuntimePaths`: `codex_bin`, `claude_launcher`, `antigravity_launcher`, `gemini_launcher: Path | None`.
@@ -343,7 +346,7 @@ def test_live_doctor_auth_is_terminal_and_argv_is_absolute(monkeypatch: pytest.M
     assert runtime.live_doctor(tmp_path, [], 2, True) == 1
     report = json.loads(capsys.readouterr().out)
     claude = next(x for x in report["probes"] if x["provider"] == "claude")
-    assert claude["argv"] == [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--timeout", "2", "--repair-mode"]
+    assert claude["argv"] == [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--cwd", str(tmp_path.resolve()), "--timeout", "2", "--repair-mode"]
     assert claude["family"] == "auth" and claude["retry"] is False
 ```
 
@@ -374,25 +377,38 @@ def verify_execpolicy(codex_bin: Path, rules_path: Path, launcher_dir: Path) -> 
     findings = []
     for expected, command in cases:
         result = _run_execpolicy_check(codex_bin, rules_path, [str(x) for x in command])
-        actual = json.loads(result.stdout).get("decision", "prompt") if result.returncode == 0 else "error"
+        actual = "error"
+        if result.returncode == 0:
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                decision = payload.get("decision", "prompt")
+                if isinstance(decision, str):
+                    actual = decision
         if actual != expected:
             findings.append(f"execpolicy expected {expected}, got {actual}: {command!r}")
     return findings
 
 
-def live_probe_argv(paths: RuntimePaths, provider: str, timeout_seconds: int) -> list[str]:
+def live_probe_argv(paths: RuntimePaths, provider: str, timeout_seconds: int, workspace: Path) -> list[str]:
     if provider == "codex": return [str(paths.codex_bin), "login", "status"]
     launcher = {"claude": paths.claude_launcher, "google": paths.antigravity_launcher, "gemini": paths.gemini_launcher}[provider]
     if launcher is None: raise ValueError("gemini is not installed")
-    return [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--timeout", str(timeout_seconds), "--repair-mode"]
+    return [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--cwd", str(workspace), "--timeout", str(timeout_seconds), "--repair-mode"]
 
 
 def live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_json: bool) -> int:
     probes = []
+    if findings:
+        # Emit the failed report without starting a wrapper or provider.
+        return emit_live_report(workspace, findings, probes, as_json)
     paths = resolve_runtime_paths()
     for provider in ("codex", "claude", "google") + (("gemini",) if paths.gemini_launcher else ()):
         outer_timeout = live_outer_timeout(provider, timeout_seconds)
-        result = run_argv(live_probe_argv(paths, provider, timeout_seconds), timeout_seconds=outer_timeout)
+        probe_env = live_probe_environment(workspace)
+        result = run_argv(live_probe_argv(paths, provider, timeout_seconds, workspace), timeout_seconds=outer_timeout, env=probe_env)
         family = "ok" if result.returncode == 0 else result.family
         probes.append({"provider": provider, "argv": list(result.argv), "returncode": result.returncode,
                        "family": family, "retry": family not in {"auth", "packet-integrity", "nonconvergence"}})
@@ -403,19 +419,23 @@ def live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_j
 
 `_run_execpolicy_check` is a dedicated local-only, list-form, `shell=False` transport whose executable and fixed prefix are exactly `[codex_bin, "execpolicy", "check", "--rules", rules_path]`. It has its own ten-second deterministic hang guard and process cleanup, and it never delegates to the provider-capable public `run_argv`. This preserves the earlier `static_findings()` invariant: among probe transports, static doctor may start only the local Codex policy evaluator; the previously specified local `bash -n` and Python compilation checks remain permitted. Static doctor must still make zero wrapper, vendor, provider, or network calls. Keep the existing monkeypatched-`run_argv` test green and add a focused assertion that the local verifier cannot substitute another executable or command prefix.
 
-The native evaluator contract is exit `0` plus an object-shaped JSON document. An explicit `decision` must equal the expected value; a valid object with no `decision` means `prompt`. Non-zero exit, timeout, empty output, malformed JSON, and non-object JSON each become one stable finding and exit `1`, never a traceback. Stderr warnings accompanying valid stdout JSON are diagnostic only. If command-rule installation refused an unmanaged target, bootstrap must not evaluate that target.
+The native evaluator contract is exit `0` plus an object-shaped JSON document. An explicit `decision` must equal the expected value; a valid object with no `decision` means `prompt`. Non-zero exit, timeout, empty output, malformed JSON, and non-object JSON each become one stable finding and exit `1`, never a traceback. Stderr warnings accompanying valid stdout JSON are diagnostic only. Rules installation renders a same-directory regular candidate, verifies that candidate, and atomically publishes it only after every native case passes. Failure preserves the previous rules and opt-out bytes. Reject live and dangling symlink or other non-regular rule targets; replacing a managed hardlink must not mutate its peer. If candidate creation or existing-target validation fails, bootstrap must not evaluate that target.
 
-Bootstrap persists its rules posture in the managed `triad-doctor` runtime context. Reinstalling with rules explicitly disabled removes only a bootstrap-managed stale rules file, preserves any unmanaged file, and records the disabled posture independently of file absence. A fresh static doctor with rules disabled emits exactly one non-failing note and performs zero execpolicy, wrapper, vendor, provider, or network calls; a missing rules file while the recorded posture is enabled remains a finding.
+Bootstrap persists its absolute profile path, absolute rules path, and explicit rules posture in the managed `triad-doctor` runtime context. Reinstalling with rules explicitly disabled removes only a bootstrap-managed stale rules file, preserves any unmanaged file, and records the disabled posture independently of file presence. A fresh static doctor with rules disabled emits exactly one non-failing note and performs zero execpolicy, wrapper, vendor, provider, or network calls, even when a preserved unmanaged rules file remains at that path; a missing rules file while the recorded posture is enabled remains a finding. Hostile `TRIAD_CODEX_PROFILE_NAME`, `TRIAD_CODEX_RULES_NAME`, or runtime-pin values supplied at invocation cannot redirect the generated doctor.
 
 The generated runtime command also owns the installer-resolved absolute Codex executable and sibling launcher directory. Prepending hostile same-name commands to `PATH` must not change any live `argv[0]`. Gemini availability is the install-time pinned-vendor state, not the mere presence of the always-generated fail-closed `gemini_wrapper.py` or the later mutable `PATH`; an installation without Gemini probes exactly Codex, Claude, and Google, while an installation with pinned Gemini probes exactly Codex, Claude, Google, and Gemini.
 
-The wrapper's own `--timeout` is the primary provider deadline. `--repair-mode` disables server-capacity retry for this one-shot health probe. `live_outer_timeout` adds exact route overhead rather than model time. Codex uses its direct provider timeout. Claude and Gemini add `15` seconds: two five-second TERM/KILL waits, two two-second drains, and one second of fixed margin. Google adds `82` seconds: `15` seconds for version preflight, `30` for settings acquisition, `2` for PTY TERM/KILL cleanup, `30` for settings release, and `5` seconds of fixed margin. Define named constants for every term and assert the literal terms and sums in tests. Add a hermetic delayed-preflight/lock regression and a nested-session regression: a fake wrapper starts a child with `start_new_session=True`, enforces its own shorter deadline, kills/reaps that group, and exits before the outer deadline; assert no child survives. The test must clean the child explicitly in `finally` even when the assertion fails. Never rely on outer process-group termination to reach a vendor session created by a wrapper.
+Every non-Codex live probe includes `--cwd <canonical-workspace>`. The probe environment hard-sets `TRIAD_WRAPPER_ALLOWED_ROOTS` to that same workspace, `TRIAD_WRAPPER_HARDENED=1`, and `TRIAD_CLAUDE_ENFORCE_SANDBOX=1`; Google additionally receives `AGY_SETTINGS_LOCK_TIMEOUT=30` and `AGY_NO_HEADLESS_AUTOAPPROVE=1`. This prevents caller-directory disclosure, caller-expanded lock time, and the headless soft-deny second vendor run. Any static integrity finding stops all wrapper/provider execution and returns a failed live report with an empty probe list.
+
+The wrapper's own `--timeout` is the primary provider deadline. `--repair-mode` disables server-capacity retry for this one-shot health probe. `live_outer_timeout` adds exact route overhead rather than model time. Codex uses its direct provider timeout. Claude and Gemini add `15` seconds through separately named and literally asserted terms: `5` TERM wait, `5` KILL wait, `2` stdout drain, `2` stderr drain, and `1` second fixed margin. Google adds `82` seconds: `15` seconds for version preflight, `30` for settings acquisition, `2` for PTY TERM/KILL cleanup, `30` for settings release, and `5` seconds of fixed margin. Add a hermetic delayed-preflight/lock regression and a nested-session regression: a fake wrapper starts a child with `start_new_session=True`, enforces its own shorter deadline, kills/reaps that group, and exits before the outer deadline; assert no child survives. The test must clean the child explicitly in `finally` even when the assertion fails. Never rely on outer process-group termination to reach a vendor session created by a wrapper.
 
 `run_argv` itself must also remain finite when a defective wrapper exits or is killed while a separately sessioned child retains inherited output pipes. Every TERM, KILL, wait, and pipe-drain phase has an explicit bound; add a failure-path watchdog proving return within the declared timeout plus cleanup bound. The watchdog records the detached PID and kills/reaps it in `finally`, even when the assertion fails. Direct supervision of arbitrary detached descendants is optional future hardening, but supported wrappers must prove they reap their own vendor sessions.
 
 Failure classification consumes combined stdout and stderr. `Not logged in`, login, OAuth, and credential messages on either stream are `auth`; every provider is invoked exactly once and `auth` always reports `retry: false`.
 
-Add an argparse `verify-execpolicy` subcommand that prints one finding per line and returns `0` only when `verify_execpolicy()` returns an empty list. Bootstrap invokes it immediately after `install_codex_rules` with the absolute `command -v codex`, rules path, and launcher directory; any non-zero return calls `fail "static execpolicy verification failed"`. `static_findings` calls the same function directly. When rules are opted out, static doctor emits one note and skips rule evaluation. Do not add command-string overrides or retries.
+`doctor --json` writes one standalone JSON document with no prose prefix. Human-readable static mode may retain its explanatory line.
+
+Add an argparse `verify-execpolicy` subcommand that prints one finding per line and returns `0` only when `verify_execpolicy()` returns an empty list. Bootstrap invokes it on the unpublished same-directory candidate with the absolute `command -v codex`, candidate rules path, and launcher directory; only a zero result permits atomic publication, while any non-zero result removes the candidate and calls `fail "static execpolicy verification failed"`. `static_findings` calls the same verifier on the installed path. When rules are opted out, static doctor emits one note and skips rule evaluation. Do not add command-string overrides or retries.
 
 - [ ] **Step 4: Run focused then complete verification**
 
