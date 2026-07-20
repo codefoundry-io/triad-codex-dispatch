@@ -502,7 +502,7 @@ Extend `_run(tmp_path, *extra, env_overrides: dict[str, str] | None = None)` to 
 
 - [ ] **Step 2: Run regression test to verify it fails**
 
-Run: `cd /Users/chaniri/codex_workspace && python3 workspace/triad-codex-dispatch-reliability/tests/test_gemini_sandbox.py`
+Run outside the filesystem sandbox with the repository supplied as workdir: `/opt/homebrew/bin/python3.12 tests/test_gemini_sandbox.py`
 
 Expected: FAIL at `test_hardened_implicit_readonly_rejects_auto_edit_before_spawn`; current code checks the conflict before applying hardened read-only.
 
@@ -524,11 +524,21 @@ if args.sandbox == "read-only" and not _READONLY_POLICY.is_file():
 
 Delete the existing later hardened block so normalization occurs exactly once.
 
-- [ ] **Step 4: Run all deterministic checks**
+- [ ] **Step 4: Run all deterministic dual-platform checks**
 
-Run: `cd /Users/chaniri/codex_workspace && python3 workspace/triad-codex-dispatch-reliability/tests/test_gemini_sandbox.py && python3 -m pytest workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py workspace/triad-codex-dispatch-reliability/tests/test_triad_runtime.py -q && bash -n workspace/triad-codex-dispatch-reliability/scripts/bootstrap.sh && python3 -m py_compile workspace/triad-codex-dispatch-reliability/bin/triad_runtime.py workspace/triad-codex-dispatch-reliability/bin/gemini_wrapper.py && git -C workspace/triad-codex-dispatch-reliability diff --check`
+After recording `/opt/homebrew/bin/python3.12 --version`, `/opt/homebrew/bin/python3.12 -m pytest --version`, and `/bin/bash --version`, run the macOS lane outside the filesystem sandbox with the repository supplied as workdir:
 
-Expected: Gemini reports `8/8 passed`; pytest, syntax, compilation, and whitespace checks exit `0`.
+```bash
+/opt/homebrew/bin/python3.12 tests/test_gemini_sandbox.py
+/opt/homebrew/bin/python3.12 -m pytest tests/test_bootstrap.py tests/test_triad_runtime.py -q -p no:cacheprovider
+/opt/homebrew/bin/python3.12 -m py_compile bin/triad_runtime.py bin/gemini_wrapper.py
+/bin/bash -n scripts/bootstrap.sh
+git diff --check
+```
+
+Then reuse Task 3's recorded immutable Ubuntu 24.04 digest and read-only `/repo` mount with `PYTHONPYCACHEPREFIX=/tmp/triad-pyc`. Expand and record the literal digest and worktree path in this command before running it: `docker run --rm --mount type=bind,src=<absolute-worktree>,dst=/repo,readonly --workdir /repo --env PYTHONPYCACHEPREFIX=/tmp/triad-pyc ubuntu@<resolved-ubuntu-24.04-digest> bash -lc 'apt-get update && apt-get install -y --no-install-recommends python3 python3-pytest && python3 --version && python3 -m pytest --version && bash --version | head -n 1 && python3 tests/test_gemini_sandbox.py && python3 -m pytest tests/test_bootstrap.py tests/test_triad_runtime.py -q -p no:cacheprovider && python3 -m py_compile bin/triad_runtime.py bin/gemini_wrapper.py && bash -n scripts/bootstrap.sh'`.
+
+Expected on both platforms: Gemini reports `8/8 passed`; pytest, syntax, and compilation checks exit `0`; macOS whitespace check exits `0`. No platform skip may cover the hardened-ordering or shared runtime contracts. Record both exact commands and results before Step 5.
 
 - [ ] **Step 5: Commit**
 
