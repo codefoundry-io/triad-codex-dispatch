@@ -38,6 +38,11 @@ Later plans may consume earlier interfaces but may not retrofit an earlier skill
 - External provider legs record the configured timeout, elapsed time, last observable progress/classification, and whether a bounded follow-up or rerun was requested. A timeout is terminal only when the provider process actually reaches its configured deadline and the wrapper classifies it as such.
 - Long-running reviewers may be asked for a compact progress checkpoint (current phase, files inspected, blocker, remaining work) without changing their review scope or contaminating independent conclusions.
 
+## Platform contract
+
+- Shipped runtime, bootstrap, packet, repair, and skill artifacts support both Ubuntu 24.04 and current macOS. Portable implementation paths use Python 3.12 standard-library and POSIX-common behavior available on both; macOS-only `chflags`, Linux-only `renameat2`/`/proc`, descriptor execution/link tricks, and shell features newer than Bash 3.2 are forbidden in shared runtime paths.
+- Deterministic suites run on both platforms before each task that changes shared runtime, bootstrap, packet, repair, or skill behavior may commit or advance, and again before final integration. The macOS lane uses the owner's actual terminal Python. The Ubuntu 24.04 lane uses an exact digest-pinned container or CI image, records the image digest, Python/Bash/test-runner versions, exact commands, and results, and runs the same hermetic suites. Platform-specific skips require an evidence-backed documented reason and may not cover a core safety contract.
+
 ## Task Gate
 
 For each task:
@@ -46,7 +51,8 @@ For each task:
 2. implement the smallest contract with `apply_patch`;
 3. rerun the focused green test outside the filesystem sandbox;
 4. inspect full affected files and downstream callers, not only the diff;
-5. commit only the task-owned coherent slice;
-6. run a fresh task review before advancing.
+5. for shared runtime, bootstrap, packet, repair, or skill changes, run and record the identical hermetic suite on the macOS lane and the digest-pinned Ubuntu 24.04 lane with no core-contract skip;
+6. commit only the task-owned coherent slice;
+7. run a fresh task review before advancing.
 
 The pre-existing baseline contains one stale optional-Gemini expectation and one second-bootstrap-run hang. Delivery 1 owns both; no later task may classify them as an accepted baseline failure.
