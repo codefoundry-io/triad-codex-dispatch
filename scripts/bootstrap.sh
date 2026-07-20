@@ -33,7 +33,7 @@ also removes any bootstrap-managed (provenance-matched) legacy personal-scope
 repair-agent TOMLs left by an older install; a non-matching same-name file is
 preserved. Learned classifier patches are preserved.
 
-Assumes codex, claude, and agy are already installed and OAuth logged in.
+Assumes codex, claude, and agy are already installed.
 
 Install targets must resolve OUTSIDE the workspace bootstrap runs from:
 allow-listed launchers and everything they exec must live outside all
@@ -77,17 +77,25 @@ EOF
 }
 
 MODE=""
-CHECK_ALIAS_USED=0
+LEGACY_ALIAS_TARGET=""
+if [ "$#" -ne 1 ]; then
+  usage >&2
+  exit 2
+fi
 case "${1:-}" in
   --install)
     MODE="install"
     ;;
   --check)
     MODE="install"
-    CHECK_ALIAS_USED=1
+    LEGACY_ALIAS_TARGET="--install"
     ;;
-  --remove | --uninstall)
+  --remove)
     MODE="remove"
+    ;;
+  --uninstall)
+    MODE="remove"
+    LEGACY_ALIAS_TARGET="--remove"
     ;;
   *)
     usage >&2
@@ -105,7 +113,6 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 RAW_CLASSIFIER_PATH="${TRIAD_CLASSIFIER_EXTENSION:-$CONFIG_HOME/triad-codex-dispatch/classifier-patches.json}"
 REPO_ROOT="$RAW_REPO_ROOT"
 CLASSIFIER_PATH="$RAW_CLASSIFIER_PATH"
-AUTH_TIMEOUT="${TRIAD_BOOTSTRAP_AUTH_TIMEOUT:-30}"
 CODEX_PROFILE_NAME="${TRIAD_CODEX_PROFILE_NAME:-triad-codex-dispatch}"
 CODEX_PROFILE_APPROVAL_POLICY="${TRIAD_CODEX_PROFILE_APPROVAL_POLICY:-on-request}"
 CODEX_RULES_NAME="${TRIAD_CODEX_RULES_NAME:-triad-codex-dispatch.rules}"
@@ -205,19 +212,34 @@ path_has_dir() {
 launcher_is_managed() {
   launcher="$1"
   wrapper="$2"
+  if [ -L "$launcher" ]; then
+    return 1
+  fi
   if [ ! -e "$launcher" ]; then
     return 0
   fi
+  if [ ! -f "$launcher" ]; then
+    return 1
+  fi
   python3 - "$launcher" "$wrapper" <<'PY'
-from pathlib import Path
+import os
+import stat
 import sys
 
 MARKER = "# triad-codex-dispatch managed launcher"
-path = Path(sys.argv[1])
+path = sys.argv[1]
 wrapper = sys.argv[2]
 try:
-    text = path.read_text(encoding="utf-8")
-except UnicodeDecodeError:
+    fd = os.open(
+        path,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+    )
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise OSError("managed launcher is not a regular file")
+    with os.fdopen(fd, encoding="utf-8") as handle:
+        text = handle.read()
+except (OSError, UnicodeDecodeError):
     raise SystemExit(1)
 
 legacy_generated = (
@@ -228,6 +250,55 @@ legacy_generated = (
 )
 raise SystemExit(0 if MARKER in text or legacy_generated else 1)
 PY
+}
+
+runtime_command_is_managed() {
+  runtime_command="$1"
+  if [ -L "$runtime_command" ]; then
+    return 1
+  fi
+  if [ ! -e "$runtime_command" ]; then
+    return 0
+  fi
+  if [ ! -f "$runtime_command" ]; then
+    return 1
+  fi
+  python3 - "$runtime_command" <<'PY'
+import os
+import stat
+import sys
+
+try:
+    fd = os.open(
+        sys.argv[1],
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+    )
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise OSError("managed runtime command is not a regular file")
+    with os.fdopen(fd, encoding="utf-8") as handle:
+        text = handle.read()
+except (OSError, UnicodeDecodeError):
+    raise SystemExit(1)
+raise SystemExit(0 if "# triad-codex-dispatch managed runtime command" in text else 1)
+PY
+}
+
+publish_managed_file() {
+  temp_path="$1"
+  target_path="$2"
+  if python3 - "$temp_path" "$target_path" <<'PY'
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+  then
+    return 0
+  fi
+  rm -f "$temp_path"
+  fail "could not publish managed file: $target_path"
+  return 1
 }
 
 is_expected_wrapper() {
@@ -821,66 +892,56 @@ EOF
   CODEX_HOME="$(printf '%s\n' "$canonicalized" | sed -n '4p')"
 }
 
-run_auth_probe() {
-  name="$1"
-  cmd="$2"
-  required="${3:-required}"
-  python3 - "$AUTH_TIMEOUT" "$cmd" <<'PY'
-import subprocess
-import sys
-
-timeout = int(sys.argv[1])
-cmd = sys.argv[2]
-try:
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        timeout=timeout,
-    )
-except subprocess.TimeoutExpired:
-    raise SystemExit(124)
-raise SystemExit(result.returncode)
-PY
-  rc=$?
-  if [ "$rc" -eq 0 ]; then
-    ok "$name auth probe passed"
-  elif [ "$rc" -eq 124 ]; then
-    if [ "$required" = "required" ]; then
-      fail "$name auth probe timed out after ${AUTH_TIMEOUT}s"
-    else
-      warn "$name auth probe timed out after ${AUTH_TIMEOUT}s"
-    fi
-  else
-    if [ "$required" = "required" ]; then
-      fail "$name auth probe failed"
-    else
-      warn "$name auth probe failed"
-    fi
+install_runtime_commands() {
+  runtime="$REPO_ROOT/bin/triad_runtime.py"
+  if [ ! -f "$runtime" ]; then
+    fail "missing runtime helper: $runtime"
+    return
   fi
-}
+  if [ -z "${python_exe:-}" ] || [ -z "${escaped_python:-}" ]; then
+    fail "missing resolved Python runtime for managed commands"
+    return
+  fi
+  escaped_runtime="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$runtime")" || {
+    fail "could not quote runtime helper: $runtime"
+    return
+  }
 
-check_auth() {
-  if [ "${TRIAD_BOOTSTRAP_SKIP_AUTH:-0}" = "1" ]; then
-    warn "auth probes skipped by TRIAD_BOOTSTRAP_SKIP_AUTH=1"
+  runtime_preflight_failed=0
+  for runtime_command in triad-setup triad-doctor; do
+    target="$LAUNCHER_DIR/$runtime_command"
+    if [ -L "$target" ]; then
+      fail "refusing to overwrite symlinked runtime command: $target"
+      runtime_preflight_failed=1
+    elif ! runtime_command_is_managed "$target"; then
+      fail "refusing to overwrite unmanaged runtime command: $target"
+      runtime_preflight_failed=1
+    fi
+  done
+  if [ "$runtime_preflight_failed" -ne 0 ]; then
     return
   fi
 
-  run_auth_probe "codex" "${TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex login status}"
-  run_auth_probe "claude" "${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-\"$LAUNCHER_DIR/claude_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
-  run_auth_probe "agy" "${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-\"$LAUNCHER_DIR/antigravity_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
-  if command -v gemini >/dev/null 2>&1; then
-    if [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
-      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-\"$LAUNCHER_DIR/gemini_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}"
-    else
-      run_auth_probe "gemini" "${TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-\"$LAUNCHER_DIR/gemini_wrapper.py\" --prompt 'Return exactly OK.' --sandbox read-only --timeout $AUTH_TIMEOUT}" optional
-    fi
-  elif [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
-    fail "missing required binary: gemini"
-  else
-    warn "gemini auth probe skipped because gemini is not installed"
-  fi
+  for runtime_command in triad-setup triad-doctor; do
+    target="$LAUNCHER_DIR/$runtime_command"
+    command_name="${runtime_command#triad-}"
+    escaped_command="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$command_name")" || {
+      fail "could not quote runtime command: $runtime_command"
+      continue
+    }
+    temp_target="$(mktemp "$LAUNCHER_DIR/.${runtime_command}.tmp.XXXXXX")" || {
+      fail "could not create temporary runtime command: $target"
+      continue
+    }
+    printf '#!%s -E\n# triad-codex-dispatch managed runtime command\nimport os\nimport sys\nos.execv(%s, [%s, "-E", %s, %s] + sys.argv[1:])\n' \
+      "$python_exe" "$escaped_python" "$escaped_python" "$escaped_runtime" "$escaped_command" >"$temp_target" \
+      && chmod 0755 "$temp_target" \
+      && publish_managed_file "$temp_target" "$target" \
+      || {
+        rm -f "$temp_target"
+        fail "could not install runtime command: $target"
+      }
+  done
 }
 
 install_launchers() {
@@ -889,6 +950,20 @@ install_launchers() {
     fail "missing repo bin directory: $repo_bin"
     return
   fi
+
+  python_exe="$(python3 - <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.executable).resolve())
+PY
+)" || {
+    fail "could not resolve python executable for launchers"
+    return
+  }
+  escaped_python="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$python_exe")" || {
+    fail "could not quote launcher python: $python_exe"
+    return
+  }
 
   all_wrappers_ready=1
   for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
@@ -914,25 +989,16 @@ install_launchers() {
       fail "missing wrapper: $target"
       continue
     fi
+    if [ -L "$launcher" ]; then
+      fail "refusing to overwrite symlinked launcher: $launcher"
+      continue
+    fi
     if ! launcher_is_managed "$launcher" "$wrapper"; then
       fail "refusing to overwrite unmanaged launcher: $launcher"
       continue
     fi
     escaped_target="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$target")" || {
       fail "could not quote launcher target: $target"
-      continue
-    }
-python_exe="$(python3 - <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.executable).resolve())
-PY
-)" || {
-      fail "could not resolve python executable for launcher: $wrapper"
-      continue
-    }
-    escaped_python="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$python_exe")" || {
-      fail "could not quote launcher python: $python_exe"
       continue
     }
     case "$wrapper" in
@@ -975,6 +1041,10 @@ PY
     # interpreter, closing the PATH-shim sub-channel.
     escaped_path="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "${PATH:-/usr/bin:/bin}")" || {
       fail "could not quote launcher PATH for $wrapper"
+      continue
+    }
+    temp_launcher="$(mktemp "$LAUNCHER_DIR/.${wrapper}.tmp.XXXXXX")" || {
+      fail "could not create temporary launcher: $launcher"
       continue
     }
     {
@@ -1035,11 +1105,17 @@ PY
         printf 'env.pop(%s, None)\n' "$escaped_vendor_env"
       fi
       printf 'os.execve(%s, [%s, "-E", %s] + sys.argv[1:], env)\n' "$escaped_python" "$escaped_python" "$escaped_target"
-    } >"$launcher" || {
+    } >"$temp_launcher" || {
+      rm -f "$temp_launcher"
       fail "could not write launcher: $launcher"
       continue
     }
-    chmod 0755 "$launcher" || fail "could not chmod launcher: $launcher"
+    if ! chmod 0755 "$temp_launcher"; then
+      rm -f "$temp_launcher"
+      fail "could not chmod launcher: $launcher"
+      continue
+    fi
+    publish_managed_file "$temp_launcher" "$launcher"
   done
 
   if ! path_has_dir "$LAUNCHER_DIR"; then
@@ -1861,6 +1937,10 @@ run_remove() {
 
   for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
     launcher="$LAUNCHER_DIR/$wrapper"
+    if [ -L "$launcher" ]; then
+      warn "leaving symlinked launcher in place: $launcher"
+      continue
+    fi
     if [ ! -e "$launcher" ]; then
       continue
     fi
@@ -1872,6 +1952,26 @@ run_remove() {
       fi
     else
       warn "leaving unmanaged launcher in place: $launcher"
+    fi
+  done
+
+  for runtime_command in triad-setup triad-doctor; do
+    target="$LAUNCHER_DIR/$runtime_command"
+    if [ -L "$target" ]; then
+      warn "leaving symlinked runtime command in place: $target"
+      continue
+    fi
+    if [ ! -e "$target" ]; then
+      continue
+    fi
+    if runtime_command_is_managed "$target"; then
+      if rm -f "$target"; then
+        ok "removed runtime command: $target"
+      else
+        fail "could not remove runtime command: $target"
+      fi
+    else
+      warn "leaving unmanaged runtime command in place: $target"
     fi
   done
 
@@ -1980,8 +2080,8 @@ PY
   fi
 }
 
-if [ "$CHECK_ALIAS_USED" -eq 1 ]; then
-  warn "--check is deprecated; use --install (--check remains an alias for one release)"
+if [ -n "$LEGACY_ALIAS_TARGET" ]; then
+  warn "${1:-} is a deprecated alias for $LEGACY_ALIAS_TARGET; removed in the next release after 0.2.526"
 fi
 
 if [ "$MODE" = "remove" ]; then
@@ -2032,6 +2132,7 @@ check_local_writable_agent_residual
 check_duplicate_selectors
 migrate_legacy_repair_agents
 install_launchers
+install_runtime_commands
 ensure_log_dir
 ensure_classifier
 install_codex_runtime_profile
@@ -2039,7 +2140,6 @@ merge_codex_config_fragment
 warn_requirements_remediation
 install_codex_rules
 install_shell_entry
-check_auth
 report_no_prompt_posture
 
 if [ "$errors" -eq 0 ]; then

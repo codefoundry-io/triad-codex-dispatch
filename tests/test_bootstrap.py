@@ -66,6 +66,9 @@ def _make_repo_root(
         wrapper = bin_dir / name
         wrapper.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
         wrapper.chmod(mode)
+    (bin_dir / "triad_runtime.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
     if real_agents:
         for path in (ROOT / "agents").glob("*.toml"):
             shutil.copy2(path, agents_dir / path.name)
@@ -90,6 +93,7 @@ def _run_bootstrap(
     arg="--check",
     cwd=None,
     fake_scripts=None,
+    timeout=10,
 ):
     if repo_root is None:
         repo_root = _make_repo_root(tmp_path, real_agents=True)
@@ -120,7 +124,6 @@ def _run_bootstrap(
         "PATH": os.pathsep.join(path_parts),
         "TRIAD_BOOTSTRAP_REPO_ROOT": str(repo_root),
         "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_bin),
-        "TRIAD_BOOTSTRAP_SKIP_AUTH": "1",
     }
     if env_overrides:
         env.update(env_overrides)
@@ -130,6 +133,7 @@ def _run_bootstrap(
         text=True,
         capture_output=True,
         env=env,
+        timeout=timeout,
     )
     return result, env, launcher_bin
 
@@ -246,58 +250,34 @@ def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     assert not (Path(env["HOME"]) / ".codex" / "agents").exists()
 
 
-def test_default_agy_auth_probe_uses_wrapper_pty_path():
-    # finding #7 re-confirm (2026-07-05, codex leg Q7): the probe must invoke the
-    # wrapper by its ABSOLUTE launcher path ($LAUNCHER_DIR/...), never a bare name.
-    # Bare names PATH-resolve, which (a) risks a bootstrap-ordering miss and (b)
-    # lets a PATH-planted <wrapper>.py shadow the real launcher — the very
-    # PATH-shadow class finding #3 closes for vendor bins. The absolute launcher
-    # path is shadow-proof AND pinned (the launcher exports TRIAD_<CLI>_BIN).
-    text = BOOTSTRAP.read_text(encoding="utf-8")
-
-    # Q7 re-confirm round 2 (agy leg): the absolute launcher path must be
-    # SHELL-QUOTED (\"$LAUNCHER_DIR/...\") so a LAUNCHER_DIR containing spaces does
-    # not word-split under the probe's `sh -c`.
-    assert (
-        'run_auth_probe "agy" '
-        '"${TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-\\"$LAUNCHER_DIR/antigravity_wrapper.py\\" --prompt '
-        in text
+def test_install_never_executes_provider_binaries(tmp_path: Path) -> None:
+    marker = tmp_path / "provider-called"
+    provider_script = (
+        'if [ "${1:-}" = "--version" ]; then echo "provider 2.1.170"; '
+        'else printf provider-called > "$TRIAD_PROVIDER_MARKER"; fi'
     )
-    assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-agy -p' not in text
-    assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-antigravity_wrapper.py' not in text  # bare name gone
-    assert 'TRIAD_BOOTSTRAP_AGY_AUTH_CMD:-$LAUNCHER_DIR' not in text  # unquoted path gone (now shell-quoted)
-
-
-def test_default_claude_auth_probe_uses_wrapper_sandbox_path():
-    # finding #7 (2026-07-05): the claude auth probe must route through the wrapper
-    # (claude_wrapper.py --sandbox read-only synthesizes --tools Read,Glob,Grep +
-    # strict-mcp + setting-sources user), NOT a direct `claude -p ... --allowedTools
-    # Read` (pre-approve only — weaker than the wrapper's restrict, and bypasses the
-    # pinned-bin + dispatch security model). Same routing as the agy probe.
-    # Q7 re-confirm: absolute launcher path ($LAUNCHER_DIR/...), not a bare name
-    # (shadow-proof + pinned via the launcher's TRIAD_<CLI>_BIN export).
-    text = BOOTSTRAP.read_text(encoding="utf-8")
-    assert (
-        'run_auth_probe "claude" '
-        '"${TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-\\"$LAUNCHER_DIR/claude_wrapper.py\\" --prompt '
-        in text
+    result, _env, launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
+            "TRIAD_PROVIDER_MARKER": str(marker),
+        },
+        fake_scripts={
+            "codex": provider_script,
+            "claude": provider_script,
+            "gemini": provider_script,
+            "agy": provider_script,
+        },
+        arg="--install",
     )
-    assert 'TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude -p' not in text
-    assert 'TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-claude_wrapper.py' not in text  # bare name gone
-    assert 'TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD:-$LAUNCHER_DIR' not in text  # unquoted path gone (now shell-quoted)
-    assert '--allowedTools Read}' not in text  # the weaker direct posture is gone
 
-
-def test_default_gemini_auth_probe_uses_wrapper_sandbox_path():
-    # finding #7 (+ Q7 re-confirm): the gemini auth probe must route through the
-    # ABSOLUTE launcher path $LAUNCHER_DIR/gemini_wrapper.py --sandbox read-only
-    # (Policy-Engine deny; shadow-proof + pinned), not a direct `gemini -p` or a
-    # bare `gemini_wrapper.py`.
-    text = BOOTSTRAP.read_text(encoding="utf-8")
-    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-\\"$LAUNCHER_DIR/gemini_wrapper.py\\" --prompt ' in text
-    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini -p' not in text
-    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-gemini_wrapper.py' not in text  # bare name gone
-    assert 'TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD:-$LAUNCHER_DIR' not in text  # unquoted path gone (now shell-quoted)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not marker.exists()
+    for name in ("triad-setup", "triad-doctor"):
+        launcher = launchers / name
+        assert launcher.is_file()
+        assert os.access(launcher, os.X_OK)
+        assert "triad_runtime.py" in launcher.read_text(encoding="utf-8")
 
 
 def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
@@ -658,7 +638,152 @@ def test_check_refuses_to_overwrite_unmanaged_launcher(tmp_path):
     )
 
 
-def test_optional_gemini_launcher_does_not_require_missing_pinned_binary(tmp_path):
+@pytest.mark.parametrize(
+    ("name", "marker", "dangling"),
+    [
+        ("claude_wrapper.py", "# triad-codex-dispatch managed launcher\n", False),
+        ("claude_wrapper.py", "# triad-codex-dispatch managed launcher\n", True),
+        ("triad-setup", "# triad-codex-dispatch managed runtime command\n", False),
+        ("triad-setup", "# triad-codex-dispatch managed runtime command\n", True),
+    ],
+)
+def test_install_refuses_symlinked_managed_targets_without_mutating_them(
+    tmp_path: Path, name: str, marker: str, dangling: bool
+) -> None:
+    launcher_dir = tmp_path / "linked-launchers"
+    launcher_dir.mkdir()
+    linked_target = tmp_path / "linked-target"
+    if not dangling:
+        linked_target.write_text(marker, encoding="utf-8")
+        expected = linked_target.read_bytes()
+    link = launcher_dir / name
+    link.symlink_to(linked_target)
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        pre_path=(launcher_dir,),
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir)},
+    )
+
+    assert result.returncode != 0
+    assert link.is_symlink()
+    if dangling:
+        assert not linked_target.exists()
+    else:
+        assert linked_target.read_bytes() == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "marker", "dangling"),
+    [
+        ("claude_wrapper.py", "# triad-codex-dispatch managed launcher\n", False),
+        ("claude_wrapper.py", "# triad-codex-dispatch managed launcher\n", True),
+        ("triad-setup", "# triad-codex-dispatch managed runtime command\n", False),
+        ("triad-setup", "# triad-codex-dispatch managed runtime command\n", True),
+    ],
+)
+def test_remove_leaves_symlinked_targets_untouched(
+    tmp_path: Path, name: str, marker: str, dangling: bool
+) -> None:
+    launcher_dir = tmp_path / "linked-launchers"
+    launcher_dir.mkdir()
+    linked_target = tmp_path / "linked-target"
+    if not dangling:
+        linked_target.write_text(marker, encoding="utf-8")
+        expected = linked_target.read_bytes()
+    link = launcher_dir / name
+    link.symlink_to(linked_target)
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--remove",
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert link.is_symlink()
+    if dangling:
+        assert not linked_target.exists()
+    else:
+        assert linked_target.read_bytes() == expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "name"),
+    [
+        ("--install", "claude_wrapper.py"),
+        ("--install", "triad-setup"),
+        ("--remove", "claude_wrapper.py"),
+        ("--remove", "triad-setup"),
+    ],
+)
+def test_fifo_targets_are_rejected_without_blocking(
+    tmp_path: Path, mode: str, name: str
+) -> None:
+    launcher_dir = tmp_path / "fifo-launchers"
+    launcher_dir.mkdir()
+    target = launcher_dir / name
+    os.mkfifo(target)
+
+    try:
+        result, _env, _launchers = _run_bootstrap(
+            tmp_path,
+            arg=mode,
+            pre_path=(launcher_dir,),
+            env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir)},
+            timeout=2,
+        )
+    except subprocess.TimeoutExpired as exc:
+        pytest.fail(f"bootstrap blocked while inspecting FIFO target: {exc}")
+
+    assert stat.S_ISFIFO(target.stat().st_mode)
+    if mode == "--install":
+        assert result.returncode != 0
+    else:
+        assert result.returncode == 0, result.stderr + result.stdout
+
+
+def test_unmanaged_runtime_command_preflight_prevents_partial_install(tmp_path: Path) -> None:
+    launcher_dir = tmp_path / "runtime-launchers"
+    launcher_dir.mkdir()
+    setup = launcher_dir / "triad-setup"
+    setup.write_text("#!/usr/bin/env bash\necho unmanaged\n", encoding="utf-8")
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        pre_path=(launcher_dir,),
+        env_overrides={"TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir)},
+    )
+
+    assert result.returncode != 0
+    assert setup.read_text(encoding="utf-8") == "#!/usr/bin/env bash\necho unmanaged\n"
+    assert not (launcher_dir / "triad-doctor").exists()
+
+
+def test_reinstall_replaces_managed_wrapper_hardlink_without_mutating_peer(tmp_path: Path) -> None:
+    first, env, launcher_dir = _run_bootstrap(tmp_path, arg="--install")
+    assert first.returncode == 0, first.stderr + first.stdout
+    launcher = launcher_dir / "claude_wrapper.py"
+    peer = tmp_path / "launcher-peer"
+    os.link(launcher, peer)
+    with launcher.open("a", encoding="utf-8") as handle:
+        handle.write("# peer must retain this byte sequence\n")
+    peer_before = peer.read_bytes()
+
+    second, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
+    )
+
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert peer.read_bytes() == peer_before
+    assert launcher.read_bytes() != peer_before
+
+
+def test_optional_gemini_launcher_remains_pinned_and_fails_closed_when_pin_is_missing(tmp_path):
     result, _env, launcher_bin = _run_bootstrap(
         tmp_path,
         fake_names=("codex", "claude", "agy"),
@@ -666,8 +791,9 @@ def test_optional_gemini_launcher_does_not_require_missing_pinned_binary(tmp_pat
 
     assert result.returncode == 0, result.stderr + result.stdout
     text = (launcher_bin / "gemini_wrapper.py").read_text(encoding="utf-8")
-    assert "TRIAD_REQUIRE_PINNED_VENDOR" not in text
-    assert "TRIAD_GEMINI_BIN" not in text
+    assert "TRIAD_REQUIRE_PINNED_VENDOR" in text
+    assert 'env["TRIAD_REQUIRE_PINNED_VENDOR"] = "1"' in text
+    assert 'env.pop("TRIAD_GEMINI_BIN", None)' in text
 
 
 def test_check_refuses_to_overwrite_unmanaged_codex_command_rules(tmp_path):
@@ -795,34 +921,46 @@ def test_install_flag_is_primary_and_check_is_deprecated_alias(tmp_path):
 
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
     result2, _env2, _launcher_bin2 = _run_bootstrap(
-        tmp_path, repo_root=repo_root, arg="--check"
-    )
-    assert result2.returncode == 0, result2.stderr + result2.stdout
-    assert "--check is deprecated; use --install" in result2.stdout
-
-    result3, _env3, _launcher_bin3 = _run_bootstrap(
         tmp_path, repo_root=repo_root, arg="--bogus"
     )
-    assert result3.returncode == 2
+    assert result2.returncode == 2
 
 
-def test_install_alias_check_respects_skip_auth_env():
-    # TRIAD_BOOTSTRAP_SKIP_AUTH=1 must keep working on the new --install
-    # path; the harness sets it for every run, so assert the script still
-    # honors it textually AND that no auth probe ran in the alias tests
-    # above (they would fail on the fake CLIs otherwise).
+@pytest.mark.parametrize(
+    ("alias", "canonical"),
+    [("--check", "--install"), ("--uninstall", "--remove")],
+)
+def test_legacy_aliases_are_bounded(tmp_path: Path, alias: str, canonical: str) -> None:
+    result, _env, _launchers = _run_bootstrap(tmp_path, arg=alias, timeout=5)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert f"deprecated alias for {canonical}" in result.stdout
+    assert "removed in the next release after 0.2.526" in result.stdout
+
+
+def test_second_install_completes_within_timeout(tmp_path: Path) -> None:
+    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    assert first.returncode == 0, first.stderr + first.stdout
+
+    second, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
+        arg="--install",
+        timeout=5,
+    )
+    assert second.returncode == 0, second.stderr + second.stdout
+
+
+def test_bootstrap_removes_auth_probe_configuration():
     text = BOOTSTRAP.read_text(encoding="utf-8")
-    assert "TRIAD_BOOTSTRAP_SKIP_AUTH" in text
-
-
-# --- Fast-follow: auth probe + claude minimum version -----------------------
-
-
-def test_default_codex_auth_probe_uses_login_status():
-    text = BOOTSTRAP.read_text(encoding="utf-8")
-
-    assert "TRIAD_BOOTSTRAP_CODEX_AUTH_CMD:-codex login status" in text
-    assert "codex doctor" not in text
+    assert "run_auth_probe" not in text
+    assert "check_auth" not in text
+    assert "TRIAD_BOOTSTRAP_AUTH_TIMEOUT" not in text
+    assert "TRIAD_BOOTSTRAP_SKIP_AUTH" not in text
+    assert "TRIAD_BOOTSTRAP_CODEX_AUTH_CMD" not in text
+    assert "TRIAD_BOOTSTRAP_CLAUDE_AUTH_CMD" not in text
+    assert "TRIAD_BOOTSTRAP_GEMINI_AUTH_CMD" not in text
+    assert "TRIAD_BOOTSTRAP_AGY_AUTH_CMD" not in text
 
 
 def test_claude_version_minimum_warns_on_old_version(tmp_path):
