@@ -30,6 +30,14 @@ Later plans may consume earlier interfaces but may not retrofit an earlier skill
 - Claude capacity remains unavailable until the owner says otherwise. The final skill/prompt quality gate is therefore labeled `interim-four-leg` and uses two independent exact Gemini Pro High legs plus two independent fresh Codex legs on identical frozen bytes. It is not represented as a formal three-family review.
 - The final gate runs deterministic `skill-prompt-review` lint on every changed skill, reference, and authored dispatch prompt, then fresh semantic reviews and clean/planted-defect behavior controls. Findings are reconciled by evidence, not votes.
 
+## Timeout accounting and progress checks
+
+- Static analysis/build/test time and LLM review time are separate measurements. A static command gets a deterministic hang guard sized to that command; it never donates or removes time from an LLM leg.
+- LLM dispatch timeout is chosen from the selected route/model, reasoning effort, frozen input bytes, and requested review depth. Higher reasoning, a more capable/slower model, or a larger affected-code archive increases the allowance; the shipped workflow must not reuse a fixed ten-minute static-analysis limit for every LLM call.
+- Native subagent waits are event-driven. A `wait_agent` timeout is only a leader wake-up boundary, not failure evidence. The leader may request an intermediate checkpoint or inspect agent status when useful, and does not interrupt or respawn a healthy agent merely because one wait boundary elapsed.
+- External provider legs record the configured timeout, elapsed time, last observable progress/classification, and whether a bounded follow-up or rerun was requested. A timeout is terminal only when the provider process actually reaches its configured deadline and the wrapper classifies it as such.
+- Long-running reviewers may be asked for a compact progress checkpoint (current phase, files inspected, blocker, remaining work) without changing their review scope or contaminating independent conclusions.
+
 ## Task Gate
 
 For each task:

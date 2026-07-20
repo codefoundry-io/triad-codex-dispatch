@@ -232,8 +232,8 @@ def test_install_never_executes_provider_binaries(tmp_path: Path) -> None:
 def test_legacy_aliases_are_bounded(tmp_path: Path, alias: str, canonical: str) -> None:
     result, _env, _launchers = _run_bootstrap(tmp_path, arg=alias)
     assert result.returncode == 0, result.stderr + result.stdout
-    assert f"deprecated alias for {canonical}" in result.stderr
-    assert "removed in the next release after 0.2.526" in result.stderr
+    assert f"deprecated alias for {canonical}" in result.stdout
+    assert "removed in the next release after 0.2.526" in result.stdout
 
 
 def test_optional_gemini_launcher_remains_pinned_and_fails_closed_when_pin_is_missing(tmp_path: Path) -> None:
