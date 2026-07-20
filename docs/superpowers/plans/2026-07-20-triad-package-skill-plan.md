@@ -17,7 +17,7 @@
 - Malformed/mutated package or equal-version source/install drift is `version-config`, exits `78`, and blocks dispatch. Unknown source commit is JSON `null`, never guessed.
 - Formal fresh Codex uses a default child with explicit current leader-selected `model`, `reasoning_effort`, and `fork_turns="none"`; record exposed actual values or `unexposed`, never a Custom Agent or `fork_context`. Shipped skill text uses moving-target placeholders rather than pinning an aging model identifier.
 - Deterministic tests have no provider dependency. Korean docs remain semantically equivalent to English.
-- Every Python/test/lint command is an authoritative run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. First record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`, then use that literal `python3`; snippets assume the repository worktree is supplied as the command working directory.
+- Every Python/test/lint command is an authoritative run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. First record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`; when it lacks pytest, use the already verified `/opt/homebrew/bin/python3.12` without altering the environment. Snippets assume the repository worktree is supplied as the command working directory.
 
 ## File Map
 

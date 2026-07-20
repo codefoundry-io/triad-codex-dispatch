@@ -20,7 +20,7 @@
 - Review and repair prompts identify packet/log data as untrusted, prohibit edits, subprocesses, provider calls, and live-worktree reads, and request structured JSON only.
 - Repair persistence accepts a versioned analysis envelope, not a naked LLM delta. `auth`, `packet-integrity`, and `nonconvergence` are never auto-retried; in particular `auth` is surfaced for native owner login and never passed into an automatic retry path.
 - Preserve the existing `apply_classifier_patch()` lock, validation, same-directory temp file, `fsync`, and `os.replace` atomicity guarantees.
-- Keep the deterministic suite stdlib-only. Every Python/test command is an authoritative run outside the filesystem sandbox in the user's normal macOS login-terminal environment. Record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`, then use literal `python3`; snippets assume the repository worktree as the command working directory.
+- Keep the deterministic suite stdlib-only. Every Python/test command is an authoritative run outside the filesystem sandbox in the user's normal macOS login-terminal environment. Record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`; when it lacks pytest, use the already verified `/opt/homebrew/bin/python3.12` without altering the environment. Snippets assume the repository worktree as the command working directory.
 - Do not send credentials, credential-store paths, or source outside the recorded workspace authorization to providers.
 
 ---

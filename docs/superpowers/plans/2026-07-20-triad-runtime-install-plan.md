@@ -16,7 +16,7 @@
 - Setup persists no credential values: only canonical workspace root, fixed routes `claude`/`google`, authorization, approval posture, no-prompt boolean, and required environment-variable names.
 - Preserve managed-file refusal, workspace-escape validation, pinned launchers, and `--remove` behavior.
 - The only legacy aliases are `--check -> --install` and `--uninstall -> --remove`; both warn `removed in the next release after 0.2.526`.
-- Every Python/test command is an authoritative run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. First record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`, then use that literal `python3`. Command snippets assume the repository worktree is supplied as the command working directory; do not implement them as `cd ... && ...` command strings.
+- Every Python/test command is an authoritative run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. First record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`. If that interpreter lacks pytest, verify and use an already installed versioned interpreter rather than installing into or changing the user's environment; the current verified test interpreter is `/opt/homebrew/bin/python3.12`. Command snippets assume the repository worktree is supplied as the command working directory; do not implement them as `cd ... && ...` command strings.
 - `--no-prompt` is valid only with `--approval-policy never`; reject every contradictory setup request before writing state.
 
 ## File Structure
@@ -340,7 +340,7 @@ def test_live_doctor_auth_is_terminal_and_argv_is_absolute(monkeypatch: pytest.M
     assert runtime.live_doctor(tmp_path, [], 2, True) == 1
     report = json.loads(capsys.readouterr().out)
     claude = next(x for x in report["probes"] if x["provider"] == "claude")
-    assert claude["argv"] == [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--timeout", "2"]
+    assert claude["argv"] == [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--timeout", "2", "--repair-mode"]
     assert claude["family"] == "auth" and claude["retry"] is False
 ```
 
@@ -379,14 +379,15 @@ def live_probe_argv(paths: RuntimePaths, provider: str, timeout_seconds: int) ->
     if provider == "codex": return [str(paths.codex_bin), "login", "status"]
     launcher = {"claude": paths.claude_launcher, "google": paths.antigravity_launcher, "gemini": paths.gemini_launcher}[provider]
     if launcher is None: raise ValueError("gemini is not installed")
-    return [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--timeout", str(timeout_seconds)]
+    return [str(launcher.resolve()), "--prompt", "Return exactly OK.", "--sandbox", "read-only", "--timeout", str(timeout_seconds), "--repair-mode"]
 
 
 def live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_json: bool) -> int:
     probes = []
     paths = resolve_runtime_paths()
     for provider in ("codex", "claude", "google") + (("gemini",) if paths.gemini_launcher else ()):
-        result = run_argv(live_probe_argv(paths, provider, timeout_seconds), timeout_seconds=timeout_seconds)
+        outer_timeout = timeout_seconds if provider == "codex" else timeout_seconds + 15
+        result = run_argv(live_probe_argv(paths, provider, timeout_seconds), timeout_seconds=outer_timeout)
         family = "ok" if result.returncode == 0 else result.family
         probes.append({"provider": provider, "argv": list(result.argv), "returncode": result.returncode,
                        "family": family, "retry": family not in {"auth", "packet-integrity", "nonconvergence"}})
@@ -394,6 +395,8 @@ def live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_j
     print(json.dumps(report, ensure_ascii=False) if as_json else json.dumps(report, indent=2, ensure_ascii=False))
     return 0 if not findings and all(x["family"] == "ok" for x in probes) else 1
 ```
+
+The wrapper's own `--timeout` is the primary provider deadline. `--repair-mode` disables server-capacity retry for this one-shot health probe, and the outer runtime gives the wrapper 15 additional seconds to terminate its separately sessioned vendor child (the wrapper currently allows up to two five-second TERM/KILL waits plus drain time). Add a hermetic nested-session regression: a fake wrapper starts a child with `start_new_session=True`, enforces its own shorter deadline, kills/reaps that group, and exits before the outer grace; assert no child survives. The test must clean the child explicitly in `finally` even when the assertion fails. Never rely on outer process-group termination to reach a vendor session created by a wrapper.
 
 Add an argparse `verify-execpolicy` subcommand that prints one finding per line and returns `0` only when `verify_execpolicy()` returns an empty list. Bootstrap invokes it immediately after `install_codex_rules` with the absolute `command -v codex`, rules path, and launcher directory; any non-zero return calls `fail "static execpolicy verification failed"`. `static_findings` calls the same function directly. When rules are opted out, static doctor emits one note and skips rule evaluation. Do not add command-string overrides or retries.
 

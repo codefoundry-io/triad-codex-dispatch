@@ -22,7 +22,7 @@
 - Ordinary mode requires archive integrity, all requested change inventories, a complete manifest, and a supplied coverage ledger. Formal mode adds a minted non-adoptable ID, provider exports, and dispatch/acceptance verification; it must not weaken any ordinary-mode check.
 - The immutable subtree is `<review-record>/packet/`. Future verdicts, receipts, and resolution records belong beside it, not inside it, so their creation cannot change verified packet bytes.
 - `review_scratch.py` remains the sole owner of the `.active` marker format and close/prune ownership fence. `.gitignore` continues to exclude `_runs/`; no review evidence is staged by default.
-- Every Python/test command is an authoritative run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. First record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`, then use that literal `python3`; snippets assume the repository worktree is supplied as the command working directory.
+- Every Python/test command is an authoritative run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. First record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`; when it lacks pytest, use the already verified `/opt/homebrew/bin/python3.12` without altering the environment. Snippets assume the repository worktree is supplied as the command working directory.
 
 ---
 

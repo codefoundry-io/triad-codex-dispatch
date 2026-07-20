@@ -20,7 +20,7 @@ Later plans may consume earlier interfaces but may not retrofit an earlier skill
 
 ## Cross-Plan Invariants
 
-- All direct Python, test, lint, and bootstrap verification commands run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. Record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`, then use literal `python3`. The root leader supplies the repository worktree as `workdir`; no `cd ... && ...` command string is needed.
+- All direct Python, test, lint, and bootstrap verification commands run in the user's normal macOS login-terminal environment, outside the filesystem sandbox. Record `command -v python3`, `python3 --version`, and `python3 -m pytest --version`. If that interpreter lacks pytest, inspect an already installed versioned `python3.12`, record the same evidence, and use it without installing or changing the user's environment. On 2026-07-20 this selected `/opt/homebrew/bin/python3.12` because the login-shell `python3` was 3.14.6 without pytest. The root leader supplies the repository worktree as `workdir`; no `cd ... && ...` command string is needed.
 - External process transport is list-form argv with `shell=False`. Prompts and hostile literals travel through a UTF-8 prompt file or a typed argument, never shell interpolation.
 - `<review-record>/packet/` is immutable after sealing. Exports, receipts, verdicts, provenance, and resolution records are sibling subtrees of `<review-record>`.
 - Every raw external path is absolute, checks all existing components for symlinks before resolution, and is then proved canonically contained below its allowed root.
