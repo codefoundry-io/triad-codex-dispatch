@@ -308,8 +308,11 @@ git commit -m "feat: make bootstrap installation deterministic"
 
 **Interfaces:**
 - Produces: `verify_execpolicy(codex_bin: Path, rules_path: Path, launcher_dir: Path) -> list[str]`
+- Produces internal bounded local runner: `_run_execpolicy_check(codex_bin: Path, rules_path: Path, command: Sequence[str]) -> ProbeResult`
 - Produces: `live_probe_argv(paths: RuntimePaths, provider: str, timeout_seconds: int) -> list[str]`
 - Produces: `live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_json: bool) -> int`
+- Produces: installer-owned runtime context for the absolute Codex executable, sibling launcher directory, rules path/enabled posture, and install-time Gemini vendor availability; caller environment and mutable `PATH` cannot override it.
+- Produces: `live_outer_timeout(provider: str, provider_timeout_seconds: int) -> int`, including bounded route preflight and cleanup overhead.
 - Produces internal CLI: `verify-execpolicy --codex-bin ABSOLUTE --rules ABSOLUTE --launcher-dir ABSOLUTE`
 - `RuntimePaths`: `codex_bin`, `claude_launcher`, `antigravity_launcher`, `gemini_launcher: Path | None`.
 
@@ -344,6 +347,8 @@ def test_live_doctor_auth_is_terminal_and_argv_is_absolute(monkeypatch: pytest.M
     assert claude["family"] == "auth" and claude["retry"] is False
 ```
 
+`write_fake_execpolicy_cli` must be the same fake Codex executable installed into bootstrap's isolated `PATH`, and the shared default fake-binary fixture must recognize `execpolicy check`, record its exact argv, and emit the native object JSON shapes. Rules are enabled by default, so no unrelated bootstrap test may depend on a non-JSON fake Codex response for this local subcommand.
+
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run outside the filesystem sandbox with the repository as workdir: `python3 -m pytest tests/test_bootstrap.py::test_execpolicy_verifier_uses_native_argv_contract_without_provider_calls tests/test_triad_runtime.py::test_live_doctor_auth_is_terminal_and_argv_is_absolute -q -p no:cacheprovider`
@@ -368,7 +373,7 @@ def verify_execpolicy(codex_bin: Path, rules_path: Path, launcher_dir: Path) -> 
              ("prompt", ["bash", "-lc", f"{launcher_dir / 'claude_wrapper.py'} --prompt static"]))
     findings = []
     for expected, command in cases:
-        result = run_argv([str(codex_bin), "execpolicy", "check", "--rules", str(rules_path), *(str(x) for x in command)], timeout_seconds=10)
+        result = _run_execpolicy_check(codex_bin, rules_path, [str(x) for x in command])
         actual = json.loads(result.stdout).get("decision", "prompt") if result.returncode == 0 else "error"
         if actual != expected:
             findings.append(f"execpolicy expected {expected}, got {actual}: {command!r}")
@@ -386,7 +391,7 @@ def live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_j
     probes = []
     paths = resolve_runtime_paths()
     for provider in ("codex", "claude", "google") + (("gemini",) if paths.gemini_launcher else ()):
-        outer_timeout = timeout_seconds if provider == "codex" else timeout_seconds + 15
+        outer_timeout = live_outer_timeout(provider, timeout_seconds)
         result = run_argv(live_probe_argv(paths, provider, timeout_seconds), timeout_seconds=outer_timeout)
         family = "ok" if result.returncode == 0 else result.family
         probes.append({"provider": provider, "argv": list(result.argv), "returncode": result.returncode,
@@ -396,7 +401,19 @@ def live_doctor(workspace: Path, findings: list[str], timeout_seconds: int, as_j
     return 0 if not findings and all(x["family"] == "ok" for x in probes) else 1
 ```
 
-The wrapper's own `--timeout` is the primary provider deadline. `--repair-mode` disables server-capacity retry for this one-shot health probe, and the outer runtime gives the wrapper 15 additional seconds to terminate its separately sessioned vendor child (the wrapper currently allows up to two five-second TERM/KILL waits plus drain time). Add a hermetic nested-session regression: a fake wrapper starts a child with `start_new_session=True`, enforces its own shorter deadline, kills/reaps that group, and exits before the outer grace; assert no child survives. The test must clean the child explicitly in `finally` even when the assertion fails. Never rely on outer process-group termination to reach a vendor session created by a wrapper.
+`_run_execpolicy_check` is a dedicated local-only, list-form, `shell=False` transport whose executable and fixed prefix are exactly `[codex_bin, "execpolicy", "check", "--rules", rules_path]`. It has its own ten-second deterministic hang guard and process cleanup, and it never delegates to the provider-capable public `run_argv`. This preserves the earlier `static_findings()` invariant: among probe transports, static doctor may start only the local Codex policy evaluator; the previously specified local `bash -n` and Python compilation checks remain permitted. Static doctor must still make zero wrapper, vendor, provider, or network calls. Keep the existing monkeypatched-`run_argv` test green and add a focused assertion that the local verifier cannot substitute another executable or command prefix.
+
+The native evaluator contract is exit `0` plus an object-shaped JSON document. An explicit `decision` must equal the expected value; a valid object with no `decision` means `prompt`. Non-zero exit, timeout, empty output, malformed JSON, and non-object JSON each become one stable finding and exit `1`, never a traceback. Stderr warnings accompanying valid stdout JSON are diagnostic only. If command-rule installation refused an unmanaged target, bootstrap must not evaluate that target.
+
+Bootstrap persists its rules posture in the managed `triad-doctor` runtime context. Reinstalling with rules explicitly disabled removes only a bootstrap-managed stale rules file, preserves any unmanaged file, and records the disabled posture independently of file absence. A fresh static doctor with rules disabled emits exactly one non-failing note and performs zero execpolicy, wrapper, vendor, provider, or network calls; a missing rules file while the recorded posture is enabled remains a finding.
+
+The generated runtime command also owns the installer-resolved absolute Codex executable and sibling launcher directory. Prepending hostile same-name commands to `PATH` must not change any live `argv[0]`. Gemini availability is the install-time pinned-vendor state, not the mere presence of the always-generated fail-closed `gemini_wrapper.py` or the later mutable `PATH`; an installation without Gemini probes exactly Codex, Claude, and Google, while an installation with pinned Gemini probes exactly Codex, Claude, Google, and Gemini.
+
+The wrapper's own `--timeout` is the primary provider deadline. `--repair-mode` disables server-capacity retry for this one-shot health probe. `live_outer_timeout` adds exact route overhead rather than model time. Codex uses its direct provider timeout. Claude and Gemini add `15` seconds: two five-second TERM/KILL waits, two two-second drains, and one second of fixed margin. Google adds `82` seconds: `15` seconds for version preflight, `30` for settings acquisition, `2` for PTY TERM/KILL cleanup, `30` for settings release, and `5` seconds of fixed margin. Define named constants for every term and assert the literal terms and sums in tests. Add a hermetic delayed-preflight/lock regression and a nested-session regression: a fake wrapper starts a child with `start_new_session=True`, enforces its own shorter deadline, kills/reaps that group, and exits before the outer deadline; assert no child survives. The test must clean the child explicitly in `finally` even when the assertion fails. Never rely on outer process-group termination to reach a vendor session created by a wrapper.
+
+`run_argv` itself must also remain finite when a defective wrapper exits or is killed while a separately sessioned child retains inherited output pipes. Every TERM, KILL, wait, and pipe-drain phase has an explicit bound; add a failure-path watchdog proving return within the declared timeout plus cleanup bound. The watchdog records the detached PID and kills/reaps it in `finally`, even when the assertion fails. Direct supervision of arbitrary detached descendants is optional future hardening, but supported wrappers must prove they reap their own vendor sessions.
+
+Failure classification consumes combined stdout and stderr. `Not logged in`, login, OAuth, and credential messages on either stream are `auth`; every provider is invoked exactly once and `auth` always reports `retry: false`.
 
 Add an argparse `verify-execpolicy` subcommand that prints one finding per line and returns `0` only when `verify_execpolicy()` returns an empty list. Bootstrap invokes it immediately after `install_codex_rules` with the absolute `command -v codex`, rules path, and launcher directory; any non-zero return calls `fail "static execpolicy verification failed"`. `static_findings` calls the same function directly. When rules are opted out, static doctor emits one note and skips rule evaluation. Do not add command-string overrides or retries.
 
