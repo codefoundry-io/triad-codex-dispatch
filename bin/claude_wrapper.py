@@ -97,12 +97,9 @@ def main() -> int:
         "--model",
         default=None,
         help="Model for the session — claude CLI --model passthrough (an alias "
-             "for the latest, or a full model name). FREE STRING, never enum-"
-             "pinned (models rot; 'no model names in code' rule — the NAME is "
-             "supplied at dispatch, only the flag lives here). Omit = vendor "
-             "default. Guidance (owner 2026-07-18): a fable-class model for "
-             "long-running leader/worker operation; opus-4.8 with --effort xhigh "
-             "for review legs.",
+             "for the latest, or a full model name). Unrestricted FREE STRING "
+             "caller passthrough; no generic wrapper default. Formal-review "
+             "callers must follow the cross-family routing contract.",
     )
     p.add_argument(
         "--effort",

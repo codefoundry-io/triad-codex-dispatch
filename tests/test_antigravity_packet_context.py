@@ -50,6 +50,44 @@ def _write_real_sealed_packet(tmp_path: Path) -> tuple[Path, str]:
     return packet, digest
 
 
+def _run_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    answer: str,
+    *,
+    rc: int = 0,
+    transcript: bool = True,
+    pydantic_cls=None,
+):
+    """Drive the extraction path without starting an AGY provider process."""
+    sentinel = "AGY_DONE_" + "9" * 32
+    monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
+    monkeypatch.setattr(
+        wrapper._pty,
+        "run_via_pty",
+        lambda *_a, **_k: wrapper._pty.PtyResult(
+            f"{answer}\n<<<{sentinel}>>>\n".encode(), rc, False
+        ),
+    )
+    monkeypatch.setattr(
+        wrapper._common,
+        "extract_agy_answer_from_transcript",
+        (lambda *_a, **_k: answer) if transcript else (lambda *_a, **_k: None),
+    )
+    if not transcript:
+        monkeypatch.setattr(
+            wrapper._common,
+            "extract_antigravity_answer",
+            lambda *_a, **_k: (answer, None),
+        )
+    return wrapper._run_agy_with_retry(
+        ["agy", "-p", "review"],
+        "review",
+        30,
+        expected_sentinel=sentinel,
+        pydantic_cls=pydantic_cls,
+    )
+
+
 def test_pty_reports_missing_shebang_interpreter_as_exec_start_error(
     tmp_path: Path,
 ) -> None:
@@ -585,6 +623,81 @@ def test_truncated_done_content_falls_back_to_complete_pty_answer(
     assert result.classification == "ok"
     assert result.exit_code == wrapper._common.EXIT_OK
     assert pty_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("answer", "transcript"),
+    [
+        ("head\n<truncated 200 bytes>\ntail", True),
+        ("head\n  <truncated 7 lines>\t\ntail", False),
+    ],
+)
+def test_zero_exit_own_line_truncation_is_terminal_and_quarantined(
+    answer: str,
+    transcript: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_answer(monkeypatch, answer, transcript=transcript)
+
+    assert result.classification == "truncated-answer"
+    assert result.exit_code == wrapper._common.EXIT_TERMINAL
+    assert result.final_answer is None
+    assert result.extraction_error is not None
+    assert "quarantined" in result.extraction_error
+
+
+def test_truncated_answer_never_reaches_schema_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        wrapper,
+        "validate_response",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("validated")),
+    )
+
+    result = _run_answer(
+        monkeypatch,
+        "head\n<truncated 1 bytes>\ntail",
+        pydantic_cls=object,
+    )
+
+    assert result.classification == "truncated-answer"
+    assert result.schema_repair_attempt == 0
+
+
+def test_nonzero_truncated_answer_remains_vendor_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_answer(monkeypatch, "head\n<truncated 2 lines>\ntail", rc=17)
+
+    assert result.classification == "vendor-error"
+
+
+def test_inline_truncation_text_is_not_a_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answer = "The vendor printed <truncated 2 lines> inline."
+    result = _run_answer(monkeypatch, answer)
+
+    assert result.classification == "ok"
+    assert result.final_answer == answer
+
+
+def test_singular_truncation_text_is_not_a_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answer = "head\n<truncated 1 byte>\ntail"
+    result = _run_answer(monkeypatch, answer)
+
+    assert result.classification == "ok"
+    assert result.final_answer == answer
+
+
+def test_truncated_answer_maps_to_terminal_exit() -> None:
+    assert (
+        wrapper._common.map_classification_to_exit("truncated-answer")
+        == wrapper._common.EXIT_TERMINAL
+    )
 
 
 def test_preflight_proves_packet_identity_without_starting_provider(

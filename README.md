@@ -29,9 +29,11 @@ reaches out to the other families for you.
 - A generated Codex profile on the Codex permission-profile system
   (`default_permissions = "triad_leader"`, extending `:workspace`; no legacy
   `sandbox_mode` keys) plus command rules for the wrapper launchers — both
-  installed by default. By default, the generated triad profile omits
-  `approval_policy` and `approvals_reviewer`, so Codex inherits the owner's
-  existing layered approval configuration unchanged.
+  installed by default. The dedicated profile sets
+  `approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`;
+  the exact absolute-launcher rules use `prompt` so provider calls reach that
+  reviewer. Bootstrap does not replace the approval keys in the owner's base
+  `config.toml`.
 - One installed read-only `triad-repair-analyzer` Custom Agent for classifier
   gaps. The analyzer returns a proposal; the leader writes only that proposal
   to a unique UTF-8 JSON file. The owner applies it with the deterministic
@@ -44,8 +46,9 @@ reaches out to the other families for you.
 
 ## Required (~2 minutes)
 
-Three steps get you a working install that preserves your existing approval
-configuration. Everything past this section is optional.
+Three steps get you a working install with automatic review in the dedicated
+triad profile while leaving the base approval settings unchanged. Everything
+past this section is optional.
 
 1. **Native vendor logins.** Install and log in to the leader `codex` and the
    workers you will use — the toolkit issues/refreshes no credentials:
@@ -78,7 +81,7 @@ configuration. Everything past this section is optional.
    Its shebang makes the shipped script directly executable.
 
    Before its first mutation, the script verifies that the selected Python can
-   import the Pydantic 2 APIs used by formal review. If not, it stops and prints
+   import the Pydantic 2 APIs used by the toolkit. If not, it stops and prints
    an argv-safe command equivalent to
    `python3 -m pip install -r <absolute-plugin-path>/requirements.txt`. Run that
    command in the Python environment you own, then rerun bootstrap. Bootstrap
@@ -86,9 +89,17 @@ configuration. Everything past this section is optional.
 
    The script installs the runtime profile, command rules, and three provider
    wrapper commands. It does not run provider login or model probes. The
-   installed absolute-launcher rules automatically allow those wrapper commands
-   to run outside the sandbox without a repeated approval prompt. Other
-   commands continue to use your inherited approval configuration.
+   installed absolute-launcher rules prompt on those wrapper commands, and the
+   dedicated profile routes eligible prompts to Codex automatic review. When the
+   owner explicitly invokes the matching triad skill and the approved provider
+   input excludes credentials, tokens, cookies, and authentication files, that
+   request carries the authorization context the reviewer needs. Review still
+   fails closed on a denial, timeout, missing authorization, or unsafe input.
+
+   Automatic review is an execution-time security check, not owner workflow
+   authorization. Commit, push, plugin or dependency installation, release, and
+   publication remain separate owner decisions; the leader must not initiate
+   them merely because `approvals_reviewer = "auto_review"` is active.
 
    > **Placement invariant (hard).** Run bootstrap from your project workspace,
    > not from a directory that contains the install targets. Bootstrap writes the
@@ -115,20 +126,24 @@ subsection only when its "do this ONLY if…" line applies to you.
 
 ### No-prompt posture (heavy users)
 
-The installed absolute-launcher rules automatically allow the three provider
-launchers; other commands use your inherited approval configuration. *Do this ONLY if
-you want the whole dedicated triad session
-to have no interactive approval requests and to start with the hardened wrapper
-environment pinned.* Add `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the
-managed shell entry to the bootstrap command.
+By default the exact launcher rules use `prompt`. *Do this ONLY if you want the
+whole dedicated triad session to have no interactive approval requests and to
+start with the hardened wrapper environment pinned.* Add
+`TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the managed shell entry to the
+bootstrap command.
 
-Setting `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` explicitly emits only
-`approval_policy = "never"`; it remains an opt-in advanced mode and never
-changes `approvals_reviewer`.
+That explicit setting emits `approval_policy = "never"` in the dedicated
+profile and rewrites the three managed launcher rules to `allow`, preserving the
+advanced no-prompt exception. The profile still contains
+`approvals_reviewer = "auto_review"`, but automatic review is inactive when the
+approval policy is `never`.
 
 > **Warning — session-wide scope.**
 > `approval_policy=never` applies to the whole triad Codex session, not only this
-> plugin. Do not run unrelated work in that session.
+> plugin. The generated launcher rules are user-layer rules, so their `allow`
+> decision is not profile-local. Do not run unrelated work in that session, and
+> rerun the default bootstrap command before returning to the automatic-review
+> posture.
 
 Set the two options in the normal terminal:
 
@@ -247,18 +262,52 @@ returns Claude's answer. You will see a one-line success summary on stderr:
 answer); `exit=0` is success. Swap `triad-claude-dispatch` for
 `triad-antigravity-dispatch` to consult the Google-family (`agy`) leg the same way.
 
+### Worktree-first cross-family review
+
+When the owner explicitly invokes `triad-cross-family-review`, that one request
+authorizes the named Claude, Google-family, and fresh Codex review legs over the
+stated source scope. The leader records that authorization once and does not ask
+again for every leg. Provider-visible inputs must still exclude credentials,
+tokens, cookies, authentication files, environment dumps, and unrelated paths.
+
+The existing Git worktree is the only source root for a normal or formal review.
+This existing worktree remains the canonical source throughout the round.
+The leader selects uncommitted changes, a revision range, or one commit; captures
+one trusted Git status/diff with fixed read-only Git arguments; and gives the
+same worktree root, scope, objective, and captured output to every reviewer. The
+diff is an entry point, not the review boundary. Each no-edit reviewer directly
+reads and searches affected unchanged callers, consumers, tests, build files,
+configuration, and governing documentation when relevant. Reviewers do not run
+candidate code, tests, builds, hooks, or generated scripts.
+
+The leader records a lightweight pre-review fingerprint of `HEAD`, the selected
+diff, the complete untracked-path inventory, and Git object hashes for untracked
+contents. After every leg returns, the leader recomputes that fingerprint. A
+change invalidates the round; an unchanged fingerprint admits reconciliation.
+The leader does not edit the worktree while reviewers are running.
+
+This default path creates no source copy, packet, manifest, generated related-file
+list, or snapshot. A source archive is not a hidden prerequisite for a formal
+gate. Small review records may retain the review ID, scope, pre/post fingerprint,
+exact provider commands, and reviewer outputs, but not copied source or
+authentication material. Legacy packet-bound wrapper options may remain for
+explicit compatibility; the installed skill and default gate do not use them.
+Commit, push, install/update, merge, release, and publication still require
+their own owner authorization.
+
 Normal code-write dispatch should run from the target workspace. Path
 containment is OPT-IN: the wrappers reject a `--cwd` / `--prompt-file` outside a
 trusted root ONLY when `TRIAD_WRAPPER_ALLOWED_ROOTS` is set (the managed
 `codex-triad` shell entry pins it together with `TRIAD_WRAPPER_HARDENED=1` — the
 hardened path). By default they do not constrain paths; the boundary rests on the
-isolated `--cwd` worktree + the Codex profile/rules.
+selected `--cwd` worktree, requested wrapper sandbox, and Codex profile/rules.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Codex asks for approval before an installed wrapper call | The generated absolute-launcher rules are missing, disabled, or stale | Rerun the freshly printed bootstrap command with rules enabled. If you intentionally opted out of rules, the prompt is expected. Unrelated commands continue to use your inherited approval configuration; see [No-prompt posture](#no-prompt-posture-heavy-users). |
+| A wrapper call pauses for manual approval instead of automatic review | The dedicated profile is not active, a higher-precedence project/managed setting selects another reviewer, or the generated rules are missing/stale | Rerun the freshly printed bootstrap command with profile and rules enabled, then start a fresh `codex --profile triad-codex-dispatch --search` session. Inspect higher-precedence policy if it persists. |
+| Automatic review denies a wrapper call | Authorization is missing/out of scope, provider-visible input includes excluded credential material, or the reviewer found another unsafe condition | Do not bypass the denial. Narrow the input or obtain the missing owner authorization; otherwise stop. |
 | A dispatch fails with `oauth-env` | The worker CLI's login expired or is missing | Re-run that vendor's native login (`claude` / `agy` OAuth, or `codex login`). The toolkit never re-authenticates for you — it surfaces the signal so you log in. |
 | The gemini leg fails with `IneligibleTier` | The Gemini CLI *individual* tier is deprecated | Use the `agy` (Antigravity) leg — it is the Google-family leg for individual users. `gemini` is only for business / Vertex / API-key accounts. |
 | A new skill isn't available after install/update | Existing Codex sessions don't see newly installed skills | Start a new Codex session (and rerun `bootstrap.sh --install` after a plugin update so launcher paths stay current). |
@@ -272,8 +321,8 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `0` | Success — the answer follows | Nothing. |
 | `4` | The configured provider binary was missing or not executable before submission | Fix that binary. For the AGY route only, Gemini Enterprise fallback is eligible when the wrapper-owned diagnostic also proves this pre-submit failure. |
 | `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
-| `65` | Auth / config / quota (e.g. `oauth-env`, `cli-subscription-cap`) | Re-login or wait for the quota reset — see the classification word. |
-| `66` | Structured-output (`--pydantic`) schema validation failed | In a sealed formal call, `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. |
+| `65` | Auth / config / quota, or a lossy AGY answer (for example `oauth-env`, `cli-subscription-cap`, or `truncated-answer`) | For `truncated-answer`, do not repair it or switch to Gemini; request a new bounded, compact result. For other classes, re-login or wait for the quota reset — see the classification word. |
+| `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The worktree-first formal path does not require the legacy packet-bound schema. |
 | `69` | A code task was blocked / needs more context (codex `--task code`) | Provide the missing context and re-dispatch. |
 
 ## Scope & Limits — What This Does NOT Do
@@ -300,8 +349,9 @@ Honest boundaries, so you know where the toolkit stops:
   after changing `TRIAD_CLASSIFIER_EXTENSION`.
 - **Wrapper containment is process/permission-level, not OS-level confinement.**
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
-  they are not a claim of OS-level isolation. The boundary rests on the isolated
-  `--cwd` worktree + the Codex profile/rules + your review before commit.
+  they are not a claim of OS-level isolation. The boundary rests on process
+  permissions, the selected `--cwd` worktree, the Codex profile/rules, and your
+  review before commit.
 
 ## Update
 
@@ -408,17 +458,16 @@ logs keep full prompts and vendor transcripts as untrusted repair evidence and
 remain until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
 
-For a formal sealed call, the wrapper verifies `PACKET_SHA256, SHA256SUMS, and
-INPUT_SHA256SUMS` before provider resolution. Every normal non-`--repair-mode`
-wrapper invocation that reaches its dispatch driver performs best-effort cleanup of managed
-UUID/file-IPC entries older than 3,600 seconds before provider execution; Antigravity performs it
-before `--preflight-only` as well; cleanup errors never block dispatch, and this is not a perfect
-garbage collector. A sealed formal schema failure is terminal: `schema-fail is terminal
-for that invocation`; the leader may make an explicit new invocation after
-deciding what to do. This schema rule does not disable documented same-prompt
-capacity/transport recovery or the Antigravity headless soft-deny adaptation;
-those preserve the review prompt and packet identity and do not create a
-replacement formal leg.
+Worktree-first review does not use the packet-bound `FormalReview` schema,
+sealed-packet flags, or a source snapshot. Legacy wrapper support for those
+options may remain for explicit compatibility, but it is not part of the normal
+or formal worktree review and is not a gate prerequisite.
+
+Every normal non-`--repair-mode` wrapper invocation that reaches its dispatch
+driver performs best-effort cleanup of managed UUID/file-IPC entries older than
+3,600 seconds before provider execution; Antigravity performs it before
+`--preflight-only` as well. Cleanup errors never block dispatch, and this is not
+a perfect garbage collector.
 
 Antigravity settings under `~/.gemini/antigravity-cli/` are transacted during
 agy calls. Avoid editing agy permissions during triad calls or running another
@@ -440,9 +489,12 @@ that proposal. Full threat model: [SECURITY.md](SECURITY.md).
 ## Notes
 
 - This plugin avoids `danger-full-access`.
-- Generated command rules automatically allow only the absolute launcher files
-  installed under `~/.local/bin` or `TRIAD_BOOTSTRAP_BIN_DIR`; those launchers
-  validate their argv and call the installed plugin cache. Other commands remain
-  under the profile's normal approval policy.
+- Generated command rules match only the absolute launcher files installed
+  under `~/.local/bin` or `TRIAD_BOOTSTRAP_BIN_DIR`; those launchers validate
+  their argv and call the installed plugin cache. They use `prompt` by default
+  and `allow` only for an explicitly bootstrapped `approval_policy=never`
+  posture.
+- Automatic review never supplies owner workflow authorization for commit,
+  push, install, release, or publication.
 - The exact installed `triad-repair-analyzer` uses its pinned read-only sandbox;
   it returns a proposal or escalation and never applies a classifier change.

@@ -22,7 +22,7 @@ The leader renders the owner command from an argv list using Python
 `$()`, or backticks and prevents shell-text reconstruction.
 
 Bootstrap likewise resolves one Python runtime and feature-probes the exact
-Pydantic 2 surface used by formal review before any persistent mutation. It
+Pydantic 2 surface used by the toolkit before any persistent mutation. It
 does not invoke `pip` or download packages. If the probe fails, it renders an
 argv-safe `python -m pip install -r <absolute requirements.txt>` command for the
 owner to run in that same Python environment from a normal terminal.
@@ -47,31 +47,57 @@ still be a poor classification. Treat it as an integrity and routing risk, not a
 code-execution boundary. Inspect applied deltas and use the normal review process
 for material changes.
 
-A formal triad review freezes all reviewed bytes and hashes under one review ID.
-Changing any reviewed byte invalidates that round. A targeted rerun can be
-advisory, but only a fresh ID with every required family is a new formal gate.
-Formal legs use the exact packaged `triad_formal_review_schema:FormalReview`
-operand, the `Critical | Major | Minor` severity vocabulary, and citations to
-exact manifest-enumerated paths under the immutable packet root. Claude and
-Gemini wrappers accept only the paired root/digest context required by that
-schema. A sealed formal call verifies `PACKET_SHA256, SHA256SUMS, and
-INPUT_SHA256SUMS` before provider resolution and fails before provider startup
-when that context is incomplete or unsupported. The model reads
-`INPUT_SHA256SUMS` and cited files through no-follow, root-confined descriptors,
-then verifies the digest, UTF-8 text, and line range. Gemini fallback is
-restricted to explicit pre-submission agy route unavailability; uncertain and
-post-dispatch outcomes remain on the agy failure path.
+A formal triad review uses the existing worktree as its only source root. The
+leader resolves one absolute Git worktree and captures one trusted status/diff
+with fixed, non-mutating Git arguments. Every family receives the same worktree,
+scope, objective, suspect decisions, and captured output. The diff is an entry
+point rather than a review boundary: no-edit reviewers directly read and search
+affected unchanged callers, consumers, tests, build files, configuration, and
+governing documentation when relevant. Reviewers may inspect Git and source but
+do not execute candidate code, tests, builds, hooks, or generated scripts.
 
-Sealed formal wrapper invocations do not perform a hidden schema-repair retry:
-`schema-fail is terminal for that invocation`. A leader may make an explicit new
-invocation after deciding what to do. This schema rule does not disable
-documented same-prompt capacity/transport recovery or the Antigravity headless
-soft-deny adaptation; those preserve the review prompt and packet identity and
-do not create a replacement formal leg. Every normal non-`--repair-mode`
-wrapper invocation that reaches its dispatch driver performs best-effort cleanup of managed
-UUID/file-IPC entries older than 3,600 seconds before provider execution; Antigravity performs it
-before `--preflight-only` as well; cleanup errors never block dispatch, and no perfect garbage
-collector is claimed.
+Before dispatch, the leader records a lightweight fingerprint of `HEAD`, the
+selected diff, the complete untracked-path inventory, and Git object hashes for
+untracked contents. The same fingerprint is recomputed after all legs return.
+Any change invalidates the whole round because families may have observed
+different states; an unchanged result admits reconciliation. The leader does
+not edit the worktree while reviewers are running.
+
+The default path creates no source copy, packet, manifest, generated related-file
+allowlist, or snapshot. A source archive is not a hidden formal-gate
+prerequisite. Small review records may retain the review ID, scope, pre/post
+fingerprint, exact provider commands, and reviewer outputs, but not copied
+source or authentication material. The packet-bound `FormalReview` schema and
+sealed-packet flags are not used by normal or formal worktree review. Legacy
+wrapper support may remain for explicit compatibility, but no installed skill
+or default gate directs users through it.
+
+Gemini fallback is restricted to explicit pre-submission agy route unavailability;
+uncertain and post-dispatch outcomes remain on the agy failure path. Every
+normal non-`--repair-mode` wrapper invocation that reaches its
+dispatch driver performs best-effort cleanup of managed UUID/file-IPC entries
+older than 3,600 seconds before provider execution; Antigravity performs it
+before `--preflight-only` as well. Cleanup errors never block dispatch, and no
+perfect garbage collector is claimed.
+
+## Auto-review boundary
+
+Human-run bootstrap installs a dedicated triad Codex profile with
+`approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`.
+Provenance-marked rules match only the absolute managed launchers for the Claude,
+Antigravity, and Gemini wrappers and use `decision = "prompt"`. They do not grant
+a broad shell, generic Python, or repository-wrapper prefix. The prompt
+justification identifies the exact call as an owner-authorized triad review and
+requires provider-visible input to exclude credentials, tokens, cookies,
+authentication files, environment dumps, and unrelated paths.
+
+Automatic review is an execution-time security decision, not a new source of
+workflow authorization. Denial, timeout, missing authorization, and unsafe
+input fail closed. Commit, push, plugin or dependency install/update, merge,
+release, and publication still require separate owner authorization. The
+explicit `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` compatibility posture is an
+advanced exception: it rewrites the managed rules to `allow`, disables automatic
+review for that dedicated session, and must not be treated as the default.
 
 ## Authentication and reports
 

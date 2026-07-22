@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Workspace-escape invariant (HARD):
-#   Allow-listed files and everything they exec must live OUTSIDE all
+#   Policy-matched files and everything they exec must live OUTSIDE all
 #   sandbox-writable roots.
 # The generated exec-policy rules run the wrapper launchers outside the Codex
-# sandbox WITHOUT prompting. That is only safe when the launchers, the pinned
+# sandbox after automatic review by default, or without review only in the
+# explicit `never` posture. Both are safe only when the launchers, the pinned
 # python3 runtime, the checkout bin/ wrappers they exec, and the Codex policy
 # surface (CODEX_HOME rules/profiles/agents) plus the classifier patch dir are
 # NOT writable from inside a sandboxed session. A workspace-writable launcher
-# (or exec target) is a promptless sandbox-escape chain: the sandbox rewrites
-# the allow-listed file, then asks Codex to run it outside the sandbox.
+# (or exec target) lets the sandbox rewrite a trusted executable before asking
+# Codex to run it outside the sandbox.
 # check_workspace_escape enforces this against the workspace bootstrap is run
 # from ($PWD, the sandbox-writable root) and hard-fails on violation.
 set -u
@@ -39,7 +40,7 @@ Assumes codex and claude, plus agy, or configured Gemini Enterprise/Business,
 Vertex, or API-key routing, are already installed.
 
 Install targets must resolve OUTSIDE the workspace bootstrap runs from:
-allow-listed launchers and everything they exec must live outside all
+policy-matched launchers and everything they exec must live outside all
 sandbox-writable roots (see the header of this script). Bootstrap hard-fails
 otherwise.
 
@@ -49,12 +50,13 @@ $CODEX_HOME/rules/triad-codex-dispatch.rules — so a plain --install with 0 env
 vars yields the recommended setup. The profile uses the Codex permission-profile
 system (default_permissions = "triad_leader"); it never emits legacy sandbox_mode
 / [sandbox_workspace_write], which would disable permission profiles and
-neutralize the triad_leader profile's scoping. By default, it inherits the
-owner's approval settings. The installed absolute-launcher rules automatically
-allow the managed wrapper commands. TRIAD_CODEX_PROFILE_APPROVAL_POLICY is the
-only triad-specific approval-policy override and remains opt-in. For explicitly
-approved heavy-user no-prompt deployments, set it to never; inherited owner
-policy may already be never.
+neutralize the triad_leader profile's scoping. By default, the dedicated profile
+sets approval_policy=on-request and approvals_reviewer=auto_review. The installed
+absolute-launcher rules prompt on the managed wrapper commands so eligible calls
+route through automatic approval review. TRIAD_CODEX_PROFILE_APPROVAL_POLICY is
+the only triad-specific approval-policy override and remains opt-in. For an
+explicitly approved heavy-user no-prompt deployment, set it to never; that
+advanced exception keeps the managed wrapper rules on allow.
 
 Alongside the profile, --install merges Codex's native loader-environment
 policy ([shell_environment_policy] inherit="all" plus explicit
@@ -67,7 +69,7 @@ exactly that marker block. See migration/config-fragment.recommended.toml.
 To opt OUT of the default profile install, set
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=0 (or TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE=1).
 To opt OUT of the default command rules, set TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0
-(or TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1). The generated rules allow only this
+(or TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1). The generated rules match only this
 checkout's authenticated absolute wrapper launchers.
 
 Set TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 to append the managed codex-triad
@@ -531,7 +533,7 @@ PY
     done <<EOF
 $workspace_guard_output
 EOF
-    fail "invariant: allow-listed launchers and everything they exec must live outside all sandbox-writable roots; run bootstrap from a directory that does not contain the install targets, or point the TRIAD_BOOTSTRAP_* / CODEX_HOME overrides outside this workspace"
+    fail "invariant: policy-matched launchers and everything they exec must live outside all sandbox-writable roots; run bootstrap from a directory that does not contain the install targets, or point the TRIAD_BOOTSTRAP_* / CODEX_HOME overrides outside this workspace"
   fi
 }
 
@@ -982,7 +984,7 @@ install_launchers() {
       continue
     }
     {
-      # SEC-3 POSITIVE ENVIRONMENT POLICY. This launcher is allow-listed by
+      # SEC-3 POSITIVE ENVIRONMENT POLICY. This launcher is policy-matched by
       # install_codex_rules and runs OUTSIDE the codex sandbox, so the whole
       # inherited environment is a trust boundary: any inherited loader/runtime
       # var makes an outside-sandbox process run workspace code. The pre-merge
@@ -1083,9 +1085,10 @@ verify_installed_launchers() {
 # The profile + command rules install by DEFAULT (a plain --install with 0 env
 # vars yields the recommended setup). want_codex_profile / want_codex_rules
 # encode that default-ON with two opt-outs each: an explicit ...=0, or the
-# ...SKIP_... escape. The profile inherits the owner's approval settings unless
-# TRIAD_CODEX_PROFILE_APPROVAL_POLICY is set explicitly; the installed exact-
-# launcher rules auto-allow only the managed wrapper commands.
+# ...SKIP_... escape. The dedicated profile explicitly selects auto-review and
+# stays on-request unless TRIAD_CODEX_PROFILE_APPROVAL_POLICY is set. Exact-
+# launcher rules prompt by default; an explicit `never` retains the advanced
+# no-prompt allow behavior.
 want_codex_profile() {
   [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE:-0}" != "1" ] \
     && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-1}" != "0" ]
@@ -1166,7 +1169,7 @@ install_codex_runtime_profile() {
   codex_home="$CODEX_HOME"
 
   # SEC-3 exec-target write-denies (R1): the profile denies write on the
-  # wrapper .py exec targets (bin_dir), the allow-listed launchers
+  # wrapper .py exec targets (bin_dir), the policy-matched launchers
   # (LAUNCHER_DIR), the resolved python3 runtime, and each resolved vendor
   # binary the wrappers exec -- see the header invariant + the python
   # heredoc comment below for why. Resolve the python3 runtime the same way
@@ -1262,18 +1265,15 @@ def toml_string(value: Path) -> str:
     text = str(value)
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-approval_policy_line = (
-    f'approval_policy = {toml_string(approval_policy)}\n'
-    if approval_policy_explicit == "1"
-    else ""
-)
+approval_policy_line = f'approval_policy = {toml_string(approval_policy)}\n'
 
 # --- SEC-3: exec-target write-denies ------------------------------------
 # Workspace-escape invariant (see this script's header): the wrapper .py
-# exec targets (bin_dir), the allow-listed launchers (launcher_dir), the
+# exec targets (bin_dir), the policy-matched launchers (launcher_dir), the
 # python3 runtime, and the vendor CLI binaries the wrappers exec must be
 # non-writable from inside a sandboxed session -- otherwise a tampered exec
-# target is a promptless sandbox-escape chain (spike-proven 2026-07-16: a
+# target is a trusted-executable rewrite chain (promptless in the explicit
+# `never` posture; spike-proven 2026-07-16: a
 # codex session with cwd=the checkout CAN overwrite bin/*.py under the
 # shipped :workspace-extending profile; a "read" deny blocks it; codex's
 # more-specific-wins precedence lets the nested bin/_logs and bin/_debug
@@ -1370,7 +1370,8 @@ sys.stdout.write(
 # or any loaded config layer: legacy sandbox settings disable
 # default_permissions, which would neutralize the triad_leader permission
 # profile's scoping.
-{approval_policy_line}default_permissions = "triad_leader"
+{approval_policy_line}approvals_reviewer = "auto_review"
+default_permissions = "triad_leader"
 
 [permissions.triad_leader]
 description = "Triad leader session: workspace writes plus triad runtime dirs; network on."
@@ -1438,7 +1439,7 @@ EOF
 # retains Codex's default KEY/SECRET/TOKEN exclusions. The explicit excludes
 # drop LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, PYTHON*, BASH_ENV, ENV,
 # PERL5LIB, RUBYOPT, and RUBYLIB before Codex spawns any subprocess, including
-# the allow-listed wrapper launchers that run outside the sandbox. The launcher
+# the policy-matched wrapper launchers that run outside the sandbox. The launcher
 # env scrub remains defense in depth for its own descendant process.
 #
 # G4 (never clobber a user's own config): there is NO stdlib TOML *writer*
@@ -1567,7 +1568,7 @@ install_codex_rules() {
     rm -f "$rules_output"
     return
   }
-if ! python3 - "$codex_home" "$CODEX_RULES_NAME" "$REPO_ROOT" "$LAUNCHER_DIR" >"$rules_output" 2>"$rules_err" <<'PY'
+if ! python3 - "$codex_home" "$CODEX_RULES_NAME" "$REPO_ROOT" "$LAUNCHER_DIR" "$CODEX_PROFILE_APPROVAL_POLICY" "$CODEX_PROFILE_APPROVAL_POLICY_EXPLICIT" >"$rules_output" 2>"$rules_err" <<'PY'
 from pathlib import Path
 import shlex
 import sys
@@ -1579,9 +1580,21 @@ WRAPPERS = (
     ("gemini_wrapper.py", "Gemini business-tier wrapper"),
 )
 
-codex_home_raw, rules_name, repo_root_raw, launcher_dir_raw = sys.argv[1:]
+(
+    codex_home_raw, rules_name, repo_root_raw, launcher_dir_raw,
+    approval_policy, approval_policy_explicit,
+) = sys.argv[1:]
 if not rules_name.endswith(".rules") or "/" in rules_name or "\\" in rules_name:
     print(f"invalid TRIAD_CODEX_RULES_NAME: {rules_name!r}")
+    raise SystemExit(1)
+if approval_policy not in {"never", "on-request", "untrusted"}:
+    print(f"invalid TRIAD_CODEX_PROFILE_APPROVAL_POLICY: {approval_policy!r}")
+    raise SystemExit(1)
+if approval_policy_explicit not in {"0", "1"}:
+    print(
+        "invalid TRIAD_CODEX_PROFILE_APPROVAL_POLICY explicitness flag: "
+        f"{approval_policy_explicit!r}"
+    )
     raise SystemExit(1)
 
 codex_home = Path(codex_home_raw).expanduser()
@@ -1609,11 +1622,19 @@ def unique(values):
         result.append(text)
     return result
 
+advanced_no_prompt = approval_policy == "never" and approval_policy_explicit == "1"
+decision = "allow" if advanced_no_prompt else "prompt"
+
 lines = [
     MARKER,
     "# Generated by scripts/bootstrap.sh --install.",
     "# Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 to refresh.",
-    "# These rules intentionally allow wrapper-specific command prefixes only.",
+    (
+        "# Explicit approval_policy=never exception: these rules allow "
+        "wrapper-specific command prefixes."
+        if advanced_no_prompt
+        else "# These rules prompt on wrapper-specific command prefixes for automatic review."
+    ),
     "# They do not allow broad shell entrypoints such as bash -lc or zsh -lc.",
     "",
 ]
@@ -1623,12 +1644,21 @@ for wrapper, label in WRAPPERS:
     repo_path = repo_root / "bin" / wrapper
     prompt_path = repo_root / "_runs" / "prompts" / "triad-prompt.txt"
     wrapper_paths = unique([str(launcher_path)])
+    justification = (
+        f"Allow authenticated triad {label} commands outside the sandbox."
+        if advanced_no_prompt
+        else (
+            "Require automatic approval review; approve only an owner-authorized "
+            f"triad review through the {label} whose provider-visible input excludes "
+            "credentials, tokens, cookies, and authentication files."
+        )
+    )
 
     lines.extend([
         "prefix_rule(",
         f"    pattern = [{starlark_list(wrapper_paths)}],",
-        '    decision = "allow",',
-        f'    justification = "Allow authenticated triad {label} commands outside the sandbox.",',
+        f'    decision = "{decision}",',
+        f"    justification = {starlark_string(justification)},",
         "    match = [",
         f"        {starlark_string(command_example(launcher_path, '--prompt', 'hi', '--sandbox', 'read-only'))},",
         f"        {starlark_string(command_example(launcher_path, '--prompt-file', prompt_path, '--sandbox', 'read-only'))},",

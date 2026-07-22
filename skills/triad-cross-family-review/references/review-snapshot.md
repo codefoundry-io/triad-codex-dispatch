@@ -1,7 +1,8 @@
 # Review snapshot closure contract
 
-Use the packaged Python helper before a formal dispatch. It defines the default
-source-complete universe as:
+Use this packaged Python helper only when the owner explicitly requests a
+durable, source-complete archive. It is not a prerequisite for worktree review
+and its output is not a provider input by default. The archived universe is:
 
 - every tracked Git index path, except a tracked path deleted in the working tree;
 - every non-ignored untracked path;
@@ -33,7 +34,7 @@ create_snapshot_argv = [
     snapshot_tool,
     "create",
     "--repo", "/absolute/canonical/project-root",
-    "--output-parent", "/absolute/review-id/packet/inputs",
+    "--output-parent", "/absolute/review-archive",
 ]
 verify_snapshot_argv = [
     bootstrap_python,
@@ -44,12 +45,12 @@ verify_snapshot_argv = [
 ]
 ```
 
-Create the snapshot below the not-yet-sealed packet, run `verify`, and freeze
-both canonical JSON receipts plus the entire snapshot tree into the packet
-manifests. Dispatch only when both commands exit zero and the final packet hash
-binds those exact bytes. A byte-identical copy may move to another parent when
-it keeps the generated snapshot directory name, which is the receipt's logical
-snapshot identity. Renaming that directory invalidates verification.
+Create the snapshot in the owner-approved archive location and run `verify`.
+Retain both canonical JSON receipts with the snapshot. Do not silently send the
+archive to a provider or substitute it for direct existing-worktree review. A
+byte-identical copy may move to another parent when it keeps the generated
+snapshot directory name, which is the receipt's logical snapshot identity.
+Renaming that directory invalidates verification.
 
 The `create` command keeps stdout deliberately small for CLI transports: it
 returns only the snapshot root, receipt path, manifest hash, file count, and seal
@@ -57,12 +58,10 @@ state. The complete enumeration and file evidence remain in the referenced
 `SNAPSHOT_RECEIPT.json`; consume that file rather than expecting the full receipt
 on stdout.
 
-Git-ignored bytes are visible in the receipt but are outside the default source
-snapshot. Inspect that inventory before dispatch. If a generated or ignored file
-is a deployed consumer required for the review, the default snapshot is
-insufficient: include it with an evidence-equivalent project snapshot and
-verifier, or mark the formal gate invalid. A diff remains a navigation index,
-not a reason to omit unchanged callers or consumers.
+Git-ignored bytes are visible in the receipt but are outside the archived source
+snapshot. The normal reviewer still reads the existing worktree and traces
+affected unchanged callers or consumers from the diff; the archive never defines
+that review boundary.
 
 A project-specific snapshot tool may replace this helper only when its frozen
 receipt proves the same or stronger enumerated universe, repeated enumeration,

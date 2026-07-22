@@ -210,7 +210,8 @@ def test_bootstrap_help_describes_google_route_fallback() -> None:
     help_text = " ".join(result.stderr.split())
     assert "agy, or configured Gemini Enterprise/Business" in help_text
     assert "only triad-specific approval-policy override" in help_text
-    assert "inherited owner policy may already be never" in help_text
+    assert "sets approval_policy=on-request and approvals_reviewer=auto_review" in help_text
+    assert "advanced exception keeps the managed wrapper rules on allow" in help_text
 
 
 def test_bootstrap_repair_help_exposes_explicit_install_and_remove() -> None:
@@ -1207,12 +1208,12 @@ def _assert_profile_does_not_disable_multi_agent(profile_path: Path) -> None:
     assert "multi_agent" not in data.get("features", {})
 
 
-def test_default_install_installs_profile_rules_and_inherits_approvals(tmp_path):
+def test_default_install_installs_profile_rules_and_enables_auto_review(tmp_path):
     # Default-ON: a plain --install with 0 env vars installs BOTH the runtime
     # profile and the command rules (the recommended setup), and the launcher +
     # classifier + log dir install path is unchanged. It installs exactly one
-    # read-only repair analyzer. The generated profile leaves owner approval
-    # settings unset by default; the no-prompt `never` posture stays opt-in.
+    # read-only repair analyzer. The dedicated profile opts into interactive
+    # automatic approval review; the no-prompt `never` posture stays opt-in.
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -1230,10 +1231,10 @@ def test_default_install_installs_profile_rules_and_inherits_approvals(tmp_path)
     profile = home / ".codex" / "triad-codex-dispatch.config.toml"
     assert profile.is_file()
     assert (home / ".codex" / "rules" / "triad-codex-dispatch.rules").is_file()
-    # SAFETY: default installs inherit the owner's approval configuration.
+    # SAFETY: the dedicated profile uses interactive automatic review by default.
     data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert "approval_policy" not in data
-    assert "approvals_reviewer" not in data
+    assert data["approval_policy"] == "on-request"
+    assert data["approvals_reviewer"] == "auto_review"
     assert data["default_permissions"] == "triad_leader"
     _assert_profile_does_not_disable_multi_agent(profile)
     assert "start a fresh Codex session" in result.stdout
@@ -1248,6 +1249,25 @@ def test_default_install_installs_profile_rules_and_inherits_approvals(tmp_path)
         in apply_text
     )
     assert 'env["TRIAD_CLASSIFIER_EXTENSION"]' in apply_text
+
+
+def test_default_install_routes_exact_wrapper_calls_through_auto_review(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(tmp_path)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    codex_home = Path(env["HOME"]) / ".codex"
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    rules = codex_home / "rules" / "triad-codex-dispatch.rules"
+
+    profile_data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    assert profile_data["approval_policy"] == "on-request"
+    assert profile_data["approvals_reviewer"] == "auto_review"
+
+    rules_text = rules.read_text(encoding="utf-8")
+    assert rules_text.count('decision = "prompt"') == 3
+    assert 'decision = "allow"' not in rules_text
+    assert "owner-authorized triad review" in rules_text
+    assert "credentials, tokens, cookies, and authentication files" in rules_text
 
 
 def test_reinstall_refreshes_the_managed_repair_analyzer(tmp_path: Path) -> None:
@@ -2232,8 +2252,8 @@ def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
 def test_check_supports_workspace_contained_install_targets(tmp_path):
     # Install targets contained in the TOOLKIT checkout are still supported
     # when bootstrap runs from OUTSIDE those directories (cwd=ROOT here).
-    # Running the same layout FROM the containing directory is a promptless
-    # sandbox-escape chain and must hard-fail — see the
+    # Running the same layout FROM the containing directory is a trusted-
+    # executable rewrite chain and must hard-fail — see the
     # test_install_fails_when_*_inside_workspace battery below.
     repo_root = _make_repo_root(tmp_path, real_agents=True)
     workspace_codex = repo_root / ".triad-codex-home"
@@ -2731,8 +2751,8 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "triad-codex-dispatch managed runtime profile" in text
     data = tomllib.loads(text)
     assert "Explicit external-CLI consent profile" in text
-    assert "approval_policy" not in data
-    assert "approvals_reviewer" not in data
+    assert data["approval_policy"] == "on-request"
+    assert data["approvals_reviewer"] == "auto_review"
     assert "sandbox_mode" not in data
     assert "sandbox_workspace_write" not in data
     assert data["default_permissions"] == "triad_leader"
@@ -2754,13 +2774,13 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "Codex runtime profile installed" in result.stdout
 
 
-def test_default_runtime_profile_inherits_owner_approval_settings(tmp_path):
+def test_default_runtime_profile_preserves_base_approval_settings(tmp_path):
     codex_home = tmp_path / "owner-codex-home"
     codex_home.mkdir()
     base_config = codex_home / "config.toml"
     base_config.write_text(
-        'approval_policy = "on-request"\n'
-        'approvals_reviewer = "auto_review"\n',
+        'approval_policy = "never"\n'
+        'approvals_reviewer = "user"\n',
         encoding="utf-8",
     )
 
@@ -2771,12 +2791,13 @@ def test_default_runtime_profile_inherits_owner_approval_settings(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     base_data = tomllib.loads(base_config.read_text(encoding="utf-8"))
-    assert base_data["approval_policy"] == "on-request"
-    assert base_data["approvals_reviewer"] == "auto_review"
+    assert base_data["approval_policy"] == "never"
+    assert base_data["approvals_reviewer"] == "user"
+    assert "auto_review" not in base_data
     profile = Path(env["CODEX_HOME"]) / "triad-codex-dispatch.config.toml"
     profile_data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert "approval_policy" not in profile_data
-    assert "approvals_reviewer" not in profile_data
+    assert profile_data["approval_policy"] == "on-request"
+    assert profile_data["approvals_reviewer"] == "auto_review"
     assert profile_data["default_permissions"] == "triad_leader"
 
 
@@ -2796,12 +2817,33 @@ def test_check_can_install_runtime_profile_with_explicit_approval_policy(
     profile = Path(env["HOME"]) / ".codex" / "triad-codex-dispatch.config.toml"
     data = tomllib.loads(profile.read_text(encoding="utf-8"))
     assert data["approval_policy"] == approval_policy
-    assert data.keys() & {"approval_policy", "approvals_reviewer"} == {
-        "approval_policy"
-    }
+    assert data["approvals_reviewer"] == "auto_review"
 
 
-def test_empty_runtime_profile_approval_policy_inherits_owner_settings(tmp_path):
+def test_explicit_never_profile_preserves_advanced_allow_rules(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "never"},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    codex_home = Path(env["HOME"]) / ".codex"
+    profile_data = tomllib.loads(
+        (codex_home / "triad-codex-dispatch.config.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+    rules_text = (codex_home / "rules" / "triad-codex-dispatch.rules").read_text(
+        encoding="utf-8"
+    )
+
+    assert profile_data["approval_policy"] == "never"
+    assert profile_data["approvals_reviewer"] == "auto_review"
+    assert rules_text.count('decision = "allow"') == 3
+    assert 'decision = "prompt"' not in rules_text
+
+
+def test_empty_runtime_profile_approval_policy_uses_auto_review_default(tmp_path):
     result, env, _launcher_bin = _run_bootstrap(
         tmp_path,
         env_overrides={
@@ -2813,8 +2855,8 @@ def test_empty_runtime_profile_approval_policy_inherits_owner_settings(tmp_path)
     assert result.returncode == 0, result.stderr + result.stdout
     profile = Path(env["HOME"]) / ".codex" / "triad-codex-dispatch.config.toml"
     data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert "approval_policy" not in data
-    assert "approvals_reviewer" not in data
+    assert data["approval_policy"] == "on-request"
+    assert data["approvals_reviewer"] == "auto_review"
     assert data["default_permissions"] == "triad_leader"
 
 
@@ -2898,7 +2940,10 @@ def test_check_can_install_optional_codex_command_rules(tmp_path):
     text = rules.read_text(encoding="utf-8")
     assert "triad-codex-dispatch managed command rules" in text
     assert "Codex command rules installed" in result.stdout
-    assert 'decision = "allow"' in text
+    assert text.count('decision = "prompt"') == 3
+    assert 'decision = "allow"' not in text
+    assert "owner-authorized triad review" in text
+    assert "credentials, tokens, cookies, and authentication files" in text
     assert "bash -lc" in text
     assert "zsh -lc" in text
     assert "python3 -c" in text
@@ -3471,11 +3516,12 @@ def test_remove_rolls_back_public_commands_after_late_command_failure(
 
 
 # --- MUST-land 1: workspace-escape guard -----------------------------------
-# The generated exec-policy allow-rules run the launcher paths OUTSIDE the
-# sandbox without prompting. If any install target (or the checkout the
-# launchers exec) is writable from inside the Codex workspace bootstrap runs
-# from ($PWD = the sandbox-writable root), a sandboxed session can rewrite an
-# allow-listed file and escape without a prompt. Bootstrap must hard-fail.
+# The generated exec-policy rules run the launcher paths OUTSIDE the sandbox
+# after automatic review by default, or without review in the explicit `never`
+# posture. If any install target (or the checkout the launchers exec) is writable
+# from inside the Codex workspace bootstrap runs from ($PWD = the sandbox-writable
+# root), a sandboxed session can rewrite a trusted executable before asking
+# Codex to run it outside. Bootstrap must hard-fail.
 
 
 def test_install_fails_when_codex_home_inside_workspace(tmp_path):
@@ -3536,7 +3582,7 @@ def test_install_fails_when_classifier_dir_inside_workspace(tmp_path):
 
 def test_install_fails_when_repo_root_inside_workspace(tmp_path):
     # The launchers exec <repo_root>/bin/*.py, so a checkout cloned INTO the
-    # workspace is the same promptless escape chain even when the launcher
+    # workspace is the same executable-rewrite chain even when the launcher
     # directory itself lives outside.
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -4351,7 +4397,7 @@ def test_install_fails_when_codex_home_inside_workspace_via_case_variant(tmp_pat
     """macOS case-insensitivity workspace-escape bypass (finding #2, 2026-07-05).
 
     A CODEX_HOME that resolves INSIDE the sandbox-writable workspace through a
-    case-variant path (WS vs ws) is the SAME promptless escape chain as the
+    case-variant path (WS vs ws) is the SAME executable-rewrite chain as the
     plain inside-workspace battery and MUST hard-fail. The guard compared with
     Path.is_relative_to (case-SENSITIVE), so on a case-insensitive FS (macOS APFS
     default) a mixed-case install target slipped past the guard and installed

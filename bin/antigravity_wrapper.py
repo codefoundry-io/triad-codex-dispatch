@@ -227,6 +227,17 @@ def _is_headless_softdeny(text) -> bool:
     return _HEADLESS_SOFTDENY_SIGNATURE in (text or "").lower()
 
 
+_TRUNCATED_ANSWER_RE = re.compile(
+    r"^[ \t]*<truncated [0-9]+ (?:bytes|lines)>[ \t]*$",
+    re.MULTILINE,
+)
+
+
+def _has_truncated_answer_marker(answer) -> bool:
+    """True only for agy's own-line lossy-output marker."""
+    return bool(_TRUNCATED_ANSWER_RE.search(answer or ""))
+
+
 def _add_skip_permissions(cmd):
     """Insert --dangerously-skip-permissions right after argv[0] (the
     empirically-verified working position `agy --dangerously-skip-permissions
@@ -296,12 +307,15 @@ def _run_agy_with_retry(cmd, unsealed_prompt, timeout, *, expected_sentinel,
                             pty "answer" is partial, and its rc=128+signal
                             would otherwise hit the rc gate and mislabel a
                             retriable timeout as terminal vendor-error]
-      - answer present + non-empty, vendor rc==0 -> ("ok", EXIT_OK)
-                                                     [classify NOT called]
+      - answer present + non-empty, vendor rc==0, no truncation marker
+                         -> ("ok", EXIT_OK)          [classify NOT called]
       - answer present + non-empty, vendor rc!=0 -> ("vendor-error",
                             EXIT_TERMINAL)   [P4 rc gate — never a silent ok,
                             never via classify; answer quarantined from stdout,
                             bounded copy in extraction_error -> run-log]
+      - answer present + own-line truncation marker, rc=0
+                         -> ("truncated-answer", EXIT_TERMINAL)
+                            [direct driver gate — quarantined, never schema repair]
       - sentinel found, body empty -> ("extraction-error", EXIT_CLI_FAIL)
                                        [direct — NOT via classify, whose blob
                                         still holds the marker and would
@@ -411,6 +425,20 @@ def _run_agy_with_retry(cmd, unsealed_prompt, timeout, *, expected_sentinel,
                                   f"vendor rc={result.rc} returned a non-empty "
                                   f"answer; surfaced as vendor-error (not ok, "
                                   f"not repair). quarantined answer: {snippet}"))
+            if _has_truncated_answer_marker(answer):
+                snippet = answer if len(answer) <= 2000 else answer[:2000] + " …[truncated]"
+                return finish(
+                    None,
+                    "truncated-answer",
+                    _common.EXIT_TERMINAL,
+                    result.rc,
+                    scrubbed_output=scrubbed,
+                    extraction_error=(
+                        "vendor rc=0 returned an answer containing an own-line "
+                        "truncation marker; surfaced as truncated-answer (not ok, "
+                        f"not repair). quarantined answer: {snippet}"
+                    ),
+                )
             if pydantic_cls is None:
                 return finish(answer, "ok", _common.EXIT_OK, result.rc,
                               scrubbed_output=scrubbed)

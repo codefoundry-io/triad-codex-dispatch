@@ -82,6 +82,7 @@ def map_classification_to_exit(cls: str) -> int:
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # agy: rc!=0 but a non-empty answer — surface, NOT repair
+        "truncated-answer": EXIT_TERMINAL,  # agy: rc=0 own-line truncation marker — surface, NOT repair
         "unknown": EXIT_CLI_FAIL,
     }.get(cls, EXIT_CLI_FAIL)
 
@@ -2488,10 +2489,10 @@ def _prune_audit_archives(log_dir: Path) -> None:
 #
 #   CLASSIFICATION_TOKENS = the classify() result enum (keys of the
 #     map_classification_to_exit dict — the single source of truth).
-#     EXCEPTION (deliberate, P4 2026-07-11): `vendor-error` is in the exit map
-#     but NOT here — it is emitted directly by the agy driver when rc!=0 with a
-#     non-empty answer (a condition a classifier patch cannot express), so it
-#     must never be a proposable repair target.
+#     EXCEPTION (deliberate, P4 2026-07-11): `vendor-error` and
+#     `truncated-answer` are in the exit map but NOT here — they are emitted
+#     directly by the agy driver for conditions a classifier patch cannot
+#     express, so they must never be proposable repair targets.
 #   PATTERN_LIST_NAMES    = the built-in pattern-list constant names an
 #     extension may extend (a proposal's pattern_list must be one of these).
 
