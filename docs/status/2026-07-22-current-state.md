@@ -9,9 +9,10 @@ Date: 2026-07-22
 - Product repository:
   `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability`
 - Branch: `codex/triad-reliability-redesign`
-- Commit: `177c9901d3e43b10f3736742455ad8da70068bed`
-- The local branch and `origin/codex/triad-reliability-redesign` match and the
-  product worktree was clean before this handoff document was added.
+- Repair base: `09b4c59f43d76d2b9c47b13e58bff970b9b7d819`
+- This document is part of the owner-authorized commit/push publication of the
+  approval-inheritance repair. Verify the current `HEAD`, worktree, and remote
+  branch before continuing; do not assume the original uncommitted state.
 
 Preserve the unrelated dirty checkout at
 `/Users/chaniri/triad-codex-dispatch`. Do not reset, clean, copy over, merge
@@ -56,7 +57,7 @@ Two nonblocking follow-ups remain recorded from R14:
 - The owner then ran the shell-entry installation guide. `~/.zshrc` now contains
   the managed `codex-triad()` function.
 
-## Newly discovered distribution defect
+## Approval-inheritance repair complete; commit/push authorized
 
 The owner's existing settings are:
 
@@ -66,8 +67,8 @@ approvals_reviewer = "auto_review"
 ```
 
 They remain unchanged in both `~/.codex/config.toml` and the workspace
-`.codex/config.toml`. However, the generated separate runtime profile currently
-contains:
+`.codex/config.toml`. The previously generated separate runtime profile instead
+contained:
 
 ```toml
 approval_policy = "on-request"
@@ -75,26 +76,47 @@ approvals_reviewer = "user"
 default_permissions = "triad_leader"
 ```
 
-Therefore a session started through the installed `codex-triad` function uses
-`approvals_reviewer="user"` instead of inheriting the owner's Agent review
-setting. `approval_policy=never` was not installed, but this reviewer override
-still violates the owner's requirement to use existing user authority and
-approval configuration unchanged.
+That override violated the owner's requirement to use existing user authority
+and approval configuration unchanged. The installed local profile has now been
+hotfixed by omitting both approval keys.
 
-This defect was discovered after the R14 reviewed commit. It is recorded but
-not fixed. The current general first-install guidance is not ready for release
-until the runtime profile inherits `approval_policy` and `approvals_reviewer`
-by default. `codex-triad` must remain optional, and any explicit session-wide
-`approval_policy=never` mode must remain a separately requested advanced mode.
+Local proof is recorded exactly as:
 
-## Fresh-session boundary
+```text
+TRIAD_LOCAL_CLEAN effective_approval=on-request/auto_review pins=3/3 skills=4/4 catalog_version=0.2.527 profile_permission=triad_leader
+```
 
-The next session begins with evidence-only skill testing. Do not edit source,
-user config, shell RC files, plugin installation, or Git history before the
-owner sees the test results. In particular, do not silently replace Agent
-review, do not set `approval_policy=never`, and do not treat a prompt-only role
-claim as proof of a custom-agent selector.
+The bounded source repair makes the generated profile omit both
+`approval_policy` and `approvals_reviewer` by default, while retaining
+`default_permissions = "triad_leader"`. A nonempty
+`TRIAD_CODEX_PROFILE_APPROVAL_POLICY` in `on-request`, `never`, or `untrusted`
+emits only `approval_policy`; it never emits `approvals_reviewer`. In particular,
+`never` remains an advanced opt-in mode.
 
-After the test report, ask the owner whether to implement the bounded profile
-inheritance repair. If approved, keep it small: profile generation and directly
-affected bootstrap tests/docs only, with no new launcher or permission system.
+Completed verification evidence from the workspace-root login-shell boundary:
+
+- Literal `python3`: Python `3.12.13`; pytest `9.0.3`.
+- Focused bootstrap tests: `4 passed`.
+- Distribution contract: `52 passed`.
+- Final tests-directory run: `608 passed, 6 subtests passed in 125.65s` from
+  `python3 -m pytest /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/tests -q`.
+- Task reviews: approved.
+- Initial whole-diff review: `With fixes` only for the handoff/test-plan items
+  now addressed by the final-review fix wave.
+- Final frozen-artifact re-review: `APPROVED`; no Critical, Important, or Minor
+  findings remained, and all three supplied SHA-256 hashes matched.
+
+This evidence does not rewrite or supersede immutable R14 history. The owner
+authorized commit and push for this bounded repair. Git history and remote-state
+changes go through the workspace's automatic security review and may present an
+approval request. Version/changelog changes, reinstall, release, and
+pull-request creation remain separate and pending.
+
+## Next handoff boundary
+
+Preserve `_runs/reviews/20260722-triad-reliability-formal-r14` as immutable
+history. Do not reinstall, invoke providers, open a pull request, release, bump
+the version or changelog, or modify `/Users/chaniri/triad-codex-dispatch`.
+Commit and push are authorized only for this reviewed bounded repair; if the
+workspace security boundary requests approval, wait for that approval before
+continuing. Verify the resulting local and remote branch state.

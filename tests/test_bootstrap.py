@@ -207,7 +207,10 @@ def test_bootstrap_help_describes_google_route_fallback() -> None:
     )
 
     assert result.returncode == 2
-    assert "agy, or configured Gemini Enterprise/Business" in result.stderr
+    help_text = " ".join(result.stderr.split())
+    assert "agy, or configured Gemini Enterprise/Business" in help_text
+    assert "only triad-specific approval-policy override" in help_text
+    assert "inherited owner policy may already be never" in help_text
 
 
 def test_bootstrap_repair_help_exposes_explicit_install_and_remove() -> None:
@@ -1204,13 +1207,12 @@ def _assert_profile_does_not_disable_multi_agent(profile_path: Path) -> None:
     assert "multi_agent" not in data.get("features", {})
 
 
-def test_default_install_installs_profile_rules_and_prompts_by_default(tmp_path):
+def test_default_install_installs_profile_rules_and_inherits_approvals(tmp_path):
     # Default-ON: a plain --install with 0 env vars installs BOTH the runtime
     # profile and the command rules (the recommended setup), and the launcher +
     # classifier + log dir install path is unchanged. It installs exactly one
-    # read-only repair analyzer. Crucially the generated profile still PROMPTS
-    # by default (approval_policy=on-request): defaulting profile+rules ON must
-    # NOT silently auto-approve — the no-prompt `never` posture stays opt-in.
+    # read-only repair analyzer. The generated profile leaves owner approval
+    # settings unset by default; the no-prompt `never` posture stays opt-in.
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -1228,9 +1230,11 @@ def test_default_install_installs_profile_rules_and_prompts_by_default(tmp_path)
     profile = home / ".codex" / "triad-codex-dispatch.config.toml"
     assert profile.is_file()
     assert (home / ".codex" / "rules" / "triad-codex-dispatch.rules").is_file()
-    # SAFETY: the default profile still prompts (does not auto-approve)
+    # SAFETY: default installs inherit the owner's approval configuration.
     data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert data["approval_policy"] == "on-request"
+    assert "approval_policy" not in data
+    assert "approvals_reviewer" not in data
+    assert data["default_permissions"] == "triad_leader"
     _assert_profile_does_not_disable_multi_agent(profile)
     assert "start a fresh Codex session" in result.stdout
     apply_launcher = _launcher_bin / "triad-apply-repair"
@@ -2727,8 +2731,8 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "triad-codex-dispatch managed runtime profile" in text
     data = tomllib.loads(text)
     assert "Explicit external-CLI consent profile" in text
-    assert data["approval_policy"] == "on-request"
-    assert data["approvals_reviewer"] == "user"
+    assert "approval_policy" not in data
+    assert "approvals_reviewer" not in data
     assert "sandbox_mode" not in data
     assert "sandbox_workspace_write" not in data
     assert data["default_permissions"] == "triad_leader"
@@ -2750,19 +2754,68 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "Codex runtime profile installed" in result.stdout
 
 
-def test_check_can_install_runtime_profile_with_never_policy(tmp_path):
+def test_default_runtime_profile_inherits_owner_approval_settings(tmp_path):
+    codex_home = tmp_path / "owner-codex-home"
+    codex_home.mkdir()
+    base_config = codex_home / "config.toml"
+    base_config.write_text(
+        'approval_policy = "on-request"\n'
+        'approvals_reviewer = "auto_review"\n',
+        encoding="utf-8",
+    )
+
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    base_data = tomllib.loads(base_config.read_text(encoding="utf-8"))
+    assert base_data["approval_policy"] == "on-request"
+    assert base_data["approvals_reviewer"] == "auto_review"
+    profile = Path(env["CODEX_HOME"]) / "triad-codex-dispatch.config.toml"
+    profile_data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    assert "approval_policy" not in profile_data
+    assert "approvals_reviewer" not in profile_data
+    assert profile_data["default_permissions"] == "triad_leader"
+
+
+@pytest.mark.parametrize("approval_policy", ["on-request", "never", "untrusted"])
+def test_check_can_install_runtime_profile_with_explicit_approval_policy(
+    tmp_path, approval_policy
+):
     result, env, _launcher_bin = _run_bootstrap(
         tmp_path,
         env_overrides={
             "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
-            "TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "never",
+            "TRIAD_CODEX_PROFILE_APPROVAL_POLICY": approval_policy,
         },
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
     profile = Path(env["HOME"]) / ".codex" / "triad-codex-dispatch.config.toml"
     data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert data["approval_policy"] == "never"
+    assert data["approval_policy"] == approval_policy
+    assert data.keys() & {"approval_policy", "approvals_reviewer"} == {
+        "approval_policy"
+    }
+
+
+def test_empty_runtime_profile_approval_policy_inherits_owner_settings(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    profile = Path(env["HOME"]) / ".codex" / "triad-codex-dispatch.config.toml"
+    data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    assert "approval_policy" not in data
+    assert "approvals_reviewer" not in data
+    assert data["default_permissions"] == "triad_leader"
 
 
 def test_check_rejects_invalid_runtime_profile_approval_policy(tmp_path):

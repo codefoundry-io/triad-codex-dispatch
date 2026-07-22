@@ -49,12 +49,12 @@ $CODEX_HOME/rules/triad-codex-dispatch.rules — so a plain --install with 0 env
 vars yields the recommended setup. The profile uses the Codex permission-profile
 system (default_permissions = "triad_leader"); it never emits legacy sandbox_mode
 / [sandbox_workspace_write], which would disable permission profiles and
-neutralize the triad_leader profile's scoping. It defaults to
-approval_policy=on-request. The installed absolute-launcher rules automatically allow
-the managed wrapper commands; on-request remains in force for other commands.
-Set TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never only for explicitly approved
-heavy-user no-prompt deployments — that is the ONLY setting that trades away the
-safety prompt, and it stays opt-in.
+neutralize the triad_leader profile's scoping. By default, it inherits the
+owner's approval settings. The installed absolute-launcher rules automatically
+allow the managed wrapper commands. TRIAD_CODEX_PROFILE_APPROVAL_POLICY is the
+only triad-specific approval-policy override and remains opt-in. For explicitly
+approved heavy-user no-prompt deployments, set it to never; inherited owner
+policy may already be never.
 
 Alongside the profile, --install merges Codex's native loader-environment
 policy ([shell_environment_policy] inherit="all" plus explicit
@@ -118,6 +118,10 @@ REPO_ROOT="$RAW_REPO_ROOT"
 CLASSIFIER_PATH="$RAW_CLASSIFIER_PATH"
 CODEX_PROFILE_NAME="${TRIAD_CODEX_PROFILE_NAME:-triad-codex-dispatch}"
 CODEX_PROFILE_APPROVAL_POLICY="${TRIAD_CODEX_PROFILE_APPROVAL_POLICY:-on-request}"
+CODEX_PROFILE_APPROVAL_POLICY_EXPLICIT=0
+if [ -n "${TRIAD_CODEX_PROFILE_APPROVAL_POLICY:-}" ]; then
+  CODEX_PROFILE_APPROVAL_POLICY_EXPLICIT=1
+fi
 CODEX_RULES_NAME="${TRIAD_CODEX_RULES_NAME:-triad-codex-dispatch.rules}"
 # Provenance markers for the managed [shell_environment_policy] block that
 # merge_codex_config_fragment appends to $CODEX_HOME/config.toml (and
@@ -1079,9 +1083,9 @@ verify_installed_launchers() {
 # The profile + command rules install by DEFAULT (a plain --install with 0 env
 # vars yields the recommended setup). want_codex_profile / want_codex_rules
 # encode that default-ON with two opt-outs each: an explicit ...=0, or the
-# ...SKIP_... escape. The profile stays on-request unless
-# TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never is set separately; the installed
-# exact-launcher rules auto-allow only the managed wrapper commands.
+# ...SKIP_... escape. The profile inherits the owner's approval settings unless
+# TRIAD_CODEX_PROFILE_APPROVAL_POLICY is set explicitly; the installed exact-
+# launcher rules auto-allow only the managed wrapper commands.
 want_codex_profile() {
   [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE:-0}" != "1" ] \
     && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-1}" != "0" ]
@@ -1220,14 +1224,15 @@ install_codex_runtime_profile() {
     rm -f "$profile_err"
     return
   }
-  if ! python3 - "$codex_home" "$CODEX_PROFILE_NAME" "$CODEX_PROFILE_APPROVAL_POLICY" "$classifier_dir" "$log_dir" "$bin_dir" "$LAUNCHER_DIR" "$debug_dir" "$python_runtime" "$claude_bin" "$gemini_bin" "$agy_bin" >"$profile_payload" 2>"$profile_err" <<'PY'
+  if ! python3 - "$codex_home" "$CODEX_PROFILE_NAME" "$CODEX_PROFILE_APPROVAL_POLICY" "$CODEX_PROFILE_APPROVAL_POLICY_EXPLICIT" "$classifier_dir" "$log_dir" "$bin_dir" "$LAUNCHER_DIR" "$debug_dir" "$python_runtime" "$claude_bin" "$gemini_bin" "$agy_bin" >"$profile_payload" 2>"$profile_err" <<'PY'
 from pathlib import Path
 import sys
 
 MARKER = "# triad-codex-dispatch managed runtime profile"
 
 (
-    codex_home_raw, profile_name, approval_policy, classifier_dir_raw, log_dir_raw,
+    codex_home_raw, profile_name, approval_policy, approval_policy_explicit,
+    classifier_dir_raw, log_dir_raw,
     bin_dir_raw, launcher_dir_raw, debug_dir_raw, python_runtime_raw,
     claude_bin_raw, gemini_bin_raw, agy_bin_raw,
 ) = sys.argv[1:]
@@ -1236,6 +1241,12 @@ if not profile_name or "/" in profile_name or "\\" in profile_name:
     raise SystemExit(1)
 if approval_policy not in {"never", "on-request", "untrusted"}:
     print(f"invalid TRIAD_CODEX_PROFILE_APPROVAL_POLICY: {approval_policy!r}")
+    raise SystemExit(1)
+if approval_policy_explicit not in {"0", "1"}:
+    print(
+        "invalid TRIAD_CODEX_PROFILE_APPROVAL_POLICY explicitness flag: "
+        f"{approval_policy_explicit!r}"
+    )
     raise SystemExit(1)
 
 codex_home = Path(codex_home_raw).expanduser()
@@ -1250,6 +1261,12 @@ vendor_bins = [Path(p) for p in (claude_bin_raw, gemini_bin_raw, agy_bin_raw) if
 def toml_string(value: Path) -> str:
     text = str(value)
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+approval_policy_line = (
+    f'approval_policy = {toml_string(approval_policy)}\n'
+    if approval_policy_explicit == "1"
+    else ""
+)
 
 # --- SEC-3: exec-target write-denies ------------------------------------
 # Workspace-escape invariant (see this script's header): the wrapper .py
@@ -1353,9 +1370,7 @@ sys.stdout.write(
 # or any loaded config layer: legacy sandbox settings disable
 # default_permissions, which would neutralize the triad_leader permission
 # profile's scoping.
-approval_policy = "{approval_policy}"
-approvals_reviewer = "user"
-default_permissions = "triad_leader"
+{approval_policy_line}default_permissions = "triad_leader"
 
 [permissions.triad_leader]
 description = "Triad leader session: workspace writes plus triad runtime dirs; network on."

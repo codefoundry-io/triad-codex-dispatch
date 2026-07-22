@@ -592,24 +592,57 @@ def test_readme_troubleshooting_links_target_the_actual_no_prompt_headings() -> 
     assert "#no-prompt-opt-in-heavy-user-전용" not in korean
 
 
-def test_readmes_describe_default_launcher_auto_approval_truthfully() -> None:
+def test_readmes_describe_default_launcher_auto_approval_and_inheritance_truthfully() -> None:
     english = " ".join(_text(ROOT / "README.md").split())
     korean = " ".join(_text(ROOT / "README.ko.md").split())
 
-    assert "installed absolute-launcher rules automatically allow" in english
-    assert "on-request remains in force for other commands" in english
+    assert (
+        "installed absolute-launcher rules automatically allow those wrapper commands "
+        "to run outside the sandbox without a repeated approval prompt."
+    ) in english
+    assert "Other commands continue to use your inherited approval configuration." in english
     assert "asks before each external-CLI wrapper call by default" not in english
-    assert "설치된 절대 launcher rule이 자동 승인" in korean
-    assert "다른 command에는 on-request가 유지" in korean
+    assert (
+        "설치된 절대 launcher rule이 자동 승인 하므로 세 wrapper는 반복 승인 prompt 없이 "
+        "sandbox 밖에서 실행됩니다."
+    ) in korean
+    assert "상속된 approval configuration이 계속 적용됩니다." in korean
     assert "호출 전에 기본적으로 승인을 요청합니다" not in korean
 
 
-def test_bootstrap_usage_describes_default_launcher_auto_approval_truthfully() -> None:
+def test_bootstrap_usage_describes_default_launcher_auto_approval_and_inheritance_truthfully() -> None:
     usage = " ".join(_text(ROOT / "scripts" / "bootstrap.sh").split())
 
-    assert "installed absolute-launcher rules automatically allow" in usage
-    assert "on-request remains in force for other commands" in usage
+    assert "The installed absolute-launcher rules automatically allow the managed wrapper commands." in usage
+    assert "By default, it inherits the owner's approval settings." in usage
     assert "prompts before each external-CLI wrapper call" not in usage
+
+
+def test_release_handoff_records_git_security_review_and_owner_authorization() -> None:
+    handoffs = tuple(
+        " ".join(_text(path).split())
+        for path in (
+            ROOT / "docs" / "status" / "2026-07-22-current-state.md",
+            ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md",
+        )
+    )
+
+    for handoff in handoffs:
+        assert "The owner authorized commit and push for this bounded repair." in handoff
+        assert (
+            "Git history and remote-state changes go through the workspace's "
+            "automatic security review and may present an approval request."
+        ) in handoff
+        assert (
+            "Version/changelog changes, reinstall, release, and pull-request "
+            "creation remain separate and pending."
+        ) in handoff
+        for stale in (
+            "commit, and push are still pending and unauthorized.",
+            "reinstall, version/changelog changes, commit, and push remain pending.",
+            "Do not reinstall, invoke providers, commit, push",
+        ):
+            assert stale not in handoff
 
 
 def test_google_leg_prefers_agy_then_uses_configured_gemini_fallback() -> None:

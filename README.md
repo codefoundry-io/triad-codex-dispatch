@@ -29,7 +29,9 @@ reaches out to the other families for you.
 - A generated Codex profile on the Codex permission-profile system
   (`default_permissions = "triad_leader"`, extending `:workspace`; no legacy
   `sandbox_mode` keys) plus command rules for the wrapper launchers — both
-  installed by default.
+  installed by default. By default, the generated triad profile omits
+  `approval_policy` and `approvals_reviewer`, so Codex inherits the owner's
+  existing layered approval configuration unchanged.
 - One installed read-only `triad-repair-analyzer` Custom Agent for classifier
   gaps. The analyzer returns a proposal; the leader writes only that proposal
   to a unique UTF-8 JSON file. The owner applies it with the deterministic
@@ -42,8 +44,8 @@ reaches out to the other families for you.
 
 ## Required (~2 minutes)
 
-Three steps get you a working install with sane, prompting defaults. Everything
-past this section is optional.
+Three steps get you a working install that preserves your existing approval
+configuration. Everything past this section is optional.
 
 1. **Native vendor logins.** Install and log in to the leader `codex` and the
    workers you will use — the toolkit issues/refreshes no credentials:
@@ -85,8 +87,8 @@ past this section is optional.
    The script installs the runtime profile, command rules, and three provider
    wrapper commands. It does not run provider login or model probes. The
    installed absolute-launcher rules automatically allow those wrapper commands
-   to run outside the sandbox without a repeated approval prompt;
-   `on-request` remains in force for other commands in the profile.
+   to run outside the sandbox without a repeated approval prompt. Other
+   commands continue to use your inherited approval configuration.
 
    > **Placement invariant (hard).** Run bootstrap from your project workspace,
    > not from a directory that contains the install targets. Bootstrap writes the
@@ -114,11 +116,15 @@ subsection only when its "do this ONLY if…" line applies to you.
 ### No-prompt posture (heavy users)
 
 The installed absolute-launcher rules automatically allow the three provider
-launchers; on-request remains in force for other commands. *Do this ONLY if
+launchers; other commands use your inherited approval configuration. *Do this ONLY if
 you want the whole dedicated triad session
 to have no interactive approval requests and to start with the hardened wrapper
 environment pinned.* Add `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` plus the
 managed shell entry to the bootstrap command.
+
+Setting `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` explicitly emits only
+`approval_policy = "never"`; it remains an opt-in advanced mode and never
+changes `approvals_reviewer`.
 
 > **Warning — session-wide scope.**
 > `approval_policy=never` applies to the whole triad Codex session, not only this
@@ -252,7 +258,7 @@ isolated `--cwd` worktree + the Codex profile/rules.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Codex asks for approval before an installed wrapper call | The generated absolute-launcher rules are missing, disabled, or stale | Rerun the freshly printed bootstrap command with rules enabled. If you intentionally opted out of rules, the prompt is expected. `approval_policy=on-request` still governs unrelated commands; see [No-prompt posture](#no-prompt-posture-heavy-users). |
+| Codex asks for approval before an installed wrapper call | The generated absolute-launcher rules are missing, disabled, or stale | Rerun the freshly printed bootstrap command with rules enabled. If you intentionally opted out of rules, the prompt is expected. Unrelated commands continue to use your inherited approval configuration; see [No-prompt posture](#no-prompt-posture-heavy-users). |
 | A dispatch fails with `oauth-env` | The worker CLI's login expired or is missing | Re-run that vendor's native login (`claude` / `agy` OAuth, or `codex login`). The toolkit never re-authenticates for you — it surfaces the signal so you log in. |
 | The gemini leg fails with `IneligibleTier` | The Gemini CLI *individual* tier is deprecated | Use the `agy` (Antigravity) leg — it is the Google-family leg for individual users. `gemini` is only for business / Vertex / API-key accounts. |
 | A new skill isn't available after install/update | Existing Codex sessions don't see newly installed skills | Start a new Codex session (and rerun `bootstrap.sh --install` after a plugin update so launcher paths stay current). |

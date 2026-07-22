@@ -7,8 +7,8 @@ Start the new Codex session with saved project root exactly:
 Then paste the fenced prompt below.
 
 ```text
-Resume triad-codex-dispatch from its authoritative 0.2.527 post-install
-checkpoint.
+Resume triad-codex-dispatch from its authoritative 0.2.527 approval-inheritance
+repair checkpoint.
 
 Development root:
 /Users/chaniri/codex_workspace
@@ -21,50 +21,63 @@ Read first, in order:
 2. /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/docs/status/2026-07-22-current-state.md
 3. /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/docs/status/2026-07-22-resume-prompt.md
 
-The first turn is an evidence-only installed-skill test. Do not modify source,
-~/.codex, ~/.zshrc, plugin installation, Git state, or provider authentication.
-Do not commit, push, remove, reinstall, or repair anything yet.
+Read the current-state document completely. It preserves immutable R14 history
+and records the completed bounded repair plus its intentional uncommitted
+final-review fixes. The local profile was hotfixed by omitting both
+`approval_policy` and `approvals_reviewer`; that is local proof, not
+distribution verification.
 
-The owner installed the managed codex-triad shell function and started this new
-session to test it. Preserve the owner's existing approval configuration:
-approval_policy=on-request and approvals_reviewer=auto_review. Never set
-approval_policy=never. The known defect is that the generated triad profile
-currently says approvals_reviewer=user; test and report this fact rather than
-silently changing it.
+The intended source contract is:
 
-Prove, using live current-session evidence:
-1. Whether this session has the codex-triad environment pins
-   TRIAD_WRAPPER_ALLOWED_ROOTS, TRIAD_WRAPPER_HARDENED=1, and
-   TRIAD_CLAUDE_ENFORCE_SANDBOX=1. Read only; do not print credentials or the
-   full environment.
-2. The exact effective approval_policy and approvals_reviewer source values
-   from the base, workspace, and triad profile files. Read only the named keys.
-3. Whether all four installed skills are exposed in this fresh session:
-   triad-antigravity-dispatch, triad-claude-dispatch,
-   triad-cross-family-review, and triad-gemini-dispatch.
-4. Use the native spawn surface with agent_type exactly
-   triad-repair-analyzer and a unique task name. Give it a controlled nonexistent
-   /private/tmp run_log_path and the installed 0.2.527 toolkit_root. It must
-   return the bounded escalate/proposal:null result. Do not use codex exec, a
-   generic agent, an alias, or a prompt-only role claim as a substitute.
-5. Invoke the installed triad-antigravity-dispatch skill for one minimal real
-   token-using smoke call through the owner's already authenticated AGY route.
-   Ask the provider to return exactly TRIAD_SKILL_OK. Do not log in, copy
-   credentials, change provider settings permanently, or use the Gemini
-   Enterprise fallback unless AGY is genuinely unavailable.
+1. Default generated profiles omit `approval_policy` and `approvals_reviewer`,
+   preserving the owner's layered approval configuration unchanged.
+2. A nonempty `TRIAD_CODEX_PROFILE_APPROVAL_POLICY` in `on-request`, `never`,
+   or `untrusted` emits only `approval_policy`.
+3. `approvals_reviewer` is never generated and
+   `default_permissions = "triad_leader"` remains.
+4. `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` remains an advanced opt-in; do
+   not enable it unless the owner explicitly asks.
 
-Run provider/Python operations in the owner's normal terminal boundary as the
-installed skill specifies. The skill invocation must perform its normal
-best-effort cleanup of managed temporary IPC older than 3,600 seconds. Do not
-broaden the test into a formal four-leg review.
+The recorded local proof is:
 
-Report a compact evidence table with session pins, config values, skill
-exposure, exact selector proof, AGY smoke result, and any approval prompt that
-actually occurred. Reconcile ambiguity as leader. Stop after the report and ask
-the owner whether to proceed with the bounded profile-inheritance repair. Do
-not implement that repair in the test turn.
+`TRIAD_LOCAL_CLEAN effective_approval=on-request/auto_review pins=3/3 skills=4/4 catalog_version=0.2.527 profile_permission=triad_leader`
 
-Preserve the unrelated dirty checkout at /Users/chaniri/triad-codex-dispatch.
-The authoritative product branch is codex/triad-reliability-redesign at commit
-177c9901d3e43b10f3736742455ad8da70068bed plus this handoff-only commit.
+Completed source evidence is:
+
+- Workspace-root literal `python3`: Python 3.12.13; pytest 9.0.3.
+- Focused bootstrap tests: 4 passed.
+- Distribution contract: 52 passed.
+- Final tests-directory run: 608 passed, 6 subtests passed in 125.65s.
+- Task reviews: approved.
+- The initial whole-diff review returned `With fixes` only for the handoff and
+  test-plan findings addressed in the intentional uncommitted fix wave.
+- Final frozen-artifact re-review: `APPROVED`; no Critical, Important, or Minor
+  findings remained, and all supplied artifact hashes matched.
+
+The owner authorized commit and push for this bounded repair. Git history and
+remote-state changes go through the workspace's automatic security review and
+may present an approval request. Version/changelog changes, reinstall, release,
+and pull-request creation remain separate and pending.
+
+Preserve the reviewed repair content and documentation state, whether it is
+still uncommitted or already published. Do not modify `~/.codex`, `~/.zshrc`,
+plugin installation, provider authentication, or the unrelated dirty checkout
+at `/Users/chaniri/triad-codex-dispatch`. Do not invoke providers, reinstall,
+remove, open a pull request, bump the version or changelog, or claim a release.
+
+First, verify that the exact completed evidence above and the final-review fixes
+remain present without rewriting `_runs/reviews/20260722-triad-reliability-formal-r14`.
+The final re-review is already approved. Verify the actual local `HEAD`,
+worktree, and remote branch before assuming whether publication completed. If
+commit or push is still pending, the owner's authorization applies only to this
+reviewed bounded repair; wait for any workspace security approval request before
+continuing. Report a compact evidence table that separates the local hotfix,
+tests, final review, and Git publication state. Do not open a pull request or
+perform a release, reinstall, or version/changelog change without new owner
+authorization.
+
+The repair base was exact commit
+`09b4c59f43d76d2b9c47b13e58bff970b9b7d819` on product branch
+`codex/triad-reliability-redesign`. Verify the branch's current local and remote
+commit instead of expecting the original uncommitted repair state.
 ```
