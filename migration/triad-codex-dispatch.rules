@@ -1,6 +1,7 @@
-# Copy this template into ~/.codex/rules/triad-codex-dispatch.rules, or run
-# TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 scripts/bootstrap.sh --check to generate
-# the same rules with user-specific absolute paths.
+# Copy this template into ~/.codex/rules/triad-codex-dispatch.rules only when
+# you intentionally maintain the rules by hand. Otherwise, run the freshly
+# printed absolute `--install` command from an unrelated project working
+# directory to generate these rules with user-specific absolute paths.
 #
 # Before copying manually, replace:
 # - /path/to/launcher-dir with your absolute TRIAD_BOOTSTRAP_BIN_DIR
@@ -11,6 +12,9 @@
 # No-prompt dispatch requires literal argv whose first token is the absolute
 # bootstrap launcher path. Do not add bare wrapper names, checkout bin/*.py
 # paths, python3, env, bash -lc, or zsh -lc as allowed patterns.
+#
+# Discover agy model labels live with `agy models`; do not bake a model name
+# into an allow-rule match.
 #
 # See:
 # Expected: matchedRules contains triad-codex-dispatch allow rule.
@@ -31,8 +35,6 @@ prefix_rule(
     match = [
         "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/claude_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
-        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only --effort xhigh",
-        "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox workspace-write --cwd /path/to/workspace",
     ],
     not_match = [
         "claude_wrapper.py --prompt hi --sandbox read-only",
@@ -41,6 +43,7 @@ prefix_rule(
         "zsh -lc claude_wrapper.py --prompt hi",
         "python3 /path/to/triad-codex-dispatch/bin/claude_wrapper.py --prompt hi --sandbox read-only",
         "/usr/bin/env python3 /path/to/triad-codex-dispatch/bin/claude_wrapper.py --prompt hi --sandbox read-only",
+        "python3 -c print('not a triad wrapper')",
     ],
 )
 
@@ -53,7 +56,6 @@ prefix_rule(
     match = [
         "/path/to/launcher-dir/antigravity_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/antigravity_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
-        "/path/to/launcher-dir/antigravity_wrapper.py --prompt hi --sandbox read-only --model Gemini 3.1 Pro (High)",
     ],
     not_match = [
         "antigravity_wrapper.py --prompt hi --sandbox read-only",
@@ -62,6 +64,7 @@ prefix_rule(
         "zsh -lc antigravity_wrapper.py --prompt hi",
         "python3 /path/to/triad-codex-dispatch/bin/antigravity_wrapper.py --prompt hi --sandbox read-only",
         "/usr/bin/env python3 /path/to/triad-codex-dispatch/bin/antigravity_wrapper.py --prompt hi --sandbox read-only",
+        "python3 -c print('not a triad wrapper')",
     ],
 )
 
@@ -74,7 +77,6 @@ prefix_rule(
     match = [
         "/path/to/launcher-dir/gemini_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/gemini_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
-        "/path/to/launcher-dir/gemini_wrapper.py --prompt hi --sandbox workspace-write --cwd /path/to/workspace --approval-mode auto_edit",
     ],
     not_match = [
         "gemini_wrapper.py --prompt hi --sandbox read-only",
@@ -83,5 +85,6 @@ prefix_rule(
         "zsh -lc gemini_wrapper.py --prompt hi",
         "python3 /path/to/triad-codex-dispatch/bin/gemini_wrapper.py --prompt hi --sandbox read-only",
         "/usr/bin/env python3 /path/to/triad-codex-dispatch/bin/gemini_wrapper.py --prompt hi --sandbox read-only",
+        "python3 -c print('not a triad wrapper')",
     ],
 )

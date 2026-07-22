@@ -37,8 +37,13 @@ Options:
         Inject a JSON schema block into the prompt and validate the answer
         with `cls.model_validate_json()`. On validation fail, retry once
         with a clarifying suffix; second failure → exit 66.
+  --sealed-packet-root /absolute/<review-id>/packet
+  --expected-packet-sha256 <64-lowercase-hex>
+        Paired trusted validation context for schemas that require packet
+        identity. Invalid or incomplete context fails before provider startup.
   --repair-mode
-        Internal: invoked by Sonnet repair sub-agent (server-cap retry=0).
+        Compatibility: one provider attempt with automatic retries disabled.
+        The current read-only analyzer never invokes provider wrappers.
 """
 from __future__ import annotations
 
@@ -48,12 +53,11 @@ import os
 import sys
 
 from _common import (
+    build_validation_context,
     validate_wrapper_cwd,
     load_prompt_text,
     EXIT_ARG_ERROR,
-    audit,
-    debug_log,
-    emit_run_log,
+    persist_result_artifacts,
     load_pydantic_class,
     log,
     require_binary,
@@ -136,10 +140,12 @@ def main() -> int:
         default=None,
         help="pydantic class spec (module.path:ClassName) for schema enforcement",
     )
+    p.add_argument("--sealed-packet-root", default=None)
+    p.add_argument("--expected-packet-sha256", default=None)
     p.add_argument(
         "--repair-mode",
         action="store_true",
-        help="Internal: invoked by Sonnet repair sub-agent (server-cap retry=0)",
+        help="Compatibility: one provider attempt with automatic retries disabled",
     )
     p.add_argument(
         "--debug",
@@ -183,8 +189,6 @@ def main() -> int:
         log(f"--permission-mode {args.permission_mode} forbidden by Triad safety")
         return EXIT_ARG_ERROR
 
-    claude_bin = require_binary("claude")
-
     pydantic_cls = None
     if args.pydantic:
         try:
@@ -192,6 +196,18 @@ def main() -> int:
         except Exception as e:
             log(f"--pydantic load failed: {e}")
             return EXIT_ARG_ERROR
+
+    try:
+        validation_context = build_validation_context(
+            pydantic_cls,
+            args.sealed_packet_root,
+            args.expected_packet_sha256,
+        )
+    except Exception as e:
+        log(f"sealed validation context failed: {e}")
+        return EXIT_ARG_ERROR
+
+    claude_bin = require_binary("claude")
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [
@@ -230,18 +246,13 @@ def main() -> int:
         pydantic_cls=pydantic_cls,
         last_msg_path=None,
         repair_mode=args.repair_mode,
+        validation_context=validation_context,
     )
 
     audit_cmd = build_cmd(args.prompt)
-    audit("claude", audit_cmd, args.prompt, result)
-
-    if args.debug:
-        debug_log("claude", args.prompt, result)
-
-    # Per-execution run-log (failure only) — dispatch SKILL input artifact.
-    run_log_path = emit_run_log("claude", sys.argv, audit_cmd, args.prompt, result)
-    if run_log_path is not None:
-        log(f"run-log: {run_log_path}")
+    persist_result_artifacts(
+        "claude", sys.argv, audit_cmd, args.prompt, result, debug=args.debug
+    )
 
     if pydantic_cls and result.validated is not None:
         sys.stdout.write(json.dumps(result.validated, ensure_ascii=False))

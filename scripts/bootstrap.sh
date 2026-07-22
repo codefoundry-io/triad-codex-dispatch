@@ -19,9 +19,11 @@ Usage: scripts/bootstrap.sh --install
        scripts/bootstrap.sh --remove
 
 --install checks local prerequisites for triad-codex-dispatch and installs
-local launcher scripts. It installs NO in-session repair agents: codex-host
-repair is a top-level read-only analyzer the owner runs in a fresh terminal
-(see the dispatch SKILL Step 5). It also quarantines any legacy personal-scope
+local launcher scripts, the read-only triad-repair-analyzer Custom Agent, and
+the triad-apply-repair executable. Applying a validated proposal remains an
+explicit owner action through the installed launcher (see the shared repair
+protocol in docs/references/repair-protocol.md).
+It also quarantines any legacy personal-scope
 repair-agent TOMLs (bootstrap-authored provenance only — a same-name file
 without that provenance is left in place) left by an older install into a
 timestamped directory outside agents/, recoverable if needed. (--check is a
@@ -33,7 +35,8 @@ also removes any bootstrap-managed (provenance-matched) legacy personal-scope
 repair-agent TOMLs left by an older install; a non-matching same-name file is
 preserved. Learned classifier patches are preserved.
 
-Assumes codex, claude, and agy are already installed.
+Assumes codex and claude, plus agy, or configured Gemini Enterprise/Business,
+Vertex, or API-key routing, are already installed.
 
 Install targets must resolve OUTSIDE the workspace bootstrap runs from:
 allow-listed launchers and everything they exec must live outside all
@@ -47,19 +50,19 @@ vars yields the recommended setup. The profile uses the Codex permission-profile
 system (default_permissions = "triad_leader"); it never emits legacy sandbox_mode
 / [sandbox_workspace_write], which would disable permission profiles and
 neutralize the triad_leader profile's scoping. It defaults to
-approval_policy=on-request (Codex prompts before each external-CLI wrapper call).
+approval_policy=on-request. The installed absolute-launcher rules automatically allow
+the managed wrapper commands; on-request remains in force for other commands.
 Set TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never only for explicitly approved
 heavy-user no-prompt deployments — that is the ONLY setting that trades away the
 safety prompt, and it stays opt-in.
 
-Alongside the profile, --install merges codex's native loader-env allowlist
-([shell_environment_policy] inherit="core") into $CODEX_HOME/config.toml under a
-provenance marker (with a .bak backup), so codex drops loader/interpreter
-injection vars (LD_PRELOAD/NODE_OPTIONS/PYTHONPATH/...) from every subprocess it
-spawns, including the outside-sandbox wrapper launchers. It preserves every
-other key (marker-delimited append, never a re-emit) and leaves a user's own
-[shell_environment_policy] untouched (warns instead). --remove strips exactly
-that marker block. See migration/config-fragment.recommended.toml.
+Alongside the profile, --install merges Codex's native loader-environment
+policy ([shell_environment_policy] inherit="all" plus explicit
+loader/interpreter excludes) into $CODEX_HOME/config.toml under a provenance
+marker (with the first free .bak, .bak2, ... backup). It preserves every other
+key and leaves a user's own or edited policy block untouched (warns instead).
+The launcher-level environment scrub remains defense in depth. --remove strips
+exactly that marker block. See migration/config-fragment.recommended.toml.
 
 To opt OUT of the default profile install, set
 TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=0 (or TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE=1).
@@ -116,15 +119,14 @@ CLASSIFIER_PATH="$RAW_CLASSIFIER_PATH"
 CODEX_PROFILE_NAME="${TRIAD_CODEX_PROFILE_NAME:-triad-codex-dispatch}"
 CODEX_PROFILE_APPROVAL_POLICY="${TRIAD_CODEX_PROFILE_APPROVAL_POLICY:-on-request}"
 CODEX_RULES_NAME="${TRIAD_CODEX_RULES_NAME:-triad-codex-dispatch.rules}"
-CLAUDE_MIN_VERSION="2.1.170"
-SHELL_ENTRY_BEGIN="# >>> triad-codex-dispatch codex-triad >>>"
-SHELL_ENTRY_END="# <<< triad-codex-dispatch codex-triad <<<"
 # Provenance markers for the managed [shell_environment_policy] block that
 # merge_codex_config_fragment appends to $CODEX_HOME/config.toml (and
 # remove_codex_config_fragment strips). Keyed on these two literal comment
 # lines so --remove deletes exactly OUR block and nothing else.
 CONFIG_FRAGMENT_BEGIN="# >>> triad-codex-dispatch managed shell_environment_policy >>>"
 CONFIG_FRAGMENT_END="# <<< triad-codex-dispatch managed shell_environment_policy <<<"
+REPAIR_ANALYZER_NAME="triad-repair-analyzer"
+APPLY_REPAIR_LAUNCHER="triad-apply-repair"
 SHELL_RC="${TRIAD_BOOTSTRAP_SHELL_RC:-}"
 if [ -z "$SHELL_RC" ]; then
   case "${SHELL:-}" in
@@ -134,33 +136,7 @@ if [ -z "$SHELL_RC" ]; then
 fi
 
 errors=0
-# SEC2_FLAGGED_SELECTORS -- NEWLINE-joined set of triad-codex-dispatch@*
-# selectors check_local_writable_agent_residual (SEC-2) already warned
-# about. Populated by that function (called BEFORE check_duplicate_selectors
-# in the --install flow, per R3) so DIST-1's hygiene warn can de-duplicate
-# rather than emit a second, overlapping warning for the same
-# selector/state.
-# NEWLINE-joined + exact-LINE membership compare, deliberately NOT a
-# space-joined string matched via a `case " $LIST " in *" $item "*)`
-# substring test: TOML string keys can contain literal spaces, so a
-# pathological selector name equal to two OTHER flagged names joined by a
-# single space would false-match that substring test (task-3 review,
-# Minor). A bash ARRAY would also fix this, but this script is deliberately
-# written array-free/`[[ ]]`-free throughout (see e.g. path_has_dir()) —
-# this repo's own hermetic test harness (tests/system/export/
-# s3-codex-bootstrap-migration.sh's run_bootstrap()) execs this script via
-# a narrowed PATH that resolves `bash` to Apple's frozen /bin/bash 3.2.57,
-# where `"${arr[@]}"` on an empty array is a hard "unbound variable" error
-# under `set -u` (fixed only in bash 4.4+) -- confirmed by spike.
-# add_flagged_selector() (below) appends via a literal embedded newline,
-# flagged_selector_matches() reads it back line-by-line with exact
-# `[ "$x" = "$name" ]` equality — a name can only spoof a match this way if
-# it itself contains a literal embedded newline, which the existing
-# read_plugin_selectors TSV wire format (name/flag split on a literal tab,
-# one selector per line) already cannot carry through intact, so this
-# introduces no new assumption.
-# Initialized here (not only inside check_local_writable_agent_residual) so
-# it is always bound under `set -u` even if the call order ever changes.
+# Exact-line set used to de-duplicate selector safety warnings under Bash 3.2.
 SEC2_FLAGGED_SELECTORS=""
 
 # add_flagged_selector NAME -- appends NAME to the newline-joined
@@ -174,10 +150,6 @@ $1"
   fi
 }
 
-# flagged_selector_matches NAME -- true (0) iff NAME is present in
-# SEC2_FLAGGED_SELECTORS as an exact, whole-line match. See the
-# SEC2_FLAGGED_SELECTORS declaration comment above for why this is a
-# line-exact compare rather than a substring/case-pattern test.
 flagged_selector_matches() {
   target="$1"
   while IFS= read -r flagged_name; do
@@ -202,6 +174,47 @@ fail() {
   errors=$((errors + 1))
 }
 
+validate_codex_profile_name() {
+  case "$CODEX_PROFILE_NAME" in
+    ""|[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]*|*[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz._-]*)
+      fail "invalid TRIAD_CODEX_PROFILE_NAME: must match [A-Za-z0-9][A-Za-z0-9._-]*"
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+validate_codex_profile_approval_policy() {
+  case "$CODEX_PROFILE_APPROVAL_POLICY" in
+    on-request|never|untrusted) return 0 ;;
+    *)
+      fail "invalid TRIAD_CODEX_PROFILE_APPROVAL_POLICY: must be on-request, never, or untrusted"
+      return 1
+      ;;
+  esac
+}
+
+validate_codex_rules_name() {
+  case "$CODEX_RULES_NAME" in
+    *.rules)
+      case "$CODEX_RULES_NAME" in
+        */*|*\\*) ;;
+        *) return 0 ;;
+      esac
+      ;;
+  esac
+  fail "invalid TRIAD_CODEX_RULES_NAME: must be a basename ending in .rules"
+  return 1
+}
+
+validate_bootstrap_inputs() {
+  validation_failed=0
+  validate_codex_profile_name || validation_failed=1
+  validate_codex_profile_approval_policy || validation_failed=1
+  validate_codex_rules_name || validation_failed=1
+  return "$validation_failed"
+}
+
 path_has_dir() {
   case ":$PATH:" in
     *":$1:"*) return 0 ;;
@@ -221,35 +234,8 @@ launcher_is_managed() {
   if [ ! -f "$launcher" ]; then
     return 1
   fi
-  python3 - "$launcher" "$wrapper" <<'PY'
-import os
-import stat
-import sys
-
-MARKER = "# triad-codex-dispatch managed launcher"
-path = sys.argv[1]
-wrapper = sys.argv[2]
-try:
-    fd = os.open(
-        path,
-        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
-    )
-    if not stat.S_ISREG(os.fstat(fd).st_mode):
-        os.close(fd)
-        raise OSError("managed launcher is not a regular file")
-    with os.fdopen(fd, encoding="utf-8") as handle:
-        text = handle.read()
-except (OSError, UnicodeDecodeError):
-    raise SystemExit(1)
-
-legacy_generated = (
-    "triad-codex-dispatch" in text
-    and f"/bin/{wrapper}" in text
-    and "os.execv(" in text
-    and "TRIAD_REQUIRE_PINNED_VENDOR" in text
-)
-raise SystemExit(0 if MARKER in text or legacy_generated else 1)
-PY
+  python3 "$REPO_ROOT/bin/bootstrap_repair.py" command-owned \
+    --kind launcher --name "$wrapper" --path "$launcher" >/dev/null
 }
 
 runtime_command_is_managed() {
@@ -263,42 +249,110 @@ runtime_command_is_managed() {
   if [ ! -f "$runtime_command" ]; then
     return 1
   fi
-  python3 - "$runtime_command" <<'PY'
+  runtime_name="${runtime_command##*/}"
+  python3 "$REPO_ROOT/bin/bootstrap_repair.py" command-owned \
+    --kind runtime --name "$runtime_name" --path "$runtime_command" >/dev/null
+}
+
+COMMAND_MANIFEST=""
+
+begin_command_group() {
+  COMMAND_MANIFEST="$(mktemp "${TMPDIR:-/tmp}/triad-command-group.XXXXXX")" || {
+    fail "could not create command transaction manifest"
+    return 1
+  }
+}
+
+queue_command_artifact() {
+  name="$1"
+  kind="$2"
+  target="$3"
+  payload="$4"
+  if ! python3 - "$name" "$kind" "$target" "$payload" >>"$COMMAND_MANIFEST" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "name": sys.argv[1],
+    "kind": sys.argv[2],
+    "target": sys.argv[3],
+    "data_path": sys.argv[4],
+    "mode": 0o755,
+}, ensure_ascii=False))
+PY
+  then
+    rm -f "$payload"
+    fail "could not queue managed command: $target"
+    return 1
+  fi
+}
+
+queue_command_removal() {
+  name="$1"
+  kind="$2"
+  target="$3"
+  if ! python3 - "$name" "$kind" "$target" >>"$COMMAND_MANIFEST" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "name": sys.argv[1],
+    "kind": sys.argv[2],
+    "target": sys.argv[3],
+    "mode": 0o755,
+}, ensure_ascii=False))
+PY
+  then
+    fail "could not queue managed command removal: $target"
+    return 1
+  fi
+}
+
+publish_command_group() {
+  [ -n "$COMMAND_MANIFEST" ] || return 0
+  if ! python3 "$REPO_ROOT/bin/bootstrap_repair.py" commands-install --manifest "$COMMAND_MANIFEST"; then
+    fail "could not install managed command group"
+  else
+    ok "managed command group installed"
+  fi
+  python3 - "$COMMAND_MANIFEST" <<'PY'
+import json
+from pathlib import Path
 import os
 import stat
 import sys
 
-try:
-    fd = os.open(
-        sys.argv[1],
-        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
-    )
-    if not stat.S_ISREG(os.fstat(fd).st_mode):
-        os.close(fd)
-        raise OSError("managed runtime command is not a regular file")
-    with os.fdopen(fd, encoding="utf-8") as handle:
-        text = handle.read()
-except (OSError, UnicodeDecodeError):
-    raise SystemExit(1)
-raise SystemExit(0 if "# triad-codex-dispatch managed runtime command" in text else 1)
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    try:
+        payload = Path(json.loads(line)["data_path"])
+        payload.unlink(missing_ok=True)
+    except (KeyError, OSError, ValueError, json.JSONDecodeError):
+        pass
 PY
+  rm -f "$COMMAND_MANIFEST"
+  COMMAND_MANIFEST=""
 }
 
-publish_managed_file() {
-  temp_path="$1"
-  target_path="$2"
-  if python3 - "$temp_path" "$target_path" <<'PY'
-import os
-import sys
-
-os.replace(sys.argv[1], sys.argv[2])
-PY
-  then
+remove_command_group() {
+  [ -n "$COMMAND_MANIFEST" ] || return 0
+  if [ ! -s "$COMMAND_MANIFEST" ]; then
+    rm -f "$COMMAND_MANIFEST"
+    COMMAND_MANIFEST=""
     return 0
   fi
-  rm -f "$temp_path"
-  fail "could not publish managed file: $target_path"
-  return 1
+  if ! python3 "$REPO_ROOT/bin/bootstrap_repair.py" commands-remove \
+    --manifest "$COMMAND_MANIFEST" \
+    --preserve-foreign \
+    --test-fail-at "${TRIAD_BOOTSTRAP_TEST_FAIL_COMMAND_REMOVE_AT:-}"; then
+    fail "could not remove managed command group"
+    rm -f "$COMMAND_MANIFEST"
+    COMMAND_MANIFEST=""
+    return 1
+  else
+    ok "managed command group removed"
+  fi
+  rm -f "$COMMAND_MANIFEST"
+  COMMAND_MANIFEST=""
 }
 
 is_expected_wrapper() {
@@ -318,59 +372,51 @@ raise SystemExit(0 if resolved in {target, launcher} else 1)
 PY
 }
 
-# repair_agent_is_managed <path> — SEC-1 provenance predicate for a legacy
-# personal-scope repair-agent TOML (an older install left write-capable
-# claude/gemini/agy-wrapper-repair.toml files at $CODEX_HOME/agents/; the
-# current --install creates none, but must migrate any left behind — see
-# migrate_legacy_repair_agents / the --remove loop below). Managed means the
-# file carries the BOOTSTRAP-AUTHORED provenance, matched as a START-OF-FILE
-# header (first ~5 lines only — never a substring anywhere in the file):
-#   (the line-1 pair "# Codex named subagent" AND "wrapper repair agent")
-#   OR "Installed by bootstrap to the Codex personal agent-discovery scope"
-# This is bootstrap-emitted boilerplate verified present verbatim in the real
-# legacy TOMLs and ABSENT from every shipped doc. `default_permissions =
-# "triad_repair"` is a WEAK corroborator only (doc-published in
-# AGENTS.recommended.md) and is deliberately NOT checked here — it must never
-# by itself trigger quarantine/removal of a user's own same-name file.
-# lstat BEFORE read: a symlink is never followed/treated as managed, even
-# when its target would otherwise match (callers additionally branch on
-# `-L` themselves, before ever calling this, so they can warn+skip instead
-# of taking the managed/unmanaged action). The bash `[ -L ]` guard and the
-# python read below are two syscalls separated by a process spawn, so a
-# symlink swapped in during that window would otherwise be silently
-# followed by Path.open()'s default behavior; the python side additionally
-# opens with O_NOFOLLOW to close that TOCTOU gap (open() fails with ELOOP
-# on a symlink, treated the same as any other read failure: NOT managed).
-repair_agent_is_managed() {
-  path="$1"
-  if [ -L "$path" ] || [ ! -f "$path" ]; then
+run_repair_lifecycle() {
+  action="$1"
+  python3 "$REPO_ROOT/bin/bootstrap_repair.py" "$action" \
+    --config "$CODEX_HOME/config.toml" \
+    --analyzer "$CODEX_HOME/agents/$REPAIR_ANALYZER_NAME.toml" \
+    --launcher "$LAUNCHER_DIR/$APPLY_REPAIR_LAUNCHER" \
+    --source "$REPO_ROOT/agents/$REPAIR_ANALYZER_NAME.toml" \
+    --apply-patch "$REPO_ROOT/bin/apply_patch.py" \
+    --classifier "$CLASSIFIER_PATH"
+  if [ "$?" -eq 0 ]; then
+    ok "repair artifacts $action completed"
+    return 0
+  fi
+  fail "repair artifact $action failed"
+  return 1
+}
+
+remove_owned_artifact() {
+  owned_kind="$1"
+  owned_path="$2"
+  removed_message="$3"
+  unmanaged_message="$4"
+  owned_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-remove \
+    --kind "$owned_kind" --path "$owned_path")"
+  if [ "$?" -ne 0 ]; then
+    fail "could not safely remove managed artifact: $owned_path"
     return 1
   fi
-  python3 - "$path" <<'PY'
-from pathlib import Path
-import os
-import sys
-
-HEADER_LINES = 5
-TOKEN_HEADER_A = "# Codex named subagent"
-TOKEN_HEADER_B = "wrapper repair agent"
-TOKEN_SCOPE = "Installed by bootstrap to the Codex personal agent-discovery scope"
-
-path = Path(sys.argv[1])
-try:
-    # O_NOFOLLOW: never follow a symlink swapped in between the bash-level
-    # lstat guard (above) and this open() (TOCTOU) — ELOOP is caught below
-    # and treated as NOT managed, same as any other read failure.
-    fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW)
-    with os.fdopen(fd, "r", encoding="utf-8") as fh:
-        head = "".join(next(fh, "") for _ in range(HEADER_LINES))
-except (OSError, UnicodeDecodeError):
-    raise SystemExit(1)
-
-pair_match = TOKEN_HEADER_A in head and TOKEN_HEADER_B in head
-scope_match = TOKEN_SCOPE in head
-raise SystemExit(0 if (pair_match or scope_match) else 1)
-PY
+  case "$owned_status" in
+    absent)
+      return 0
+      ;;
+    unmanaged)
+      warn "$unmanaged_message"
+      return 0
+      ;;
+    removed)
+      ok "$removed_message"
+      return 0
+      ;;
+    *)
+      fail "unexpected managed removal status for $owned_path: $owned_status"
+      return 1
+      ;;
+  esac
 }
 
 check_binary() {
@@ -386,6 +432,19 @@ check_optional_binary() {
     ok "found optional binary: $1"
   else
     warn "optional binary not found: $1"
+  fi
+}
+
+GOOGLE_ROUTE=""
+check_google_route() {
+  if command -v agy >/dev/null 2>&1; then
+    GOOGLE_ROUTE="agy"
+    ok "found Google route: agy"
+  elif command -v gemini >/dev/null 2>&1; then
+    GOOGLE_ROUTE="gemini"
+    warn "found Gemini fallback candidate: executable presence only; configured route must be proven in the owner's authenticated terminal"
+  else
+    fail "missing Google route: agy or gemini"
   fi
 }
 
@@ -405,42 +464,6 @@ PY
   fi
 }
 
-check_claude_version() {
-  if ! command -v claude >/dev/null 2>&1; then
-    return
-  fi
-  claude_version_raw="$(claude --version 2>/dev/null || true)"
-  claude_version_parsed="$(python3 - "$claude_version_raw" "$CLAUDE_MIN_VERSION" <<'PY'
-import re
-import sys
-
-raw, minimum = sys.argv[1], sys.argv[2]
-match = re.search(r"\d+(?:\.\d+)+", raw)
-if match is None:
-    raise SystemExit(2)
-found = [int(part) for part in match.group(0).split(".")]
-want = [int(part) for part in minimum.split(".")]
-width = max(len(found), len(want))
-found += [0] * (width - len(found))
-want += [0] * (width - len(want))
-print(match.group(0))
-raise SystemExit(0 if found >= want else 1)
-PY
-)"
-  claude_version_rc="$?"
-  if [ "$claude_version_rc" -eq 0 ] && [ -n "$claude_version_parsed" ]; then
-    ok "claude version $claude_version_parsed >= minimum $CLAUDE_MIN_VERSION"
-  elif [ "$claude_version_rc" -eq 1 ] && [ -n "$claude_version_parsed" ]; then
-    warn "claude version $claude_version_parsed is older than minimum $CLAUDE_MIN_VERSION; upgrade claude before dispatching the claude leg"
-  else
-    warn "could not determine claude version (output: $claude_version_raw)"
-  fi
-}
-
-# MUST-land 1 (workspace-escape guard). See the header invariant: allow-listed
-# files and everything they exec must live outside all sandbox-writable roots.
-# Hard-fails when any install target (or the checkout / python runtime the
-# launchers exec) resolves inside the workspace bootstrap runs from ($PWD).
 check_workspace_escape() {
   workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$CODEX_HOME" "$(dirname -- "$CLASSIFIER_PATH")" "$REPO_ROOT" <<'PY'
 from pathlib import Path
@@ -452,22 +475,6 @@ workspace = Path(pwd_raw).resolve()
 
 
 def _fs_case_insensitive(probe):
-    # A case-insensitive filesystem (macOS APFS default) resolves an upper- and
-    # lower-cased variant of the same existing path to ONE inode; a case-sensitive
-    # FS (Linux ext4) does not. This decides whether the containment compare below
-    # must case-fold. Without it, Path.is_relative_to compares case-sensitively,
-    # so on macOS a mixed-case install target (WS vs ws) slipped past the guard
-    # and installed into the sandbox-writable workspace (finding #2, 2026-07-05).
-    # os.path.normcase is NOT usable here: it only folds case on Windows (nt) and
-    # is a no-op on Darwin/Linux, so it would not have closed the macOS bypass.
-    # Known Minor edge (re-confirm 2026-07-05, all 3 legs rated non-blocking): a
-    # non-round-trip Unicode casing char in the workspace path (e.g. 'ß'.upper()
-    # == 'SS', length changes) makes os.path.exists(up) miss, so this returns
-    # False (exact compare) and could miss a mixed-case escape — but only on a
-    # case-insensitive FS with a non-ASCII install path AND an attacker-crafted
-    # target; realistic install paths are ASCII, and is_expected_wrapper /
-    # launcher-managed checks are additional barriers. Defense-in-depth edge, not
-    # the sole gate.
     s = str(probe)
     try:
         up, lo = s.upper(), s.lower()
@@ -532,30 +539,7 @@ check_legacy_sandbox_config() {
   fi
 }
 
-# read_plugin_selectors — shared python3 tomllib reader for
-# check_duplicate_selectors (DIST-1) and check_local_writable_agent_residual
-# (SEC-2). Reads $CODEX_HOME/config.toml (the canonicalized CODEX_HOME) and
-# prints one "<selector>\t<true|false>" line per [plugins."triad-codex-dispatch@..."]
-# table found — real TOML table parsing via tomllib, not a bash line-follower,
-# so a table with `enabled` OMITTED is never confused with an adjacent,
-# unrelated table's own `enabled` key. An omitted `enabled` key is treated as
-# ENABLED (true): this is codex's documented default — PluginConfig's
-# `enabled: bool` field is `#[serde(default = "default_enabled")]` with
-# `default_enabled() -> bool { true }` (codex-rs/config/src/types.rs, verified
-# against the openai/codex GitHub source 2026-07-16; the top-level `[plugins]`
-# table itself deserializes as `pub plugins: HashMap<String, PluginConfig>` in
-# codex-rs/config/src/config_toml.rs, keyed by the exact `PLUGIN@MARKETPLACE`
-# selector string codex's own `plugin add`/`plugin remove` CLI uses). Any
-# `[plugins.*]` table whose name does not start with "triad-codex-dispatch@"
-# is ignored (never counted, never misassociated).
-#
-# A MISSING config.toml is not a failure (a fresh install has zero plugins
-# configured yet) — exit 0 with no output. Exit 3 signals the file EXISTS but
-# could not be read or parsed (permission error / malformed TOML); the two
-# callers deliberately react differently to that signal —
-# check_duplicate_selectors treats it as a graceful no-op (hygiene, not a SEC
-# surface) while check_local_writable_agent_residual treats it as a WARN (a
-# SEC surface must not be silently skipped).
+# Read enabled triad plugin selectors through TOML, never line parsing.
 read_plugin_selectors() {
   python3 - "$CODEX_HOME/config.toml" <<'PY'
 import sys
@@ -586,31 +570,7 @@ raise SystemExit(0)
 PY
 }
 
-# cache_write_capable_state MARKETPLACE — SEC-2 helper: does
-# $CODEX_HOME/plugins/cache/<MARKETPLACE>/triad-codex-dispatch/*/agents/*.toml
-# (any installed version) declare `default_permissions = "triad_repair"`?
-# Deliberately walks with Path.iterdir/Path.exists, NOT Path.glob: spike-
-# verified 2026-07-16 that pathlib's glob() silently swallows PermissionError
-# and returns an empty match list on an unreadable directory — making an
-# unreadable cache indistinguishable from an absent one — while
-# iterdir()/exists() correctly raise/propagate PermissionError from an
-# unreadable directory, which is exactly the signal this SEC-2 check needs in
-# order to warn rather than silently report "no residual found". Prints
-# exactly one of:
-#   absent      — the marketplace/plugin cache directory does not exist
-#                 (clean; a plugin that was never installed cannot be a
-#                 discovery path)
-#   clean       — cache dir readable, every candidate agent TOML parsed
-#                 cleanly, and none declares default_permissions = "triad_repair"
-#   found       — at least one write-capable agent TOML found (SEC-2 residual)
-#   unreadable  — the cache dir (or a file under it) could not be opened, OR
-#                 a candidate agent TOML exists and is readable but fails to
-#                 PARSE (broken TOML syntax) — a SEC surface must not treat a
-#                 file it cannot actually inspect as "clean" just because the
-#                 failure was a parse error rather than an OSError (task-3
-#                 review, Important; a `found` elsewhere in the same scan
-#                 still wins — this only changes what an all-skipped/no-match
-#                 scan reports instead of "clean")
+# Classify cached write-capable legacy repair agents without glob error suppression.
 cache_write_capable_state() {
   python3 - "$CODEX_HOME/plugins/cache" "$1" <<'PY'
 import sys
@@ -795,36 +755,28 @@ EOF
 # into a timestamped sibling directory OUTSIDE agents/ (Codex only discovers
 # agents under agents/, so a sibling dir is provably not a discovery path).
 # Idempotent (a second --install finds nothing left to quarantine). Never
-# halts --install: a quarantine-dir-create or move failure just warns and
+# halts --install: a quarantine-dir-create or transaction failure just warns and
 # continues to the next name. Called AFTER the errors!=0 -> exit 1 preflight
 # gate and check_legacy_sandbox_config, BEFORE install_launchers.
 migrate_legacy_repair_agents() {
-  quarantine_dir=""
-  quarantine_attempted=0
   for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
     agent_file="$CODEX_HOME/agents/$name.toml"
-    if [ -L "$agent_file" ]; then
-      warn "leaving legacy repair-agent symlink in place (never following a symlink target): $agent_file"
-      continue
-    fi
-    if [ ! -e "$agent_file" ]; then
-      continue
-    fi
-    if ! repair_agent_is_managed "$agent_file"; then
-      warn "leaving unmanaged repair agent in place: $agent_file"
-      continue
-    fi
-    if [ "$quarantine_attempted" -eq 0 ]; then
-      quarantine_attempted=1
-      quarantine_dir="$(mktemp -d "$CODEX_HOME/.triad-quarantine-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX" 2>/dev/null)"
-    fi
-    if [ -z "$quarantine_dir" ] || [ ! -d "$quarantine_dir" ]; then
-      warn "could not create quarantine directory under $CODEX_HOME; leaving legacy repair agent in place: $agent_file"
-      continue
-    fi
-    quarantine_dest="$quarantine_dir/$name.toml"
-    if mv "$agent_file" "$quarantine_dest" 2>/dev/null; then
-      warn "quarantined legacy repair agent: $agent_file -> $quarantine_dest"
+    if quarantine_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-quarantine \
+      --kind legacy-agent --path "$agent_file" --quarantine-parent "$CODEX_HOME" \
+      2>/dev/null)"; then
+      case "$quarantine_status" in
+        quarantined)
+          warn "quarantined legacy repair agent: $agent_file"
+          ;;
+        absent)
+          ;;
+        unmanaged)
+          warn "leaving unmanaged repair agent in place: $agent_file"
+          ;;
+        *)
+          warn "unexpected legacy repair-agent quarantine status for $agent_file: $quarantine_status"
+          ;;
+      esac
     else
       warn "could not quarantine legacy repair agent (leaving in place): $agent_file"
     fi
@@ -892,56 +844,43 @@ EOF
   CODEX_HOME="$(printf '%s\n' "$canonicalized" | sed -n '4p')"
 }
 
-install_runtime_commands() {
-  runtime="$REPO_ROOT/bin/triad_runtime.py"
-  if [ ! -f "$runtime" ]; then
-    fail "missing runtime helper: $runtime"
-    return
-  fi
-  if [ -z "${python_exe:-}" ] || [ -z "${escaped_python:-}" ]; then
-    fail "missing resolved Python runtime for managed commands"
-    return
-  fi
-  escaped_runtime="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$runtime")" || {
-    fail "could not quote runtime helper: $runtime"
+resolve_python_runtime() {
+  python_exe="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" runtime-path)" || {
+    fail "could not resolve a portable Python runtime for launchers"
     return
   }
+  escaped_python="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$python_exe")" || {
+    fail "could not quote launcher Python runtime"
+    return
+  }
+  escaped_classifier="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$CLASSIFIER_PATH")" || {
+    fail "could not quote classifier path for launchers"
+    return
+  }
+}
 
-  runtime_preflight_failed=0
-  for runtime_command in triad-setup triad-doctor; do
-    target="$LAUNCHER_DIR/$runtime_command"
-    if [ -L "$target" ]; then
-      fail "refusing to overwrite symlinked runtime command: $target"
-      runtime_preflight_failed=1
-    elif ! runtime_command_is_managed "$target"; then
-      fail "refusing to overwrite unmanaged runtime command: $target"
-      runtime_preflight_failed=1
+check_formal_schema_dependency() {
+  if python3 "$REPO_ROOT/bin/bootstrap_repair.py" formal-schema-ready \
+    --requirements "$REPO_ROOT/requirements.txt"; then
+    ok "Pydantic 2 formal review APIs available"
+  else
+    fail "formal review dependency readiness failed"
+  fi
+}
+
+preflight_install_command_targets() {
+  command_preflight_failed=0
+  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+    launcher="$LAUNCHER_DIR/$wrapper"
+    if [ -L "$launcher" ]; then
+      fail "refusing to overwrite symlinked launcher: $launcher"
+      command_preflight_failed=1
+    elif ! launcher_is_managed "$launcher" "$wrapper"; then
+      fail "refusing to overwrite unmanaged launcher: $launcher"
+      command_preflight_failed=1
     fi
   done
-  if [ "$runtime_preflight_failed" -ne 0 ]; then
-    return
-  fi
-
-  for runtime_command in triad-setup triad-doctor; do
-    target="$LAUNCHER_DIR/$runtime_command"
-    command_name="${runtime_command#triad-}"
-    escaped_command="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$command_name")" || {
-      fail "could not quote runtime command: $runtime_command"
-      continue
-    }
-    temp_target="$(mktemp "$LAUNCHER_DIR/.${runtime_command}.tmp.XXXXXX")" || {
-      fail "could not create temporary runtime command: $target"
-      continue
-    }
-    printf '#!%s -E\n# triad-codex-dispatch managed runtime command\nimport os\nimport sys\nos.execv(%s, [%s, "-E", %s, %s] + sys.argv[1:])\n' \
-      "$python_exe" "$escaped_python" "$escaped_python" "$escaped_runtime" "$escaped_command" >"$temp_target" \
-      && chmod 0755 "$temp_target" \
-      && publish_managed_file "$temp_target" "$target" \
-      || {
-        rm -f "$temp_target"
-        fail "could not install runtime command: $target"
-      }
-  done
+  [ "$command_preflight_failed" -eq 0 ]
 }
 
 install_launchers() {
@@ -951,19 +890,10 @@ install_launchers() {
     return
   fi
 
-  python_exe="$(python3 - <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.executable).resolve())
-PY
-)" || {
-    fail "could not resolve python executable for launchers"
+  if [ -z "${python_exe:-}" ] || [ -z "${escaped_python:-}" ] || [ -z "${escaped_classifier:-}" ]; then
+    fail "missing preflighted Python runtime or classifier path for launchers"
     return
-  }
-  escaped_python="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$python_exe")" || {
-    fail "could not quote launcher python: $python_exe"
-    return
-  }
+  fi
 
   all_wrappers_ready=1
   for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
@@ -1043,7 +973,7 @@ PY
       fail "could not quote launcher PATH for $wrapper"
       continue
     }
-    temp_launcher="$(mktemp "$LAUNCHER_DIR/.${wrapper}.tmp.XXXXXX")" || {
+    temp_launcher="$(mktemp "${TMPDIR:-/tmp}/triad-${wrapper}.XXXXXX")" || {
       fail "could not create temporary launcher: $launcher"
       continue
     }
@@ -1090,6 +1020,11 @@ PY
       printf ')\n'
       printf 'env = {k: v for k, v in os.environ.items() if k not in _SCRUB}\n'
       printf 'env["PATH"] = %s\n' "$escaped_path"
+      printf 'env["TRIAD_AUDIT_REDACT_PROMPTS"] = "1"\n'
+      # The classifier is install-time state. Pin the canonical absolute path
+      # into every provider launcher so a fresh shell cannot silently select a
+      # different default or lose a one-shot custom override.
+      printf 'env["TRIAD_CLASSIFIER_EXTENSION"] = %s\n' "$escaped_classifier"
       # ALWAYS require a pin (SEC-3 / C1): a resolved vendor bakes TRIAD_<CLI>_BIN
       # below; an absent one leaves the require flag with NO pin so
       # _common.require_binary fails closed (EXIT_BINARY_MISSING, "refusing PATH
@@ -1115,7 +1050,7 @@ PY
       fail "could not chmod launcher: $launcher"
       continue
     fi
-    publish_managed_file "$temp_launcher" "$launcher"
+    queue_command_artifact "$wrapper" launcher "$launcher" "$temp_launcher"
   done
 
   if ! path_has_dir "$LAUNCHER_DIR"; then
@@ -1123,6 +1058,10 @@ PY
     return
   fi
 
+}
+
+verify_installed_launchers() {
+  repo_bin="$REPO_ROOT/bin"
   for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
     target="$repo_bin/$wrapper"
     launcher="$LAUNCHER_DIR/$wrapper"
@@ -1140,9 +1079,9 @@ PY
 # The profile + command rules install by DEFAULT (a plain --install with 0 env
 # vars yields the recommended setup). want_codex_profile / want_codex_rules
 # encode that default-ON with two opt-outs each: an explicit ...=0, or the
-# ...SKIP_... escape. The approval-policy prompt is NOT affected by these — it
-# stays on-request unless TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never is set
-# separately, so defaulting the profile ON never silently auto-approves.
+# ...SKIP_... escape. The profile stays on-request unless
+# TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never is set separately; the installed
+# exact-launcher rules auto-allow only the managed wrapper commands.
 want_codex_profile() {
   [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE:-0}" != "1" ] \
     && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-1}" != "0" ]
@@ -1151,6 +1090,55 @@ want_codex_profile() {
 want_codex_rules() {
   [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_RULES:-0}" != "1" ] \
     && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES:-1}" != "0" ]
+}
+
+preflight_codex_install_targets() {
+  profile_selected="$1"
+  rules_selected="$2"
+  target_check_failed=0
+  if [ "$profile_selected" = "1" ]; then
+    profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
+    target_check_output="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-artifact \
+      --action preflight --kind profile --path "$profile_path")"
+    if [ "$?" -ne 0 ]; then
+      target_check_failed=1
+      while IFS= read -r line; do
+        [ -n "$line" ] && fail "$line"
+      done <<EOF
+$target_check_output
+EOF
+    else
+      case "$target_check_output" in
+        absent | managed) : ;;
+        *)
+          target_check_failed=1
+          fail "unexpected profile preflight status for $profile_path: $target_check_output"
+          ;;
+      esac
+    fi
+  fi
+  if [ "$rules_selected" = "1" ]; then
+    rules_path="$CODEX_HOME/rules/$CODEX_RULES_NAME"
+    target_check_output="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-artifact \
+      --action preflight --kind rules --path "$rules_path")"
+    if [ "$?" -ne 0 ]; then
+      target_check_failed=1
+      while IFS= read -r line; do
+        [ -n "$line" ] && fail "$line"
+      done <<EOF
+$target_check_output
+EOF
+    else
+      case "$target_check_output" in
+        absent | managed) : ;;
+        *)
+          target_check_failed=1
+          fail "unexpected rules preflight status for $rules_path: $target_check_output"
+          ;;
+      esac
+    fi
+  fi
+  [ "$target_check_failed" -eq 0 ]
 }
 
 ensure_log_dir() {
@@ -1181,15 +1169,11 @@ install_codex_runtime_profile() {
   # install_launchers resolves it for the launcher shebang (bare `python3`
   # on PATH; sys.executable canonicalized) so the deny matches the actual
   # exec target.
-  python_runtime="$(python3 - <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.executable).resolve())
-PY
-)" || {
-    fail "could not resolve the python3 runtime path for the Codex profile deny-list"
+  python_runtime="$python_exe"
+  if [ -z "$python_runtime" ]; then
+    fail "missing preflighted Python runtime for the Codex profile deny-list"
     return
-  }
+  fi
 
   # Vendor binaries (claude, gemini, agy -- the ones this product's wrappers
   # exec). Resolved IDENTICALLY to install_launchers' bare `command -v $cmd`
@@ -1231,7 +1215,12 @@ PY
     fail "could not create temporary file for Codex profile install"
     return
   }
-  installed="$(python3 - "$codex_home" "$CODEX_PROFILE_NAME" "$CODEX_PROFILE_APPROVAL_POLICY" "$classifier_dir" "$log_dir" "$bin_dir" "$LAUNCHER_DIR" "$debug_dir" "$python_runtime" "$claude_bin" "$gemini_bin" "$agy_bin" 2>"$profile_err" <<'PY'
+  profile_payload="$(mktemp "${TMPDIR:-/tmp}/triad-codex-profile-payload.XXXXXX")" || {
+    fail "could not create temporary payload for Codex profile install"
+    rm -f "$profile_err"
+    return
+  }
+  if ! python3 - "$codex_home" "$CODEX_PROFILE_NAME" "$CODEX_PROFILE_APPROVAL_POLICY" "$classifier_dir" "$log_dir" "$bin_dir" "$LAUNCHER_DIR" "$debug_dir" "$python_runtime" "$claude_bin" "$gemini_bin" "$agy_bin" >"$profile_payload" 2>"$profile_err" <<'PY'
 from pathlib import Path
 import sys
 
@@ -1257,7 +1246,6 @@ launcher_dir = Path(launcher_dir_raw)
 debug_dir = Path(debug_dir_raw)
 python_runtime = Path(python_runtime_raw)
 vendor_bins = [Path(p) for p in (claude_bin_raw, gemini_bin_raw, agy_bin_raw) if p]
-profile_path = codex_home / f"{profile_name}.config.toml"
 
 def toml_string(value: Path) -> str:
     text = str(value)
@@ -1354,14 +1342,7 @@ for p in (classifier_dir, log_dir, debug_dir):
 deny_block = "\n".join(deny_lines)
 reallow_block = "\n".join(reallow_lines)
 
-codex_home.mkdir(parents=True, exist_ok=True)
-if profile_path.exists():
-    existing = profile_path.read_text(encoding="utf-8")
-    if MARKER not in existing:
-        print(f"refusing to overwrite unmanaged Codex profile: {profile_path}")
-        raise SystemExit(1)
-
-profile_path.write_text(
+sys.stdout.write(
     f"""{MARKER}
 # Generated by scripts/bootstrap.sh --install.
 # Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 to refresh.
@@ -1388,12 +1369,23 @@ extends = ":workspace"
 
 [permissions.triad_leader.network]
 enabled = true
-""",
-    encoding="utf-8",
+"""
 )
-print(profile_path)
 PY
-  )"
+  then
+    profile_output="$(cat "$profile_err")"
+    while IFS= read -r line; do
+      [ -n "$line" ] && fail "$line"
+    done <<EOF
+$profile_output
+EOF
+    rm -f "$profile_payload" "$profile_err"
+    return
+  fi
+  profile_path="$codex_home/$CODEX_PROFILE_NAME.config.toml"
+  installed="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-artifact \
+    --action install --kind profile --path "$profile_path" \
+    --payload-file "$profile_payload" 2>>"$profile_err")"
   if [ "$?" -ne 0 ]; then
     profile_output="$(
       printf '%s\n' "$installed"
@@ -1404,144 +1396,86 @@ PY
     done <<EOF
 $profile_output
 EOF
-    rm -f "$profile_err"
+    rm -f "$profile_payload" "$profile_err"
     return
   fi
+  case "$installed" in
+    created | updated | unchanged) : ;;
+    *)
+      fail "unexpected Codex runtime profile install status for $profile_path: $installed"
+      rm -f "$profile_payload" "$profile_err"
+      return
+      ;;
+  esac
   if [ -s "$profile_err" ]; then
     while IFS= read -r line; do
       [ -n "$line" ] && warn "$line"
     done <"$profile_err"
   fi
-  rm -f "$profile_err"
-  ok "Codex runtime profile installed: $installed"
+  rm -f "$profile_payload" "$profile_err"
+  ok "Codex runtime profile installed: $profile_path ($installed)"
 }
 
-# merge_codex_config_fragment — SEC-3 native env-boundary close (Slice A
-# Layer ②, task-3-brief.md). Merges codex's NATIVE loader-env allowlist
-# ([shell_environment_policy] inherit = "core") into $CODEX_HOME/config.toml so
-# Codex drops loader/interpreter injection vars (LD_PRELOAD, LD_LIBRARY_PATH,
-# DYLD_INSERT_LIBRARIES, NODE_OPTIONS, PYTHONPATH, ...) from the environment of
-# EVERY subprocess it spawns -- including the allow-listed wrapper launchers
-# that run OUTSIDE the sandbox. This is the native close of the one residual
-# the launcher's own env scrub cannot reach: an LD_PRELOAD/DYLD_* aimed at the
-# launcher's OWN process, which the dynamic linker honors at exec BEFORE any
-# launcher line runs (see the SEC-3 launcher comment in install_launchers).
-# Codex's default inherit="all" strips only *KEY*/*SECRET*/*TOKEN* names, so
-# loader vars pass through UNSCRUBBED by default; inherit="core" keeps only a
-# positive allowlist (PATH/HOME/USER/SHELL/TERM/LANG/LC_*), dropping every
-# loader var (Tier-1: learn.chatgpt.com/docs/config-file/config-advanced #
-# shell_environment_policy; the table is read from $CODEX_HOME/config.toml).
+# merge_codex_config_fragment — native env-boundary close. Merges Codex's
+# [shell_environment_policy] inherit="all" plus explicit case-insensitive
+# loader/interpreter excludes into $CODEX_HOME/config.toml. `inherit="all"`
+# retains normal environment values (including the triad wrapper controls) and
+# retains Codex's default KEY/SECRET/TOKEN exclusions. The explicit excludes
+# drop LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, PYTHON*, BASH_ENV, ENV,
+# PERL5LIB, RUBYOPT, and RUBYLIB before Codex spawns any subprocess, including
+# the allow-listed wrapper launchers that run outside the sandbox. The launcher
+# env scrub remains defense in depth for its own descendant process.
 #
 # G4 (never clobber a user's own config): there is NO stdlib TOML *writer*
 # (tomllib is read-only), so a hand-rolled full-file re-emit would destroy the
 # user's comments/formatting/ordering. Instead the python heredoc uses tomllib
 # ONLY to PARSE the existing config.toml and CHECK whether a
 # [shell_environment_policy] table already exists:
-#   * OUR managed marker block already present -> no-op (idempotent).
+#   * the exact legacy managed inherit="core" block -> replace only that block
+#       with the current managed policy, preserving every outside byte.
+#   * any other marker-delimited block -> leave it untouched (an edited block
+#       is user-owned until explicitly reconciled).
 #   * a [shell_environment_policy] table present but NOT ours (user's own)
 #       -> leave it untouched; WARN (respect the user's config).
 #   * absent -> APPEND the marker-delimited managed block (preserving every
-#       other key), written atomically (temp + os.replace) after a .bak backup
-#       of the prior file.
+#       other key), published against captured target state after an absent-only
+#       first-free .bak, .bak2, ... backup of the prior file.
 # NON-fatal by design (defense-in-depth on top of the always-on launcher env
 # scrub): never calls fail -- any read/parse/write error just WARNs and leaves
 # config.toml untouched, so a config.toml hiccup never blocks --install.
 # Gated on want_codex_profile (same gate the replaced WARN used): the fragment
 # reinforces the same exec-target trust boundary the managed profile protects.
-# bash-3.2-safe: array-free/[[ ]]-free; the python heredoc does the TOML work
-# (mirrors install_codex_runtime_profile / check_legacy_sandbox_config).
+# bash-3.2-safe: array-free/[[ ]]-free; bootstrap_repair.py owns the TOML and
+# descriptor-checked publication work.
 merge_codex_config_fragment() {
+  if [ "$errors" -ne 0 ]; then
+    return
+  fi
   if ! want_codex_profile; then
     return
   fi
   config_path="$CODEX_HOME/config.toml"
-  merge_status="$(python3 - "$config_path" "$CONFIG_FRAGMENT_BEGIN" "$CONFIG_FRAGMENT_END" <<'PY'
-import os
-import sys
-import tempfile
-import tomllib
-from pathlib import Path
-
-config_path = Path(sys.argv[1])
-begin = sys.argv[2]
-end = sys.argv[3]
-
-FRAGMENT = '[shell_environment_policy]\ninherit = "core"\n'
-managed_block = begin + "\n" + FRAGMENT + end + "\n"
-
-# Step 1. Read the existing file; graceful if absent or unreadable.
-try:
-    existing = config_path.read_text(encoding="utf-8")
-    existed = True
-except FileNotFoundError:
-    existing = ""
-    existed = False
-except (OSError, UnicodeDecodeError):
-    print("unreadable")
-    raise SystemExit(0)
-
-# Step 2. Idempotent -- our own managed marker already present means no-op.
-if begin in existing:
-    print("already-managed")
-    raise SystemExit(0)
-
-# Step 3. Parse ONLY to detect a pre-existing [shell_environment_policy] table.
-# There is no stdlib TOML writer, so we never re-emit the existing file.
-try:
-    data = tomllib.loads(existing) if existing else {}
-except tomllib.TOMLDecodeError:
-    print("malformed")
-    raise SystemExit(0)
-
-if "shell_environment_policy" in data:
-    # The user has their own policy -> never clobber it.
-    print("user-policy")
-    raise SystemExit(0)
-
-# Step 4. Absent -> append the marker-delimited managed block, preserving every
-# prior byte. Back up the prior file to .bak, then atomic temp + os.replace.
-try:
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    if existed:
-        Path(str(config_path) + ".bak").write_text(existing, encoding="utf-8")
-    if existing.strip():
-        new_text = existing.rstrip("\n") + "\n\n" + managed_block
-    else:
-        new_text = managed_block
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(config_path.parent), prefix=".config.toml.", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(new_text)
-        os.replace(tmp_name, config_path)
-    except BaseException:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-except (OSError, UnicodeError):
-    print("writeerror")
-    raise SystemExit(0)
-
-print("merged")
-raise SystemExit(0)
-PY
-)"
+  merge_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" config-fragment \
+    --action merge --path "$config_path")"
   merge_rc=$?
   if [ "$merge_rc" -ne 0 ]; then
     merge_status="crash"
   fi
   case "$merge_status" in
     merged)
-      ok "merged native [shell_environment_policy] inherit=\"core\" into $config_path (backup: $config_path.bak); Codex now drops loader env vars (LD_PRELOAD/NODE_OPTIONS/PYTHONPATH/...) before spawning the wrapper launchers"
+      ok "merged native [shell_environment_policy] inherit=\"all\" with explicit loader/interpreter excludes into $config_path; the retained backup path and cleanup guidance were reported above; the launcher env scrub remains defense in depth"
+      ;;
+    migrated)
+      ok "migrated the exact legacy managed [shell_environment_policy] inherit=\"core\" block to inherit=\"all\" with explicit loader/interpreter excludes in $config_path; the retained backup path and cleanup guidance were reported above"
       ;;
     already-managed)
       ok "native [shell_environment_policy] fragment already present (managed) in $config_path; no change"
       ;;
     user-policy)
-      warn "$config_path already defines its own [shell_environment_policy]; leaving it untouched. For loader-env hardening set inherit=\"core\" (or add exclude=[\"LD_*\",\"DYLD_*\",\"NODE_OPTIONS\",\"PYTHON*\",...]); see migration/config-fragment.recommended.toml"
+      warn "$config_path already defines its own [shell_environment_policy]; leaving it untouched. For loader-env hardening keep inherit=\"all\" and add exclude=[\"LD_*\",\"DYLD_*\",\"NODE_OPTIONS\",\"NODE_PATH\",\"PYTHON*\",...]; see migration/config-fragment.recommended.toml"
+      ;;
+    edited-managed)
+      warn "$config_path contains an edited managed [shell_environment_policy] block; leaving it untouched. Reconcile it manually with migration/config-fragment.recommended.toml"
       ;;
     malformed)
       warn "$config_path is not valid TOML; skipped the [shell_environment_policy] merge (fix the file, then re-run --install). The launcher's own env scrub still applies"
@@ -1567,13 +1501,14 @@ PY
 # instead of default_permissions -- overriding the triad_leader exec-target
 # denies above for that project. Codex reads requirements.toml -- the Tier-1
 # config source that outranks every project-local/per-user layer -- ONLY from
-# /etc/codex/ (root-owned), an org-managed cloud config bundle, or macOS MDM;
-# NEVER from $CODEX_HOME (a per-user path bootstrap could write unprivileged).
+# the personal machine's root-owned /etc/codex/requirements.toml; NEVER from
+# $CODEX_HOME (a per-user path bootstrap could write unprivileged).
 # A copy written there would be silently inert (Codex never loads it) while
 # looking like a closed gap -- so bootstrap ships a first-party recommended
-# file (migration/requirements.recommended.toml) for a root/admin to install
-# and only WARNs here, pointing at it; it never writes to /etc/codex itself
-# (that needs root, which bootstrap does not have and must not assume).
+# file (migration/requirements.recommended.toml) for the machine owner to
+# install with administrator privileges and only WARNs here, pointing at it;
+# it never writes to /etc/codex itself (that needs privileges bootstrap does
+# not have and must not assume).
 # Gated on want_codex_profile() (the artifact only makes sense once the
 # triad_leader profile it references is installed) AND on errors -eq 0:
 # install_codex_runtime_profile can itself fail (bad profile name/policy,
@@ -1589,9 +1524,10 @@ warn_requirements_remediation() {
   fi
   requirements_artifact="$REPO_ROOT/migration/requirements.recommended.toml"
   if [ -f "$requirements_artifact" ]; then
-    warn "the installed profile (default_permissions=\"triad_leader\") protects this session's own exec targets, but a TRUSTED project's own .codex/config.toml with a legacy sandbox_mode key disables permission profiles for that project, which can override the exec-target denies above; to ENFORCE the permission-profile model machine-wide (block that legacy-sandbox opt-out -- the per-machine deny BODY stays in this per-user profile; Codex >= 0.138.0 required), a root/admin installs the shipped remediation. Do NOT overwrite an existing /etc/codex/requirements.toml (it may carry unrelated org constraints): sudo cp -n \"$requirements_artifact\" /etc/codex/requirements.toml (the -n refuses to clobber; if it already exists, MERGE default_permissions + [allowed_permission_profiles].triad_leader into it by hand)"
+    warn "the installed profile (default_permissions=\"triad_leader\") protects this session's own exec targets, but a TRUSTED project's own .codex/config.toml with a legacy sandbox_mode key disables permission profiles for that project, which can override the exec-target denies above; to ENFORCE the permission-profile model machine-wide (block that legacy-sandbox opt-out -- the per-machine deny BODY stays in this per-user profile; Codex >= 0.138.0 required), follow the installed plugin's migration/requirements.recommended.toml instructions. Its cwd-independent Python shlex.join command printer resolves the absolute plugin path and emits a no-clobber argv-safe admin command. Do NOT overwrite an existing /etc/codex/requirements.toml; if it exists, MERGE default_permissions + [allowed_permission_profiles].triad_leader into it by hand."
     warn "non-root partial mitigation (per sensitive project, no root needed): add [projects.\"<abs-path>\"] trust_level = \"untrusted\" to ~/.codex/config.toml to stop that project's own .codex/ config layer from loading"
-    # The env-boundary hardening ([shell_environment_policy] inherit="core") is
+    # The env-boundary hardening ([shell_environment_policy] inherit="all" plus
+    # explicit loader/interpreter excludes) is
     # no longer a WARN here: merge_codex_config_fragment now MERGES it natively
     # into $CODEX_HOME/config.toml on --install (see that function). The
     # /etc/codex + existing-profile-user variants stay documented in the shipped
@@ -1634,8 +1570,6 @@ if not rules_name.endswith(".rules") or "/" in rules_name or "\\" in rules_name:
     raise SystemExit(1)
 
 codex_home = Path(codex_home_raw).expanduser()
-rules_dir = codex_home / "rules"
-rules_path = rules_dir / rules_name
 repo_root = Path(repo_root_raw)
 launcher_dir = Path(launcher_dir_raw)
 
@@ -1659,13 +1593,6 @@ def unique(values):
         seen.add(text)
         result.append(text)
     return result
-
-rules_dir.mkdir(parents=True, exist_ok=True)
-if rules_path.exists():
-    existing = rules_path.read_text(encoding="utf-8")
-    if MARKER not in existing:
-        print(f"refusing to overwrite unmanaged Codex rules file: {rules_path}")
-        raise SystemExit(1)
 
 lines = [
     MARKER,
@@ -1704,8 +1631,7 @@ for wrapper, label in WRAPPERS:
         "",
     ])
 
-rules_path.write_text("\n".join(lines), encoding="utf-8")
-print(rules_path)
+print("\n".join(lines), end="")
 PY
   then
     rules_fail_output="$(
@@ -1720,39 +1646,53 @@ EOF
     rm -f "$rules_output" "$rules_err"
     return
   fi
+  rules_path="$codex_home/rules/$CODEX_RULES_NAME"
+  installed="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-artifact \
+    --action install --kind rules --path "$rules_path" \
+    --payload-file "$rules_output" 2>>"$rules_err")"
+  if [ "$?" -ne 0 ]; then
+    rules_fail_output="$installed
+$(cat "$rules_err")"
+    while IFS= read -r line; do
+      [ -n "$line" ] && fail "$line"
+    done <<EOF
+$rules_fail_output
+EOF
+    rm -f "$rules_output" "$rules_err"
+    return
+  fi
+  case "$installed" in
+    created | updated | unchanged) : ;;
+    *)
+      fail "unexpected Codex command rules install status for $rules_path: $installed"
+      rm -f "$rules_output" "$rules_err"
+      return
+      ;;
+  esac
   if [ -s "$rules_err" ]; then
     while IFS= read -r line; do
       [ -n "$line" ] && warn "$line"
     done <"$rules_err"
   fi
-  installed="$(sed -n '1p' "$rules_output")"
   rm -f "$rules_output" "$rules_err"
-  ok "Codex command rules installed: $installed"
+  ok "Codex command rules installed: $rules_path ($installed)"
 }
 
-# Strips the managed codex-triad block (markers inclusive) from a shell RC
-# file. Used for both idempotent refresh (--install) and uninstall (--remove).
-strip_managed_shell_entry() {
-  python3 - "$1" "$SHELL_ENTRY_BEGIN" "$SHELL_ENTRY_END" <<'PY'
-from pathlib import Path
-import sys
-
-path, begin, end = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-kept = []
-skipping = False
-for line in lines:
-    stripped = line.rstrip("\n")
-    if stripped == begin:
-        skipping = True
-        continue
-    if stripped == end:
-        skipping = False
-        continue
-    if not skipping:
-        kept.append(line)
-path.write_text("".join(kept), encoding="utf-8")
-PY
+# Read-only validation shared by install and remove before public command
+# publication/removal. A malformed marker state must never reach the transformer.
+preflight_shell_entry() {
+  shell_action="$1"
+  if [ "$shell_action" = "install" ] \
+    && [ "${TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY:-0}" != "1" ]; then
+    return 0
+  fi
+  if python3 "$REPO_ROOT/bin/bootstrap_repair.py" shell-entry \
+    --action "preflight-$shell_action" --path "$SHELL_RC" \
+    --profile "$CODEX_PROFILE_NAME" >/dev/null; then
+    return 0
+  fi
+  fail "shell entry preflight failed: $SHELL_RC"
+  return 1
 }
 
 # MUST-land 6: the managed codex-triad shell function is the pinned no-prompt
@@ -1765,37 +1705,20 @@ install_shell_entry() {
     return
   fi
   rc_file="$SHELL_RC"
-  rc_dir="$(dirname -- "$rc_file")"
-  mkdir -p "$rc_dir" || {
-    fail "could not create shell RC directory: $rc_dir"
-    return
-  }
-  if [ -e "$rc_file" ] && grep -Fq "$SHELL_ENTRY_BEGIN" "$rc_file" 2>/dev/null; then
-    strip_managed_shell_entry "$rc_file" || {
-      fail "could not refresh managed codex-triad shell entry in $rc_file"
-      return
-    }
-  elif [ -e "$rc_file" ] && grep -q "codex-triad" "$rc_file" 2>/dev/null; then
-    fail "refusing to modify unmanaged codex-triad shell entry in $rc_file; remove it manually, then re-run --install"
+  shell_install_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" shell-entry \
+    --action install --path "$rc_file" --profile "$CODEX_PROFILE_NAME")"
+  if [ "$?" -ne 0 ]; then
+    fail "could not install codex-triad shell entry in $rc_file"
     return
   fi
-  {
-    printf '%s\n' "$SHELL_ENTRY_BEGIN"
-    printf '# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;\n'
-    printf '# removed by --remove. Pinned no-prompt posture: wrapper root\n'
-    printf '# containment + hardened wrapper mode + enforced claude sandbox.\n'
-    printf 'codex-triad() {\n'
-    printf '  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\\n'
-    printf '  TRIAD_WRAPPER_HARDENED=1 \\\n'
-    printf '  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \\\n'
-    printf '    command codex --profile %s --search "$@"\n' "$CODEX_PROFILE_NAME"
-    printf '}\n'
-    printf '%s\n' "$SHELL_ENTRY_END"
-  } >>"$rc_file" || {
-    fail "could not append codex-triad shell entry to $rc_file"
-    return
-  }
-  ok "codex-triad shell entry installed: $rc_file"
+  case "$shell_install_status" in
+    installed)
+      ok "codex-triad shell entry installed: $rc_file"
+      ;;
+    *)
+      fail "unexpected codex-triad shell install status for $rc_file: $shell_install_status"
+      ;;
+  esac
 }
 
 report_no_prompt_posture() {
@@ -1814,90 +1737,39 @@ report_no_prompt_posture() {
   fi
 }
 
-expand_user_path() {
-  python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser())' "$1"
-}
-
 # remove_codex_config_fragment — symmetric to merge_codex_config_fragment.
-# Strips exactly OUR marker-delimited [shell_environment_policy] block from
-# $CODEX_HOME/config.toml (keyed on CONFIG_FRAGMENT_BEGIN/END), leaving every
-# other key untouched. If stripping the block leaves the file effectively empty
-# (i.e. --install had CREATED config.toml solely for the fragment), the file is
-# removed to restore the pre-install absent state. Our marker absent -> silent
-# no-op (config.toml is a SHARED file; a user's own [shell_environment_policy]
-# without our marker is left in place). NON-fatal: any read/write error WARNs.
+# Removes exactly one literal current or legacy managed
+# [shell_environment_policy] block from $CODEX_HOME/config.toml. Any edited,
+# duplicate, incomplete, or otherwise unrecognized marker state is left
+# byte-for-byte untouched. Removal is literal replacement, never a marker-range
+# scan or newline-normalizing reserialization. If the literal block was the
+# entire file, remove the file to restore the pre-install absent state.
 remove_codex_config_fragment() {
+  if [ "$errors" -ne 0 ]; then
+    return
+  fi
   config_path="$CODEX_HOME/config.toml"
-  remove_status="$(python3 - "$config_path" "$CONFIG_FRAGMENT_BEGIN" "$CONFIG_FRAGMENT_END" <<'PY'
-import os
-import sys
-import tempfile
-from pathlib import Path
-
-config_path = Path(sys.argv[1])
-begin = sys.argv[2]
-end = sys.argv[3]
-
-try:
-    text = config_path.read_text(encoding="utf-8")
-except FileNotFoundError:
-    print("absent")
-    raise SystemExit(0)
-except (OSError, UnicodeDecodeError):
-    print("unreadable")
-    raise SystemExit(0)
-
-if begin not in text:
-    # No managed block of ours -> leave a user-authored file untouched.
-    print("not-managed")
-    raise SystemExit(0)
-
-kept = []
-skipping = False
-for line in text.splitlines(keepends=True):
-    stripped = line.rstrip("\n")
-    if stripped == begin:
-        skipping = True
-        continue
-    if stripped == end:
-        skipping = False
-        continue
-    if not skipping:
-        kept.append(line)
-
-remainder = "".join(kept)
-try:
-    if remainder.strip() == "":
-        # config.toml existed only for our fragment -> restore absent state.
-        config_path.unlink()
-        print("removed-file")
-        raise SystemExit(0)
-    remainder = remainder.rstrip("\n") + "\n"
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(config_path.parent), prefix=".config.toml.", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(remainder)
-        os.replace(tmp_name, config_path)
-    except BaseException:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-except (OSError, UnicodeError):
-    print("writeerror")
-    raise SystemExit(0)
-
-print("removed")
-raise SystemExit(0)
-PY
-)"
+  remove_err="$(mktemp "${TMPDIR:-/tmp}/triad-config-remove-err.XXXXXX")" || {
+    fail "could not create temporary file for config fragment removal stderr"
+    return 1
+  }
+  remove_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" config-fragment \
+    --action remove --path "$config_path" 2>"$remove_err")"
   remove_rc=$?
   if [ "$remove_rc" -ne 0 ]; then
-    remove_status="crash"
+    fail "config fragment removal helper failed for $config_path"
+    while IFS= read -r line; do
+      [ -n "$line" ] && printf '[error] %s\n' "$line" >&2
+    done <"$remove_err"
+    rm -f "$remove_err"
+    return 1
   fi
+  if [ -s "$remove_err" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && warn "$line"
+    done <"$remove_err"
+  fi
+  rm -f "$remove_err"
   case "$remove_status" in
     removed | removed-file)
       ok "removed managed [shell_environment_policy] fragment from $config_path"
@@ -1905,7 +1777,7 @@ PY
     absent | not-managed)
       : # nothing of ours to remove; stay silent (config.toml is a shared file)
       ;;
-    unreadable | writeerror)
+    unrecognized-managed | unreadable | writeerror)
       warn "could not remove the managed [shell_environment_policy] fragment from $config_path"
       ;;
     *)
@@ -1919,61 +1791,67 @@ run_remove() {
     fail "missing required binary: python3"
     return
   fi
-  LAUNCHER_DIR="$(expand_user_path "$RAW_LAUNCHER_DIR")"
-  CODEX_HOME="$(expand_user_path "$RAW_CODEX_HOME")"
-  CLASSIFIER_PATH="$(expand_user_path "$RAW_CLASSIFIER_PATH")"
-
-  if [ -e "$SHELL_RC" ] && grep -Fq "$SHELL_ENTRY_BEGIN" "$SHELL_RC" 2>/dev/null; then
-    if strip_managed_shell_entry "$SHELL_RC"; then
-      ok "removed managed codex-triad shell entry from $SHELL_RC"
-    else
-      fail "could not remove managed codex-triad shell entry from $SHELL_RC"
-    fi
-  elif [ -e "$SHELL_RC" ] && grep -q "codex-triad" "$SHELL_RC" 2>/dev/null; then
-    warn "leaving unmanaged codex-triad entry in place: $SHELL_RC (not installed by bootstrap)"
-  else
-    ok "no codex-triad shell entry to remove: $SHELL_RC"
+  # Use the same trusted-root spelling as install. Nested paths such as
+  # CODEX_HOME/agents remain unresolved and are checked separately, but a
+  # stable operator-selected root alias (`/tmp` on macOS or a CODEX_HOME
+  # symlink) must not make install succeed and the matching remove fail.
+  canonicalize_path_inputs
+  if [ "$errors" -ne 0 ]; then
+    return
   fi
 
+  # Validate every repair-lifecycle path before uninstall removes any other
+  # managed artifact. The transactional remove repeats these checks at commit
+  # time; this read-only pass prevents a known-bad target from causing a
+  # partial uninstall.
+  if ! run_repair_lifecycle preflight-remove; then
+    return
+  fi
+  if ! preflight_shell_entry remove; then
+    return
+  fi
+
+  if ! begin_command_group; then
+    return
+  fi
   for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
     launcher="$LAUNCHER_DIR/$wrapper"
-    if [ -L "$launcher" ]; then
-      warn "leaving symlinked launcher in place: $launcher"
-      continue
-    fi
-    if [ ! -e "$launcher" ]; then
-      continue
-    fi
-    if launcher_is_managed "$launcher" "$wrapper"; then
-      if rm -f "$launcher"; then
-        ok "removed launcher: $launcher"
-      else
-        fail "could not remove launcher: $launcher"
-      fi
-    else
-      warn "leaving unmanaged launcher in place: $launcher"
-    fi
+    queue_command_removal "$wrapper" launcher "$launcher"
   done
-
+  # Kept only to clean command entries published by older releases.
   for runtime_command in triad-setup triad-doctor; do
     target="$LAUNCHER_DIR/$runtime_command"
-    if [ -L "$target" ]; then
-      warn "leaving symlinked runtime command in place: $target"
-      continue
-    fi
-    if [ ! -e "$target" ]; then
-      continue
-    fi
-    if runtime_command_is_managed "$target"; then
-      if rm -f "$target"; then
-        ok "removed runtime command: $target"
-      else
-        fail "could not remove runtime command: $target"
-      fi
-    else
-      warn "leaving unmanaged runtime command in place: $target"
-    fi
+    queue_command_removal "$runtime_command" runtime "$target"
   done
+  if [ "$errors" -ne 0 ]; then
+    rm -f "$COMMAND_MANIFEST"
+    COMMAND_MANIFEST=""
+    return
+  fi
+  if ! remove_command_group; then
+    return
+  fi
+
+  shell_remove_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" shell-entry \
+    --action remove --path "$SHELL_RC" --profile "$CODEX_PROFILE_NAME")"
+  if [ "$?" -ne 0 ]; then
+    fail "could not remove managed codex-triad shell entry from $SHELL_RC"
+  else
+    case "$shell_remove_status" in
+      removed)
+        ok "removed managed codex-triad shell entry from $SHELL_RC"
+        ;;
+      unmanaged)
+        warn "leaving unmanaged codex-triad entry in place: $SHELL_RC (not installed by bootstrap)"
+        ;;
+      absent)
+        ok "no codex-triad shell entry to remove: $SHELL_RC"
+        ;;
+      *)
+        fail "unexpected codex-triad shell remove status for $SHELL_RC: $shell_remove_status"
+        ;;
+    esac
+  fi
 
   for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
     agent_file="$CODEX_HOME/agents/$name.toml"
@@ -1981,34 +1859,25 @@ run_remove() {
       warn "leaving legacy repair-agent symlink in place (never following a symlink target): $agent_file"
       continue
     fi
-    if [ ! -e "$agent_file" ]; then
-      continue
-    fi
-    if ! repair_agent_is_managed "$agent_file"; then
-      warn "preserving unmanaged repair agent: $agent_file"
-      continue
-    fi
-    if rm -f "$agent_file"; then
-      ok "removed managed repair agent: $agent_file"
-    else
-      fail "could not remove repair agent: $agent_file"
-    fi
+    remove_owned_artifact \
+      legacy-agent \
+      "$agent_file" \
+      "removed managed repair agent: $agent_file" \
+      "preserving unmanaged repair agent: $agent_file"
   done
 
-  profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
-  if [ -e "$profile_path" ]; then
-    if grep -Fq "# triad-codex-dispatch managed runtime profile" "$profile_path" 2>/dev/null; then
-      if rm -f "$profile_path"; then
-        ok "removed Codex runtime profile: $profile_path"
-      else
-        fail "could not remove Codex runtime profile: $profile_path"
-      fi
-    else
-      warn "leaving unmanaged Codex profile in place: $profile_path"
-    fi
-  fi
+  run_repair_lifecycle remove
 
-  remove_codex_config_fragment
+  profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
+  remove_owned_artifact \
+    profile \
+    "$profile_path" \
+    "removed Codex runtime profile: $profile_path" \
+    "leaving unmanaged Codex profile in place: $profile_path"
+
+  if ! remove_codex_config_fragment; then
+    return
+  fi
 
   # C5 (symmetric to warn_requirements_remediation on --install): a root/admin
   # may have installed the shipped /etc/codex/requirements.toml remediation,
@@ -2034,54 +1903,80 @@ run_remove() {
   fi
 
   rules_path="$CODEX_HOME/rules/$CODEX_RULES_NAME"
-  if [ -e "$rules_path" ]; then
-    if grep -Fq "# triad-codex-dispatch managed command rules" "$rules_path" 2>/dev/null; then
-      if rm -f "$rules_path"; then
-        ok "removed Codex command rules: $rules_path"
-      else
-        fail "could not remove Codex command rules: $rules_path"
-      fi
-    else
-      warn "leaving unmanaged Codex rules file in place: $rules_path"
-    fi
-  fi
+  remove_owned_artifact \
+    rules \
+    "$rules_path" \
+    "removed Codex command rules: $rules_path" \
+    "leaving unmanaged Codex rules file in place: $rules_path"
 
   if [ -e "$CLASSIFIER_PATH" ]; then
     ok "classifier patches preserved (learned classifications): $CLASSIFIER_PATH — remove manually to reset"
   fi
 }
 
-ensure_classifier() {
-  dir="$(dirname -- "$CLASSIFIER_PATH")"
-  mkdir -p "$dir" || {
-    fail "could not create classifier directory: $dir"
-    return
-  }
-  if [ ! -e "$CLASSIFIER_PATH" ]; then
-    printf '{}\n' >"$CLASSIFIER_PATH" || {
-      fail "could not create classifier file: $CLASSIFIER_PATH"
-      return
-    }
+preflight_classifier() {
+  classifier_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" classifier \
+    --action preflight --path "$CLASSIFIER_PATH")"
+  if [ "$?" -ne 0 ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && fail "$line"
+    done <<EOF
+$classifier_status
+EOF
+    return 1
   fi
-  if [ ! -w "$CLASSIFIER_PATH" ]; then
-    fail "classifier file is not writable: $CLASSIFIER_PATH"
-    return
-  fi
-  if python3 - "$CLASSIFIER_PATH" <<'PY'
-import json
-import sys
-with open(sys.argv[1], encoding="utf-8") as fh:
-    json.load(fh)
-PY
-  then
-    ok "classifier file is writable JSON: $CLASSIFIER_PATH"
-  else
-    fail "classifier file is not valid JSON: $CLASSIFIER_PATH"
-  fi
+  case "$classifier_status" in
+    absent | ready)
+      return 0
+      ;;
+    *)
+      fail "unexpected classifier preflight status for $CLASSIFIER_PATH: $classifier_status"
+      return 1
+      ;;
+  esac
 }
 
+ensure_classifier() {
+  classifier_err="$(mktemp "${TMPDIR:-/tmp}/triad-classifier-err.XXXXXX")" || {
+    fail "could not create temporary file for classifier stderr"
+    return 1
+  }
+  classifier_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" classifier \
+    --action ensure --path "$CLASSIFIER_PATH" 2>"$classifier_err")"
+  classifier_rc=$?
+  if [ "$classifier_rc" -ne 0 ]; then
+    fail "classifier ensure helper failed for $CLASSIFIER_PATH"
+    while IFS= read -r line; do
+      [ -n "$line" ] && printf '[error] %s\n' "$line" >&2
+    done <"$classifier_err"
+    rm -f "$classifier_err"
+    return 1
+  fi
+  if [ -s "$classifier_err" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && warn "$line"
+    done <"$classifier_err"
+  fi
+  rm -f "$classifier_err"
+  case "$classifier_status" in
+    created | ready)
+      ok "classifier file is writable JSON: $CLASSIFIER_PATH"
+      ;;
+    *)
+      fail "unexpected classifier ensure status for $CLASSIFIER_PATH: $classifier_status"
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+if ! validate_bootstrap_inputs; then
+  printf '[error] bootstrap input validation failed with %s issue(s)\n' "$errors" >&2
+  exit 1
+fi
+
 if [ -n "$LEGACY_ALIAS_TARGET" ]; then
-  warn "${1:-} is a deprecated alias for $LEGACY_ALIAS_TARGET; removed in the next release after 0.2.526"
+  warn "${1:-} is a deprecated alias for $LEGACY_ALIAS_TARGET; kept through 0.2.527 and scheduled for removal after 0.2.527"
 fi
 
 if [ "$MODE" = "remove" ]; then
@@ -2098,20 +1993,24 @@ fi
 printf 'triad-codex-dispatch bootstrap install\n'
 check_binary codex
 check_binary claude
-check_binary agy
+check_google_route
 if [ "${TRIAD_BOOTSTRAP_REQUIRE_GEMINI:-0}" = "1" ]; then
   check_binary gemini
-else
+elif [ "$GOOGLE_ROUTE" = "agy" ]; then
   check_optional_binary gemini
 fi
 check_python
-check_binary jq
-check_claude_version
 if [ "$errors" -eq 0 ]; then
   canonicalize_path_inputs
 fi
 if [ "$errors" -eq 0 ]; then
   check_workspace_escape
+fi
+if [ "$errors" -eq 0 ]; then
+  resolve_python_runtime
+fi
+if [ "$errors" -eq 0 ]; then
+  check_formal_schema_dependency
 fi
 printf 'repo root: %s\n' "$REPO_ROOT"
 printf 'reminder: trust this workspace in Codex before relying on project-local skills.\n'
@@ -2124,25 +2023,92 @@ if want_codex_profile \
   && ! want_codex_rules; then
   warn "approval_policy=never with the command rules opted out can auto-deny sandbox escapes; keep the default rules install for no-prompt dispatch"
 fi
-check_legacy_sandbox_config
-# R2 (SEC-2) BEFORE R1 (DIST-1): the SEC-framed confused-deputy warning must
-# not be drowned by / duplicated with the plain hygiene warning, and R1's
-# de-dup depends on SEC2_FLAGGED_SELECTORS, which only R2 populates.
-check_local_writable_agent_residual
-check_duplicate_selectors
+# Repair targets share config and launcher state with the remaining bootstrap
+# steps. Reject unsafe/unmanaged repair inputs before the first persistent
+# mutation; the later transactional install revalidates them against races.
+if ! run_repair_lifecycle preflight-install; then
+  printf '[error] repair artifact preflight failed; skipping installation steps\n' >&2
+  exit 1
+fi
+# All three public commands are independent persistent targets. Validate the
+# entire group before migration, profiles, rules, classifier, logs, or shell
+# state can be touched. commands-install repeats the check atomically at
+# publication time to reject a target changed after this read-only pass.
+if ! preflight_install_command_targets; then
+  printf '[error] managed command preflight failed; skipping installation steps\n' >&2
+  exit 1
+fi
+if want_codex_profile; then
+  profile_selected=1
+else
+  profile_selected=0
+fi
+if want_codex_rules; then
+  rules_selected=1
+else
+  rules_selected=0
+fi
+if ! preflight_codex_install_targets "$profile_selected" "$rules_selected"; then
+  printf '[error] Codex profile/rules preflight failed; skipping installation steps\n' >&2
+  exit 1
+fi
+if ! preflight_shell_entry install; then
+  printf '[error] shell entry preflight failed; skipping installation steps\n' >&2
+  exit 1
+fi
+if ! preflight_classifier; then
+  printf '[error] classifier preflight failed; skipping installation steps\n' >&2
+  exit 1
+fi
+if begin_command_group; then
+  install_launchers
+  if [ "$errors" -eq 0 ]; then
+    publish_command_group
+    if [ "$errors" -eq 0 ]; then
+      verify_installed_launchers
+    fi
+  else
+    # publish_command_group also removes only the shell-created payload files.
+    # Do not hand an incomplete group to the Python mutation engine.
+    python3 - "$COMMAND_MANIFEST" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    try:
+        Path(json.loads(line)["data_path"]).unlink(missing_ok=True)
+    except (KeyError, OSError, ValueError, json.JSONDecodeError):
+        pass
+PY
+    rm -f "$COMMAND_MANIFEST"
+    COMMAND_MANIFEST=""
+  fi
+fi
+if [ "$errors" -ne 0 ]; then
+  fail "managed command installation failed; skipping remaining installation steps"
+  exit 1
+fi
 migrate_legacy_repair_agents
-install_launchers
-install_runtime_commands
 ensure_log_dir
-ensure_classifier
+if ! ensure_classifier; then
+  printf '[error] classifier installation failed; skipping remaining installation steps\n' >&2
+  exit 1
+fi
 install_codex_runtime_profile
 merge_codex_config_fragment
+if run_repair_lifecycle install; then
+  check_legacy_sandbox_config
+  check_local_writable_agent_residual
+  check_duplicate_selectors
+fi
 warn_requirements_remediation
 install_codex_rules
 install_shell_entry
 report_no_prompt_posture
 
 if [ "$errors" -eq 0 ]; then
+  printf 'next step: start a fresh Codex session so the new agent_type %s loads.\n' "$REPAIR_ANALYZER_NAME"
   ok "bootstrap install passed"
   exit 0
 fi

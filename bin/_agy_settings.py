@@ -21,12 +21,14 @@ import errno
 import fcntl
 import json
 import os
+import stat
 import sys
 import time
 import uuid
 from pathlib import Path
 
 _DEFAULT_PATH = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+_TEMP_CREATE_ATTEMPTS = 32
 
 # read-only: every mutation + shell (sandboxed OR unsandboxed) blocked; reads
 # succeed. read_url is intentionally NOT denied — agy's web search/research is
@@ -75,6 +77,14 @@ def _settings_path() -> Path:
     return Path(env) if env else _DEFAULT_PATH
 
 
+def _reject_settings_symlink(p: Path) -> None:
+    if p.is_symlink():
+        raise OSError(
+            errno.ELOOP,
+            f"AGY settings path must not be a symbolic link: {p}",
+        )
+
+
 def _shared_state_path(p: Path) -> Path:
     return p.with_name(".agy_settings.shared.json")
 
@@ -96,27 +106,130 @@ def _shareable_deny(deny_rules: list) -> bool:
 
 def _snapshot(p: Path) -> dict:
     if p.exists():
-        return {"existed": True, "content": p.read_text()}
+        with p.open("r", encoding="utf-8", newline="") as stream:
+            return {"existed": True, "content": stream.read()}
     return {"existed": False, "content": ""}
 
 
-def _atomic_write(p: Path, text: str) -> None:
-    """Atomic durable write: fully write a temp file in the SAME dir -> fsync ->
-    os.replace (atomic on POSIX same-filesystem). Buffered write guarantees every
-    byte lands (raw os.write may short-write); the parent-dir fsync makes the
-    rename itself durable across a power loss."""
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    with open(tmp, "wb") as f:
-        f.write(text.encode())
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, p)
-    dfd = os.open(str(p.parent), os.O_RDONLY)
+def _write_all(fd: int, data: bytes) -> None:
+    view = memoryview(data)
+    offset = 0
+    while offset < len(view):
+        try:
+            written = os.write(fd, view[offset:])
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise OSError(errno.EIO, "short AGY settings temporary-file write")
+        offset += written
+
+
+def _temp_inode_matches(
+    dir_fd: int,
+    temp_name: str,
+    temp_fd: int,
+    created: os.stat_result,
+    *,
+    require_single_link: bool,
+) -> bool:
     try:
-        os.fsync(dfd)
+        held = os.fstat(temp_fd)
+        current = os.stat(temp_name, dir_fd=dir_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(created.st_mode)
+        and stat.S_ISREG(held.st_mode)
+        and stat.S_ISREG(current.st_mode)
+        and os.path.samestat(created, held)
+        and os.path.samestat(created, current)
+        and (not require_single_link or (held.st_nlink == current.st_nlink == 1))
+    )
+
+
+def _cleanup_temp_inode(
+    dir_fd: int,
+    temp_name: str,
+    temp_fd: int,
+    created: os.stat_result,
+) -> None:
+    if not _temp_inode_matches(
+        dir_fd,
+        temp_name,
+        temp_fd,
+        created,
+        require_single_link=False,
+    ):
+        return
+    try:
+        os.unlink(temp_name, dir_fd=dir_fd)
+    except FileNotFoundError:
+        pass
+
+
+def _atomic_write(p: Path, text: str) -> None:
+    """Durably publish bytes through one exclusively created temporary inode."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    dir_fd = os.open(str(p.parent), os.O_RDONLY | os.O_CLOEXEC)
+    temp_fd: int | None = None
+    temp_name: str | None = None
+    created: os.stat_result | None = None
+    published = False
+    try:
+        if not stat.S_ISDIR(os.fstat(dir_fd).st_mode):
+            raise OSError(errno.ENOTDIR, "AGY settings parent is not a directory")
+        flags = (
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_NOFOLLOW
+            | os.O_CLOEXEC
+        )
+        collision: FileExistsError | None = None
+        for _ in range(_TEMP_CREATE_ATTEMPTS):
+            temp_name = f"{p.name}.tmp.{os.getpid()}.{uuid.uuid4().hex}"
+            try:
+                temp_fd = os.open(temp_name, flags, 0o600, dir_fd=dir_fd)
+            except FileExistsError as error:
+                collision = error
+                continue
+            break
+        if temp_fd is None:
+            assert collision is not None
+            raise collision
+        created = os.fstat(temp_fd)
+        if not stat.S_ISREG(created.st_mode) or created.st_nlink != 1:
+            raise OSError(
+                errno.EPERM,
+                "AGY settings temporary leaf is not a single-link regular file",
+            )
+        _write_all(temp_fd, text.encode())
+        os.fsync(temp_fd)
+        if not _temp_inode_matches(
+            dir_fd,
+            temp_name,
+            temp_fd,
+            created,
+            require_single_link=True,
+        ):
+            raise OSError(
+                errno.ESTALE,
+                "AGY settings temporary inode changed before publication",
+            )
+        os.replace(
+            temp_name,
+            p.name,
+            src_dir_fd=dir_fd,
+            dst_dir_fd=dir_fd,
+        )
+        published = True
+        os.fsync(dir_fd)
     finally:
-        os.close(dfd)
+        if temp_fd is not None:
+            if not published and temp_name is not None and created is not None:
+                _cleanup_temp_inode(dir_fd, temp_name, temp_fd, created)
+            os.close(temp_fd)
+        os.close(dir_fd)
 
 
 def _restore(p: Path, snap: dict) -> None:
@@ -359,8 +472,8 @@ def _shared_readonly_guard(
                 _crash_recover(p, bak)
                 entry_snap = _snapshot(p)
                 _atomic_write(bak, json.dumps(entry_snap))
-                _merge_deny(p, deny_rules)
                 mutated = True
+                _merge_deny(p, deny_rules)
                 state = {"deny_key": key, "holders": []}
 
             state["holders"].append(
@@ -390,15 +503,25 @@ def _shared_readonly_guard(
                         os.set_inheritable(cleanup_fd, False)
                         _lock_until(cleanup_fd, time.monotonic() + lock_timeout)
                         cleanup_acquired = True
-                    _restore(p, entry_snap)
                     try:
-                        bak.unlink()
-                    except FileNotFoundError:
-                        pass
-                    try:
-                        state_path.unlink()
-                    except FileNotFoundError:
-                        pass
+                        _restore(p, entry_snap)
+                    except Exception as restore_error:
+                        if body_had_exception:
+                            sys.stderr.write(
+                                "[agy_settings] restore failed after entry error: "
+                                f"{restore_error}\n"
+                            )
+                        else:
+                            raise
+                    else:
+                        try:
+                            bak.unlink()
+                        except FileNotFoundError:
+                            pass
+                        try:
+                            state_path.unlink()
+                        except FileNotFoundError:
+                            pass
                 finally:
                     if cleanup_fd is not None:
                         if cleanup_acquired:
@@ -538,6 +661,7 @@ def agy_settings_guard(deny_rules, *, lock_timeout: float = 30.0):
     settings are mutated.
     """
     p = _settings_path()
+    _reject_settings_symlink(p)
     bak = p.with_name(".agybak")
     lock = p.with_name(".agy_settings.lock")
     p.parent.mkdir(parents=True, exist_ok=True)
