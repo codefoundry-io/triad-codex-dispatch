@@ -189,7 +189,7 @@ CLS=$(printf '%s' "$SUMMARY" | sed -E 's/.*\[wrapper\] antigravity ([a-z-]+) .*/
 
 Token set: `ok | server-capacity | cli-subscription-cap | token-limit | oauth-env
 | schema-fail | schema-rejected | timeout | extraction-error | vendor-error
-| fanout-spawn-error | config-conflict | task-blocked | unknown`. Exit codes: `0` ok / `1` cli-fail / `2` timeout /
+| truncated-answer | fanout-spawn-error | config-conflict | task-blocked | unknown`. Exit codes: `0` ok / `1` cli-fail / `2` timeout /
 `3` arg / `4` binary-missing / `64` server-cap-exhausted / `65` terminal /
 `66` schema fail / `67` schema-rejected.
 
@@ -210,6 +210,7 @@ stdout; a bounded copy rides in the run-log's `extraction_error`).
 | `ok` (0) | Return wrapper stdout. With `--pydantic`, stdout is the validated JSON object. |
 | terminal (65) — `cli-subscription-cap` / `token-limit` / `oauth-env` (agy-live) / `vendor-error` (agy-live) / `fanout-spawn-error` / `task-blocked` (engine-shared tokens, not produced by agy — codex fan-out / claude permission-denial legs) | Surface to user with cause (quota / prompt too large / re-login / vendor-error: agy exited rc≠0 yet produced a non-empty answer — the answer is NOT on stdout but a bounded copy IS in the run-log `extraction_error`; inspect and decide re-dispatch vs accept). **NOT** repair territory. Auth is user-managed. |
 | `config-conflict` (65) | Local agy settings/config conflict. Wait briefly and re-dispatch once if it is a settings-lock contention; if repeated, surface the config-lock cause and ask the user to let other agy work finish. **NOT** repair territory. |
+| `truncated-answer` (65) | agy folded the MIDDLE of a long answer CLI-side (own-line `<truncated N bytes\|lines>` marker; ~4KB cap observed 2026-07-22) and keeps NO full copy anywhere (the transcript record is capped too) — lossy, unrecoverable at the wrapper layer; the answer is quarantined from stdout (bounded copy in the run-log). **Remediation: re-dispatch under § Long-answer output-file contract** (agy `write_file` is fold-exempt — verified 24KB intact). **NOT** repair territory (deterministic vendor behavior on the answer-present path). Plain-retrying the same stdout-shaped dispatch will fold again. |
 | `server-capacity` exhausted (64) | Wait + retry, or surface. Wrapper already retried per backoff. |
 | `unknown` (1) | **Step 5 — surface the top-level read-only analyzer command (MANDATORY; Hard rule 6).** |
 | `extraction-error` (1) | **Step 5 — surface the analyzer command.** rc=0 but the extractor found no sentinel / empty answer body. |
@@ -305,6 +306,29 @@ fi
 Do not remove the run-log here. The 5b analyzer runs later in a fresh terminal you
 cannot observe, so an `rm` now would race ahead of it. Leave it in place — the
 wrapper's age-floor sweep reclaims it.
+
+## Long-answer output-file contract (truncation loophole; 2026-07-22)
+
+agy's print path AND its own transcript store cap every record's content
+(~4KB observed; own-line `<truncated N bytes|lines>` markers) — a long
+single answer is FOLDED mid-body and the lost text survives nowhere
+agy-side. `write_file` output is NOT subject to the fold (verified: 24KB
+file intact while the chat answer folded).
+
+For any dispatch whose answer may exceed ~3KB (review legs, research
+reports, multi-section documents):
+
+1. Prompt the worker to WRITE the full deliverable to an **ABSOLUTE path**
+   (agy resolves relative paths against its own scratch project, NOT
+   `--cwd` — a relative path lands in `~/.gemini/antigravity-cli/scratch/`),
+   and to print only a one-line confirmation (e.g. `DONE <filename>`).
+2. Read the file as the deliverable; the chat answer is only a completion
+   signal.
+3. Version caveat: on agy ≤1.1.2 a `--sandbox read-only` deny transaction
+   blocks `write_file` — omit `--sandbox` there; on ≥1.1.3 the headless
+   skip-perms adaptation auto-approves it (isolation caveat applies).
+4. On `truncated-answer` (65), re-dispatch once under this contract —
+   never plain-retry.
 
 ## Outputs
 
