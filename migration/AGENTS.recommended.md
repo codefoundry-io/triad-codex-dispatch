@@ -21,40 +21,22 @@ directly:
 - `$triad-gemini-dispatch` only for business, Vertex, or API-key Gemini tiers.
 - `$triad-cross-family-review` before risky merges.
 
-For sessions that may trigger wrapper repair, start Codex with web search:
-
-```bash
-codex --search
-```
-
 Do not use `danger-full-access`, `bypassPermissions`, or yolo-style permission
-modes for this toolkit. Bootstrap installs shipped repair agents with
-`default_permissions = "triad_repair"` so the generated TOML grants read access
-to the toolkit checkout, write access only to the classifier config and bounded
-run-log IPC area, and network for repair verification. This is the declared
-profile grant boundary, not proof that a broader parent session or managed
-runtime override cannot allow more. The profile uses bootstrap-injected absolute
-filesystem grants for the toolkit checkout, classifier config, bounded run-log
-IPC area, Python runtime, and resolved vendor CLI executable directories, not
-`:workspace_roots`, so the profile itself does not expand into the caller
-workspace. Repair verification strips the original wrapper `--cwd` and runs
-from the toolkit checkout; it checks classifier routing, not caller-repo
-behavior.
-The generated profile grants write access to the classifier config directory and
-the bounded `bin/_logs/<cli>/` IPC area. That log area contains run logs,
-requested `<run_log>.repair.json` response files, and temporary `.prompt.tmp`
-files used for repair verification.
+modes for this toolkit. Repair uses the exact registered
+`triad-repair-analyzer` Custom Agent, which pins a read-only sandbox. The agent
+reads an untrusted absolute run-log path and the local classifier framework as
+needed, then returns a proposal or escalation. It makes no provider or network
+calls and performs no edits.
 
-Classifier patch edits must use the adjacent advisory lock file. Runtime
-artifacts under `bin/_logs/<cli>/` are bounded by the wrapper, but normal
-dispatch should still remove the run log and matching `.repair.json` after the
-repair branch is handled.
+The owner applies a validated proposal from a normal authenticated terminal with
+`triad-apply-repair --cli <cli> --proposal-file <absolute-path>`. Run logs remain
+available as untrusted evidence until the wrapper's age-floor cleanup; do not
+manually remove them after analysis.
 
-Run before relying on the toolkit on a new machine:
-
-```bash
-scripts/bootstrap.sh --check
-```
+The plugin-add step prints a safely quoted absolute bootstrap command from its
+returned `installedPath`. Run that printed absolute bootstrap command exactly
+from a normal terminal outside the plugin cache or checkout. Do not carry a
+temporary plugin-path variable across terminal or process boundaries.
 
 Claude, agy, and business-tier Gemini auth are managed independently from Codex
 auth. Auth failures should be surfaced to the user, not repaired by editing the

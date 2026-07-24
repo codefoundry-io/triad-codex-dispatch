@@ -10,29 +10,33 @@ Per-CLI vendor JSON modes (always on):
 - Gemini: `gemini -p ... --output-format json`
   → stdout = single JSON object {response, stats, error}, stderr ≈ 189 B.
 
-Schema enforcement (`--pydantic module:Class`) uses the prompt-side few-shot
-pattern (verified Step A3 = 15/15 PASS): JSON-only instruction + shape line
+Schema enforcement (`--pydantic module:Class`) uses the verified prompt-side
+few-shot pattern: JSON-only instruction + shape line
 + dummy example + USER REQUEST. Vendor settings.json `responseSchema` path
 NOT used (Issue #13388 = open / settings silent-ignored).
 
 Audit log schema = the RunResult dataclass + audit() body. There is no
-separate schema file. _logs/<cli>/audit.jsonl is the output; cleanup is
-the maintenance agent's responsibility.
+separate schema file. _logs/<cli>/audit.jsonl is the output; bounded runtime
+rotation owns its cleanup.
 """
 from __future__ import annotations
 
 import fcntl
+import errno
 import importlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import types
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -54,7 +58,7 @@ EXIT_CLI_FAIL = 1
 EXIT_TIMEOUT = 2
 EXIT_ARG_ERROR = 3
 EXIT_BINARY_MISSING = 4
-EXIT_RATE_GIVE_UP = 64   # transient retry exhausted → Sonnet repair sub-agent
+EXIT_RATE_GIVE_UP = 64   # transient retry exhausted → repair-routed classification
 EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env → user escalate
 EXIT_SCHEMA_FAIL = 66    # pydantic validation failed even after 1 retry
 EXIT_SCHEMA_REJECTED = 67  # codex refused --output-schema at submit (massage/strict-rule drift)
@@ -78,11 +82,12 @@ def map_classification_to_exit(cls: str) -> int:
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # agy: rc!=0 but a non-empty answer — surface, NOT repair
+        "truncated-answer": EXIT_TERMINAL,  # agy: rc=0 own-line truncation marker — surface, NOT repair
         "unknown": EXIT_CLI_FAIL,
     }.get(cls, EXIT_CLI_FAIL)
 
 
-# ─── Pattern lists (seed — living value, Step D maintenance updates) ──────
+# ─── Pattern lists (seed — extended only through validated proposals) ─────
 # Lowercase substring match. Terminal-first ordering when classifying.
 
 SERVER_CAPACITY_PATTERNS: tuple[str, ...] = (
@@ -203,8 +208,8 @@ OAUTH_ENV_PATTERNS: tuple[str, ...] = (
 
 # ─── Vendor exit code maps (EMPIRICAL ONLY) ───────────────────────────────
 # ONLY empirically observed exit codes are entered. An unobserved code =>
-# "unknown" => repair-agent dispatch (the repair agent web-searches, analyzes,
-# and patches an entry into this map).
+# "unknown" => repair-routed classification; the read-only analyzer may propose
+# a validated entry for the owner to apply deterministically.
 # Tier 1 docs (Gemini PR #13728: 41/42/52/53/130, Codex mintlify: 2/3/4/130)
 # never triggered in this environment, so NOT entered — add after observing.
 
@@ -236,7 +241,7 @@ ANTIGRAVITY_VENDOR_EXIT_MAP: dict[int, str] = {
                             # Source: run-log 20260625T082029Z-98429-e4610255.json (vendor_exit_code=0,
                             # extraction_error=no-sentinel, full Korean answer in stdout, classification=unknown).
 }
-# populated empirically by the agy-wrapper-repair sub-agent
+# Populated only from empirically observed Antigravity behavior.
 
 # Matched ONLY in the antigravity classify arm, only on the no-answer path;
 # NOT added to shared OAUTH_ENV_PATTERNS (FP-safe).
@@ -260,13 +265,13 @@ AUDIT_ARCHIVE_MAX_BYTES = AUDIT_ROTATE_BYTES * AUDIT_MAX_ARCHIVES
 
 # ─── Run-log policy (per-execution artifact, dispatch-SKILL input) ────────
 # Separate from audit.jsonl: one file per FAILED call (rc != 0) at
-# _logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json — successes never dispatch the
-# repair agent, so no file. The dispatch SKILL passes only the PATH in the
-# agent prompt and the agent fetches it with its Read tool, isolating large
-# vendor stdout / non-ASCII / special-char escaping from prompt transport.
+# _logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json; successes create no file. The
+# dispatch skill keeps the path opaque and passes it only to the read-only
+# analyzer, isolating large vendor stdout and arbitrary characters from prompt
+# transport.
 # 2-layer cleanup:
-#   Primary  = the dispatch SKILL rm's it right after the repair agent returns
-#   Failsafe = this function unlinks oldest-first when the dir cap is exceeded
+#   Primary  = later normal-dispatch age-floor cleanup removes old files
+#   Failsafe = cap pruning removes eligible files oldest-first
 _RUN_LOG_MAX_FILES = 100
 _RUN_LOG_MAX_BYTES = 20 * 1024 * 1024  # 20 MB total cap
 
@@ -286,8 +291,10 @@ class RunResult:
     schema_repair_attempt: int = 0
     extraction_error: Optional[str] = None
     validation_error: Optional[str] = None
-    # Vendor raw exit code — the repair agent's web-search key for unobserved codes.
+    # Vendor raw exit code retained as evidence for unobserved classifications.
     vendor_exit_code: int = -1
+    # Antigravity settings/provider custody boundary. Other wrappers leave it unset.
+    dispatch_phase: Optional[str] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -303,7 +310,8 @@ def require_binary(name: str) -> str:
     A codex-host launcher execs the wrapper with
     `TRIAD_<name.upper()>_BIN=<resolved absolute path>` and
     `TRIAD_REQUIRE_PINNED_VENDOR=1`, so a workspace-planted `<name>` earlier on
-    PATH cannot shadow the real vendor CLI an allow-listed launcher executes.
+    PATH cannot shadow the real vendor CLI an approval-reviewed, policy-matched
+    launcher executes.
     Lab default (neither env set) = `shutil.which` (PATH), unchanged.
 
     - a valid pin (absolute, existing, executable) always wins over PATH;
@@ -344,7 +352,7 @@ def _classifier_extension_path() -> Path:
     if override:
         return Path(override)
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "triad-dispatch" / "classifier-patches.json"
+    return Path(base) / "triad-codex-dispatch" / "classifier-patches.json"
 
 
 def _load_classifier_extension() -> dict:
@@ -389,7 +397,8 @@ def _load_classifier_extension() -> dict:
 
 # ─── Product hardening mode (L8 twin→SoT port, owner adjudications 2026-07-05) ───
 # The lab (SoT callers, skill contracts) runs UNRESTRICTED by default; the
-# public codex-host product's bootstrap sets TRIAD_WRAPPER_HARDENED=1, which
+# explicitly opted-in legacy codex-triad shell entry sets
+# TRIAD_WRAPPER_HARDENED=1 and pins TRIAD_WRAPPER_ALLOWED_ROOTS, which
 # activates: allowed-roots containment (required), the pydantic import gate,
 # and audit prompt redaction. Each control also has an individual env so it
 # can be engaged on its own (set TRIAD_WRAPPER_ALLOWED_ROOTS to enforce
@@ -417,8 +426,8 @@ def runtime_allowed_roots() -> list[Path]:
     """Containment roots for --cwd / --prompt-file. Env unset → NO containment
     in the lab (callers own isolation per the SKILL contracts); under
     TRIAD_WRAPPER_HARDENED=1 the env is REQUIRED (refuse rather than guess —
-    the public product's bootstrap pins it; a hardened run without pinned
-    roots must not silently fall back to cwd)."""
+    the explicitly opted-in legacy codex-triad shell entry pins it; a hardened
+    run without pinned roots must not silently fall back to cwd)."""
     raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
     if not raw:
         if _wrapper_hardened():
@@ -502,6 +511,96 @@ def validate_wrapper_cwd(cwd: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
+SEALED_VALIDATION_CONTEXT = frozenset(
+    {"sealed_packet_root", "expected_packet_sha256"}
+)
+
+
+def build_validation_context(
+    pydantic_cls: Any,
+    sealed_packet_root: Optional[str],
+    expected_packet_sha256: Optional[str],
+) -> Optional[dict[str, str]]:
+    """Validate one schema's optional sealed-packet context before dispatch."""
+    paired = bool(sealed_packet_root) == bool(expected_packet_sha256)
+    if not paired:
+        raise ValueError(
+            "--sealed-packet-root and --expected-packet-sha256 must be "
+            "supplied together"
+        )
+    if sealed_packet_root and pydantic_cls is None:
+        raise ValueError("sealed packet identity requires --pydantic")
+
+    raw_required = (
+        getattr(pydantic_cls, "required_validation_context", frozenset())
+        if pydantic_cls is not None
+        else frozenset()
+    )
+    if not isinstance(raw_required, (set, frozenset)) or not all(
+        isinstance(item, str) for item in raw_required
+    ):
+        raise ValueError(
+            "Pydantic required_validation_context must be a set of strings"
+        )
+    required = frozenset(raw_required)
+    unsupported = required - SEALED_VALIDATION_CONTEXT
+    if unsupported:
+        raise ValueError(
+            "unsupported Pydantic validation context: "
+            f"{sorted(unsupported)}"
+        )
+
+    if not sealed_packet_root:
+        if required:
+            raise ValueError(
+                "missing supported Pydantic validation context: "
+                f"{sorted(required)}"
+            )
+        return None
+    if required != SEALED_VALIDATION_CONTEXT:
+        raise ValueError(
+            "sealed packet schema requires exact validation context: "
+            f"{sorted(SEALED_VALIDATION_CONTEXT)}"
+        )
+
+    raw_root = Path(sealed_packet_root).expanduser()
+    if not raw_root.is_absolute() or raw_root.is_symlink():
+        raise ValueError(
+            "--sealed-packet-root must be an absolute non-symlink directory"
+        )
+    resolved_text = validate_wrapper_cwd(str(raw_root))
+    if resolved_text is None:
+        raise ValueError("--sealed-packet-root must resolve to a directory")
+    resolved = Path(resolved_text)
+    if (
+        raw_root != resolved
+        or resolved.name != "packet"
+        or not resolved.parent.name.strip()
+    ):
+        raise ValueError(
+            "--sealed-packet-root must be a canonical "
+            "<nonempty-review-id>/packet directory"
+        )
+    if (
+        not isinstance(expected_packet_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected_packet_sha256) is None
+    ):
+        raise ValueError(
+            "--expected-packet-sha256 must be 64 lowercase hex characters"
+        )
+    context = {
+        "sealed_packet_root": str(resolved),
+        "expected_packet_sha256": expected_packet_sha256,
+    }
+    verifier = getattr(pydantic_cls, "verify_sealed_packet", None)
+    if not callable(verifier):
+        raise ValueError(
+            "sealed packet schema must provide verify_sealed_packet(context)"
+        )
+    verifier(context)
+    return context
+
+
 
 def _redact_prompt_args(cmd: list[str]) -> list[str]:
     """Keep argv shape in durable audit logs without storing prompt payloads."""
@@ -555,7 +654,7 @@ def classify(
     """Failure classes + ok. Layer order:
       L1 — vendor exit code map (empirically observed raw codes only)
       L2 — substring fallback (the per-class pattern lists)
-      L3 — "unknown" (repair-agent dispatch signal)
+      L3 — "unknown" (repair-routed classification signal)
 
     `vendor_exit_code` is the raw CLI subprocess exit (e.g. 7, 130). When
     omitted, falls back to `exit_code` for legacy callers, but L1 is
@@ -563,8 +662,8 @@ def classify(
     {EXIT_OK, EXIT_CLI_FAIL, ...} code, not the vendor's. Pass
     `vendor_exit_code` explicitly to make the vendor exit map functional
     (2026-05-03 fix: prior to this, both CODEX_VENDOR_EXIT_MAP and
-    GEMINI_VENDOR_EXIT_MAP were decoration; future repair-agent
-    enrichments can now route vendor-specific exit codes correctly).
+    GEMINI_VENDOR_EXIT_MAP were decoration; future owner-applied validated
+    proposals can now route vendor-specific exit codes correctly).
     """
     if exit_code == 0:
         return "ok"
@@ -644,8 +743,8 @@ def classify(
     if any(p in blob for p in _p("OAUTH_ENV_PATTERNS", OAUTH_ENV_PATTERNS)):
         return "oauth-env"
     # schema-rejected checked LAST in L2 — capacity/terminal classes win.
-    # submit-time --output-schema refusal: surfaced to caller (terminal-like),
-    # NOT routed to the repair agent.
+    # submit-time --output-schema refusal: surfaced to caller as terminal-like,
+    # not mapped to a repair-routed classification.
     if any(p in blob for p in _p("SCHEMA_REJECTED_PATTERNS", SCHEMA_REJECTED_PATTERNS)):
         return "schema-rejected"
     if any(p in stderr_blob for p in _p("FANOUT_SPAWN_PATTERNS", FANOUT_SPAWN_PATTERNS)):
@@ -659,6 +758,83 @@ def classify(
 
 # ─── Pydantic helpers (NEW) ───────────────────────────────────────────────
 
+_CANONICAL_FORMAL_REVIEW_OPERAND = "triad_formal_review_schema:FormalReview"
+_PACKAGED_FORMAL_REVIEW_MODULE = "_triad_packaged_formal_review_schema"
+_packaged_formal_review_module: Optional[types.ModuleType] = None
+_packaged_formal_review_lock = threading.Lock()
+
+
+def _read_exact_regular_nofollow(source_path: Path) -> bytes:
+    """Read bytes only from an attested no-follow regular-file descriptor."""
+    required_flags = ("O_NOFOLLOW", "O_CLOEXEC", "O_NONBLOCK")
+    flags = os.O_RDONLY
+    for name in required_flags:
+        value = getattr(os, name, None)
+        if value is None:
+            raise ImportError(f"canonical formal-review schema requires os.{name}")
+        flags |= value
+
+    try:
+        fd = os.open(source_path, flags)
+    except OSError as exc:
+        raise ImportError(
+            "canonical formal-review schema must be an exact regular sibling file"
+        ) from exc
+    try:
+        opened = os.fstat(fd)
+        current = source_path.lstat()
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or not stat.S_ISREG(current.st_mode)
+            or not os.path.samestat(opened, current)
+        ):
+            raise ImportError(
+                "canonical formal-review schema must be an exact regular sibling file"
+            )
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            return stream.read()
+    finally:
+        os.close(fd)
+
+
+def _load_packaged_formal_review_module() -> types.ModuleType:
+    """Load the bundled schema from the exact regular sibling file.
+
+    The public operand is intentionally not resolved through ``sys.path`` or
+    the canonical module name.  Hardened callers therefore cannot be diverted
+    to a same-named module while custom schemas keep the broad import gate.
+    """
+    global _packaged_formal_review_module
+    with _packaged_formal_review_lock:
+        if _packaged_formal_review_module is not None:
+            return _packaged_formal_review_module
+
+        source_path = Path(__file__).resolve(strict=True).with_name(
+            "triad_formal_review_schema.py"
+        )
+        source = _read_exact_regular_nofollow(source_path)
+
+        module = types.ModuleType(_PACKAGED_FORMAL_REVIEW_MODULE)
+        module.__file__ = str(source_path)
+        module.__package__ = ""
+        module.__loader__ = None
+        prior = sys.modules.get(_PACKAGED_FORMAL_REVIEW_MODULE)
+        sys.modules[_PACKAGED_FORMAL_REVIEW_MODULE] = module
+        try:
+            exec(
+                compile(source, str(source_path), "exec", dont_inherit=True),
+                module.__dict__,
+            )
+        except BaseException:
+            if prior is None:
+                sys.modules.pop(_PACKAGED_FORMAL_REVIEW_MODULE, None)
+            else:
+                sys.modules[_PACKAGED_FORMAL_REVIEW_MODULE] = prior
+            raise
+        _packaged_formal_review_module = module
+        return module
+
+
 def load_pydantic_class(spec: str):
     """Parse 'module.path:ClassName' or 'module.path.ClassName' →
     pydantic BaseModel subclass.
@@ -666,19 +842,30 @@ def load_pydantic_class(spec: str):
     Raises ImportError / AttributeError / TypeError on failure.
     """
     if not PYDANTIC_OK:
-        raise RuntimeError("pydantic not installed — `pip3 install --user pydantic`")
-    if _wrapper_hardened() and os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
+        requirements = Path(__file__).resolve().parent.parent / "requirements.txt"
+        install_command = shlex.join(
+            [sys.executable, "-m", "pip", "install", "-r", str(requirements)]
+        )
+        raise RuntimeError(
+            "pydantic 2 is unavailable in this Python runtime; run "
+            f"`{install_command}` in your normal terminal"
+        )
+    if spec == _CANONICAL_FORMAL_REVIEW_OPERAND:
+        mod = _load_packaged_formal_review_module()
+        cls_name = "FormalReview"
+    elif _wrapper_hardened() and os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
         # Hardened installs (public codex-host product) must opt in explicitly:
         # --pydantic imports arbitrary Python outside the vendor sandbox.
         raise PermissionError(
             "--pydantic imports Python code outside the sandbox; under "
             "TRIAD_WRAPPER_HARDENED=1 set TRIAD_ALLOW_PYDANTIC_IMPORT=1 only "
             "for trusted schema modules")
-    if ":" in spec:
-        mod_path, cls_name = spec.rsplit(":", 1)
     else:
-        mod_path, cls_name = spec.rsplit(".", 1)
-    mod = importlib.import_module(mod_path)
+        if ":" in spec:
+            mod_path, cls_name = spec.rsplit(":", 1)
+        else:
+            mod_path, cls_name = spec.rsplit(".", 1)
+        mod = importlib.import_module(mod_path)
     cls = getattr(mod, cls_name)
     if not (isinstance(cls, type) and BaseModel is not None and issubclass(cls, BaseModel)):
         raise TypeError(f"{spec} is not a pydantic BaseModel subclass")
@@ -697,15 +884,65 @@ def _dummy_for_type(t: str) -> Any:
     }.get(t, None)
 
 
-def schema_block_for_prompt(cls) -> str:
+def schema_block_for_prompt(
+    cls,
+    *,
+    body_semantics_only: bool = False,
+) -> str:
     """Build the schema injection block for the prompt.
 
-    Format verified by Step A3 spike (Gemini 10/10 + Codex 5/5 PASS):
-        - JSON-only instruction (emphasised)
-        - Shape line in human-readable form
-        - One dummy example
+    Generic schemas retain the compact shape and dummy example. The packaged
+    FormalReview contract adds its complete nested schema and cross-field
+    verdict rules.
     """
     schema = cls.model_json_schema()
+    if (
+        cls.__module__ == _PACKAGED_FORMAL_REVIEW_MODULE
+        and cls.__name__ == "FormalReview"
+    ):
+        schema.pop("description", None)
+        complete_schema = json.dumps(
+            schema,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=2,
+        )
+        return (
+            "The JSON object must match this complete canonical FormalReview "
+            f"JSON Schema:\n{complete_schema}\n\n"
+            "Required top-level fields: `review_id`, `packet_sha256`, `verdict`, "
+            "`findings`, `open_questions`.\n"
+            "Each finding requires: `severity`, `location`, `trigger`, `evidence`, "
+            "`correction`.\n"
+            "`verdict` must be exactly `SAFE` or `NOT-SAFE`.\n"
+            "`severity` must be exactly `Critical`, `Major`, or `Minor`.\n"
+            "A Critical or Major finding requires `NOT-SAFE`.\n"
+            "Any non-empty `open_questions` requires `NOT-SAFE`.\n"
+            "Otherwise `verdict` must be `SAFE`.\n\n"
+            "Final-format rules:\n"
+            "- Return one complete top-level envelope containing all five required "
+            "fields.\n"
+            "- Set `review_id` and `packet_sha256` exactly to the trusted values in "
+            "the runtime material.\n"
+            "- Use exactly one manifest-listed packet-relative path and one positive "
+            "decimal line number in each `location`. Create separate findings for "
+            "separate paths. Use line numbers rather than function or symbol names.\n"
+            "- Every required string must contain non-whitespace text.\n"
+            "- Represent no findings or open questions with the empty arrays `[]` "
+            "and include both fields. Use the schema-defined type for every value.\n\n"
+            "Few-shot 1 — NO FINDINGS — emit the complete envelope:\n"
+            '{"review_id": "<review-id>", "packet_sha256": "<sha256>", '
+            '"verdict": "SAFE", "findings": [], "open_questions": []}\n\n'
+            "Few-shot 2 — ONE BLOCKING FINDING — still emit the complete envelope:\n"
+            '{"review_id": "<review-id>", "packet_sha256": "<sha256>", '
+            '"verdict": "NOT-SAFE", "findings": [{"severity": "Major", '
+            '"location": "inputs/candidate/<path>:<positive-line>", '
+            '"trigger": "<non-empty trigger>", "evidence": "<non-empty evidence>", '
+            '"correction": "<non-empty correction>"}], "open_questions": []}\n\n'
+            "Angle-bracket values are shape placeholders only. Replace every one "
+            "with the current review identity and packet evidence so the response "
+            "contains only concrete values."
+        )
     fields = schema.get("properties", {})
     required = set(schema.get("required", []))
 
@@ -717,6 +954,15 @@ def schema_block_for_prompt(cls) -> str:
         shape_parts.append(f'"{name}{marker}": <{t}>')
         dummy[name] = _dummy_for_type(t)
     shape_line = "{" + ", ".join(shape_parts) + "}"
+
+    if body_semantics_only:
+        return (
+            "The JSON body must match exactly this shape:\n"
+            f"{shape_line}\n\n"
+            "JSON body example:\n"
+            f"{json.dumps(dummy, ensure_ascii=False)}\n\n"
+            "Use the user's request below to determine the JSON body values."
+        )
 
     return (
         "You are a JSON-only response API. Your output MUST be valid JSON "
@@ -730,8 +976,42 @@ def schema_block_for_prompt(cls) -> str:
     )
 
 
-def inject_schema_to_prompt(prompt: str, cls) -> str:
-    block = schema_block_for_prompt(cls)
+def inject_schema_to_prompt(
+    prompt: str,
+    cls,
+    *,
+    body_semantics_only: bool = False,
+) -> str:
+    block = schema_block_for_prompt(
+        cls,
+        body_semantics_only=body_semantics_only,
+    )
+    if (
+        cls.__module__ == _PACKAGED_FORMAL_REVIEW_MODULE
+        and cls.__name__ == "FormalReview"
+    ):
+        final_rule = (
+            "Based on the runtime review input above, perform the review and "
+            "produce a FormalReview JSON body that satisfies the response contract."
+            if body_semantics_only
+            else (
+                "Based on the user request and FormalReview contract above, return "
+                "exactly one valid JSON object with no surrounding content.\nJSON:"
+            )
+        )
+        return (
+            "=== USER REQUEST ===\n"
+            f"<runtime_review_input>\n{prompt}\n</runtime_review_input>\n\n"
+            "The runtime material above determines review scope and evidence. The "
+            "FormalReview response contract below controls the output shape.\n\n"
+            f"=== FORMAL REVIEW RESPONSE CONTRACT ===\n{block}\n\n"
+            f"{final_rule}"
+        )
+    if body_semantics_only:
+        return (
+            f"{block}\n\n=== USER REQUEST ===\n"
+            f"<runtime_review_input>\n{prompt}\n</runtime_review_input>"
+        )
     return f"{block}\n\n=== USER REQUEST ===\n{prompt}\n\nJSON:"
 
 
@@ -783,11 +1063,16 @@ def strip_markdown_fences(text: str) -> str:
     return s.strip()
 
 
-def validate_response(answer_text: str, cls) -> Tuple[bool, Any]:
+def validate_response(
+    answer_text: str,
+    cls,
+    *,
+    context: Optional[dict[str, Any]] = None,
+) -> Tuple[bool, Any]:
     """(ok, validated_dict_or_error_string)."""
     cleaned = strip_markdown_fences(answer_text)
     try:
-        obj = cls.model_validate_json(cleaned)
+        obj = cls.model_validate_json(cleaned, context=context)
         return True, obj.model_dump(mode="json")
     except Exception as e:
         return False, str(e)
@@ -1068,8 +1353,7 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
     if is_error:
         # Vendor returned an envelope with is_error=true. The result field
         # carries the detailed message (e.g. "Not logged in · Please run
-        # /login", an API error description). The repair agent classifies
-        # from this message.
+        # /login", an API error description). Classification uses this message.
         api_status = obj.get("api_error_status")
         prefix = f"is_error=true (api_error_status={api_status})"
         if result:
@@ -1163,7 +1447,8 @@ def _scan_transcript(pth: str, marker: str) -> Tuple[bool, Optional[str]]:
         call that merely QUOTES `marker` mid-prompt has its OWN footer marker
         last, so it does NOT own this sentinel (replay defense).
       - `final_done_content` = the last PLANNER_RESPONSE/MODEL/DONE record's
-        content (str), or None.
+        content (str), or None when that record explicitly declares `content`
+        in `truncated_fields`.
 
     Malformed/partial JSON lines, valid-JSON non-object records, and non-str
     content are all skipped so a concurrently-appended foreign transcript can
@@ -1207,7 +1492,13 @@ def _scan_transcript(pth: str, marker: str) -> Tuple[bool, Optional[str]]:
                 elif (rec.get("type") == "PLANNER_RESPONSE"
                         and rec.get("source") == "MODEL"
                         and rec.get("status") == "DONE"):
-                    final = content
+                    truncated_fields = rec.get("truncated_fields")
+                    final = (
+                        None
+                        if isinstance(truncated_fields, list)
+                        and "content" in truncated_fields
+                        else content
+                    )
     except OSError:
         return (False, None)
     return (owns, final)
@@ -1222,10 +1513,12 @@ def extract_agy_answer_from_transcript(
     transport, concurrency-hardened 2026-07-11).
 
     agy has no native JSON/-o-file output; every run writes a per-conversation
-    transcript whose last `PLANNER_RESPONSE/MODEL/DONE` record carries the
-    complete ANSI-free answer. A long agentic run drops the trailing marker from
-    the ANSWER, but the wrapper-sealed marker is ALWAYS present in the USER_INPUT
-    record — that (not the answer, not mtime) is the identity anchor.
+    transcript whose last non-truncated `PLANNER_RESPONSE/MODEL/DONE` record
+    carries the complete ANSI-free answer. A long agentic run drops the trailing
+    marker from the ANSWER, but the wrapper-sealed marker is ALWAYS present in
+    the USER_INPUT record — that (not the answer, not mtime) is the identity
+    anchor. An explicitly truncated final content field is rejected so the
+    caller can use its per-process PTY fallback.
 
     `before` = snapshot_agy_transcripts() taken BEFORE the run bounds the
     candidate set to conversations CREATED during this call (new paths only —
@@ -1514,6 +1807,7 @@ def run_cli_with_retry(
     last_msg_path: Optional[str] = None,
     repair_mode: bool = False,
     prompt_via_stdin: bool = False,
+    validation_context: Optional[dict[str, Any]] = None,
 ) -> RunResult:
     """Top-level driver.
 
@@ -1528,9 +1822,9 @@ def run_cli_with_retry(
     prompt mutation without leaking command construction into this function.
     """
     # Next-run IPC cleanup (owner contract: a subsequent run clears prior
-    # residue). Skipped in repair_mode — the repair agent is actively inspecting
-    # the just-written run-log; the age floor protects it anyway, but skipping
-    # avoids touching the runs dir mid-repair.
+    # residue). The legacy `repair_mode` compatibility flag skips cleanup and
+    # retries for an explicit single-attempt diagnostic invocation. The current
+    # read-only analyzer never invokes a provider wrapper.
     if not repair_mode:
         prune_stale_run_logs(cli)
 
@@ -1705,10 +1999,10 @@ def run_cli_with_retry(
                     f"elapsed={r.elapsed_s:.1f}s"
                 )
                 return r
-            # cls in {"unknown", "timeout"} — fail-fast. Both surface as
-            # repair-agent territory at the dispatch SKILL layer (timeout =
-            # likely ESCALATE since hang isn't a classifier gap, but the
-            # SKILL still routes through the same path for uniformity).
+            # cls in {"unknown", "timeout"} — fail-fast. Both surface through
+            # the dispatch skill's repair/escalation classification path; a
+            # timeout is likely escalation because a hang is not a classifier
+            # gap.
             return r
 
         assert result is not None
@@ -1733,8 +2027,8 @@ def run_cli_with_retry(
                 # JSON envelope, missing last-message file, etc.). Promote
                 # to wrapper failure AND re-classify — `_run_once` had set
                 # classification="ok" based on rc alone, which is now stale.
-                # Re-emit the 1-line summary so dispatch SKILL Step 3 grep
-                # gets the corrected token (2026-05-03 later-3).
+                # Re-emit the one-line final summary so the dispatch contract
+                # receives the corrected classification token.
                 result.exit_code = EXIT_CLI_FAIL
                 result.classification = "extraction-error"
                 log(
@@ -1750,7 +2044,9 @@ def run_cli_with_retry(
         if pydantic_cls is None:
             return result
 
-        ok, validated_or_err = validate_response(answer, pydantic_cls)
+        ok, validated_or_err = validate_response(
+            answer, pydantic_cls, context=validation_context
+        )
         if ok:
             result.validated = validated_or_err
             return result
@@ -1758,7 +2054,7 @@ def run_cli_with_retry(
         result.validation_error = str(validated_or_err)
         log(f"schema validation failed: {validated_or_err}")
 
-        if schema_repair_attempt >= 1 or repair_mode:
+        if schema_repair_attempt >= 1 or repair_mode or validation_context:
             return promote_schema_fail(result)
 
         # 1 retry — augment prompt with the failure notice and loop.
@@ -1781,6 +2077,140 @@ def run_cli_with_retry(
 _LOG_DIR = Path(os.environ.get("TRIAD_DISPATCH_LOG_DIR")
                 or Path(__file__).resolve().parent / "_logs")
 _DEBUG_DIR = Path(__file__).resolve().parent / "_debug"
+_AUDIT_LOCK_TIMEOUT_S = 0.10
+_AUDIT_LOCK_POLL_S = 0.01
+_AUDIT_COPY_CHUNK_BYTES = 64 * 1024
+
+
+def _audit_open_flags(*names: str) -> int:
+    """Return required portable POSIX flags or fail the advisory audit."""
+    flags = 0
+    for name in names:
+        value = getattr(os, name, None)
+        if value is None:
+            raise OSError(errno.ENOTSUP, f"audit requires os.{name}")
+        flags |= value
+    return flags
+
+
+def _open_directory_nofollow(path: Path, *, create: bool = True) -> int:
+    """Open a directory by walking every component without following links."""
+    flags = os.O_RDONLY | _audit_open_flags(
+        "O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC"
+    )
+    parts = Path(path).parts
+    if any(part == ".." or os.sep in part for part in parts if part != os.sep):
+        raise OSError(errno.EINVAL, "unsafe audit directory component")
+    start = os.sep if Path(path).is_absolute() else "."
+    fd = os.open(start, flags)
+    try:
+        for part in parts:
+            if part in ("", ".", os.sep):
+                continue
+            try:
+                next_fd = os.open(part, flags, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                try:
+                    os.mkdir(part, 0o700, dir_fd=fd)
+                except FileExistsError:
+                    # A cooperative first-use writer won the create race.
+                    # Reopen below with the identical no-follow flags; a
+                    # symlink, non-directory, or later replacement still fails
+                    # the descriptor attestation.
+                    pass
+                next_fd = os.open(part, flags, dir_fd=fd)
+            next_st = os.fstat(next_fd)
+            if not stat.S_ISDIR(next_st.st_mode):
+                os.close(next_fd)
+                raise OSError(errno.ENOTDIR, "audit component is not a directory")
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _open_regular_nofollow(
+    dir_fd: int,
+    name: str,
+    *,
+    flags: int,
+    mode: int = 0o600,
+    normalize_mode: bool = True,
+) -> int:
+    """Open one private regular, single-link leaf relative to ``dir_fd``."""
+    if not name or name in (".", "..") or os.sep in name:
+        raise OSError(errno.EINVAL, "unsafe audit leaf name")
+    safe_flags = flags | _audit_open_flags("O_NOFOLLOW", "O_NONBLOCK", "O_CLOEXEC")
+    fd = os.open(name, safe_flags, mode, dir_fd=dir_fd)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+            raise OSError(errno.EPERM, "audit leaf must be regular and single-link")
+        current = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or current.st_nlink != 1
+            or not os.path.samestat(st, current)
+        ):
+            raise OSError(errno.ESTALE, "audit leaf changed during open")
+        if normalize_mode:
+            # Creation mode is already 0600; normalize a legacy safe leaf only
+            # after proving the pathname and descriptor still name one inode.
+            os.fchmod(fd, mode)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _regular_fd_matches_name(dir_fd: int, name: str, fd: int) -> bool:
+    """Check that ``name`` still denotes the exact safe inode held by ``fd``."""
+    try:
+        held = os.fstat(fd)
+        current = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(held.st_mode)
+        and stat.S_ISREG(current.st_mode)
+        and held.st_nlink == 1
+        and current.st_nlink == 1
+        and os.path.samestat(held, current)
+    )
+
+
+def _bounded_flock(fd: int, timeout_s: float = _AUDIT_LOCK_TIMEOUT_S) -> bool:
+    """Acquire an exclusive lock without ever waiting beyond a short deadline."""
+    deadline = time.monotonic() + max(0.0, timeout_s)
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError as exc:
+            if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                return False
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(_AUDIT_LOCK_POLL_S, remaining))
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    """Write every byte, handling partial and interrupted POSIX writes."""
+    view = memoryview(data)
+    written = 0
+    while written < len(view):
+        try:
+            count = os.write(fd, view[written:])
+        except InterruptedError:
+            continue
+        if count <= 0:
+            raise OSError(errno.EIO, "short audit write")
+        written += count
 
 
 def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
@@ -1789,9 +2219,13 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
     A per-CLI lock file serializes append + rotation across processes.
     `final_answer_head` caps at 500 chars; full answer flows to caller via
     `result.final_answer`.
+
+    Writers with namespace authority over the audit directory are assumed to
+    be trusted and cooperative. Descriptor attestation rejects observed swaps,
+    but portable Python/POSIX has no atomic unlink-if-same-inode operation.
+    Persistence is best-effort audit evidence, not a power-loss durability
+    protocol; audit failure never changes the provider result.
     """
-    log_dir = _LOG_DIR / cli
-    log_dir.mkdir(parents=True, exist_ok=True)
     ok = result.exit_code == EXIT_OK
     redact = _audit_redact_enabled()
     # Custody taxonomy (P4.b, spec 3-way 2026-07-11; extends the 2026-07-05
@@ -1827,6 +2261,7 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
         "exit_code": result.exit_code,
         "elapsed_s": round(result.elapsed_s, 2),
         "classification": result.classification,
+        "dispatch_phase": result.dispatch_phase,
         "mode": result.mode,
         "repair_attempt": result.repair_attempt,
         "schema_repair_attempt": result.schema_repair_attempt,
@@ -1853,76 +2288,202 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
         rec["stdout_len"] = len(result.stdout or "")
     else:
         rec["stdout"] = result.stdout
-    path = log_dir / "audit.jsonl"
-    lock_path = log_dir / ".audit.lock"
-    with lock_path.open("a", encoding="utf-8") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                # Flush the record while the audit lock is held so append and
-                # possible rotation are one serialized critical section.
-                f.flush()
-            _rotate_audit_if_needed(log_dir, path, cli)
-        finally:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_UN)
-            except Exception:
-                pass
-
-
-def _rotate_audit_if_needed(log_dir: Path, path: Path, cli: str) -> None:
-    """Rotate active audit log and cap archives.
-
-    Called under `.audit.lock`. Best-effort: audit must never fail the wrapper
-    call path.
-    """
     try:
-        if path.stat().st_size <= AUDIT_ROTATE_BYTES:
-            return
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        archive = log_dir / f"audit.{stamp}-{os.getpid()}-{uuid.uuid4().hex[:8]}.jsonl"
-        path.rename(archive)
-        path.touch()
-        log(
-            f"WARN: rotated {cli}/audit.jsonl to {archive.name} "
-            f"(>{AUDIT_ROTATE_BYTES // (1024*1024)} MB)"
-        )
-        _prune_audit_archives(log_dir)
+        payload = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
+        _persist_audit_record(cli, payload)
     except Exception:
-        pass
+        # Audit evidence is advisory. Provider output, normalized exit, and
+        # classification are already authoritative and must remain untouched.
+        return
+
+
+def _persist_audit_record(cli: str, payload: bytes) -> None:
+    """Persist one record through descriptor-bound, no-follow operations."""
+    if not cli or cli in (".", "..") or os.sep in cli:
+        raise OSError(errno.EINVAL, "unsafe audit CLI name")
+    log_dir_fd = _open_directory_nofollow(_LOG_DIR / cli)
+    lock_fd = -1
+    locked = False
+    try:
+        lock_fd = _open_regular_nofollow(
+            log_dir_fd,
+            ".audit.lock",
+            flags=os.O_RDWR | os.O_CREAT,
+        )
+        locked = _bounded_flock(lock_fd)
+        if not locked or not _regular_fd_matches_name(
+            log_dir_fd, ".audit.lock", lock_fd
+        ):
+            return
+        audit_fd = _open_regular_nofollow(
+            log_dir_fd,
+            "audit.jsonl",
+            flags=os.O_RDWR | os.O_APPEND | os.O_CREAT,
+        )
+        try:
+            _write_all(audit_fd, payload)
+            _rotate_audit_fd_if_needed(log_dir_fd, audit_fd, cli)
+        finally:
+            os.close(audit_fd)
+    finally:
+        if locked:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        try:
+            if lock_fd >= 0:
+                os.close(lock_fd)
+        finally:
+            os.close(log_dir_fd)
+
+
+def _unlink_regular_if_same(
+    dir_fd: int,
+    name: str,
+    expected: os.stat_result,
+    *,
+    older_than: Optional[float] = None,
+) -> bool:
+    """Unlink only the same held regular entry, optionally still stale."""
+    try:
+        check_fd = _open_regular_nofollow(
+            dir_fd,
+            name,
+            flags=os.O_RDONLY,
+            normalize_mode=False,
+        )
+    except OSError:
+        return False
+    try:
+        current = os.fstat(check_fd)
+        if not os.path.samestat(current, expected):
+            return False
+        if older_than is not None and current.st_mtime >= older_than:
+            return False
+        if not _regular_fd_matches_name(dir_fd, name, check_fd):
+            return False
+        # A cooperating consumer can refresh an IPC leaf while the pathname
+        # attestation runs. Recheck the held descriptor immediately before the
+        # unlink and keep it open through the operation.
+        final = os.fstat(check_fd)
+        if older_than is not None and final.st_mtime >= older_than:
+            return False
+        try:
+            os.unlink(name, dir_fd=dir_fd)
+            return True
+        except OSError:
+            return False
+    finally:
+        os.close(check_fd)
+
+
+def _rotate_audit_fd_if_needed(log_dir_fd: int, audit_fd: int, cli: str) -> None:
+    """Copy the held audit inode exclusively, then truncate that same inode."""
+    source = os.fstat(audit_fd)
+    if (
+        source.st_size <= AUDIT_ROTATE_BYTES
+        or not stat.S_ISREG(source.st_mode)
+        or source.st_nlink != 1
+    ):
+        return
+    pread = getattr(os, "pread", None)
+    if pread is None:
+        raise OSError(errno.ENOTSUP, "audit rotation requires os.pread")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive_name = (
+        f"audit.{stamp}-{os.getpid()}-{uuid.uuid4().hex[:8]}.jsonl"
+    )
+    archive_fd = _open_regular_nofollow(
+        log_dir_fd,
+        archive_name,
+        flags=os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+    )
+    archive_identity = os.fstat(archive_fd)
+    complete = False
+    try:
+        offset = 0
+        while offset < source.st_size:
+            chunk = pread(
+                audit_fd,
+                min(_AUDIT_COPY_CHUNK_BYTES, source.st_size - offset),
+                offset,
+            )
+            if not chunk:
+                raise OSError(errno.EIO, "audit source changed during rotation")
+            _write_all(archive_fd, chunk)
+            offset += len(chunk)
+        source_after = os.fstat(audit_fd)
+        archive_after = os.fstat(archive_fd)
+        if (
+            not os.path.samestat(source, source_after)
+            or source_after.st_size != source.st_size
+            or not stat.S_ISREG(archive_after.st_mode)
+            or archive_after.st_nlink != 1
+            or archive_after.st_size != source.st_size
+            or not _regular_fd_matches_name(
+                log_dir_fd, archive_name, archive_fd
+            )
+        ):
+            raise OSError(errno.ESTALE, "audit changed during rotation")
+        os.ftruncate(audit_fd, 0)
+        complete = True
+    finally:
+        os.close(archive_fd)
+        if not complete:
+            _unlink_regular_if_same(log_dir_fd, archive_name, archive_identity)
+    log(
+        f"WARN: rotated {cli}/audit.jsonl to {archive_name} "
+        f"(>{AUDIT_ROTATE_BYTES // (1024*1024)} MB)"
+    )
+    _prune_audit_archives_fd(log_dir_fd)
+
+
+def _prune_audit_archives_fd(log_dir_fd: int) -> None:
+    """Prune no-follow regular archives from a trusted/cooperative directory."""
+    rows: list[tuple[str, float, int, os.stat_result]] = []
+    for name in os.listdir(log_dir_fd):
+        if name == "audit.jsonl" or not (
+            name.startswith("audit.") and name.endswith(".jsonl")
+        ):
+            continue
+        try:
+            fd = _open_regular_nofollow(log_dir_fd, name, flags=os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            st = os.fstat(fd)
+            rows.append((name, st.st_mtime, st.st_size, st))
+        finally:
+            os.close(fd)
+    rows.sort(key=lambda row: row[1])
+    total_bytes = sum(row[2] for row in rows)
+    over_count = max(0, len(rows) - AUDIT_MAX_ARCHIVES)
+    over_bytes = total_bytes - AUDIT_ARCHIVE_MAX_BYTES
+    for name, _mtime, size, identity in rows:
+        if over_count <= 0 and over_bytes <= 0:
+            break
+        if _unlink_regular_if_same(log_dir_fd, name, identity):
+            over_count -= 1
+            over_bytes -= size
 
 
 def _prune_audit_archives(log_dir: Path) -> None:
-    """Bound audit archives by count and aggregate bytes."""
+    """Compatibility wrapper around descriptor-relative archive pruning."""
     try:
-        entries = list(log_dir.glob("audit.*.jsonl"))
-    except Exception:
+        log_dir_fd = _open_directory_nofollow(log_dir, create=False)
+    except OSError:
         return
-    rows: list[tuple[Path, float, int]] = []
-    for p in entries:
-        try:
-            st = p.stat()
-            rows.append((p, st.st_mtime, st.st_size))
-        except OSError:
-            continue
-    rows.sort(key=lambda x: x[1])
-    total_bytes = sum(sz for _, _, sz in rows)
-    over_count = max(0, len(rows) - AUDIT_MAX_ARCHIVES)
-    over_bytes = total_bytes - AUDIT_ARCHIVE_MAX_BYTES
-    for p, _, sz in rows:
-        if over_count <= 0 and over_bytes <= 0:
-            break
-        try:
-            p.unlink()
-            over_count -= 1
-            over_bytes -= sz
-        except OSError:
-            continue
+    try:
+        _prune_audit_archives_fd(log_dir_fd)
+    except OSError:
+        return
+    finally:
+        os.close(log_dir_fd)
 
 
 # ─── Deterministic classifier-patch applier (repair read-only redesign) ────
-# The repair sub-agent is a READ-ONLY analyzer: it returns a structured patch
+# The repair analyzer is READ-ONLY: it returns a structured patch
 # PROPOSAL and has ZERO write authority. This function is the SINGLE trusted
 # write path to the classifier extension JSON — validate against the enum +
 # pattern-name SoT + literal bounds, then flock + atomic-write. No LLM in the
@@ -1930,10 +2491,10 @@ def _prune_audit_archives(log_dir: Path) -> None:
 #
 #   CLASSIFICATION_TOKENS = the classify() result enum (keys of the
 #     map_classification_to_exit dict — the single source of truth).
-#     EXCEPTION (deliberate, P4 2026-07-11): `vendor-error` is in the exit map
-#     but NOT here — it is emitted directly by the agy driver when rc!=0 with a
-#     non-empty answer (a condition a classifier patch cannot express), so it
-#     must never be a proposable repair target.
+#     EXCEPTION (deliberate, P4 2026-07-11): `vendor-error` and
+#     `truncated-answer` are in the exit map but NOT here — they are emitted
+#     directly by the agy driver for conditions a classifier patch cannot
+#     express, so they must never be proposable repair targets.
 #   PATTERN_LIST_NAMES    = the built-in pattern-list constant names an
 #     extension may extend (a proposal's pattern_list must be one of these).
 
@@ -2370,29 +2931,27 @@ def emit_run_log(
 ) -> Optional[Path]:
     """Write per-execution run-log on failure only.
 
-    Run-logs live at `_logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json`. Used by
-    the dispatch SKILL to feed the failing call's full context to the repair
-    sub-agent without inline-embedding (escape-safe + parallel-safe).
+    Run-logs live at `_logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json`. The
+    dispatch skill passes the opaque path to the read-only analyzer without
+    inline embedding (escape-safe and parallel-safe).
 
-    On success (`exit_code == EXIT_OK`), returns None and writes nothing —
-    repair agent dispatch isn't needed.
+    On success (`exit_code == EXIT_OK`), returns None and writes nothing because
+    no repair handoff is needed.
 
     Self-prunes after write: if dir exceeds `_RUN_LOG_MAX_FILES` or
-    `_RUN_LOG_MAX_BYTES`, oldest files are unlinked until under threshold
+    `_RUN_LOG_MAX_BYTES`, eligible stale files are unlinked oldest-first.
+    Fresh sibling IPC is retained even if that leaves a temporary overflow
     (best-effort, race-tolerant for parallel writes).
     """
     if result.exit_code == EXIT_OK:
         return None
-
-    runs_dir = _LOG_DIR / cli / "runs"
-    runs_dir.mkdir(parents=True, exist_ok=True)
+    if not cli or cli in (".", "..") or os.sep in cli:
+        raise OSError(errno.EINVAL, "unsafe run-log CLI name")
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     pid = os.getpid()
     suffix = uuid.uuid4().hex[:8]
     fname = f"{ts}-{pid}-{suffix}.json"
-    path = runs_dir / fname
-
     rec: dict = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "cli": cli,
@@ -2403,88 +2962,176 @@ def emit_run_log(
         "exit_code": result.exit_code,
         "vendor_exit_code": result.vendor_exit_code,
         "classification": result.classification,
+        "dispatch_phase": result.dispatch_phase,
         "mode": result.mode,
         "elapsed_s": round(result.elapsed_s, 2),
         "stderr": result.stderr,
         "stdout": result.stdout,
         "final_answer": result.final_answer,
+        "validated": result.validated,
         "extraction_error": result.extraction_error,
         "validation_error": result.validation_error,
     }
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(rec, f, ensure_ascii=False, indent=2)
 
-    _prune_run_logs(runs_dir, preserve=path)
+    payload = json.dumps(rec, ensure_ascii=False, indent=2).encode("utf-8")
+
+    def write_under(runs_dir: Path) -> Path:
+        runs_fd = _open_directory_nofollow(runs_dir)
+        leaf_fd = -1
+        identity: Optional[os.stat_result] = None
+        complete = False
+        try:
+            leaf_fd = _open_regular_nofollow(
+                runs_fd,
+                fname,
+                flags=os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            )
+            identity = os.fstat(leaf_fd)
+            _write_all(leaf_fd, payload)
+            if not _regular_fd_matches_name(runs_fd, fname, leaf_fd):
+                raise OSError(errno.ESTALE, "run-log leaf changed during write")
+            complete = True
+            try:
+                _prune_run_logs_fd(runs_fd, preserve_name=fname)
+            except Exception:
+                # The IPC file is already complete. Retention cleanup must not
+                # hide it or change the provider's authoritative result.
+                pass
+            return runs_dir / fname
+        finally:
+            if leaf_fd >= 0:
+                os.close(leaf_fd)
+            if not complete and identity is not None:
+                _unlink_regular_if_same(runs_fd, fname, identity)
+            os.close(runs_fd)
+
+    runs_dir = _LOG_DIR / cli / "runs"
+    try:
+        path = write_under(runs_dir)
+    except Exception:
+        # File IPC is the repair handoff. If the configured audit root is full,
+        # read-only, or occupied by a non-directory, retain the normalized
+        # provider result in a unique stdlib-created private temp directory.
+        # macOS may spell its trusted temp root through `/var`, a system
+        # symlink. Canonicalize only this stdlib-created private directory; a
+        # configured primary root remains deliberately unresolved.
+        fallback_root = Path(
+            tempfile.mkdtemp(prefix=f"triad-{cli}-run-log-")
+        ).resolve(strict=True)
+        path = write_under(fallback_root)
 
     return path
 
 
-def _prune_run_logs(runs_dir: Path, preserve: Optional[Path] = None) -> None:
-    """Best-effort prune: enforce file count + total byte caps.
+def persist_result_artifacts(
+    cli: str,
+    wrapper_cmd: list[str],
+    vendor_cmd: list[str],
+    prompt: str,
+    result: RunResult,
+    *,
+    debug: bool,
+) -> Optional[Path]:
+    """Persist best-effort evidence without changing the provider result.
 
-    Race-tolerant — parallel writes that all hit the cap may all attempt to
-    prune; duplicate unlink attempts are absorbed by try/except. Worst case =
-    slight over-prune. `preserve` (L6 twin→SoT port, 2026-07-05) is never
-    deleted by this writer: a single large fresh run-log IS the current
-    call's repair IPC and must survive even when it alone exceeds the byte
-    cap (mtime order alone did not protect the only-file case).
+    Audit/debug storage is advisory. A failure run-log is repair IPC, so
+    `emit_run_log` first falls back to a unique private temporary directory.
+    If every storage route fails, this helper emits a fixed diagnostic and
+    returns None; callers still write the provider answer and return its
+    normalized exit code.
     """
-    preserve_resolved = preserve.resolve(strict=False) if preserve else None
-    # Race-resilient listing: a concurrent unlink (or a dangling symlink) makes
-    # p.stat() raise mid-sort. Materialize (path, mtime) per-file, skipping any
-    # entry that vanishes — a single bad entry must NOT abort the whole prune
-    # (the previous `sorted(..., key=p.stat)` form aborted on the first OSError).
     try:
-        entries = list(runs_dir.glob("*.json")) + list(runs_dir.glob("*.prompt.tmp"))
+        audit(cli, vendor_cmd, prompt, result)
     except Exception:
-        return
-    pairs: list[tuple[Path, float]] = []
-    for p in entries:
+        log("audit-unavailable: storage-failure")
+    if debug:
         try:
-            pairs.append((p, p.stat().st_mtime))
+            debug_log(cli, prompt, result)
+        except Exception:
+            log("debug-log-unavailable: storage-failure")
+    try:
+        path = emit_run_log(cli, wrapper_cmd, vendor_cmd, prompt, result)
+    except Exception:
+        path = None
+    if path is not None:
+        log(f"run-log: {path}")
+    elif result.exit_code != EXIT_OK:
+        log("run-log-unavailable: storage-failure")
+    return path
+
+
+def _prune_run_logs_fd(runs_fd: int, preserve_name: Optional[str] = None) -> None:
+    """Prune only descriptor-bound regular, single-link run-log leaves."""
+    rows: list[tuple[str, float, int, os.stat_result]] = []
+    for name in os.listdir(runs_fd):
+        if not (name.endswith(".json") or name.endswith(".prompt.tmp")):
+            continue
+        try:
+            leaf_fd = _open_regular_nofollow(
+                runs_fd, name, flags=os.O_RDONLY, normalize_mode=False
+            )
         except OSError:
             continue
-    files = [p for p, _ in sorted(pairs, key=lambda x: x[1])]
-
-    over_count = max(0, len(files) - _RUN_LOG_MAX_FILES)
-    # Per-file accumulation (NOT sum(... if f.exists())): a concurrent unlink
-    # between exists() and stat() raises OSError; a single try/except over the
-    # whole sum would reset total_bytes to 0 and silently bypass byte-limit
-    # pruning (under-prune). Skip vanished files individually instead.
-    total_bytes = 0
-    for f in files:
         try:
-            total_bytes += f.stat().st_size
-        except OSError:
-            continue
-    over_bytes = total_bytes - _RUN_LOG_MAX_BYTES
+            st = os.fstat(leaf_fd)
+            rows.append((name, st.st_mtime, st.st_size, st))
+        finally:
+            os.close(leaf_fd)
+    rows.sort(key=lambda row: row[1])
+    over_count = max(0, len(rows) - _RUN_LOG_MAX_FILES)
+    over_bytes = sum(row[2] for row in rows) - _RUN_LOG_MAX_BYTES
+    cutoff = time.time() - _STALE_IPC_AGE_FLOOR_S
 
-    for f in files:
+    for name, _listed_mtime, _listed_size, listed in rows:
         if over_count <= 0 and over_bytes <= 0:
             break
-        if preserve_resolved is not None and f.resolve(strict=False) == preserve_resolved:
+        if name == preserve_name:
             continue
         try:
-            sz = f.stat().st_size
-            f.unlink()
+            leaf_fd = _open_regular_nofollow(
+                runs_fd, name, flags=os.O_RDONLY, normalize_mode=False
+            )
+        except OSError:
+            continue
+        try:
+            current = os.fstat(leaf_fd)
+            if (
+                not os.path.samestat(current, listed)
+                or current.st_mtime >= cutoff
+                or not _regular_fd_matches_name(runs_fd, name, leaf_fd)
+            ):
+                continue
+        finally:
+            os.close(leaf_fd)
+        if _unlink_regular_if_same(
+            runs_fd, name, current, older_than=cutoff
+        ):
             over_count -= 1
-            over_bytes -= sz
-        except Exception:
-            pass
+            over_bytes -= current.st_size
 
 
-# Default age floor for the next-run stale-prune. Must comfortably exceed the
-# longest window a run-log can be present-but-still-in-use: one failed dispatch
-# plus the repair agent's 3-attempt ceiling (each attempt re-runs the wrapper in
-# repair_mode — no server-cap retry, 600 s default --timeout — plus agent
-# reasoning), so a worst case of ~3 × 600 s + overhead ≈ 40 min. The floor is set
-# to 2 h (well above that) so a concurrent (live) sibling's freshly written
-# run-log is NEVER inside the deletion window under 4-way parallel dispatch.
-# repair_mode itself skips the prune, so an in-flight repair never races its own
-# log; the cap-based `_prune_run_logs` (100 files / 20 MB) bounds disk regardless,
-# so a generous floor costs nothing. Raised 3600→7200 after the merge-gate review
-# flagged the 60-min margin as thin (owner decision 2026-06-12).
-_STALE_IPC_AGE_FLOOR_S = 7200
+def _prune_run_logs(runs_dir: Path, preserve: Optional[Path] = None) -> None:
+    """Compatibility wrapper for descriptor-bound best-effort cap pruning."""
+    preserve_name = (
+        preserve.name
+        if preserve is not None and preserve.parent == runs_dir
+        else None
+    )
+    try:
+        runs_fd = _open_directory_nofollow(runs_dir, create=False)
+    except OSError:
+        return
+    try:
+        _prune_run_logs_fd(runs_fd, preserve_name=preserve_name)
+    except OSError:
+        return
+    finally:
+        os.close(runs_fd)
+
+
+# Default one-hour age floor for best-effort next-run IPC cleanup. Repair mode
+# skips the sweep, while the cap-based `_prune_run_logs` still bounds overflow.
+_STALE_IPC_AGE_FLOOR_S = 3600
 
 
 def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) -> None:
@@ -2495,8 +3142,8 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     whose mtime is older than `age_floor_s`. Called at the START of every normal
     (non-repair-mode) dispatch, so a SUBSEQUENT run cleans up the residue a
     prior run left on failure — including failure classes (terminal / server-cap
-    / schema-rejected / fanout-partial / task-blocked) whose dispatch path never
-    reaches the SKILL's Step 5d `rm`. The cap-based `_prune_run_logs` remains the
+    / schema-rejected / fanout-partial / task-blocked) whose evidence remains for
+    analyzer and owner handling. The cap-based `_prune_run_logs` remains the
     over-cap failsafe; this is the time-based next-run sweep.
 
     The age floor is what makes this concurrency-safe under 4-way parallel
@@ -2504,18 +3151,47 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     never deleted while still awaiting consumption. Best-effort + per-file
     tolerant — a vanishing entry never aborts the sweep.
     """
+    # `emit_run_log` uses a unique private temp directory only when the primary
+    # configured root is unusable. Sweep those prior fallback IPC directories
+    # on the same age-floor contract as normal run logs.
+    prune_stale_tmp_dirs(f"triad-{cli}-run-log-", age_floor_s=age_floor_s)
     runs_dir = _LOG_DIR / cli / "runs"
     cutoff = time.time() - max(0, age_floor_s)
     try:
-        entries = list(runs_dir.glob("*.json")) + list(runs_dir.glob("*.prompt.tmp"))
-    except Exception:
+        runs_fd = _open_directory_nofollow(runs_dir, create=False)
+    except OSError:
         return
-    for p in entries:
+    try:
         try:
-            if p.stat().st_mtime < cutoff:
-                p.unlink()
+            names = os.listdir(runs_fd)
         except OSError:
-            continue
+            return
+        for name in names:
+            if not (name.endswith(".json") or name.endswith(".prompt.tmp")):
+                continue
+            try:
+                leaf_fd = _open_regular_nofollow(
+                    runs_fd, name, flags=os.O_RDONLY, normalize_mode=False
+                )
+            except OSError:
+                continue
+            try:
+                listed = os.fstat(leaf_fd)
+            except OSError:
+                continue
+            finally:
+                try:
+                    os.close(leaf_fd)
+                except OSError:
+                    pass
+            _unlink_regular_if_same(
+                runs_fd, name, listed, older_than=cutoff
+            )
+    finally:
+        try:
+            os.close(runs_fd)
+        except OSError:
+            pass
 
 
 def prune_stale_tmp_dirs(
@@ -2534,18 +3210,34 @@ def prune_stale_tmp_dirs(
 
     `base` defaults to the system temp dir (`tempfile.gettempdir()`).
     """
-    base_dir = Path(base) if base else Path(tempfile.gettempdir())
+    # The system temp root may be exposed through macOS's `/var` symlink; it is
+    # trusted only when selected internally. Caller-provided bases remain
+    # literal so a symlinked managed root is skipped by the no-follow open.
+    base_dir = Path(base) if base else Path(tempfile.gettempdir()).resolve()
     cutoff = time.time() - max(0, age_floor_s)
     try:
-        entries = list(base_dir.glob(prefix + "*"))
-    except Exception:
+        base_fd = _open_directory_nofollow(base_dir, create=False)
+    except OSError:
         return
-    for d in entries:
+    try:
         try:
-            if d.is_dir() and d.stat().st_mtime < cutoff:
-                shutil.rmtree(d, ignore_errors=True)
+            names = os.listdir(base_fd)
         except OSError:
-            continue
+            return
+        for name in names:
+            if not name.startswith(prefix):
+                continue
+            try:
+                entry = os.stat(name, dir_fd=base_fd, follow_symlinks=False)
+                if stat.S_ISDIR(entry.st_mode) and entry.st_mtime < cutoff:
+                    shutil.rmtree(name, dir_fd=base_fd, ignore_errors=True)
+            except OSError:
+                continue
+    finally:
+        try:
+            os.close(base_fd)
+        except OSError:
+            pass
 
 
 # ─── Debug log (human-readable per-call markdown table) ───────────────────

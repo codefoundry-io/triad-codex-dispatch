@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Thin CLI over `_common.apply_classifier_patch` — the SKILL-callable applier.
 
-The repair sub-agent is a READ-ONLY analyzer (no Write/Edit/Bash): it returns a
-structured patch PROPOSAL as inline JSON. The leader (or the codex-host top-level
-`codex exec -s read-only` shell) then feeds that proposal to THIS command, which
+The repair analyzer is READ-ONLY: it returns a structured patch
+proposal. The leader stores only that proposal as a UTF-8 JSON file, and the
+owner passes the file to this command from their normal terminal. This command
 is the single deterministic, validated, zero-LLM write path to the classifier
 extension JSON.
 

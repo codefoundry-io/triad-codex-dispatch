@@ -17,6 +17,7 @@ import os
 import pty
 import select
 import signal
+import struct
 import time
 from dataclasses import dataclass
 
@@ -28,6 +29,70 @@ class PtyResult:
     output_bytes: bytes
     rc: int
     killed: bool
+
+
+class PtyStartError(Exception):
+    """Child setup failed before the vendor executable replaced the process."""
+
+    def __init__(self, stage: str, error_number: int):
+        self.stage = stage
+        self.errno = error_number
+        super().__init__(f"pty child start failed: stage={stage} errno={error_number}")
+
+
+_START_STATUS = struct.Struct("!BI")
+_START_STAGE_TO_CODE = {"chdir": 1, "exec": 2}
+_START_CODE_TO_STAGE = {value: key for key, value in _START_STAGE_TO_CODE.items()}
+
+
+def _report_start_error(fd: int, stage: str, exc: Exception) -> None:
+    error_number = getattr(exc, "errno", None)
+    if not isinstance(error_number, int) or error_number < 0:
+        error_number = errno.EIO
+    payload = _START_STATUS.pack(_START_STAGE_TO_CODE[stage], error_number)
+    offset = 0
+    while offset < len(payload):
+        try:
+            written = os.write(fd, payload[offset:])
+        except InterruptedError:
+            continue
+        except OSError:
+            break
+        if written <= 0:
+            break
+        offset += written
+
+
+def _read_start_error(fd: int, deadline: float) -> PtyStartError | None:
+    payload = bytearray()
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("PTY child start handshake timed out")
+        try:
+            ready, _, _ = select.select([fd], [], [], min(remaining, 1.0))
+        except InterruptedError:
+            continue
+        if not ready:
+            continue
+        try:
+            chunk = os.read(fd, _START_STATUS.size - len(payload))
+        except InterruptedError:
+            continue
+        if not chunk:
+            break
+        payload.extend(chunk)
+        if len(payload) == _START_STATUS.size:
+            break
+    if not payload:
+        return None
+    if len(payload) != _START_STATUS.size:
+        raise OSError(errno.EIO, "incomplete PTY child start status")
+    stage_code, error_number = _START_STATUS.unpack(payload)
+    stage = _START_CODE_TO_STAGE.get(stage_code)
+    if stage is None:
+        raise OSError(errno.EIO, "invalid PTY child start stage")
+    return PtyStartError(stage, error_number)
 
 
 def run_via_pty(cmd, cwd=None, timeout=600, env=None) -> PtyResult:
@@ -46,66 +111,93 @@ def run_via_pty(cmd, cwd=None, timeout=600, env=None) -> PtyResult:
     """
     full_env = _common.scrubbed_child_env() if env is None else dict(env)
     full_env.setdefault("TERM", "dumb")  # suppress TUI escapes
+    deadline = time.monotonic() + timeout
 
-    pid, master_fd = pty.fork()
+    status_read_fd, status_write_fd = os.pipe()
+    os.set_inheritable(status_write_fd, False)
+    try:
+        pid, master_fd = pty.fork()
+    except BaseException:
+        os.close(status_read_fd)
+        os.close(status_write_fd)
+        raise
     if pid == 0:  # child — own session courtesy of pty.fork()
+        os.close(status_read_fd)
         try:
             if cwd:
-                os.chdir(cwd)
+                try:
+                    os.chdir(cwd)
+                except Exception as exc:
+                    _report_start_error(status_write_fd, "chdir", exc)
+                    os._exit(127)
             os.execvpe(cmd[0], list(cmd), full_env)
-        except Exception:
+        except Exception as exc:
+            _report_start_error(status_write_fd, "exec", exc)
             os._exit(127)
+
+    os.close(status_write_fd)
+    try:
+        start_error = _read_start_error(status_read_fd, deadline)
+    except BaseException:
+        os.close(master_fd)
+        _killpg(pid)
+        _reap(pid)
+        raise
+    finally:
+        os.close(status_read_fd)
+    if start_error is not None:
+        os.close(master_fd)
+        _reap(pid)
+        raise start_error
 
     chunks = bytearray()
     killed = False
-    deadline = time.monotonic() + timeout
+    saw_eof = False
+    rc = None
     try:
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                killed = True
-                break
-            r, _, _ = select.select([master_fd], [], [], min(remaining, 1.0))
-            if master_fd in r:
-                try:
-                    data = os.read(master_fd, 65536)
-                except OSError as e:
-                    if e.errno == errno.EIO:  # Linux EOF
-                        break
-                    raise
-                if not data:  # macOS EOF
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    killed = True
                     break
-                chunks.extend(data)
+                r, _, _ = select.select([master_fd], [], [], min(remaining, 1.0))
+                if master_fd in r:
+                    try:
+                        data = os.read(master_fd, 65536)
+                    except OSError as e:
+                        if e.errno == errno.EIO:  # Linux EOF
+                            saw_eof = True
+                            break
+                        raise
+                    if not data:  # macOS EOF
+                        saw_eof = True
+                        break
+                    chunks.extend(data)
+        finally:
+            if saw_eof and not killed:
+                rc = _reap_until(pid, deadline)
+                if rc is None:
+                    killed = True
+            if killed:
+                _killpg(pid)
+            if rc is None:
+                rc = _reap(pid)
     finally:
         os.close(master_fd)
-        child_status = _killpg(pid) if killed else None
-        rc = _reap(pid, child_status)
     return PtyResult(bytes(chunks), rc, killed)
 
 
-def _killpg(pid: int):
+def _killpg(pid: int) -> None:
     """Signal the child's process GROUP down (SIGTERM, escalate to SIGKILL).
 
-    Returns the direct child's raw wait status if we reaped it here (so the
-    caller's _reap can recover it after ChildProcessError), else None.
-
-    The escalation gate is the GROUP, not the direct child: after the direct
-    child is reaped on SIGTERM, lingering descendants in the same group still
-    warrant SIGKILL. We probe the group with signal 0 (ProcessLookupError =>
-    empty => done) instead of inferring "group gone" from the direct child.
+    ``pty.fork()`` creates a session whose process-group ID is the returned
+    child PID. Use that stable ID directly: on macOS ``getpgid(pid)`` reports
+    ESRCH once the leader is a zombie even while live descendants remain in
+    its group. The caller deliberately reaps the leader only after this
+    escalation, preventing the PID/PGID from being reused while we signal it.
     """
-    try:
-        pgid = os.getpgid(pid)
-    except OSError as e:
-        # ESRCH: the child is already gone. EPERM: the pid was reused by a
-        # process in another session whose pgid we may not query (PID reuse
-        # under load) — getpgid itself can raise EPERM, not just killpg. Either
-        # way we cannot resolve the group; nothing to signal. Re-raise anything
-        # unexpected (not ESRCH/EPERM) loudly rather than swallowing it.
-        if e.errno not in (errno.ESRCH, errno.EPERM):
-            raise
-        return None
-    captured_status = None
+    pgid = pid
     for sig in (signal.SIGTERM, signal.SIGKILL):
         # Escalate only if the group still has at least one member.
         try:
@@ -118,25 +210,13 @@ def _killpg(pid: int):
             # signal at least one member, so an EPERM here means there is
             # nothing left we can act on; stop escalating.
             #
-            # Residual NOT closed by this guard: if the reused pgid is a
-            # same-uid group we CAN signal, killpg SUCCEEDS and mis-signals it
-            # (no exception raised), so the getpgid->killpg TOCTOU window is
-            # still a (rare, microsecond) wrong-signal hazard — a pidfd-based
-            # approach would be the stronger fix if that is ever observed.
-            # Anything other than ESRCH/EPERM is unexpected — re-raise loudly.
+            # The unreaped direct child keeps this PID/PGID reserved until the
+            # caller finishes escalation. Anything other than ESRCH/EPERM is
+            # unexpected — re-raise loudly.
             if e.errno not in (errno.ESRCH, errno.EPERM):
                 raise
             break
         for _ in range(20):  # up to ~1s for the signal to land
-            # Reap the direct child non-blocking; capture its status so the
-            # real exit (WIFSIGNALED -> 128+sig) is not lost to -1 later.
-            if captured_status is None:
-                try:
-                    wpid, status = os.waitpid(pid, os.WNOHANG)
-                except ChildProcessError:
-                    wpid, status = pid, None
-                if wpid == pid and status is not None:
-                    captured_status = status
             # Group-empty probe: kill(-pgid, 0) raises ESRCH when no process
             # remains, and EPERM when nothing remaining is signalable by us.
             # Either way there is nothing left for the SIGKILL escalation to
@@ -146,27 +226,39 @@ def _killpg(pid: int):
             except OSError as e:
                 if e.errno not in (errno.ESRCH, errno.EPERM):
                     raise
-                return captured_status
+                return None
             time.sleep(0.05)
-    return captured_status
+    return None
 
 
-def _reap(pid: int, prereaped_status=None) -> int:
-    """Reap the child and map its wait status to an rc.
-
-    `prereaped_status` is the raw status captured by `_killpg` (if it already
-    reaped the direct child). On ChildProcessError — the child was already
-    reaped — fall back to that status instead of the -1 sentinel so a killed
-    child reports its real 128+signal code.
-    """
-    try:
-        _, status = os.waitpid(pid, 0)
-    except ChildProcessError:
-        status = prereaped_status
-    if status is None:
-        return -1
+def _status_to_rc(status: int) -> int:
+    """Map one wait status to the subprocess-style return code contract."""
     if os.WIFEXITED(status):
         return os.WEXITSTATUS(status)
     if os.WIFSIGNALED(status):
         return 128 + os.WTERMSIG(status)
     return -1
+
+
+def _reap_until(pid: int, deadline: float) -> int | None:
+    """Poll until the child is reaped or the shared PTY deadline expires."""
+    while True:
+        try:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            return -1
+        if waited == pid:
+            return _status_to_rc(status)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        time.sleep(min(remaining, 0.05))
+
+
+def _reap(pid: int) -> int:
+    """Reap the direct child once after process-group escalation."""
+    try:
+        _, status = os.waitpid(pid, 0)
+    except ChildProcessError:
+        return -1
+    return _status_to_rc(status)
