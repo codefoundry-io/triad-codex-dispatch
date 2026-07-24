@@ -517,6 +517,30 @@ def test_schema_repair_retains_trusted_packet_footer() -> None:
     assert "packet digest mismatch" in repaired_prompt
 
 
+def test_build_cmd_passes_model_and_optional_effort_unchanged() -> None:
+    cmd = wrapper._build_cmd(
+        "review",
+        "AGY_DONE_" + "d" * 32,
+        True,
+        "Gemini 3.1 Pro (High)",
+        1200,
+    )
+
+    assert cmd[cmd.index("--model") + 1] == "Gemini 3.1 Pro (High)"
+    assert "--effort" not in cmd
+
+    future_cmd = wrapper._build_cmd(
+        "review",
+        "AGY_DONE_" + "e" * 32,
+        True,
+        "gemini-3.1-pro",
+        1200,
+        effort="high",
+    )
+    assert future_cmd[future_cmd.index("--model") + 1] == "gemini-3.1-pro"
+    assert future_cmd[future_cmd.index("--effort") + 1] == "high"
+
+
 def test_agy_schema_retry_rebuilds_unsealed_prompt_and_reseals_once() -> None:
     sentinel = "AGY_DONE_" + "1" * 32
     foreign_marker = "<<<AGY_DONE_" + "2" * 32 + ">>>"
@@ -743,10 +767,232 @@ def test_preflight_proves_packet_identity_without_starting_provider(
     receipt = json.loads(capsys.readouterr().out)
     assert receipt["provider_started"] is False
     assert receipt["dispatch_phase"] == "preflight"
+    assert receipt["model"] == "Gemini 3.1 Pro (High)"
+    assert receipt["effort"] is None
+    assert receipt["route_args"] == [
+        "--sandbox",
+        "--model",
+        "Gemini 3.1 Pro (High)",
+    ]
+    assert "effective_model" not in receipt
     assert receipt["skip_permissions"] is None
     assert receipt["sealed_packet_root"] == str(packet.resolve())
     assert receipt["expected_packet_sha256"] == digest
     assert not sentinel.exists()
+
+
+def test_preflight_echoes_requested_model_and_effort_without_provider_work(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    packet = tmp_path / "packet"
+    packet.mkdir()
+    calls = {"provider": 0, "settings": 0, "prompt_cmd": 0, "route": []}
+
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper._common,
+        "build_validation_context",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        wrapper._common,
+        "require_binary",
+        lambda _name: calls.__setitem__("provider", calls["provider"] + 1),
+    )
+    monkeypatch.setattr(
+        wrapper._agy_settings,
+        "agy_settings_guard",
+        lambda *_args, **_kwargs: calls.__setitem__("settings", calls["settings"] + 1),
+    )
+    monkeypatch.setattr(
+        wrapper,
+        "_build_cmd",
+        lambda *_args, **_kwargs: calls.__setitem__(
+            "prompt_cmd", calls["prompt_cmd"] + 1
+        ),
+    )
+
+    def capture_route(agy_sandbox, model, effort):
+        calls["route"] = [agy_sandbox, model, effort]
+        return ["--model", model, "--effort", effort]
+
+    monkeypatch.setattr(wrapper, "_build_route_args", capture_route)
+    monkeypatch.setattr(
+        wrapper,
+        "_compose_effective_prompt",
+        lambda *_args, **_kwargs: pytest.fail("preflight must not build prompt"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt", "review",
+            "--model", "gemini-3.1-pro",
+            "--effort", "high",
+            "--sealed-packet-root", str(packet),
+            "--expected-packet-sha256", "a" * 64,
+            "--preflight-only",
+        ],
+    )
+
+    assert wrapper.main() == wrapper._common.EXIT_OK
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["model"] == "gemini-3.1-pro"
+    assert receipt["effort"] == "high"
+    assert receipt["route_args"] == [
+        "--model",
+        "gemini-3.1-pro",
+        "--effort",
+        "high",
+    ]
+    assert "effective_model" not in receipt
+    assert calls == {
+        "provider": 0,
+        "settings": 0,
+        "prompt_cmd": 0,
+        "route": [False, "gemini-3.1-pro", "high"],
+    }
+
+
+def test_preflight_receipt_uses_parsed_values_when_model_looks_like_effort_flag(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    packet = tmp_path / "packet"
+    packet.mkdir()
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper._common,
+        "build_validation_context",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        wrapper._common,
+        "require_binary",
+        lambda _name: pytest.fail("preflight must not resolve provider"),
+    )
+    monkeypatch.setattr(
+        wrapper,
+        "_compose_effective_prompt",
+        lambda *_args, **_kwargs: pytest.fail("preflight must not build prompt"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            "review",
+            "--model=--effort",
+            "--effort",
+            "high",
+            "--sealed-packet-root",
+            str(packet),
+            "--expected-packet-sha256",
+            "b" * 64,
+            "--preflight-only",
+        ],
+    )
+
+    assert wrapper._build_route_args(False, "--effort", "high") == [
+        "--model",
+        "--effort",
+        "--effort",
+        "high",
+    ]
+    assert wrapper.main() == wrapper._common.EXIT_OK
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["model"] == "--effort"
+    assert receipt["effort"] == "high"
+
+
+def test_invalid_effort_is_rejected_before_provider_settings_or_filesystem_work(
+    monkeypatch,
+) -> None:
+    calls = {"prompt": 0, "provider": 0, "settings": 0, "filesystem": 0}
+
+    monkeypatch.setattr(
+        wrapper._common,
+        "load_prompt_text",
+        lambda *_args, **_kwargs: calls.__setitem__("prompt", calls["prompt"] + 1),
+    )
+    monkeypatch.setattr(
+        wrapper._common,
+        "require_binary",
+        lambda _name: calls.__setitem__("provider", calls["provider"] + 1),
+    )
+    monkeypatch.setattr(
+        wrapper._agy_settings,
+        "agy_settings_guard",
+        lambda *_args, **_kwargs: calls.__setitem__("settings", calls["settings"] + 1),
+    )
+    monkeypatch.setattr(
+        wrapper,
+        "_build_cmd",
+        lambda *_args, **_kwargs: calls.__setitem__("filesystem", calls["filesystem"] + 1),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt", "review",
+            "--effort", "extreme",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        wrapper.main()
+
+    assert exc_info.value.code == 2
+    assert calls == {"prompt": 0, "provider": 0, "settings": 0, "filesystem": 0}
+
+
+def test_main_forwards_effort_to_final_agy_argv(monkeypatch, capsys) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_driver(cmd, *_args, **_kwargs):
+        captured["argv"] = list(cmd)
+        return wrapper.AgyResult(
+            final_answer="provider answer",
+            classification="ok",
+            exit_code=wrapper._common.EXIT_OK,
+            vendor_exit_code=0,
+            final_argv=list(cmd),
+            schema_repair_attempt=0,
+            validation_error=None,
+            dispatch_phase="post-dispatch-result",
+        )
+
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(wrapper._common, "build_validation_context", lambda *_a, **_k: {})
+    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/usr/bin/agy")
+    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
+    monkeypatch.setattr(wrapper, "_run_agy_with_retry", fake_driver)
+    monkeypatch.setattr(wrapper._agy_settings, "build_deny_rules", lambda _mode: [])
+    monkeypatch.setattr(
+        wrapper._agy_settings,
+        "agy_settings_guard",
+        lambda *_args, **_kwargs: nullcontext(),
+    )
+    monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt", "review",
+            "--model", "gemini-3.1-pro",
+            "--effort", "high",
+            "--sandbox", "read-only",
+        ],
+    )
+
+    assert wrapper.main() == wrapper._common.EXIT_OK
+    final_argv = captured["argv"]
+    assert final_argv[final_argv.index("--model") + 1] == "gemini-3.1-pro"
+    assert final_argv[final_argv.index("--effort") + 1] == "high"
+    assert capsys.readouterr().out == "provider answer\n"
 
 
 def test_agy_cleanup_precedes_sealed_preflight(tmp_path: Path, monkeypatch, capsys) -> None:

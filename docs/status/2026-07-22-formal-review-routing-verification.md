@@ -1,64 +1,70 @@
 # Worktree-first review and Agent-review verification ledger
 
-Date: 2026-07-22
+Updated: 2026-07-24
 
 ## Scope
 
 This ledger covers the worktree-first review contract, provider skill examples,
-distributed profile/rules bootstrap, public documentation, root workspace
+distributed ordinary-Codex bootstrap, public documentation, root workspace
 policy, and the accepted AGY truncation failure gate. It does not extend the
-historical R14 archive and does not claim a three-family formal verdict.
+historical packet-era R14 archive. The first live worktree round below was `NOT-SAFE` and
+therefore is not a passing formal verdict.
 
 ## Behavioral contract
 
 | Concern | Verified behavior |
 | --- | --- |
-| Source | One canonical existing Git worktree |
-| Navigation | One trusted leader-captured Git status/diff, identical for every leg |
-| Impact | Reviewers directly read/search affected unchanged files beyond the diff |
-| Mutation guard | Equal pre/post fingerprint including untracked content hashes |
-| Default artifacts | No packet, copy, manifest, allowlist, snapshot, or generated related-file list |
-| Routes | Terra/xhigh, Opus/xhigh, agy `gemini-3.1-pro-high` |
+| Source | One leader-prepared shared review directory containing current approved production source, configuration, and documentation |
+| Navigation | Every leg receives the same directory and task; no prompt inlines a diff or file body; record one simple content digest before dispatch and compare it after every required leg terminates |
+| Impact | Project instructions or the owner supply exact test-source exclusions; if unavailable, stop and ask the owner. Formal plan/pre-merge legs exclude test source; normal SDD implementation review includes relevant test source |
+| Mutation check | One simple content digest is recorded before dispatch and compared after every required leg terminates; a mismatch invalidates the round |
+| Review input | The leader-prepared shared review directory and common task are the complete review input; no prompt inlines a diff or file body |
+| Routes | Terra/xhigh, Opus/xhigh, authenticated `agy models` catalog selector `gemini-3.1-pro-high`; outbound model argument `Gemini 3.1 Pro (High)` with no `--effort` |
 | Default approval path | `on-request` + `auto_review` + exact launcher `prompt` rules |
-| Explicit compatibility | An explicitly selected `never` posture retains `allow` rules |
+| Fail-closed posture | Exact launcher rules always use `prompt`; `never` disables Agent Review and cannot create a global allow |
 | AGY truncation | Exact own-line bytes/lines marker is terminal, quarantined, and non-repairable |
-| Workflow boundary | One combined local commit authorized; push/install/merge/release/publication remain separate |
+| Workflow boundary | Commit/push/install/merge/release/publication remain separately authorized |
 
-Provider read-only policy remains intact. Because the provider models do not
-receive a general shell, the trusted leader supplies the selected Git output;
-reviewers inspect the actual worktree with file reads and searches. This avoids
-both unsafe shell expansion and the rejected packet/related-list workflow.
+Provider read-only policy remains intact. The leader prepares one shared review
+directory and records one simple content digest before dispatch, then compares it
+after every required leg terminates; a mismatch invalidates the round. Every leg
+receives that same directory and task, with no inline diff or file body. The exact
+test-source boundary comes from project instructions or the owner; unavailable
+boundaries require stopping and asking the owner. Before a formal gate, classify
+every test failure as production defect, test-case defect, or intentional
+specification change and resolve or approve it.
 
 ## Deterministic evidence
 
 | Check | Result |
 | --- | --- |
-| Login-shell Python | `/opt/homebrew/opt/python@3.12/libexec/bin/python3`; Python `3.12.13`; pytest `9.0.3` |
+| Current login-shell Python | `/opt/homebrew/opt/python@3.12/libexec/bin/python3`; Python `3.12.13`; pytest `9.0.3` |
 | Skill RED baseline | Old contract could not comply without an archived packet |
 | Fresh Terra/xhigh pressure test | GREEN worktree-first workflow; no providers or artifacts |
-| Native exec-policy evaluator | `codex execpolicy check` on bootstrap-generated default and explicit-`never` rules |
+| Native exec-policy evaluator | `codex execpolicy check` on all three installed exact wrapper rules |
 | AGY packet-context runtime | `47 passed in 0.60s` |
-| Bootstrap module | Final run `233 passed in 118.53s`; preceding SIGKILL case isolated `1 passed` |
-| Distribution contract | `59 passed in 0.12s` |
-| Archive/read-only compatibility | `95 passed, 6 subtests passed in 6.10s` |
-| Non-bootstrap partition | `391 passed, 6 subtests passed in 8.08s` |
-| Bootstrap syntax/diff | `bash -n` and `git diff --check` passed |
+| Second-round corrections | `8 passed in 11.49s` |
+| Bootstrap + repair + migration + distribution | `368 passed`; two macOS-killed temporary-Python cases immediately isolated `2 passed in 0.51s` |
+| Latest focused regression | preserve-empty + repair/distribution bundle `148 passed in 6.36s` |
+| Historical R16 full suite | `687 passed plus 6 subtests in 158.50s` |
+| Current 2026-07-24 full suite | `709 passed in 152.64s` |
+| Fresh skill exposure | All four triad skills `AVAILABLE` in ordinary ephemeral Codex |
+| Bootstrap syntax/diff | `bash -n`, `git diff --check`, and `git diff --cached --check` passed |
 
 Fresh native evaluator receipts used codex-cli `0.145.0`. With the exact rules
-generated by the current bootstrap, all three default managed launchers returned
+generated by the corrected bootstrap, all three managed launchers returned
 `prompt`; the raw wrapper, repository wrapper, `bash -lc`, `zsh -lc`, direct
 Python wrapper, `/usr/bin/env python3`, and generic `python3 -c` forms returned
-no match (`{"matchedRules":[]}`). The explicit-`never` managed launcher
-returned `allow`. Every `codex execpolicy check --rules <generated-rules> --
+no match (`{"matchedRules":[]}`). `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never`
+does not change the global rules to `allow`. Every
+`codex execpolicy check --rules <generated-rules> --
 <argv...>` command exited zero; loading the file also exercised its embedded
 `match` and `not_match` assertions.
 
-The evaluator binary was `/opt/homebrew/bin/codex`. The generated default rules
-SHA-256 was
-`84971bf2950339dc72a0e4d25450fac729f4f722ca4d76724c09a01119cf44bf`;
-the explicit-`never` rules SHA-256 was
-`b2c0b17bc257176645e895d450e113cb809015cae57b3e95490f8ddb65f10c99`.
-The exact output classes were:
+The evaluator binary was `/opt/homebrew/bin/codex`. The final installed rules
+SHA-256 is
+`2d2a48e5adfe52e71601f296cf2723d9051ee2052f90376cf31580e885b019ef`.
+The exact output classes are:
 
 | Candidate argv | Native JSON result |
 | --- | --- |
@@ -69,20 +75,290 @@ The exact output classes were:
 | `bash -lc` or `zsh -lc` wrapper | `{"matchedRules":[]}`; no top-level decision |
 | direct Python wrapper or `/usr/bin/env python3` wrapper | `{"matchedRules":[]}`; no top-level decision |
 | generic `python3 -c` | `{"matchedRules":[]}`; no top-level decision |
-| Exact explicit-`never` Claude launcher | one `prefixRuleMatch`; top-level and nested decision `allow` |
+| Exact launcher with legacy profile policy set to `never` | one `prefixRuleMatch`; top-level and nested decision `prompt` |
 
-Two monolithic suite runs produced nondeterministic macOS SIGKILLs in different
-temporary-Python bootstrap edge cases. The first run otherwise had `612 passed,
-6 subtests`; the second otherwise had `611 passed, 6 subtests`. Every affected
-case passed in isolation, the entire bootstrap module passed, and every
-non-bootstrap test passed. The failing `check_python` lines were unchanged by
-this slice, so no unproven workaround was added.
+Earlier combined runs produced macOS SIGKILLs when the tests hard-linked/copied
+the signed Homebrew Python executable into synthetic whitespace/oversized paths.
+The test fixture now copies and ad-hoc signs that temporary executable on
+Darwin. Product bootstrap behavior is unchanged; the final combined suite
+passes.
 
 ## External-state result
 
-No Claude or Google provider was invoked. No plugin/profile/rules installation
-was performed in the owner's live environment. The owner authorized one
-combined local commit; no push, release, version/changelog update, merge to
-another branch, publication, or pull request was performed. The planned R15
-packet-first dispatch was cancelled before provider execution; the next
-separately authorized formal round uses the existing worktree.
+The plugin cache, managed launchers/rules, and loader-environment guard were
+refreshed locally without a dedicated profile or shell alias. A fresh ephemeral
+ordinary-Codex session exposed all four triad skills. One live same-prompt round used Claude
+Opus/xhigh, agy `gemini-3.1-pro-high`, and fresh Codex Terra/xhigh. AGY returned
+`SAFE`; Claude and Codex returned `NOT-SAFE` with reproducible bootstrap/docs
+findings. The pre/post fingerprint matched. Those findings are being corrected,
+so that round is closed and cannot be promoted to PASS. A fresh complete round
+is required after the final bytes and tests stabilize. No commit, push, merge,
+release, publication, or pull request was performed.
+
+A second complete round used prompt SHA-256
+`213289372fcead5d5a8aa5cfa7a72f224f27cfe70a641c90866c04a429a97f70`.
+Its pre/post fingerprint matched. AGY returned `SAFE`; fresh Codex found the
+unchanged migration rules still used `allow`; Claude found the repeated-install
+registration-order failure and security/documentation residuals. Accepted
+findings changed source, so that round is also closed and not PASS. The fixes
+now keep hand-maintained rules on `prompt`, cover initially-absent config through
+three installs and two installs plus remove, document ordinary-Codex executable
+integrity, and remove stale legacy wording.
+
+A later full-input attempt had `SAFE` AGY and Codex legs but its Claude leg
+timed out at 600 seconds, making the complete round invalid. The fresh-ID compact
+rerun used an exact zero-context Git diff as navigation while all reviewers kept
+direct full-file and affected-unchanged-file access. Its prompt SHA-256 was
+`423c342b1c5ba706fd56828c2ff57ce025e7d2d8ed3fc99ddb469760ae9d3bc3`;
+the pre/post fingerprint matched. AGY returned `SAFE`; Codex and Claude found a
+stale smoke/profile statement and the fresh-layout owner-edit/owner-tail
+registration failure. The accepted fixes changed source again, so this round is
+closed and not PASS.
+
+The next compact round used prompt SHA-256
+`928a87c3e9c72ff9df870e54da7065dc2d03ff205cfa100c21dfa81e5d6e02da`;
+its pre/post fingerprint matched. AGY returned `SAFE`; Claude returned `SAFE`
+with low-severity release-hardening observations; fresh Codex returned
+`NOT-SAFE` over stale current allow-list wording. The accepted fixes prevent a
+late repair-registration failure from publishing rules or the legacy shell
+entry, replace the stale migration language, and clarify remove/changelog
+coverage. Those changes invalidate that round and are covered by the then-current
+635-test full suite.
+
+R6 used prompt SHA-256
+`b396689de4524360a58072025f15caf53ffb35c4a1c848785691513f0e176b05`
+with an equal pre/post HEAD/diff/status/untracked fingerprint. Claude and fresh
+Codex returned `NOT-SAFE`; AGY returned `SAFE` but exposed an effective
+`Gemini 3.6 Flash (High)` route, conflicting with the requested selector and
+invalidating that leg. A repo-free control-plane spike reproduced the current
+agy slug-to-default behavior and proved that the display label
+`Gemini 3.1 Pro (High)` reaches the intended backend. The accepted corrections
+now embed the captured diff in the native-child message, align Agent Review
+exclusions and public security/remove/runtime wording. The R6 historical record
+documented a temporary normalization to that effective provider label; it is
+superseded by the current exact `--model`/optional `--effort` passthrough. The
+refreshed installed wrapper returned `Gemini 3.1 Pro`, effort `High`, and `ROUTE_SPIKE_OK` for the
+stable selector. R6 is closed and not PASS.
+
+R7 used prompt SHA-256
+`68debad2d5acb7d15091941a717c70a65ffa1373facb5fa70148d34c6fe4ec79`;
+the exact 141,294-byte prompt contained the shared captured status/diff and the
+pre/post fingerprint matched. AGY returned valid `SAFE` on
+`Gemini 3.1 Pro (High) / High`; Claude returned `SAFE` with minor findings;
+fresh Codex returned `NOT-SAFE` by demanding a whole-bootstrap rollback
+transaction. The leader rejected that demand against the governing bounded-
+repair design, which explicitly excludes a whole-install/whole-remove
+transaction. Accepted minor fixes remove a fresh-config registration-only
+backup, expose requested/effective AGY model values in preflight, restore the
+intended dangling-classifier test path, align usage/security wording, and prove
+the existing malformed-registration guard rejects bare-key semantic edits. R7
+is closed because those accepted fixes changed reviewed bytes.
+
+R8 used prompt SHA-256
+`dcd22b1ffaa75d072148676a55cd07aa341faf3eb432e38e38217f1953578797`;
+the exact 148,124-byte shared prompt had an equal pre/post fingerprint. AGY's
+content concluded safe but omitted the mandated result sections, so its leg was
+invalid. Fresh Codex found removal of a pre-existing empty `config.toml`;
+Claude found that rules opt-out could skip the loader guard while owner-managed
+rules still enabled a managed launcher. Both defects were reproduced and fixed.
+The resulting regressions also strengthen effective AGY route proof, align
+provider-log exclusions, and mark the old dedicated-profile plan superseded.
+Those byte changes close R8 and require a new complete round.
+
+R9 used prompt SHA-256
+`7e8f42e7f5278f7ee8f52cb09ec9011be63cbd1594d1fa8323eb9422b81fc5bf`;
+its 198,571-byte shared prompt had an equal pre/post worktree fingerprint.
+Claude and fresh Codex returned `SAFE` with Minor findings. AGY returned
+section-complete `SAFE` content on `Gemini 3.1 Pro (High)` but omitted the
+wrapper completion sentinel; the resulting `extraction-error/no-sentinel`
+invalidated that required leg. Accepted corrections align bootstrap help with
+the owner-rules guard, mark the legacy approval-profile plan superseded, and
+make the managed config-fragment separator removable so a no-final-newline owner
+file round-trips byte-for-byte. R9 is closed and not PASS.
+
+## Current route and R12 reconciliation
+
+The authenticated catalog selector `gemini-3.1-pro-high` is distinct from the
+exact outbound `Gemini 3.1 Pro (High)` argument, with no `--effort`. Preflight
+proves requested argv construction only; exposed identity must agree, and absent
+identity is `unexposed` once. The base-slug plus `--effort high` route is not
+current policy until a fresh runtime probe proves acceptance and identity
+agreement.
+
+R11 prior formal-round evidence: prompt SHA-256
+`85414ff304e4b6f5f583de08da71d9fefcce6e86f669af64caf3ab6646d60394`, diff SHA
+`0711255908f5dde70bbf19e09bb85b8b6a36fcc4b6215d0306a73075c07f2574`, equal
+fingerprint `d810c09e5e4d751ad9303d1469ebaabfdb124ab08e86c26202cea753fb47df84`,
+fresh Terra SAFE, Claude Opus SAFE with three Minor findings, AGY display-label
+route SAFE, and 644 tests plus 6 subtests.
+
+R12 ledger:
+
+- review ID: `20260723-r11-minor-hardening-r12`
+- prompt SHA-256: `4d771be60a54a698dea7fe080ad98ab335106b7befe6ec6d4a5baed1450cac01`
+- equal pre/post fingerprint: `cd3885d0f85631320409ba8eb12fe016dd279dad7e731059a70f8255c20dd454`
+- fresh Codex: `NOT-SAFE` with one Major
+- Claude: `SAFE` with six Minor findings
+- AGY: `extraction-error`, post-dispatch, fallback-ineligible (exit 1, phase post-dispatch-cleanup)
+- repair analyzer: `escalate`, proposal null/no classifier change
+- local verification: 648 passed plus 6 subtests; leader verification: 648 passed + 6 subtests
+- round status: invalid and requires a fresh complete round
+
+No verified R10 hash is available, so no value is inferred. R12 is invalid and
+requires a fresh complete round; repairing only the missing Google leg cannot
+promote it.
+
+## R13 invalid formal round
+
+This documentation reconciliation cannot be promoted:
+
+- review ID: `20260723-r11-minor-hardening-r13`
+- prompt SHA-256: `a2396c1afb614a61bbbc29a5e75612f76bd452c3f7679c5f8312b9de530db177`
+- equal pre/post fingerprint: `577770d8c4fd05ef3b0271ad21044fcd9dc173a0b7425608af035136d375ad8a`
+- fresh Codex: `NOT-SAFE` with one Major
+- AGY: `extraction-error`, post-dispatch, fallback-ineligible
+- repair analyzer: `escalate`, proposal null/no classifier change
+- Claude: invalid fenced JSON framing; diagnostic `SAFE` with two Minor findings
+- round status: invalid and requires a fresh complete round
+
+## Task 5 pre-gate hardening
+
+Task-level Terra review rejected a wording-only response to the partial-
+registration edge. The environment-fragment helper previously deleted an empty
+remainder before repair removal could consult registration provenance. The
+accepted bootstrap-only `--preserve-empty` gate leaves a zero-byte file when
+that provenance is missing; standalone helper deletion and intact normal
+round-trips remain covered.
+
+- Lunar implementation: `/root/r13_task5_docs_reconcile`
+- implementation RED: `5 failed, 73 passed`
+- focused GREEN: `80 passed`
+- broader repair/distribution GREEN: `148 passed in 6.36s`
+- Terra specification review: `/root/r13_provenance_spec_review`, approved
+- Terra quality review: `/root/r13_provenance_quality_review`, approved
+- equal task-review fingerprint:
+  `085434c5e71fed85f44bf3c68908eb149644bc5705ca659f590a944ca8379b8d`
+- leader full suite: `679 passed, 6 subtests passed in 156.35s`
+- Bash syntax plus staged and unstaged diff checks: passed
+- gate state: a fresh complete three-family round is still required
+
+The owner has narrowed that gate's reviewer scope to one leader-prepared shared
+review directory containing current approved production source, configuration,
+and documentation plus a common task as the complete review input. Every leg
+receives the same directory and task; no prompt inlines a diff or file body.
+Record one simple content digest before dispatch and compare it after every
+required leg terminates; a mismatch invalidates the round. Test source is not
+sent, opened, or reviewed by any leg. Local test execution and the full-worktree
+mutation fingerprint remain leader responsibilities.
+
+The R14-R17 ledger blocks below are historical-only records. Their path-list-era
+next-run wording is superseded by the current shared-directory flow and must not
+direct a future review.
+
+## R14 corrected formal round
+
+review ID: 20260723-r11-minor-hardening-r14
+prompt bytes: 147,929
+prompt SHA-256: f5e69a2095449b28b413c87df390429adee19f7413c23d3b266a316a5fd0d74c
+equal pre/post fingerprint: ea0f1264fe892c98eede5c3437a796b120df83b33cb3f42ccf450ceeea7835e7
+AGY: SAFE, no findings, identity unexposed
+Claude: SAFE with four Minor findings
+fresh Terra: initial false Major retracted; corrected SAFE with no findings
+round status: reviewed bytes SAFE; accepted Minor corrections change bytes and require a fresh complete round
+SECURITY.md opt-out condition: when rules are opted out and no configured rules path remains, bootstrap may skip the native loader guard; the launcher's own scrub remains defense in depth.
+
+The accepted non-test corrections are the managed-artifact read-only tri-state,
+the pre-begin_command_group warning gate, rules-opt-out containment wording,
+upgrade guidance for ordinary codex and explicit legacy opt-in, and the stale
+original config existed = true zero-byte fail-safe. Test source remains outside
+the gate-review input.
+
+## R15 invalid formal round
+
+review ID: 20260723-r11-minor-hardening-r15
+prompt bytes: 159,396
+prompt SHA-256: e176aaa948488a42db5ee8a9be00db0c99d7cdbd79b2688b5daa04babe2c205e
+equal pre/post fingerprint: 5acc6a14cc0886f268d20ef3745b574eee948531756146be2366a76efe28d21c
+fresh Terra: NOT-SAFE with one Major formal test-scope finding
+AGY: substantive SAFE, fenced JSON invalid, identity unexposed
+Claude: NOT-SAFE with one Major, two Minor findings, and two open questions
+round status: invalid and NOT-SAFE; accepted corrections change bytes and require a fresh complete round
+
+The accepted corrections make review kind and data boundary explicit, add
+unfenced AGY verdict examples, preserve parsed preflight values, downgrade only
+unselected unsafe legacy probes, and delay provider command publication until
+repair lifecycle success. A fresh complete formal round is still required.
+
+## R16 corrected formal round
+
+review ID: 20260723-r11-minor-hardening-r16
+external prompt bytes: 191,591
+external prompt SHA-256: 465688443d27be45113aa6bbaba43162b609c039dc676dd5cc2220bb154db1bb
+native prompt bytes: 191,437
+native prompt SHA-256: ee923a22d3c2924281607924c0cc4316f898911b9935624a6cd96a5eafae5db6
+equal pre/post fingerprint: 7f5021078cd769056a279ca864bbea0e1132a769f39a44c406e88158282de91d
+AGY: initial false Major retracted; corrected SAFE with no findings; identity unexposed
+Claude: SAFE with two Minor findings
+fresh Terra: SAFE with no findings
+round status: reviewed bytes SAFE; accepted Minor corrections change bytes and require a fresh complete round
+
+Every leg received the same canonical worktree, objective, approved non-test
+boundary, and identical leader-captured non-test evidence; only the
+route-specific result-contract suffix differed.
+
+1. AGY preflight now publishes the already-constructed ordered route_args;
+   Lunar RED was two KeyError: route_args failures, focused GREEN was 2 passed,
+   packet-context GREEN was 52 passed, and fresh Terra task review was spec PASS
+   / quality Approved.
+2. The historical R16 handoff count was 687 passed plus 6 subtests in 158.50s.
+
+Argus remains gated until one new complete formal round passes over the
+corrected bytes.
+
+## R17 invalid formal round
+
+review ID: 20260723-r11-minor-hardening-r17
+external prompt bytes: 195,916
+external prompt SHA-256: 3f9bb28ab8b543fa8ce9061532a18dad7bb4de99b687e568f76327de5cbf0db8
+native prompt bytes: 195,762
+native prompt SHA-256: c0651b1b4dbcf89e71618ff841184613ea3bce6979040da0762dc0dd956fcc22
+equal pre/post fingerprint: 726e1fe0d614e08a0be3415d50f56b7add81bbe271bc8345948e15c674fd0bfa
+fresh Terra: SAFE with no findings
+Claude: SAFE with two Minor packet-era round-label findings
+AGY: extraction-error, provider exit 0, wrapper exit 1, post-dispatch-cleanup after 198.3s, fallback-ineligible
+round status: invalid because the required AGY leg is missing; Argus remains gated
+
+The shared canonical worktree, approved non-test boundary, and identical
+leader-captured non-test evidence were preserved; only route-specific result
+suffixes differed. The provider run-log was not read or sent. The two Claude
+Minor wording corrections are the packet-era qualifications above. A new
+fresh-ID complete three-family round is required; do not claim that retry has
+occurred.
+
+R17 root-cause correction: the 195,916 total external prompt bytes included
+187,420 inline diff bytes. AGY truncated the input tail, so the route-specific
+result contract and completion marker were lost; the wrapper correctly failed
+closed. The next round uses path-list-only transport: the canonical worktree,
+identical approved non-test path list, fixed read-only Git commands, and hashes
+of locally retained status/diff evidence, with no inline patch or file body.
+
+## R21 accepted documentation corrections
+
+review ID: `20260724-triad-0.2.529-release-r21`
+shared-directory pre-dispatch digest: `dc21a239796f28431afd455f8cc8b48c4e2a16a7b6435fe1bed5a831f6cd2f23`
+fresh Codex: `SAFE`
+AGY: `SAFE`; wrapper exit 0; provider exit 0; requested selector
+`Gemini 3.1 Pro (High)`; no effort; runtime identity unexposed once
+Claude: `SAFE`; wrapper exit 0; provider exit 0
+round status: closed `SAFE`
+
+Fresh Codex had one historical-status Minor; it was rejected because the dated
+record is superseded. Claude had three Minors: the README audit-retention and
+status-freshness corrections were accepted; the implicit Gemini fallback
+`--sandbox` generalization was rejected because supported skill routes
+explicitly pass sandbox and omitted-sandbox legacy behavior is outside the
+owner-approved use.
+
+R21 is closed `SAFE`, but it cannot be final because the accepted corrections
+change bytes. A fresh R22 complete three-family round is required, and
+deployment remains pending.

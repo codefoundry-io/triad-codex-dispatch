@@ -1,5 +1,10 @@
 # Worktree-First Review and Auto-Review Distribution Implementation Plan
 
+> **Status:** Historical and superseded; this is a 0.2.529 implementation record.
+> Current authority is `skills/triad-cross-family-review/SKILL.md` plus
+> `../specs/2026-07-23-r11-minor-hardening-design.md`, section `Active shared-directory formal-review correction`. Do not use this plan as current
+> authority or follow its old profile instructions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:test-driven-development` and `superpowers:writing-skills`.
 > Do not commit, push, install, dispatch providers, or release; those operations
@@ -102,8 +107,11 @@ The skill body must contain, in order:
 
 1. owner authorization for the named review scope and provider families;
 2. absolute existing-worktree resolution;
-3. one scope selector: uncommitted, base/range, or commit;
-4. read-only pre-review fingerprint;
+3. one scope selector: uncommitted, base/range, or commit, with fail-closed
+   scope-specific commands and immutable OID/clean-path preconditions for
+   base/range and commit;
+4. Git-visible/nonignored read-only pre-review fingerprint; ignored paths remain
+   outside the guard and reviewer scope unless owner-approved;
 5. concurrent independent Claude, Google-family, and fresh Codex dispatch;
 6. one trusted leader-captured Git status/diff plus reviewer-owned direct file
    reads/searches and affected-unchanged-file tracing;
@@ -202,9 +210,9 @@ Generate:
 
 ```python
 prefix_rule(
-    pattern = ["/absolute/managed/claude_wrapper.py"],
+    pattern = [["/absolute/managed/claude_wrapper.py"]],
     decision = "prompt",
-    justification = "Route this exact owner-authorized triad review through automatic approval review; review source may go only to the authenticated named provider, with credentials, authentication files, environment dumps, and unrelated paths excluded.",
+    justification = "Require approval review; approve only an owner-authorized triad review through the Claude wrapper when the worktree, scope, and named provider match the owner's request and provider-visible input excludes credentials, tokens, cookies, authentication files, environment dumps, provider logs, and unrelated paths. This does not authorize commit, push, install, merge, or release.",
 )
 ```
 

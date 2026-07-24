@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.2.529 — 2026-07-23
+
+- Applies the owner-approved minimal formal-review correction: formal plan and
+  pre-merge gates use one leader-prepared shared review directory containing
+  current approved production source, configuration, and documentation. Project
+  instructions or the owner supply exact test-source exclusions; if unavailable,
+  stop and ask the owner. Every leg receives the same directory and task. No
+  prompt inlines a diff or file body. Record one simple content digest before
+  dispatch and compare it after every required leg terminates; a mismatch
+  invalidates the round. Normal SDD implementation review includes relevant
+  test source, and classify every test failure as production defect,
+  test-case defect, or intentional specification change before a formal gate.
+- Historical R14-R17 path-list attempts remain preserved verbatim as historical
+  evidence and do not direct the current shared-directory flow. Provider
+  authorization, route selection, and result handling remain governed by their
+  existing skills.
+- Keeps ordinary/non-formal fallback available after proven pre-submission agy
+  unavailability and centralizes the complete formal Gemini admission policy in
+  the [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md).
+  The shipped distribution carries no qualifying proof and runs no automatic
+  enforcement probe, so formal fallback remains closed by default.
+- Uses fresh Codex `gpt-5.6-terra`/`xhigh`, Claude `opus`/`xhigh`, and primary
+  agy authenticated `agy models` catalog selector `gemini-3.1-pro-high`; its
+  exact outbound model argument `Gemini 3.1 Pro (High)` with no `--effort`.
+  Sol and Fable remain conditional long-running escalation routes rather than
+  routine reviewers.
+- Keeps ordinary `codex` as the normal path, leaves the owner's approval,
+  reviewer, sandbox, and Auto-review policy unchanged, installs exact wrapper
+  rules with `decision = "prompt"`, and adds a provenance-marked native
+  loader-environment guard before those launchers execute. Agent Review requires
+  `on-request`/`auto_review`; granular policies must also keep `rules` and
+  `sandbox_approval` interactive. Commit, push, install, merge, tag, and release
+  remain separate owner decisions.
+- Keeps agy's own-line truncation marker fail-closed as terminal
+  `truncated-answer` while requiring a new bounded, compact read-only dispatch;
+  it does not restore the 0.2.528 generic `write_file` or sandbox-bypass
+  workaround.
+- Keeps the hand-maintained migration rules on the same Agent Review `prompt`
+  boundary as generated rules, and preserves repair-analyzer registration order
+  across repeated installs when `config.toml` was initially absent, its managed
+  environment policy was edited, or owner keys were appended later.
+- Removes the expired `--check`/`--uninstall` aliases. The legacy profile uses
+  `TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1`; the shell entry requires both that
+  flag and `TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`. Ordinary installs continue
+  to use `--install`/`--remove` and plain `codex`.
+- Prevents a late repair-analyzer registration failure from publishing provider
+  wrapper launchers, `triad-apply-repair`, analyzer/registration, command rules,
+  or the legacy shell entry, avoiding a partially activated install.
+- `--model` and optional `--effort` pass through unchanged to agy; preflight
+  reports the requested `model` and `effort` only, while provider identity is
+  admitted separately when exposed and recorded as `unexposed` when absent.
+- Avoids a registration-only backup on a fresh config and keeps malformed
+  registration edits fail-closed during removal.
+- Preserves a pre-existing empty `config.toml` across install/remove while still
+  deleting a bootstrap-created config that did not exist before installation.
+- Scopes absent-file restoration to the case where both provenance-marked managed
+  registration and environment-policy blocks remain intact; owner files and
+  altered or partial managed blocks are preserved.
+- Keeps the loader-environment guard when command-rule publication is opted out
+  but owner-maintained rules remain at the configured path and may still launch
+  the managed wrappers.
+- Removes the managed separator with the loader guard so a pre-existing owner
+  config that lacked a final newline round-trips byte-for-byte.
+- On upgrade, a plain install retains exact managed legacy profile and
+  `codex-triad` shell artifacts and warns with their paths; it never deletes
+  them automatically. Use deliberate `--remove` followed by ordinary
+  reinstall, or explicitly opt into the legacy profile and shell entry. An
+  unsafe or unreadable unselected path is reported with its refusal detail but
+  is not followed or changed, and selected ordinary installation continues;
+  selected profile, rules, and shell targets remain strict.
+- Ordinary `codex` remains the normal start path. The retired no-prompt
+  `allow` posture is not restored; exact launcher rules remain `prompt`.
+- A pre-0.2.529 config that was initially absent but carries stale
+  `original config existed = true` provenance is left as a safe zero-byte file,
+  because it is indistinguishable from a genuinely pre-existing empty file.
+
+## 0.2.528 — 2026-07-22
+
+- Added terminal `truncated-answer` detection for agy's lossy own-line
+  `<truncated N bytes|lines>` marker. This release also documented an
+  absolute-path `write_file` workaround; 0.2.529 supersedes that workaround
+  with the bounded, compact, read-only re-dispatch contract.
+
 ## 0.2.527 — 2026-07-21
 
 - Gives every Pydantic Antigravity call one JSON-body-plus-sentinel response

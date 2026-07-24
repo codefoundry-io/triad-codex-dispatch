@@ -1326,6 +1326,53 @@ def test_config_fragment_remove_preserves_concurrent_replacement(
     assert config.read_bytes() == foreign
 
 
+def test_config_fragment_remove_preserve_empty_direct_contract(
+    tmp_path: Path,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    config = tmp_path / "config.toml"
+    fragment = helper.current_config_fragment(b"\n")
+    config.write_bytes(fragment)
+
+    assert helper.remove_config_fragment(config) == "removed-file"
+    assert not config.exists()
+
+    config.write_bytes(fragment)
+    assert helper.remove_config_fragment(config, preserve_empty=True) == "removed"
+    assert config.exists()
+    assert config.read_bytes() == b""
+
+
+def test_config_fragment_remove_preserve_empty_cli_contract(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    config = tmp_path / "config.toml"
+    fragment = helper.current_config_fragment(b"\n")
+    config.write_bytes(fragment)
+
+    assert helper.main(
+        ["config-fragment", "--action", "remove", "--path", str(config)]
+    ) == 0
+    assert capsys.readouterr().out == "removed-file\n"
+    assert not config.exists()
+
+    config.write_bytes(fragment)
+    assert helper.main(
+        [
+            "config-fragment",
+            "--action",
+            "remove",
+            "--path",
+            str(config),
+            "--preserve-empty",
+        ]
+    ) == 0
+    assert capsys.readouterr().out == "removed\n"
+    assert config.exists()
+    assert config.read_bytes() == b""
+
+
 def test_narrow_bootstrap_commands_emit_only_path_or_status(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1383,6 +1430,97 @@ def test_narrow_bootstrap_commands_emit_only_path_or_status(
         ["config-fragment", "--action", "remove", "--path", str(config)]
     ) == 0
     assert capsys.readouterr().out == "removed-file\n"
+
+
+def test_managed_artifact_inspect_returns_safe_tri_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    target = tmp_path / "profile.toml"
+
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 0
+    assert capsys.readouterr().out == "absent\n"
+
+    target.write_bytes(helper.PROFILE_MARKER + b"\nowner = true\n")
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 0
+    assert capsys.readouterr().out == "managed\n"
+
+    target.write_bytes(b'owner = "foreign"\n')
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 0
+    assert capsys.readouterr().out == "unmanaged\n"
+
+
+def test_managed_artifact_inspect_refuses_non_regular_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    target = tmp_path / "profile.toml"
+    target.mkdir()
+
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 3
+    assert "refusing unsafe path" in capsys.readouterr().err
+
+
+def test_managed_artifact_inspect_refuses_symlink_leaf(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    referent = tmp_path / "referent.toml"
+    referent.write_bytes(helper.PROFILE_MARKER + b"\n")
+    target = tmp_path / "profile.toml"
+    target.symlink_to(referent)
+
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 3
+    assert "refusing unsafe path" in capsys.readouterr().err
+    assert referent.read_bytes() == helper.PROFILE_MARKER + b"\n"
+
+
+def test_managed_artifact_inspect_refuses_symlink_ancestor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    target = linked_parent / "profile.toml"
+
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 3
+    assert "refusing unsafe ancestor" in capsys.readouterr().err
+    assert not (real_parent / "profile.toml").exists()
+
+
+def test_managed_artifact_inspect_refuses_injected_read_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    target = tmp_path / "profile.toml"
+    target.write_bytes(helper.PROFILE_MARKER + b"\n")
+
+    def fail_read(_path: Path):
+        raise helper.Refusal("injected managed artifact read failure")
+
+    monkeypatch.setattr(helper, "read_state", fail_read)
+
+    assert helper.main(
+        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
+    ) == 3
+    assert "injected managed artifact read failure" in capsys.readouterr().err
+    assert target.read_bytes() == helper.PROFILE_MARKER + b"\n"
 
 
 @pytest.mark.parametrize(

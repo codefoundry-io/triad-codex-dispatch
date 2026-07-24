@@ -9,15 +9,15 @@
 # - /path/to/triad-codex-dispatch with the checkout used by bootstrap
 # - /path/to/workspace with the trusted workspace root used for prompt files and --cwd
 #
-# No-prompt dispatch requires literal argv whose first token is the absolute
+# Agent Review routing requires literal argv whose first token is the absolute
 # bootstrap launcher path. Do not add bare wrapper names, checkout bin/*.py
-# paths, python3, env, bash -lc, or zsh -lc as allowed patterns.
+# paths, python3, env, bash -lc, or zsh -lc as broader patterns.
 #
 # Discover agy model labels live with `agy models`; do not bake a model name
-# into an allow-rule match.
+# into a prompt-rule match.
 #
 # See:
-# Expected: matchedRules contains triad-codex-dispatch allow rule.
+# Expected: matchedRules contains one triad-codex-dispatch prompt rule.
 # codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- /path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only
 # codex execpolicy check --pretty --rules ~/.codex/rules/triad-codex-dispatch.rules -- /path/to/launcher-dir/claude_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only
 # Expected: matchedRules is empty.
@@ -30,8 +30,8 @@ prefix_rule(
     pattern = [[
         "/path/to/launcher-dir/claude_wrapper.py",
     ]],
-    decision = "allow",
-    justification = "Allow authenticated triad Claude wrapper commands outside the sandbox.",
+    decision = "prompt",
+    justification = "Require approval review; approve only an owner-authorized triad review through the Claude wrapper when the worktree, scope, and named provider match the owner's request and provider-visible input excludes credentials, tokens, cookies, authentication files, environment dumps, provider logs, and unrelated paths. This does not authorize commit, push, install, merge, or release.",
     match = [
         "/path/to/launcher-dir/claude_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/claude_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
@@ -51,8 +51,8 @@ prefix_rule(
     pattern = [[
         "/path/to/launcher-dir/antigravity_wrapper.py",
     ]],
-    decision = "allow",
-    justification = "Allow authenticated triad Antigravity wrapper commands outside the sandbox.",
+    decision = "prompt",
+    justification = "Require approval review; approve only an owner-authorized triad review through the Antigravity wrapper when the worktree, scope, and named provider match the owner's request and provider-visible input excludes credentials, tokens, cookies, authentication files, environment dumps, provider logs, and unrelated paths. This does not authorize commit, push, install, merge, or release.",
     match = [
         "/path/to/launcher-dir/antigravity_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/antigravity_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",
@@ -72,8 +72,8 @@ prefix_rule(
     pattern = [[
         "/path/to/launcher-dir/gemini_wrapper.py",
     ]],
-    decision = "allow",
-    justification = "Allow authenticated triad Gemini business-tier wrapper commands outside the sandbox.",
+    decision = "prompt",
+    justification = "Require approval review; approve only an owner-authorized triad review through the Gemini business-tier wrapper when the worktree, scope, and named provider match the owner's request and provider-visible input excludes credentials, tokens, cookies, authentication files, environment dumps, provider logs, and unrelated paths. This does not authorize commit, push, install, merge, or release.",
     match = [
         "/path/to/launcher-dir/gemini_wrapper.py --prompt hi --sandbox read-only",
         "/path/to/launcher-dir/gemini_wrapper.py --prompt-file /path/to/workspace/_runs/prompts/triad-prompt.txt --sandbox read-only",

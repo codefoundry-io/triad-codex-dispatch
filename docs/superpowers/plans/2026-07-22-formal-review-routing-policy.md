@@ -1,5 +1,9 @@
 # Formal Review Routing Policy Implementation Plan
 
+> **Superseded:** This plan is superseded by
+> `docs/status/2026-07-22-formal-review-routing-verification.md` and the
+> `docs/superpowers/specs/2026-07-23-r11-minor-hardening-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make every bounded formal review resolve the owner's proven Terra/Opus/Gemini routes while retaining Sol/Fable as recorded escalation options and preserving code-complete impact review.
@@ -17,6 +21,11 @@
   of exposed or `unexposed` effective-model metadata.
 - Preserve Sol/Fable as explicit options for ambiguous, security-sensitive, deeply integrative, or adjudication-heavy review; record the exact route and rationale.
 - Preserve the existing code-complete snapshot and affected caller/test/schema/configuration/unchanged-consumer trace; the diff remains navigation only.
+- Keep formal transport fail-closed by scope: uncommitted status → staged diff → unstaged diff;
+  base/range immutable merge-base/tip OIDs with tip == guarded HEAD and approved paths clean;
+  commit immutable OID == guarded HEAD and approved paths clean, followed by root-commit-safe
+  `git show`. Use `shlex.join` and `git --literal-pathspecs` for actual repo-relative arguments;
+  ignored paths are outside the Git-visible guard unless owner-approved.
 - Preserve `_runs/reviews/20260722-triad-reliability-formal-r14` unchanged.
 - Do not reinstall, invoke external providers, modify version/changelog, release, open a pull request, modify `/Users/chaniri/triad-codex-dispatch`, commit, or push without a separate owner decision for this new change.
 

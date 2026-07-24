@@ -3,8 +3,7 @@
 #   Policy-matched files and everything they exec must live OUTSIDE all
 #   sandbox-writable roots.
 # The generated exec-policy rules run the wrapper launchers outside the Codex
-# sandbox after automatic review by default, or without review only in the
-# explicit `never` posture. Both are safe only when the launchers, the pinned
+# sandbox after approval review. This is safe only when the launchers, the pinned
 # python3 runtime, the checkout bin/ wrappers they exec, and the Codex policy
 # surface (CODEX_HOME rules/profiles/agents) plus the classifier patch dir are
 # NOT writable from inside a sandboxed session. A workspace-writable launcher
@@ -27,11 +26,16 @@ protocol in docs/references/repair-protocol.md).
 It also quarantines any legacy personal-scope
 repair-agent TOMLs (bootstrap-authored provenance only — a same-name file
 without that provenance is left in place) left by an older install into a
-timestamped directory outside agents/, recoverable if needed. (--check is a
-deprecated alias for --install, kept for one release.)
+timestamped directory outside agents/, recoverable if needed.
 
 --remove uninstalls the managed artifacts: wrapper launchers, the optional
 runtime profile and command rules, and the managed codex-triad shell entry. It
+also removes the provenance-marked repair-analyzer registration and exact
+managed [shell_environment_policy] block from $CODEX_HOME/config.toml. Absent-file
+restoration applies only when both provenance-marked managed registration and
+environment-policy blocks remain intact, those managed blocks are the file's
+only content, and config.toml did not exist before the install. It is removed
+to restore its pre-install absent state. It
 also removes any bootstrap-managed (provenance-matched) legacy personal-scope
 repair-agent TOMLs left by an older install; a non-matching same-name file is
 preserved. Learned classifier patches are preserved.
@@ -44,45 +48,49 @@ policy-matched launchers and everything they exec must live outside all
 sandbox-writable roots (see the header of this script). Bootstrap hard-fails
 otherwise.
 
-By DEFAULT, --install installs/updates the runtime Codex profile at
-$CODEX_HOME/triad-codex-dispatch.config.toml AND the user-layer command rules at
-$CODEX_HOME/rules/triad-codex-dispatch.rules — so a plain --install with 0 env
-vars yields the recommended setup. The profile uses the Codex permission-profile
-system (default_permissions = "triad_leader"); it never emits legacy sandbox_mode
-/ [sandbox_workspace_write], which would disable permission profiles and
-neutralize the triad_leader profile's scoping. By default, the dedicated profile
-sets approval_policy=on-request and approvals_reviewer=auto_review. The installed
-absolute-launcher rules prompt on the managed wrapper commands so eligible calls
-route through automatic approval review. TRIAD_CODEX_PROFILE_APPROVAL_POLICY is
-the only triad-specific approval-policy override and remains opt-in. For an
-explicitly approved heavy-user no-prompt deployment, set it to never; that
-advanced exception keeps the managed wrapper rules on allow.
+By DEFAULT, --install keeps the owner's ordinary Codex session and installs the
+user-layer command rules at $CODEX_HOME/rules/triad-codex-dispatch.rules plus
+the managed loader-environment guard described below. It does not install or
+require a dedicated Codex profile and does not replace the owner's approval,
+reviewer, or sandbox settings. The exact absolute-launcher rules use
+decision=prompt.
 
-Alongside the profile, --install merges Codex's native loader-environment
-policy ([shell_environment_policy] inherit="all" plus explicit
-loader/interpreter excludes) into $CODEX_HOME/config.toml under a provenance
-marker (with the first free .bak, .bak2, ... backup). It preserves every other
-key and leaves a user's own or edited policy block untouched (warns instead).
-The launcher-level environment scrub remains defense in depth. --remove strips
-exactly that marker block. See migration/config-fragment.recommended.toml.
+For Agent Review, the active configuration must use
+approvals_reviewer=auto_review and an interactive approval policy. The simple
+supported form is approval_policy=on-request. An existing granular policy must
+keep both granular.rules=true and granular.sandbox_approval=true so exact rule
+prompts and the required sandbox escalation reach Agent Review instead of being
+auto-rejected. With approvals_reviewer=user, the same exact calls remain usable
+but prompt the person. approval_policy=never does not run Agent Review.
 
-To opt OUT of the default profile install, set
-TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=0 (or TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE=1).
-To opt OUT of the default command rules, set TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0
-(or TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1). The generated rules match only this
-checkout's authenticated absolute wrapper launchers.
+Because the exact rules execute launchers outside the sandbox, --install also
+merges Codex's native loader-environment policy
+([shell_environment_policy] inherit="all" plus explicit loader/interpreter
+excludes) into $CODEX_HOME/config.toml under a provenance marker. It preserves
+all owner keys and leaves an owner-authored or edited policy untouched with a
+warning. --remove strips only the exact managed block. See
+migration/config-fragment.recommended.toml.
 
-Set TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 to append the managed codex-triad
-shell function to your shell RC (idempotent; TRIAD_BOOTSTRAP_SHELL_RC overrides
-the RC file path). codex-triad pins TRIAD_WRAPPER_ALLOWED_ROOTS,
-TRIAD_WRAPPER_HARDENED=1, and TRIAD_CLAUDE_ENFORCE_SANDBOX=1 — it is the only
-supported no-prompt start; do not start no-prompt dispatch with a bare codex
-invocation.
+The legacy dedicated-profile generator remains opt-in for migration only through
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1; it is not the normal start path. To opt
+out of the default command rules, set TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0
+(or TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1). That opt-out skips the managed
+loader-environment guard only when the configured rules path is absent. If
+owner-maintained rules remain there, bootstrap preserves them and keeps the
+guard because those rules may still enable a managed launcher. The generated
+rules match only this checkout's authenticated absolute wrapper launchers.
+
+The legacy codex-triad shell entry is migration-only and requires both
+TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 and TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1;
+it is not the normal start path.
+
+Start a fresh ordinary Codex session after installation. Use `/status` to verify
+the active approval policy and `/debug-config` if a project, profile, or managed
+layer changes the expected reviewer.
 EOF
 }
 
 MODE=""
-LEGACY_ALIAS_TARGET=""
 if [ "$#" -ne 1 ]; then
   usage >&2
   exit 2
@@ -91,16 +99,8 @@ case "${1:-}" in
   --install)
     MODE="install"
     ;;
-  --check)
-    MODE="install"
-    LEGACY_ALIAS_TARGET="--install"
-    ;;
   --remove)
     MODE="remove"
-    ;;
-  --uninstall)
-    MODE="remove"
-    LEGACY_ALIAS_TARGET="--remove"
     ;;
   *)
     usage >&2
@@ -541,7 +541,7 @@ check_legacy_sandbox_config() {
   base_config="$CODEX_HOME/config.toml"
   if [ -f "$base_config" ] \
     && grep -Eq '^[[:space:]]*sandbox_mode[[:space:]]*=|^\[sandbox_workspace_write\]' "$base_config"; then
-    warn "legacy sandbox settings (sandbox_mode / [sandbox_workspace_write]) found in $base_config; any loaded config layer with them disables permission profiles, neutralizing the triad_leader profile's default_permissions scoping — migrate the base config to permission profiles"
+    warn "legacy sandbox settings (sandbox_mode / [sandbox_workspace_write]) found in $base_config; bootstrap preserves this owner policy. If you explicitly install the legacy triad profile, these keys disable its permission-profile scoping; otherwise review them only as part of your ordinary Codex sandbox configuration"
   fi
 }
 
@@ -1005,7 +1005,8 @@ install_launchers() {
       # RESIDUALS this launcher CANNOT self-close (documented, tracked):
       #   * HOME -> user-site: -E keeps user-site (for pydantic), and CPython
       #     derives ~/.local/... user-site from HOME, so a poisoned HOME points
-      #     user-site at a workspace sitecustomize.py that runs before line 1.
+      #     user-site at workspace sitecustomize.py/usercustomize.py startup code
+      #     that runs before line 1.
       #     Dropping HOME would break vendor auth; the real close is relocating
       #     the wrapper deps into a venv/trusted dir so user-site can be disabled.
       #   * LD_PRELOAD/DYLD_* into THIS launcher's OWN process: the dynamic linker
@@ -1082,16 +1083,11 @@ verify_installed_launchers() {
   fi
 }
 
-# The profile + command rules install by DEFAULT (a plain --install with 0 env
-# vars yields the recommended setup). want_codex_profile / want_codex_rules
-# encode that default-ON with two opt-outs each: an explicit ...=0, or the
-# ...SKIP_... escape. The dedicated profile explicitly selects auto-review and
-# stays on-request unless TRIAD_CODEX_PROFILE_APPROVAL_POLICY is set. Exact-
-# launcher rules prompt by default; an explicit `never` retains the advanced
-# no-prompt allow behavior.
+# Ordinary Codex is the default. The legacy dedicated profile is migration-only
+# and requires an explicit opt-in; exact launcher rules remain default-on.
 want_codex_profile() {
   [ "${TRIAD_BOOTSTRAP_SKIP_CODEX_PROFILE:-0}" != "1" ] \
-    && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-1}" != "0" ]
+    && [ "${TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE:-0}" = "1" ]
 }
 
 want_codex_rules() {
@@ -1146,6 +1142,103 @@ EOF
     fi
   fi
   [ "$target_check_failed" -eq 0 ]
+}
+
+# Plain installs retain migration-only artifacts but make their presence
+# discoverable. These are read-only probes and must run before the command
+# transaction begins. An unsafe or unreadable unselected target is reported
+# without following or changing it, then ordinary installation continues.
+warn_legacy_opt_out_artifacts() {
+  if want_codex_profile; then
+    :
+  else
+    profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
+    profile_inspect_err="$(mktemp "${TMPDIR:-/tmp}/triad-profile-inspect-err.XXXXXX")" || {
+      fail "could not create temporary file for legacy profile inspection"
+      return 1
+    }
+    profile_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-artifact \
+      --action inspect --kind profile --path "$profile_path" 2>"$profile_inspect_err")"
+    profile_rc=$?
+    if [ "$profile_rc" -ne 0 ]; then
+      warn "legacy profile at $profile_path was not followed or changed; its optional install target is unselected, so ordinary installation continues."
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "$line"
+      done <<EOF
+$profile_status
+EOF
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "$line"
+      done <"$profile_inspect_err"
+      rm -f "$profile_inspect_err"
+    elif [ -s "$profile_inspect_err" ]; then
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "$line"
+      done <"$profile_inspect_err"
+      rm -f "$profile_inspect_err"
+    else
+      rm -f "$profile_inspect_err"
+    fi
+    if [ "$profile_rc" -eq 0 ]; then
+      case "$profile_status" in
+        managed)
+          warn "retaining managed legacy profile at $profile_path; no automatic deletion occurred. Run --remove followed by ordinary --install, or set TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 for explicit legacy opt-in."
+          ;;
+        absent|unmanaged)
+          ;;
+        *)
+          fail "unexpected legacy managed profile inspection status for $profile_path: $profile_status"
+          return 1
+          ;;
+      esac
+    fi
+  fi
+
+  if [ "${TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY:-0}" = "1" ]; then
+    :
+  else
+    shell_inspect_err="$(mktemp "${TMPDIR:-/tmp}/triad-shell-inspect-err.XXXXXX")" || {
+      fail "could not create temporary file for legacy shell entry inspection"
+      return 1
+    }
+    shell_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" shell-entry \
+      --action preflight-remove --path "$SHELL_RC" \
+      --profile "$CODEX_PROFILE_NAME" 2>"$shell_inspect_err")"
+    shell_rc_status=$?
+    if [ "$shell_rc_status" -ne 0 ]; then
+      warn "legacy shell entry at $SHELL_RC was not followed or changed; its optional install target is unselected, so ordinary installation continues."
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "$line"
+      done <<EOF
+$shell_status
+EOF
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "$line"
+      done <"$shell_inspect_err"
+      rm -f "$shell_inspect_err"
+    elif [ -s "$shell_inspect_err" ]; then
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "$line"
+      done <"$shell_inspect_err"
+      rm -f "$shell_inspect_err"
+    else
+      rm -f "$shell_inspect_err"
+    fi
+    if [ "$shell_rc_status" -eq 0 ]; then
+      case "$shell_status" in
+        managed)
+          warn "retaining managed legacy shell entry at $SHELL_RC; no automatic deletion occurred. Run --remove followed by ordinary --install, or set TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 and TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1 for explicit legacy opt-in."
+          ;;
+        absent|unmanaged)
+          ;;
+        *)
+          fail "unexpected legacy managed shell entry inspection status for $SHELL_RC: $shell_status"
+          return 1
+          ;;
+      esac
+    fi
+  fi
+  return 0
 }
 
 ensure_log_dir() {
@@ -1459,15 +1552,16 @@ EOF
 # NON-fatal by design (defense-in-depth on top of the always-on launcher env
 # scrub): never calls fail -- any read/parse/write error just WARNs and leaves
 # config.toml untouched, so a config.toml hiccup never blocks --install.
-# Gated on want_codex_profile (same gate the replaced WARN used): the fragment
-# reinforces the same exec-target trust boundary the managed profile protects.
+# Gated on want_codex_rules: the fragment protects the boundary that spawns the
+# exact policy-matched launcher before the launcher's in-process scrub can run.
 # bash-3.2-safe: array-free/[[ ]]-free; bootstrap_repair.py owns the TOML and
 # descriptor-checked publication work.
 merge_codex_config_fragment() {
   if [ "$errors" -ne 0 ]; then
     return
   fi
-  if ! want_codex_profile; then
+  configured_rules_path="$CODEX_HOME/rules/$CODEX_RULES_NAME"
+  if ! want_codex_rules && [ ! -f "$configured_rules_path" ]; then
     return
   fi
   config_path="$CODEX_HOME/config.toml"
@@ -1622,19 +1716,13 @@ def unique(values):
         result.append(text)
     return result
 
-advanced_no_prompt = approval_policy == "never" and approval_policy_explicit == "1"
-decision = "allow" if advanced_no_prompt else "prompt"
+decision = "prompt"
 
 lines = [
     MARKER,
     "# Generated by scripts/bootstrap.sh --install.",
     "# Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 to refresh.",
-    (
-        "# Explicit approval_policy=never exception: these rules allow "
-        "wrapper-specific command prefixes."
-        if advanced_no_prompt
-        else "# These rules prompt on wrapper-specific command prefixes for automatic review."
-    ),
+    "# These rules prompt on wrapper-specific command prefixes for approval review.",
     "# They do not allow broad shell entrypoints such as bash -lc or zsh -lc.",
     "",
 ]
@@ -1645,13 +1733,12 @@ for wrapper, label in WRAPPERS:
     prompt_path = repo_root / "_runs" / "prompts" / "triad-prompt.txt"
     wrapper_paths = unique([str(launcher_path)])
     justification = (
-        f"Allow authenticated triad {label} commands outside the sandbox."
-        if advanced_no_prompt
-        else (
-            "Require automatic approval review; approve only an owner-authorized "
-            f"triad review through the {label} whose provider-visible input excludes "
-            "credentials, tokens, cookies, and authentication files."
-        )
+        "Require approval review; approve only an owner-authorized triad review "
+        f"through the {label} when the worktree, scope, and named provider match "
+        "the owner's request and provider-visible input excludes credentials, "
+        "tokens, cookies, authentication files, environment dumps, provider "
+        "logs, and unrelated paths. This does not authorize "
+        "commit, push, install, merge, or release."
     )
 
     lines.extend([
@@ -1731,6 +1818,10 @@ preflight_shell_entry() {
     && [ "${TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY:-0}" != "1" ]; then
     return 0
   fi
+  if [ "$shell_action" = "install" ] && ! want_codex_profile; then
+    fail "legacy shell entry requires TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1"
+    return 1
+  fi
   if python3 "$REPO_ROOT/bin/bootstrap_repair.py" shell-entry \
     --action "preflight-$shell_action" --path "$SHELL_RC" \
     --profile "$CODEX_PROFILE_NAME" >/dev/null; then
@@ -1740,11 +1831,9 @@ preflight_shell_entry() {
   return 1
 }
 
-# MUST-land 6: the managed codex-triad shell function is the pinned no-prompt
-# entry. It pins the engine's product-mode envs so no-prompt dispatch always
-# runs with wrapper containment + hardened wrapper mode + enforced claude
-# sandbox. A bare `codex --profile ...` start is NOT a supported no-prompt
-# path and is never emitted by this bootstrap as the primary start.
+# Legacy migration-only compatibility: when both explicit opt-ins are set, the
+# managed codex-triad shell function pins the old profile and wrapper hardening
+# environment. Ordinary installs and documented starts use plain `codex`.
 install_shell_entry() {
   if [ "${TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY:-0}" != "1" ]; then
     return
@@ -1766,29 +1855,14 @@ install_shell_entry() {
   esac
 }
 
-report_no_prompt_posture() {
-  posture="TRIAD_WRAPPER_ALLOWED_ROOTS (workspace pin) + TRIAD_WRAPPER_HARDENED=1 + TRIAD_CLAUDE_ENFORCE_SANDBOX=1"
-  if [ -e "$SHELL_RC" ] && grep -q "codex-triad()" "$SHELL_RC" 2>/dev/null; then
-    if grep -q "TRIAD_WRAPPER_HARDENED=1" "$SHELL_RC" 2>/dev/null \
-      && grep -q "TRIAD_CLAUDE_ENFORCE_SANDBOX=1" "$SHELL_RC" 2>/dev/null \
-      && grep -q "TRIAD_WRAPPER_ALLOWED_ROOTS" "$SHELL_RC" 2>/dev/null; then
-      ok "no-prompt entry verified: codex-triad pins $posture ($SHELL_RC)"
-    else
-      warn "codex-triad entry in $SHELL_RC does not pin the product-mode envs ($posture); remove the stale entry, then re-run --install with TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1"
-    fi
-  else
-    printf 'next step: start Codex through the codex-triad shell function; it pins %s.\n' "$posture"
-    printf 'install it with TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1; a bare profile start is not a supported no-prompt path.\n'
-  fi
-}
-
 # remove_codex_config_fragment — symmetric to merge_codex_config_fragment.
 # Removes exactly one literal current or legacy managed
 # [shell_environment_policy] block from $CODEX_HOME/config.toml. Any edited,
 # duplicate, incomplete, or otherwise unrecognized marker state is left
 # byte-for-byte untouched. Removal is literal replacement, never a marker-range
-# scan or newline-normalizing reserialization. If the literal block was the
-# entire file, remove the file to restore the pre-install absent state.
+# scan or newline-normalizing reserialization. Full bootstrap removal preserves
+# an empty remainder so repair lifecycle removal alone decides whether intact
+# registration provenance permits deleting the file.
 remove_codex_config_fragment() {
   if [ "$errors" -ne 0 ]; then
     return
@@ -1799,7 +1873,7 @@ remove_codex_config_fragment() {
     return 1
   }
   remove_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" config-fragment \
-    --action remove --path "$config_path" 2>"$remove_err")"
+    --action remove --path "$config_path" --preserve-empty 2>"$remove_err")"
   remove_rc=$?
   if [ "$remove_rc" -ne 0 ]; then
     fail "config fragment removal helper failed for $config_path"
@@ -1911,6 +1985,14 @@ run_remove() {
       "preserving unmanaged repair agent: $agent_file"
   done
 
+  # Remove the environment fragment while preserving an empty remainder.
+  # Repair removal can then use any intact registration provenance to restore a
+  # pre-existing empty file or delete a bootstrap-created file; without that
+  # provenance, the fail-safe result remains an empty file.
+  if ! remove_codex_config_fragment; then
+    return
+  fi
+
   run_repair_lifecycle remove
 
   profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
@@ -1919,10 +2001,6 @@ run_remove() {
     "$profile_path" \
     "removed Codex runtime profile: $profile_path" \
     "leaving unmanaged Codex profile in place: $profile_path"
-
-  if ! remove_codex_config_fragment; then
-    return
-  fi
 
   # C5 (symmetric to warn_requirements_remediation on --install): a root/admin
   # may have installed the shipped /etc/codex/requirements.toml remediation,
@@ -2020,10 +2098,6 @@ if ! validate_bootstrap_inputs; then
   exit 1
 fi
 
-if [ -n "$LEGACY_ALIAS_TARGET" ]; then
-  warn "${1:-} is a deprecated alias for $LEGACY_ALIAS_TARGET; kept through 0.2.527 and scheduled for removal after 0.2.527"
-fi
-
 if [ "$MODE" = "remove" ]; then
   printf 'triad-codex-dispatch bootstrap remove\n'
   run_remove
@@ -2064,9 +2138,8 @@ if [ "$errors" -ne 0 ]; then
   exit 1
 fi
 if want_codex_profile \
-  && [ "$CODEX_PROFILE_APPROVAL_POLICY" = "never" ] \
-  && ! want_codex_rules; then
-  warn "approval_policy=never with the command rules opted out can auto-deny sandbox escapes; keep the default rules install for no-prompt dispatch"
+  && [ "$CODEX_PROFILE_APPROVAL_POLICY" = "never" ]; then
+  warn "approval_policy=never disables Agent Review; managed prompt rules and wrapper sandbox escalations will fail closed in this legacy profile"
 fi
 # Repair targets share config and launcher state with the remaining bootstrap
 # steps. Reject unsafe/unmanaged repair inputs before the first persistent
@@ -2101,10 +2174,28 @@ if ! preflight_shell_entry install; then
   printf '[error] shell entry preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
+if ! warn_legacy_opt_out_artifacts; then
+  printf '[error] legacy artifact inspection failed; skipping installation steps\n' >&2
+  exit 1
+fi
 if ! preflight_classifier; then
   printf '[error] classifier preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
+migrate_legacy_repair_agents
+ensure_log_dir
+if ! ensure_classifier; then
+  printf '[error] classifier installation failed; skipping remaining installation steps\n' >&2
+  exit 1
+fi
+install_codex_runtime_profile
+if ! run_repair_lifecycle install; then
+  printf '[error] repair artifact installation failed; provider commands were not published\n' >&2
+  exit 1
+fi
+check_legacy_sandbox_config
+check_local_writable_agent_residual
+check_duplicate_selectors
 if begin_command_group; then
   install_launchers
   if [ "$errors" -eq 0 ]; then
@@ -2134,25 +2225,19 @@ if [ "$errors" -ne 0 ]; then
   fail "managed command installation failed; skipping remaining installation steps"
   exit 1
 fi
-migrate_legacy_repair_agents
-ensure_log_dir
-if ! ensure_classifier; then
-  printf '[error] classifier installation failed; skipping remaining installation steps\n' >&2
-  exit 1
-fi
-install_codex_runtime_profile
 merge_codex_config_fragment
-if run_repair_lifecycle install; then
-  check_legacy_sandbox_config
-  check_local_writable_agent_residual
-  check_duplicate_selectors
-fi
 warn_requirements_remediation
-install_codex_rules
-install_shell_entry
-report_no_prompt_posture
+if [ "$errors" -eq 0 ]; then
+  install_codex_rules
+fi
+if [ "$errors" -eq 0 ]; then
+  install_shell_entry
+fi
 
 if [ "$errors" -eq 0 ]; then
+  warn "launcher Python is installer-selected: credential-compatible user-site mode requires a trusted HOME because sitecustomize/usercustomize can run before launcher scrubbing; alternatively select a trusted isolated Python only if it preserves provider login."
+  printf 'ordinary Codex session: exact wrapper rules use decision=prompt.\n'
+  printf 'Agent Review requires approvals_reviewer=auto_review with approval_policy=on-request, or granular.rules=true and granular.sandbox_approval=true.\n'
   printf 'next step: start a fresh Codex session so the new agent_type %s loads.\n' "$REPAIR_ANALYZER_NAME"
   ok "bootstrap install passed"
   exit 0

@@ -31,6 +31,20 @@ ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 BOOTSTRAP_REPAIR = ROOT / "bin" / "bootstrap_repair.py"
 
+
+def _copy_test_python_executable(target: Path) -> None:
+    """Copy Python without relying on a mutable hard link to a signed binary."""
+    shutil.copy2(Path(sys.executable).resolve(), target)
+    target.chmod(target.stat().st_mode | stat.S_IXUSR)
+    if sys.platform == "darwin":
+        subprocess.run(
+            ["codesign", "--force", "--sign", "-", str(target)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
 def _fake_bin(
     tmp_path: Path,
     *names: str,
@@ -135,7 +149,7 @@ def _run_bootstrap(
     extra_path=(),
     python_script=None,
     env_overrides=None,
-    arg="--check",
+    arg="--install",
     cwd=None,
     fake_scripts=None,
     timeout=10,
@@ -187,6 +201,11 @@ def _run_bootstrap(
 
 REPAIR_ANALYZER = "triad-repair-analyzer"
 REPAIR_ANALYZER_MARKER = "# triad-codex-dispatch managed repair analyzer"
+MANAGED_LEGACY_REPAIR_AGENT = (
+    b"# Codex named subagent for Claude wrapper repair agent\n"
+    b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
+    b'name = "claude-wrapper-repair"\n'
+)
 
 
 def _load_bootstrap_repair_module():
@@ -196,6 +215,76 @@ def _load_bootstrap_repair_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _path_state_fingerprint(path: Path):
+    try:
+        current = os.lstat(path)
+    except FileNotFoundError:
+        return ("absent",)
+    mode = stat.S_IMODE(current.st_mode)
+    if stat.S_ISLNK(current.st_mode):
+        return ("symlink", mode, os.readlink(path))
+    if stat.S_ISREG(current.st_mode):
+        return ("file", mode, path.read_bytes())
+    if stat.S_ISDIR(current.st_mode):
+        entries = tuple(
+            sorted(
+                (entry.name, stat.S_IFMT(os.lstat(entry).st_mode))
+                for entry in path.iterdir()
+            )
+        )
+        return ("directory", mode, entries)
+    return ("non-regular", mode, current.st_size, current.st_rdev)
+
+
+def _install_target_fingerprint(paths: tuple[Path, ...]):
+    return {path: _path_state_fingerprint(path) for path in paths}
+
+
+def _would_be_install_targets(
+    tmp_path: Path,
+    repo_root: Path,
+    codex_home: Path,
+    classifier: Path,
+    shell_rc: Path,
+    *extra_paths: Path,
+) -> tuple[Path, ...]:
+    launcher_dir = tmp_path / "launchers"
+    return (
+        launcher_dir,
+        *(launcher_dir / name for name in (
+            "claude_wrapper.py",
+            "gemini_wrapper.py",
+            "antigravity_wrapper.py",
+            "triad-apply-repair",
+        )),
+        repo_root / "bin",
+        repo_root / "bin" / "_logs",
+        codex_home,
+        codex_home / "config.toml",
+        codex_home / "agents",
+        codex_home / "agents" / f"{REPAIR_ANALYZER}.toml",
+        *(codex_home / "agents" / name for name in (
+            "claude-wrapper-repair.toml",
+            "gemini-wrapper-repair.toml",
+            "agy-wrapper-repair.toml",
+        )),
+        codex_home / "rules",
+        codex_home / "rules" / "triad-codex-dispatch.rules",
+        codex_home / "triad-codex-dispatch.config.toml",
+        classifier.parent,
+        classifier,
+        shell_rc,
+        *extra_paths,
+    )
+
+
+def _seed_managed_legacy_repair_agent(codex_home: Path) -> Path:
+    legacy_agent = codex_home / "agents" / "claude-wrapper-repair.toml"
+    legacy_agent.parent.mkdir(parents=True, exist_ok=True)
+    legacy_agent.write_bytes(MANAGED_LEGACY_REPAIR_AGENT)
+    return legacy_agent
 
 
 def test_bootstrap_help_describes_google_route_fallback() -> None:
@@ -209,9 +298,29 @@ def test_bootstrap_help_describes_google_route_fallback() -> None:
     assert result.returncode == 2
     help_text = " ".join(result.stderr.split())
     assert "agy, or configured Gemini Enterprise/Business" in help_text
-    assert "only triad-specific approval-policy override" in help_text
-    assert "sets approval_policy=on-request and approvals_reviewer=auto_review" in help_text
-    assert "advanced exception keeps the managed wrapper rules on allow" in help_text
+    assert "ordinary Codex session" in help_text
+    assert "does not install or require a dedicated Codex profile" in help_text
+    assert "approvals_reviewer=auto_review" in help_text
+    assert "granular.rules=true" in help_text
+    assert "granular.sandbox_approval=true" in help_text
+
+
+def test_bootstrap_usage_documents_paired_legacy_shell_entry_flags() -> None:
+    result = subprocess.run(
+        ["bash", str(BOOTSTRAP), "--invalid-option"],
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 2
+    help_text = " ".join(result.stderr.split())
+    clause = (
+        "The legacy codex-triad shell entry is migration-only and requires both "
+        "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 and "
+        "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1; it is not the normal start path."
+    )
+    assert clause in help_text
 
 
 def test_bootstrap_repair_help_exposes_explicit_install_and_remove() -> None:
@@ -294,22 +403,22 @@ def test_bootstrap_repair_refuses_exact_launcher_marker_inside_python_multiline_
     assert launcher.read_text(encoding="utf-8") == foreign
 
 
-def test_bootstrap_repair_preserves_config_markers_inside_multiline_string(
+def test_bootstrap_repair_preserves_exact_registration_block_inside_multiline_string(
     tmp_path: Path,
 ) -> None:
     helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
     foreign = (
         'description = """\n'
-        f"{helper.REG_BEGIN}\n"
-        f"[agents.{REPAIR_ANALYZER}]\n"
-        'description = "looks generated"\n'
-        f'config_file = "{analyzer}"\n'
-        f"{helper.REG_END}\n"
-        '"""\n'
+        + helper.registration_block(analyzer, True)
+        + '"""\n'
     ).encode("utf-8")
     config.write_bytes(foreign)
 
     assert helper.main(args) == 0
+    expected_block = helper.registration_block(analyzer, True).encode("utf-8")
+    assert config.read_bytes() == foreign + b"\n" + expected_block
+    assert helper.main(args) == 0
+    assert config.read_bytes() == foreign + b"\n" + expected_block
     assert helper.main(
         ["remove", "--config", str(config), "--analyzer", str(analyzer),
          "--launcher", str(launcher)]
@@ -1166,6 +1275,19 @@ def test_bootstrap_repair_config_round_trips_existing_bytes_exactly(
     assert config.read_bytes() == original
 
 
+def test_config_fragment_round_trips_owner_bytes_without_final_newline(
+    tmp_path: Path,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    config = tmp_path / "config.toml"
+    original = b'title = "owner bytes without final newline"'
+    config.write_bytes(original)
+
+    assert helper.merge_config_fragment(config) == "merged"
+    assert helper.remove_config_fragment(config) == "removed"
+    assert config.read_bytes() == original
+
+
 def _assert_repair_analyzer_install_state(codex_home: Path) -> None:
     """The one supported personal-scope repair agent is read-only and managed."""
     agents_dir = codex_home / "agents"
@@ -1208,12 +1330,9 @@ def _assert_profile_does_not_disable_multi_agent(profile_path: Path) -> None:
     assert "multi_agent" not in data.get("features", {})
 
 
-def test_default_install_installs_profile_rules_and_enables_auto_review(tmp_path):
-    # Default-ON: a plain --install with 0 env vars installs BOTH the runtime
-    # profile and the command rules (the recommended setup), and the launcher +
-    # classifier + log dir install path is unchanged. It installs exactly one
-    # read-only repair analyzer. The dedicated profile opts into interactive
-    # automatic approval review; the no-prompt `never` posture stays opt-in.
+def test_default_install_keeps_ordinary_codex_and_installs_prompt_rules(tmp_path):
+    # A plain install keeps ordinary Codex settings and installs only the exact
+    # wrapper prompt rules needed to route eligible calls to the active reviewer.
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -1227,17 +1346,20 @@ def test_default_install_installs_profile_rules_and_enables_auto_review(tmp_path
         / "classifier-patches.json"
     ).read_text(encoding="utf-8") == "{}\n"
     assert (repo_root / "bin" / "_logs").is_dir()
-    # profile + rules now install by DEFAULT (no env var)
+    # A dedicated profile is not part of the normal path; exact rules are.
     profile = home / ".codex" / "triad-codex-dispatch.config.toml"
-    assert profile.is_file()
+    assert not profile.exists()
     assert (home / ".codex" / "rules" / "triad-codex-dispatch.rules").is_file()
-    # SAFETY: the dedicated profile uses interactive automatic review by default.
-    data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert data["approval_policy"] == "on-request"
-    assert data["approvals_reviewer"] == "auto_review"
-    assert data["default_permissions"] == "triad_leader"
-    _assert_profile_does_not_disable_multi_agent(profile)
-    assert "start a fresh Codex session" in result.stdout
+    assert "ordinary Codex session" in result.stdout
+    assert "granular.rules=true" in result.stdout
+    assert "granular.sandbox_approval=true" in result.stdout
+    assert "launcher Python is installer-selected" in result.stdout
+    assert "trusted HOME" in result.stdout
+    assert "sitecustomize/usercustomize" in result.stdout
+    assert "before launcher scrubbing" in result.stdout
+    assert "trusted isolated Python" in result.stdout
+    assert "preserves provider login" in result.stdout
+    assert "codex-triad" not in result.stdout
     apply_launcher = _launcher_bin / "triad-apply-repair"
     assert apply_launcher.is_file()
     assert os.access(apply_launcher, os.X_OK)
@@ -1251,23 +1373,45 @@ def test_default_install_installs_profile_rules_and_enables_auto_review(tmp_path
     assert 'env["TRIAD_CLASSIFIER_EXTENSION"]' in apply_text
 
 
-def test_default_install_routes_exact_wrapper_calls_through_auto_review(tmp_path):
+def test_default_install_routes_exact_wrapper_calls_to_active_reviewer(tmp_path):
     result, env, _launcher_bin = _run_bootstrap(tmp_path)
 
     assert result.returncode == 0, result.stderr + result.stdout
     codex_home = Path(env["HOME"]) / ".codex"
-    profile = codex_home / "triad-codex-dispatch.config.toml"
     rules = codex_home / "rules" / "triad-codex-dispatch.rules"
-
-    profile_data = tomllib.loads(profile.read_text(encoding="utf-8"))
-    assert profile_data["approval_policy"] == "on-request"
-    assert profile_data["approvals_reviewer"] == "auto_review"
 
     rules_text = rules.read_text(encoding="utf-8")
     assert rules_text.count('decision = "prompt"') == 3
     assert 'decision = "allow"' not in rules_text
     assert "owner-authorized triad review" in rules_text
-    assert "credentials, tokens, cookies, and authentication files" in rules_text
+    assert "credentials, tokens, cookies, authentication files" in rules_text
+    assert "environment dumps, provider logs, and unrelated paths" in rules_text
+    assert "worktree, scope, and named provider" in rules_text
+    assert "commit, push, install, merge, or release" in rules_text
+
+
+def test_default_install_preserves_owner_approval_keys_and_adds_env_guard(tmp_path):
+    codex_home = tmp_path / "owner-codex-home"
+    codex_home.mkdir()
+    config = codex_home / "config.toml"
+    config.write_text(
+        'approval_policy = "on-request"\n'
+        'approvals_reviewer = "auto_review"\n',
+        encoding="utf-8",
+    )
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    data = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert data["approval_policy"] == "on-request"
+    assert data["approvals_reviewer"] == "auto_review"
+    assert data["shell_environment_policy"]["inherit"] == "all"
+    assert "LD_*" in data["shell_environment_policy"]["exclude"]
+    assert not (codex_home / "triad-codex-dispatch.config.toml").exists()
 
 
 def test_reinstall_refreshes_the_managed_repair_analyzer(tmp_path: Path) -> None:
@@ -1358,6 +1502,249 @@ def test_install_registers_repair_analyzer_without_replacing_agents_settings(
     data = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
     assert data["agents"]["max_threads"] == 7
     _assert_repair_analyzer_registration(codex_home)
+
+
+def test_plain_install_warns_for_managed_legacy_profile_without_deleting_it(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "home" / ".codex"
+    codex_home.mkdir(parents=True)
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    profile.write_bytes(
+        b"# triad-codex-dispatch managed runtime profile\n"
+        b"approval_policy = \"on-request\"\n"
+    )
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert str(profile) in result.stdout
+    assert "no automatic deletion" in result.stdout
+    assert "--remove" in result.stdout
+    assert profile.read_bytes().startswith(
+        b"# triad-codex-dispatch managed runtime profile\n"
+    )
+
+
+def test_plain_install_warns_for_managed_legacy_shell_entry_without_deleting_it(
+    tmp_path: Path,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    shell_rc = tmp_path / "shellrc"
+    shell_rc.write_bytes(helper._shell_entry_block("triad-codex-dispatch"))
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert str(shell_rc) in result.stdout
+    assert "no automatic deletion" in result.stdout
+    assert "--remove" in result.stdout
+    assert shell_rc.read_bytes() == helper._shell_entry_block("triad-codex-dispatch")
+
+
+def test_plain_install_ignores_safe_unmanaged_legacy_opt_out_artifacts(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "home" / ".codex"
+    codex_home.mkdir(parents=True)
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    profile.write_text('owner = "foreign"\n', encoding="utf-8")
+    shell_rc = tmp_path / "shellrc"
+    shell_rc.write_text('codex-triad() { command codex --profile old "$@"; }\n', encoding="utf-8")
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "legacy managed profile" not in result.stdout
+    assert "legacy managed shell entry" not in result.stdout
+    assert profile.read_text(encoding="utf-8") == 'owner = "foreign"\n'
+    assert shell_rc.read_text(encoding="utf-8") == 'codex-triad() { command codex --profile old "$@"; }\n'
+
+
+def test_plain_install_has_no_managed_legacy_warning_when_opt_out_artifacts_absent(
+    tmp_path: Path,
+) -> None:
+    result, _env, _launchers = _run_bootstrap(tmp_path)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "retaining managed legacy profile" not in result.stdout
+    assert "retaining managed legacy shell entry" not in result.stdout
+    assert "no automatic deletion occurred" not in result.stdout
+
+
+@pytest.mark.parametrize("unsafe_kind", ("symlink", "fifo"))
+def test_plain_install_warns_and_continues_for_unsafe_opt_out_profile(
+    tmp_path: Path, unsafe_kind: str,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    launcher_dir = tmp_path / "launchers"
+    launcher_dir.mkdir()
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    shell_rc = tmp_path / "shellrc"
+    shell_rc.write_bytes(b"# owner shell\n")
+    classifier = tmp_path / "classifier" / "patches.json"
+    extra_paths: tuple[Path, ...] = ()
+    if unsafe_kind == "symlink":
+        referent = tmp_path / "foreign-profile.toml"
+        referent.write_bytes(helper.PROFILE_MARKER + b"\nowner = true\n")
+        profile.symlink_to(referent)
+        extra_paths = (referent,)
+    else:
+        os.mkfifo(profile)
+    unsafe_paths = (profile, *extra_paths)
+    before = _install_target_fingerprint(unsafe_paths)
+
+    result, _env, launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=repo_root,
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert str(profile) in result.stdout
+    assert "was not followed or changed" in result.stdout
+    assert "refusing unsafe" in result.stdout
+    assert _install_target_fingerprint(unsafe_paths) == before
+    for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        assert (launchers / name).is_file()
+    assert (launchers / "triad-apply-repair").is_file()
+    assert (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").is_file()
+    _assert_repair_analyzer_registration(codex_home)
+    assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
+    assert classifier.is_file()
+    assert shell_rc.read_bytes() == b"# owner shell\n"
+
+
+@pytest.mark.parametrize("unsafe_kind", ("symlink-ancestor", "directory"))
+def test_plain_install_warns_and_continues_for_unsafe_opt_out_shell(
+    tmp_path: Path, unsafe_kind: str,
+) -> None:
+    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    launcher_dir = tmp_path / "launchers"
+    launcher_dir.mkdir()
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    classifier = tmp_path / "classifier" / "patches.json"
+    extra_paths: tuple[Path, ...] = ()
+    if unsafe_kind == "symlink-ancestor":
+        real_parent = tmp_path / "real-shell-parent"
+        real_parent.mkdir()
+        linked_parent = tmp_path / "linked-shell-parent"
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+        shell_rc = linked_parent / "shellrc"
+        extra_paths = (linked_parent, real_parent / "shellrc")
+    else:
+        shell_rc = tmp_path / "shellrc"
+        shell_rc.mkdir()
+    unsafe_paths = (shell_rc, *extra_paths)
+    before = _install_target_fingerprint(unsafe_paths)
+
+    result, _env, launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=repo_root,
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert str(shell_rc) in result.stdout
+    assert "was not followed or changed" in result.stdout
+    assert "refusing unsafe" in result.stdout
+    assert _install_target_fingerprint(unsafe_paths) == before
+    for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        assert (launchers / name).is_file()
+    assert (launchers / "triad-apply-repair").is_file()
+    assert (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").is_file()
+    _assert_repair_analyzer_registration(codex_home)
+    assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
+    assert classifier.is_file()
+
+
+def test_legacy_profile_opt_in_suppresses_retained_artifact_warning(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "home" / ".codex"
+    codex_home.mkdir(parents=True)
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    profile.write_bytes(
+        b"# triad-codex-dispatch managed runtime profile\n"
+        b"approval_policy = \"on-request\"\n"
+    )
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "no automatic deletion" not in result.stdout
+
+
+def test_paired_legacy_opt_in_suppresses_warning_and_updates_managed_shell_entry(
+    tmp_path: Path,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    codex_home = tmp_path / "home" / ".codex"
+    codex_home.mkdir(parents=True)
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    old_profile = helper.PROFILE_MARKER + b"\napproval_policy = \"on-request\"\n"
+    profile.write_bytes(old_profile)
+    shell_rc = tmp_path / "shellrc"
+    old_shell = helper._shell_entry_block("old-triad-profile")
+    shell_rc.write_bytes(old_shell)
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "no automatic deletion occurred" not in result.stdout
+    assert "codex-triad shell entry installed" in result.stdout
+    refreshed_profile = profile.read_bytes()
+    assert refreshed_profile != old_profile
+    assert refreshed_profile.startswith(helper.PROFILE_MARKER + b"\n")
+    assert b"# Generated by scripts/bootstrap.sh --install.\n" in refreshed_profile
+    profile_data = tomllib.loads(refreshed_profile.decode("utf-8"))
+    assert profile_data["approval_policy"] == "on-request"
+    assert profile_data["approvals_reviewer"] == "auto_review"
+    assert profile_data["default_permissions"] == "triad_leader"
+    assert profile_data["permissions"]["triad_leader"]["extends"] == ":workspace"
+    assert profile_data["permissions"]["triad_leader"]["network"]["enabled"] is True
+    assert shell_rc.read_bytes() == helper._shell_entry_block(
+        "triad-codex-dispatch"
+    )
+    assert shell_rc.read_bytes() != old_shell
 
 
 def test_install_refuses_unmanaged_repair_analyzer_registration(tmp_path: Path) -> None:
@@ -1546,6 +1933,45 @@ def test_registration_publish_failure_rolls_back_new_analyzer(tmp_path: Path) ->
     assert result.returncode != 0
     assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
     assert not (codex_home / "config.toml").exists()
+    assert not (codex_home / "rules" / "triad-codex-dispatch.rules").exists()
+
+
+def test_registration_publish_failure_does_not_publish_shell_entry(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "home" / ".codex"
+    codex_home.mkdir(parents=True)
+    config = codex_home / "config.toml"
+    owner_config = b'owner_key = "preserve exactly"\n'
+    config.write_bytes(owner_config)
+    shell_rc = tmp_path / "shellrc"
+    owner_shell = "# owner shell\n"
+    shell_rc.write_text(owner_shell, encoding="utf-8")
+
+    result, _env, launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+            "TRIAD_BOOTSTRAP_TEST_FAIL_REPAIR_REGISTRATION_PUBLISH": "1",
+        },
+    )
+
+    assert result.returncode != 0
+    for name in (
+        "claude_wrapper.py",
+        "gemini_wrapper.py",
+        "antigravity_wrapper.py",
+        "triad-apply-repair",
+    ):
+        assert not (launchers / name).exists()
+    assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
+    assert config.read_bytes() == owner_config
+    assert shell_rc.read_text(encoding="utf-8") == owner_shell
+    assert not (codex_home / "rules" / "triad-codex-dispatch.rules").exists()
 
 
 @pytest.mark.parametrize("kind", ("symlink", "fifo"))
@@ -1723,6 +2149,7 @@ def test_install_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
             "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
@@ -1742,7 +2169,11 @@ def test_install_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
 
 
 def test_remove_refuses_unsafe_repair_target_before_any_mutation(tmp_path: Path) -> None:
-    installed, env, launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+    installed, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
+    )
     assert installed.returncode == 0, installed.stderr + installed.stdout
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
     codex_home = Path(env["HOME"]) / ".codex"
@@ -1782,7 +2213,11 @@ def test_remove_refuses_unsafe_repair_target_before_any_mutation(tmp_path: Path)
 def test_remove_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
     tmp_path: Path,
 ) -> None:
-    installed, env, launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+    installed, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
+    )
     assert installed.returncode == 0, installed.stderr + installed.stdout
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
     codex_home = Path(env["HOME"]) / ".codex"
@@ -1932,9 +2367,9 @@ def test_remove_preserves_foreign_repair_analyzer_and_apply_launcher(
     assert apply_launcher.exists() or apply_launcher.is_symlink()
 
 
-def test_profile_opted_out_via_explicit_zero(tmp_path):
-    # Default-ON opt-out path 1: an explicit ...=0 on both suppresses the
-    # profile and rules while the rest of the install still succeeds.
+def test_profile_and_rules_can_be_explicitly_disabled(tmp_path):
+    # The profile is already default-off; explicit zero also disables the
+    # default-on rules while the rest of the install succeeds.
     result, env, launcher_bin = _run_bootstrap(
         tmp_path,
         env_overrides={
@@ -1949,9 +2384,9 @@ def test_profile_opted_out_via_explicit_zero(tmp_path):
     assert (launcher_bin / "claude_wrapper.py").is_file()
 
 
-def test_profile_opted_out_via_skip_flag(tmp_path):
-    # Default-ON opt-out path 2: the ...SKIP_...=1 escape suppresses the profile
-    # and rules while the rest of the install still succeeds.
+def test_profile_and_rules_skip_flags_disable_both(tmp_path):
+    # The profile is already default-off; explicit skip flags also disable the
+    # default-on rules while the rest of the install succeeds.
     result, env, launcher_bin = _run_bootstrap(
         tmp_path,
         env_overrides={
@@ -2005,7 +2440,12 @@ def test_install_rejects_unsafe_selected_profile_or_rules_target_before_commands
         tmp_path,
         repo_root=repo_root,
         arg="--install",
-        env_overrides={"CODEX_HOME": str(codex_home)},
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": (
+                "1" if unsafe_target == "profile" else "0"
+            ),
+        },
     )
 
     assert result.returncode != 0
@@ -2035,6 +2475,7 @@ def test_install_rechecks_selected_target_at_final_write_boundary(
         )
         overrides = {
             "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
             "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
             "TRIAD_BOOTSTRAP_TEST_SWAP_PROFILE_TO_SYMLINK_BEFORE_WRITE": str(external),
         }
@@ -2071,6 +2512,7 @@ def test_install_preserves_regular_replacement_at_transaction_boundary(
         marker = b"# triad-codex-dispatch managed runtime profile\n"
         swap_env = "TRIAD_BOOTSTRAP_TEST_SWAP_PROFILE_TO_REGULAR_BEFORE_WRITE"
         selection = {"TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0"}
+        selection["TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE"] = "1"
     else:
         target = codex_home / "rules" / "triad-codex-dispatch.rules"
         target.parent.mkdir()
@@ -2120,6 +2562,7 @@ def test_install_rejects_dangling_classifier_before_first_persistent_mutation(
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
             "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
@@ -2334,7 +2777,9 @@ def test_bootstrap_requirements_warning_uses_python_argv_safe_guidance(
     tmp_path: Path,
 ) -> None:
     result, _env, _launchers = _run_bootstrap(
-        tmp_path, fake_names=("codex", "claude", "agy")
+        tmp_path,
+        fake_names=("codex", "claude", "agy"),
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -2464,11 +2909,7 @@ def test_resolved_python_path_with_whitespace_is_rejected_before_artifact_mutati
     runtime_dir = tmp_path / "python runtime"
     runtime_dir.mkdir()
     whitespace_runtime = runtime_dir / "python3"
-    try:
-        os.link(Path(sys.executable).resolve(), whitespace_runtime)
-    except OSError:
-        shutil.copy2(Path(sys.executable).resolve(), whitespace_runtime)
-    whitespace_runtime.chmod(whitespace_runtime.stat().st_mode | stat.S_IXUSR)
+    _copy_test_python_executable(whitespace_runtime)
 
     repo_root = _make_repo_root(tmp_path, real_agents=True)
     codex_home, config, classifier, shell_rc, config_before = (
@@ -2509,11 +2950,7 @@ def test_oversized_python_shebang_is_rejected_before_artifact_mutation(
     filename_size = target_path_bytes - len(os.fsencode(runtime_dir)) - 1
     assert 1 <= filename_size <= 255
     long_runtime = runtime_dir / ("p" * filename_size)
-    try:
-        os.link(Path(sys.executable).resolve(), long_runtime)
-    except OSError:
-        shutil.copy2(Path(sys.executable).resolve(), long_runtime)
-    long_runtime.chmod(long_runtime.stat().st_mode | stat.S_IXUSR)
+    _copy_test_python_executable(long_runtime)
     assert len(b"#!" + os.fsencode(long_runtime.resolve()) + b" -E\n") == 257
 
     repo_root = _make_repo_root(tmp_path, real_agents=True)
@@ -2774,7 +3211,7 @@ def test_check_can_install_optional_codex_runtime_profile(tmp_path):
     assert "Codex runtime profile installed" in result.stdout
 
 
-def test_default_runtime_profile_preserves_base_approval_settings(tmp_path):
+def test_opt_in_runtime_profile_preserves_base_approval_settings(tmp_path):
     codex_home = tmp_path / "owner-codex-home"
     codex_home.mkdir()
     base_config = codex_home / "config.toml"
@@ -2786,7 +3223,10 @@ def test_default_runtime_profile_preserves_base_approval_settings(tmp_path):
 
     result, env, _launcher_bin = _run_bootstrap(
         tmp_path,
-        env_overrides={"CODEX_HOME": str(codex_home)},
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+        },
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -2820,10 +3260,13 @@ def test_check_can_install_runtime_profile_with_explicit_approval_policy(
     assert data["approvals_reviewer"] == "auto_review"
 
 
-def test_explicit_never_profile_preserves_advanced_allow_rules(tmp_path):
+def test_explicit_never_profile_keeps_global_rules_on_agent_review_prompt(tmp_path):
     result, env, _launcher_bin = _run_bootstrap(
         tmp_path,
-        env_overrides={"TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "never"},
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+            "TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "never",
+        },
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -2839,8 +3282,26 @@ def test_explicit_never_profile_preserves_advanced_allow_rules(tmp_path):
 
     assert profile_data["approval_policy"] == "never"
     assert profile_data["approvals_reviewer"] == "auto_review"
-    assert rules_text.count('decision = "allow"') == 3
-    assert 'decision = "prompt"' not in rules_text
+    assert rules_text.count('decision = "prompt"') == 3
+    assert 'decision = "allow"' not in rules_text
+    assert "approval_policy=never disables Agent Review" in result.stdout
+
+
+def test_never_policy_without_profile_cannot_bypass_agent_review(tmp_path):
+    result, env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_CODEX_PROFILE_APPROVAL_POLICY": "never"},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    codex_home = Path(env["HOME"]) / ".codex"
+    assert not (codex_home / "triad-codex-dispatch.config.toml").exists()
+    rules_text = (codex_home / "rules" / "triad-codex-dispatch.rules").read_text(
+        encoding="utf-8"
+    )
+    assert rules_text.count('decision = "prompt"') == 3
+    assert 'decision = "allow"' not in rules_text
+    assert "exact wrapper rules use decision=prompt" in result.stdout
 
 
 def test_empty_runtime_profile_approval_policy_uses_auto_review_default(tmp_path):
@@ -2943,7 +3404,8 @@ def test_check_can_install_optional_codex_command_rules(tmp_path):
     assert text.count('decision = "prompt"') == 3
     assert 'decision = "allow"' not in text
     assert "owner-authorized triad review" in text
-    assert "credentials, tokens, cookies, and authentication files" in text
+    assert "credentials, tokens, cookies, authentication files" in text
+    assert "environment dumps, provider logs, and unrelated paths" in text
     assert "bash -lc" in text
     assert "zsh -lc" in text
     assert "python3 -c" in text
@@ -3346,6 +3808,9 @@ def test_install_rejects_unreadable_selected_codex_target_before_any_mutation(
         arg="--install",
         env_overrides={
             "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": (
+                "1" if kind == "profile" else "0"
+            ),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
             "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
@@ -3400,7 +3865,11 @@ def test_check_rejects_invalid_codex_rules_name(tmp_path):
 
 
 def test_remove_rejects_invalid_rules_name_before_any_mutation(tmp_path: Path) -> None:
-    first, env, launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+    first, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
+    )
     assert first.returncode == 0, first.stderr + first.stdout
     codex_home = Path(env["HOME"]) / ".codex"
     managed_paths = [
@@ -3434,7 +3903,11 @@ def test_remove_rejects_invalid_rules_name_before_any_mutation(tmp_path: Path) -
 def test_remove_rejects_invalid_runtime_profile_approval_policy_before_any_mutation(
     tmp_path: Path,
 ) -> None:
-    first, env, launcher_bin = _run_bootstrap(tmp_path, arg="--install")
+    first, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
+    )
     assert first.returncode == 0, first.stderr + first.stdout
     codex_home = Path(env["HOME"]) / ".codex"
     managed_paths = [
@@ -3473,6 +3946,7 @@ def test_remove_rolls_back_public_commands_after_late_command_failure(
         tmp_path,
         arg="--install",
         env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
             "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
@@ -3601,10 +4075,10 @@ def test_install_fails_when_repo_root_inside_workspace(tmp_path):
     assert not any(launcher_bin.iterdir())
 
 
-# --- Fast-follow: --install primary, --check deprecated alias ---------------
+# --- Canonical install/remove flags and expired alias rejection --------------
 
 
-def test_install_flag_is_primary_and_check_is_deprecated_alias(tmp_path):
+def test_install_flag_is_primary(tmp_path):
     result, env, _launcher_bin = _run_bootstrap(tmp_path, arg="--install")
     assert result.returncode == 0, result.stderr + result.stdout
     assert "--check is deprecated" not in result.stdout
@@ -3616,16 +4090,12 @@ def test_install_flag_is_primary_and_check_is_deprecated_alias(tmp_path):
     assert result2.returncode == 2
 
 
-@pytest.mark.parametrize(
-    ("alias", "canonical"),
-    [("--check", "--install"), ("--uninstall", "--remove")],
-)
-def test_legacy_aliases_are_bounded(tmp_path: Path, alias: str, canonical: str) -> None:
+@pytest.mark.parametrize("alias", ["--check", "--uninstall"])
+def test_expired_legacy_aliases_are_rejected(tmp_path: Path, alias: str) -> None:
     result, _env, _launchers = _run_bootstrap(tmp_path, arg=alias, timeout=5)
 
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert f"deprecated alias for {canonical}" in result.stdout
-    assert "kept through 0.2.527 and scheduled for removal after 0.2.527" in result.stdout
+    assert result.returncode == 2
+    assert "Usage: scripts/bootstrap.sh --install" in result.stderr
 
 
 def test_second_install_completes_within_timeout(tmp_path: Path) -> None:
@@ -3639,6 +4109,205 @@ def test_second_install_completes_within_timeout(tmp_path: Path) -> None:
         timeout=5,
     )
     assert second.returncode == 0, second.stderr + second.stdout
+
+
+def test_initially_absent_config_survives_three_installs(tmp_path: Path) -> None:
+    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    assert first.returncode == 0, first.stderr + first.stdout
+    config = Path(env["HOME"]) / ".codex" / "config.toml"
+    assert not Path(str(config) + ".bak").exists()
+
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    for _ in range(2):
+        repeated, _env, _launchers = _run_bootstrap(
+            tmp_path, repo_root=repo_root, arg="--install", timeout=5
+        )
+        assert repeated.returncode == 0, repeated.stderr + repeated.stdout
+
+
+def test_initially_absent_config_survives_two_installs_then_remove(
+    tmp_path: Path,
+) -> None:
+    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    assert first.returncode == 0, first.stderr + first.stdout
+
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+    second, _env, _launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--install", timeout=5
+    )
+    assert second.returncode == 0, second.stderr + second.stdout
+
+    removed, _env, _launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--remove", timeout=5
+    )
+    assert removed.returncode == 0, removed.stderr + removed.stdout
+    assert not (Path(env["HOME"]) / ".codex" / "config.toml").exists()
+
+
+def test_preexisting_empty_config_survives_install_then_remove(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "owner-codex-home"
+    codex_home.mkdir()
+    config = codex_home / "config.toml"
+    config.write_bytes(b"")
+
+    installed, env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+    assert installed.returncode == 0, installed.stderr + installed.stdout
+
+    removed, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
+        arg="--remove",
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert removed.returncode == 0, removed.stderr + removed.stdout
+    assert config.exists()
+    assert config.read_bytes() == b""
+
+
+def test_preexisting_empty_config_survives_remove_after_registration_deleted(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "owner-codex-home"
+    codex_home.mkdir()
+    config = codex_home / "config.toml"
+    config.write_bytes(b"")
+
+    installed, env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+    assert installed.returncode == 0, installed.stderr + installed.stdout
+
+    helper = _load_bootstrap_repair_module()
+    analyzer = codex_home / "agents" / f"{REPAIR_ANALYZER}.toml"
+    before, after, managed, original_existed = helper.split_registration(
+        config.read_text(encoding="utf-8"), config, analyzer
+    )
+    assert managed
+    assert original_existed
+    environment_fragment = (before + after).encode("utf-8")
+    assert environment_fragment == helper.current_config_fragment(b"\n")
+    config.write_bytes(environment_fragment)
+
+    removed, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
+        arg="--remove",
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert removed.returncode == 0, removed.stderr + removed.stdout
+    assert config.exists()
+    assert config.read_bytes() == b""
+
+
+def test_rules_opt_out_keeps_loader_guard_for_hand_maintained_rules(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "owner-codex-home"
+    rules_dir = codex_home / "rules"
+    rules_dir.mkdir(parents=True)
+    rules = rules_dir / "triad-codex-dispatch.rules"
+    owner_rules = '# owner-maintained exact prompt rules\n'
+    rules.write_text(owner_rules, encoding="utf-8")
+
+    installed, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
+        },
+    )
+
+    assert installed.returncode == 0, installed.stderr + installed.stdout
+    assert rules.read_text(encoding="utf-8") == owner_rules
+    config = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
+    assert config["shell_environment_policy"]["inherit"] == "all"
+
+
+def test_fresh_layout_preserves_edited_policy_across_reinstall_and_remove(
+    tmp_path: Path,
+) -> None:
+    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    assert first.returncode == 0, first.stderr + first.stdout
+
+    config = Path(env["HOME"]) / ".codex" / "config.toml"
+    edited = config.read_text(encoding="utf-8").replace(
+        'inherit = "all"\n', 'inherit = "all"\n# owner policy note\n', 1
+    )
+    config.write_text(edited, encoding="utf-8")
+    repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
+
+    repeated, _env, _launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--install", timeout=5
+    )
+    assert repeated.returncode == 0, repeated.stderr + repeated.stdout
+    assert config.read_text(encoding="utf-8") == edited
+
+    removed, _env, _launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--remove", timeout=5
+    )
+    assert removed.returncode == 0, removed.stderr + removed.stdout
+    remaining = config.read_text(encoding="utf-8")
+    assert "owner policy note" in remaining
+    assert "managed repair analyzer registration" not in remaining
+
+
+def test_fresh_layout_preserves_owner_key_appended_after_managed_policy(
+    tmp_path: Path,
+) -> None:
+    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    assert first.returncode == 0, first.stderr + first.stdout
+
+    config = Path(env["HOME"]) / ".codex" / "config.toml"
+    owner_tail = '\n[owner]\nvalue = "preserve"\n'
+    edited = config.read_text(encoding="utf-8") + owner_tail
+    config.write_text(edited, encoding="utf-8")
+
+    repeated, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
+        arg="--install",
+        timeout=5,
+    )
+    assert repeated.returncode == 0, repeated.stderr + repeated.stdout
+    assert config.read_text(encoding="utf-8") == edited
+
+
+def test_remove_refuses_to_reparent_bare_key_after_managed_registration(
+    tmp_path: Path,
+) -> None:
+    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    assert first.returncode == 0, first.stderr + first.stdout
+
+    config = Path(env["HOME"]) / ".codex" / "config.toml"
+    marker = "# <<< triad-codex-dispatch managed repair analyzer registration <<<\n"
+    edited = config.read_text(encoding="utf-8").replace(
+        marker, marker + 'owner_note = "preserve"\n', 1
+    )
+    config.write_text(edited, encoding="utf-8")
+    analyzer = Path(env["HOME"]) / ".codex" / "agents" / f"{REPAIR_ANALYZER}.toml"
+
+    removed, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
+        arg="--remove",
+        timeout=5,
+    )
+
+    assert removed.returncode != 0
+    assert "malformed managed repair analyzer registration" in removed.stderr
+    assert config.read_text(encoding="utf-8") == edited
+    assert analyzer.exists()
 
 
 def test_bootstrap_removes_auth_probe_configuration():
@@ -3681,7 +4350,10 @@ def test_install_migrates_only_the_exact_legacy_managed_environment_policy(
     result, _env, _launchers = _run_bootstrap(
         tmp_path,
         arg="--install",
-        env_overrides={"CODEX_HOME": str(codex_home)},
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+        },
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -3712,13 +4384,18 @@ def test_install_uses_numbered_backup_and_reports_retention_guidance(
     result, _env, _launchers = _run_bootstrap(
         tmp_path,
         arg="--install",
-        env_overrides={"CODEX_HOME": str(codex_home)},
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+        },
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert 'inherit = "all"' in config.read_text(encoding="utf-8")
     assert first_backup.read_bytes() == b"existing owner backup\n"
-    assert Path(str(config) + ".bak2").read_text(encoding="utf-8") == legacy
+    assert Path(str(config) + ".bak2").read_text(encoding="utf-8") == (
+        legacy + "\n" + _managed_repair_registration(codex_home)
+    )
     assert f"retained config backup: {config}.bak2" in result.stderr
     assert "keep it until Codex starts normally" in result.stderr
     assert "delete it if rollback is no longer needed" in result.stderr
@@ -3924,7 +4601,12 @@ def test_install_preserves_crlf_current_or_migrates_legacy_bytes(
     config.write_bytes(original)
 
     result, _env, _launchers = _run_bootstrap(
-        tmp_path, arg="--install", env_overrides={"CODEX_HOME": str(codex_home)}
+        tmp_path,
+        arg="--install",
+        env_overrides={
+            "CODEX_HOME": str(codex_home),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
+        },
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -3994,12 +4676,33 @@ def test_remove_preserves_extended_or_malformed_policy_table_after_marker_end(
     assert config.read_bytes() == original
 
 
-# --- MUST-land 6: pinned no-prompt entry (codex-triad) -----------------------
+# --- Legacy opt-in shell entry compatibility and removal ---------------------
+
+
+def test_shell_entry_opt_in_requires_legacy_profile_before_any_mutation(tmp_path):
+    shell_rc = tmp_path / "shellrc"
+    shell_rc.write_text("# owner shell\n", encoding="utf-8")
+
+    result, env, launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "requires TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in result.stderr
+    assert shell_rc.read_text(encoding="utf-8") == "# owner shell\n"
+    assert not any(launcher_bin.iterdir())
+    assert not (Path(env["HOME"]) / ".codex").exists()
 
 
 def test_shell_entry_installs_pinned_codex_triad_function(tmp_path):
     shell_rc = tmp_path / "shellrc"
     overrides = {
+        "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
         "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
         "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
     }
@@ -4015,10 +4718,10 @@ def test_shell_entry_installs_pinned_codex_triad_function(tmp_path):
     assert "TRIAD_WRAPPER_HARDENED=1" in text
     assert "TRIAD_CLAUDE_ENFORCE_SANDBOX=1" in text
     assert 'command codex --profile triad-codex-dispatch --search "$@"' in text
-    # bootstrap verifies the pinned posture and never emits a bare
-    # `codex --profile ...` start as the primary path.
-    assert "no-prompt entry verified" in result.stdout
+    # Legacy opt-in remains removable but is not advertised as the normal path.
+    assert "no-prompt entry verified" not in result.stdout
     assert "codex --profile" not in result.stdout
+    assert "report_no_prompt_posture" not in BOOTSTRAP.read_text(encoding="utf-8")
 
     # idempotent re-run: managed block refreshed in place, not duplicated
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
@@ -4046,6 +4749,7 @@ def test_shell_entry_missing_final_newline_refuses_before_any_install_mutation(
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
             "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
@@ -4074,6 +4778,7 @@ def test_shell_entry_refuses_unmanaged_codex_triad_function(tmp_path):
         tmp_path,
         arg="--install",
         env_overrides={
+            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
             "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
@@ -4094,6 +4799,7 @@ def test_shell_entry_transaction_preserves_foreign_replacement_after_capture(
     shell_rc = tmp_path / "shellrc"
     repo_root = _make_repo_root(tmp_path, real_agents=True)
     overrides = {
+        "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
         "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
         "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
     }
@@ -4196,13 +4902,17 @@ def test_bootstrap_rejects_malformed_shell_markers_without_changing_bytes(
     shell_rc = tmp_path / "shellrc"
     shell_rc.write_bytes(original)
 
+    overrides = {
+        "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
+        "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
+    }
+    if mode == "--install":
+        overrides["TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE"] = "1"
+
     result, env, launcher_bin = _run_bootstrap(
         tmp_path,
         arg=mode,
-        env_overrides={
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
-            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
-        },
+        env_overrides=overrides,
     )
 
     assert result.returncode != 0
@@ -4391,6 +5101,7 @@ def test_install_warns_when_base_config_has_legacy_sandbox_mode(tmp_path):
         "[warn]" in line and "sandbox_mode" in line
         for line in result.stdout.splitlines()
     )
+    assert "neutralizing the triad_leader profile" not in result.stdout
 
 
 def test_install_fails_when_codex_home_inside_workspace_via_case_variant(tmp_path):

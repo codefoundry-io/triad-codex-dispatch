@@ -30,6 +30,9 @@ CONFIG_FRAGMENT_BEGIN = (
 CONFIG_FRAGMENT_END = (
     b"# <<< triad-codex-dispatch managed shell_environment_policy <<<"
 )
+CONFIG_FRAGMENT_INSERTED_SEPARATOR = (
+    b"\n# triad-codex-dispatch managed inserted separator\n"
+)
 SHELL_ENTRY_BEGIN = b"# >>> triad-codex-dispatch codex-triad >>>"
 SHELL_ENTRY_END = b"# <<< triad-codex-dispatch codex-triad <<<"
 CURRENT_CONFIG_FRAGMENT_TEXT = (
@@ -304,44 +307,67 @@ def reserved_registration_markers(text: str, path: Path, parsed: dict) -> list[s
     return reserved
 
 
-def split_registration(text: str, path: Path, analyzer: Path) -> tuple[str, bool, bool]:
+def split_registration(
+    text: str, path: Path, analyzer: Path
+) -> tuple[str, str, bool, bool]:
     parsed = parsed_config(text, path)
     reserved = reserved_registration_markers(text, path, parsed)
     agents = parsed.get("agents", {})
     actual = agents.get(NAME) if isinstance(agents, dict) else None
     expected = expected_registration(analyzer)
+    candidates: list[tuple[str, str, bool]] = []
     for original_existed in (False, True):
         block = registration_block(analyzer, original_existed)
-        suffix = ("\n" if original_existed else "") + block
-        if not text.endswith(suffix):
-            continue
-        base = text[: -len(suffix)]
-        if not original_existed and base:
-            continue
-        if actual != expected:
-            continue
-        base_agents = parsed_config(base, path).get("agents", {})
-        if not isinstance(base_agents, dict) or NAME in base_agents:
-            raise Refusal(f"malformed managed repair analyzer registration in {path}")
-        if reserved != [REG_BEGIN, REG_END]:
-            raise Refusal(f"malformed managed repair analyzer registration in {path}")
-        return base, True, original_existed
+        separator = "\n" if original_existed else ""
+        needle = separator + block
+        start = 0
+        while True:
+            start = text.find(needle, start)
+            if start < 0:
+                break
+            before = text[:start]
+            after = text[start + len(needle) :]
+            if actual == expected:
+                preserved = before + after
+                try:
+                    base_agents = parsed_config(preserved, path).get("agents", {})
+                except Refusal:
+                    base_agents = None
+                if (
+                    isinstance(base_agents, dict)
+                    and NAME not in base_agents
+                    and reserved == [REG_BEGIN, REG_END]
+                ):
+                    candidates.append((before, after, original_existed))
+            start += len(needle)
+    if len(candidates) > 1:
+        raise Refusal(f"malformed managed repair analyzer registration in {path}")
+    if candidates:
+        before, after, original_existed = candidates[0]
+        return before, after, True, original_existed
     if reserved:
         raise Refusal(f"malformed managed repair analyzer registration in {path}")
-    return text, False, False
+    return text, "", False, False
 
 
 def registration(state: State | None, config: Path, analyzer: Path) -> tuple[bytes, bool]:
     original = parse_text(state, config)
     parsed_config(original, config)
-    base, had, original_existed = split_registration(original, config, analyzer)
+    before, after, had, original_existed = split_registration(
+        original, config, analyzer
+    )
     if not had:
         original_existed = state is not None
+    base = before + after
     agents = parsed_config(base, config).get("agents", {})
     if not isinstance(agents, dict) or NAME in agents:
         raise Refusal(f"refusing to overwrite unmanaged repair analyzer registration in {config}")
     block = registration_block(analyzer, original_existed)
-    result = (base + ("\n" if original_existed else "") + block).encode("utf-8")
+    if had:
+        result_text = before + ("\n" if original_existed else "") + block + after
+    else:
+        result_text = before + ("\n" if original_existed else "") + block
+    result = result_text.encode("utf-8")
     parsed_config(result.decode("utf-8"), config)
     return result, had
 
@@ -1414,6 +1440,20 @@ def preflight_managed_artifact(path: Path, kind: str) -> str:
     return "managed" if _managed_artifact_state(path, kind) is not None else "absent"
 
 
+def inspect_managed_artifact(path: Path, kind: str) -> str:
+    """Inspect a legacy artifact without claiming ownership or mutating it.
+
+    Unlike the selected-artifact preflight, a safe regular foreign file is a
+    valid observation rather than an overwrite refusal. Unsafe paths and read
+    failures remain fail-closed refusals.
+    """
+    require_safe_ancestors(path)
+    state = read_state(path)
+    if state is None:
+        return "absent"
+    return "managed" if _managed_artifact_data_is_owned(state.data, kind) else "unmanaged"
+
+
 def install_managed_artifact(path: Path, kind: str, payload: bytes) -> str:
     if not _managed_artifact_data_is_owned(payload, kind):
         raise Refusal(f"managed {kind} payload has an invalid first logical line")
@@ -1497,6 +1537,29 @@ def _publish_config_backup(config: Path, before: State) -> Path:
     return backup
 
 
+def _contains_only_managed_registration(
+    existing: bytes, path: Path, data: dict
+) -> bool:
+    if set(data) != {"agents"}:
+        return False
+    agents = data.get("agents")
+    if not isinstance(agents, dict) or set(agents) != {NAME}:
+        return False
+    entry = agents.get(NAME)
+    if not isinstance(entry, dict):
+        return False
+    analyzer_raw = entry.get("config_file")
+    if not isinstance(analyzer_raw, str) or not Path(analyzer_raw).is_absolute():
+        return False
+    try:
+        before, after, managed, original_existed = split_registration(
+            existing.decode("utf-8"), path, Path(analyzer_raw)
+        )
+    except (UnicodeDecodeError, Refusal):
+        return False
+    return managed and not original_existed and not before and not after
+
+
 def merge_config_fragment(path: Path) -> str:
     require_safe_ancestors(path)
     before = read_state(path)
@@ -1542,12 +1605,29 @@ def merge_config_fragment(path: Path) -> str:
         if "shell_environment_policy" in data:
             return "user-policy"
         if existing.strip():
-            updated = existing.rstrip(b"\n") + b"\n\n" + current_config_fragment(b"\n")
+            if existing.endswith(b"\r\n"):
+                updated = existing + current_config_fragment(b"\r\n")
+            elif existing.endswith(b"\n"):
+                updated = existing + current_config_fragment(b"\n")
+            else:
+                updated = (
+                    existing
+                    + CONFIG_FRAGMENT_INSERTED_SEPARATOR
+                    + current_config_fragment(b"\n")
+                )
         else:
             updated = current_config_fragment(b"\n")
         status = "merged"
 
-    backup = _publish_config_backup(path, before) if before is not None else None
+    registration_only = (
+        before is not None
+        and _contains_only_managed_registration(existing, path, data)
+    )
+    backup = (
+        _publish_config_backup(path, before)
+        if before is not None and not registration_only
+        else None
+    )
     _publish_single(
         path,
         updated,
@@ -1563,7 +1643,7 @@ def merge_config_fragment(path: Path) -> str:
     return status
 
 
-def remove_config_fragment(path: Path) -> str:
+def remove_config_fragment(path: Path, *, preserve_empty: bool = False) -> str:
     if os.environ.get("TRIAD_BOOTSTRAP_TEST_FAIL_CONFIG_FRAGMENT_REMOVE") == "1":
         raise Refusal("injected config fragment remove failure")
     require_safe_ancestors(path)
@@ -1603,8 +1683,19 @@ def remove_config_fragment(path: Path) -> str:
     else:
         return "unrecognized-managed"
 
+    managed_start = existing.find(managed)
+    separator_start = managed_start - len(CONFIG_FRAGMENT_INSERTED_SEPARATOR)
+    if (
+        separator_start >= 0
+        and existing[separator_start:managed_start]
+        == CONFIG_FRAGMENT_INSERTED_SEPARATOR
+    ):
+        managed = CONFIG_FRAGMENT_INSERTED_SEPARATOR + managed
     remainder = existing.replace(managed, b"", 1)
     if not remainder:
+        if preserve_empty:
+            _publish_single(path, b"", before, before.mode)
+            return "removed"
         _remove_single(before)
         return "removed-file"
     _publish_single(path, remainder, before, before.mode)
@@ -1691,7 +1782,7 @@ def _shell_entry_block(profile: str) -> bytes:
         SHELL_ENTRY_BEGIN
         + b"\n"
         + b"# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;\n"
-        + b"# removed by --remove. Pinned no-prompt posture: wrapper root\n"
+        + b"# removed by --remove. Legacy prompt-reviewed posture: wrapper root\n"
         + b"# containment + hardened wrapper mode + enforced claude sandbox.\n"
         + b"codex-triad() {\n"
         + b'  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\\n'
@@ -2001,9 +2092,19 @@ def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
         raise Refusal(f"refusing unsafe repair apply launcher: {launcher}") from error
     original = parse_text(config_before, config)
     parsed_config(original, config)
-    base, managed_registration, original_config_existed = split_registration(
+    before, after, managed_registration, original_config_existed = split_registration(
         original, config, analyzer
     )
+    base = before + after
+    if managed_registration and not original_config_existed and base:
+        managed_fragments = {
+            current_config_fragment(b"\r\n").decode("utf-8"),
+            current_config_fragment(b"\n").decode("utf-8"),
+            legacy_config_fragment(b"\r\n").decode("utf-8"),
+            legacy_config_fragment(b"\n").decode("utf-8"),
+        }
+        if base not in managed_fragments:
+            original_config_existed = True
     agents = parsed_config(base, config).get("agents", {})
     if not isinstance(agents, dict):
         raise Refusal(f"could not parse {config}")
@@ -2112,7 +2213,7 @@ def parser() -> argparse.ArgumentParser:
     classifier.add_argument("--path", required=True)
     managed_artifact = sub.add_parser("managed-artifact")
     managed_artifact.add_argument(
-        "--action", required=True, choices=("preflight", "install")
+        "--action", required=True, choices=("inspect", "preflight", "install")
     )
     managed_artifact.add_argument("--kind", required=True, choices=("profile", "rules"))
     managed_artifact.add_argument("--path", required=True)
@@ -2120,6 +2221,7 @@ def parser() -> argparse.ArgumentParser:
     config_fragment = sub.add_parser("config-fragment")
     config_fragment.add_argument("--action", required=True, choices=("merge", "remove"))
     config_fragment.add_argument("--path", required=True)
+    config_fragment.add_argument("--preserve-empty", action="store_true")
     return ap
 
 
@@ -2178,6 +2280,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         elif args.command == "managed-artifact":
             path = Path(args.path)
+            if args.action == "inspect":
+                print(inspect_managed_artifact(path, args.kind))
+                return 0
             if args.action == "preflight":
                 print(preflight_managed_artifact(path, args.kind))
                 return 0
@@ -2192,8 +2297,15 @@ def main(argv: list[str] | None = None) -> int:
             print(install_managed_artifact(path, args.kind, payload_state.data))
             return 0
         elif args.command == "config-fragment":
-            action = merge_config_fragment if args.action == "merge" else remove_config_fragment
-            print(action(Path(args.path)))
+            path = Path(args.path)
+            if args.action == "merge":
+                status = merge_config_fragment(path)
+            else:
+                status = remove_config_fragment(
+                    path,
+                    preserve_empty=args.preserve_empty,
+                )
+            print(status)
             return 0
         else:
             remove_command_group(

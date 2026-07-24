@@ -47,33 +47,31 @@ still be a poor classification. Treat it as an integrity and routing risk, not a
 code-execution boundary. Inspect applied deltas and use the normal review process
 for material changes.
 
-A formal triad review uses the existing worktree as its only source root. The
-leader resolves one absolute Git worktree and captures one trusted status/diff
-with fixed, non-mutating Git arguments. Every family receives the same worktree,
-scope, objective, suspect decisions, and captured output. The diff is an entry
-point rather than a review boundary: no-edit reviewers directly read and search
-affected unchanged callers, consumers, tests, build files, configuration, and
-governing documentation when relevant. Reviewers may inspect Git and source but
-do not execute candidate code, tests, builds, hooks, or generated scripts.
+Formal plan and pre-merge three-family gates use one leader-prepared shared review
+directory containing current approved production source, configuration, and
+documentation. Project instructions or the owner supply exact test-source
+exclusions; do not infer them. If the exact boundary is unavailable, stop and ask
+the owner. Normal SDD implementation review includes relevant test source. Other
+advisory review follows its separately owner-approved data scope.
 
-Before dispatch, the leader records a lightweight fingerprint of `HEAD`, the
-selected diff, the complete untracked-path inventory, and Git object hashes for
-untracked contents. The same fingerprint is recomputed after all legs return.
-Any change invalidates the whole round because families may have observed
-different states; an unchanged result admits reconciliation. The leader does
-not edit the worktree while reviewers are running.
+Every leg receives the same directory and task. No prompt inlines a diff or file
+body. Record one simple content digest before dispatch and compare it after every
+required leg terminates; a mismatch invalidates the round. Before a formal gate,
+classify every test failure as production defect, test-case defect, or intentional
+specification change and resolve or approve it. Reviewers do not run candidate code,
+tests, builds, hooks, or generated scripts.
 
-The default path creates no source copy, packet, manifest, generated related-file
-allowlist, or snapshot. A source archive is not a hidden formal-gate
-prerequisite. Small review records may retain the review ID, scope, pre/post
-fingerprint, exact provider commands, and reviewer outputs, but not copied
-source or authentication material. The packet-bound `FormalReview` schema and
-sealed-packet flags are not used by normal or formal worktree review. Legacy
-wrapper support may remain for explicit compatibility, but no installed skill
-or default gate directs users through it.
+The provider-visible security boundary remains unchanged: exclude credentials,
+tokens, cookies, authentication files, environment dumps, provider logs, and
+unrelated paths. Commit, push, install/update, merge, release, and publication
+still require separate owner authorization.
 
 Gemini fallback is restricted to explicit pre-submission agy route unavailability;
-uncertain and post-dispatch outcomes remain on the agy failure path. Every
+uncertain and post-dispatch outcomes remain on the agy failure path. Provider-side
+enforcement remains unproven, so formal Gemini fallback stays closed unless the
+owner supplies the evidence defined by the
+[formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md).
+The distribution does not probe for that evidence. Every
 normal non-`--repair-mode` wrapper invocation that reaches its
 dispatch driver performs best-effort cleanup of managed UUID/file-IPC entries
 older than 3,600 seconds before provider execution; Antigravity performs it
@@ -82,22 +80,81 @@ perfect garbage collector is claimed.
 
 ## Auto-review boundary
 
-Human-run bootstrap installs a dedicated triad Codex profile with
-`approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`.
-Provenance-marked rules match only the absolute managed launchers for the Claude,
+Human-run bootstrap preserves the owner's approval, reviewer, sandbox, and other
+ordinary Codex keys. It adds a provenance-marked
+`[shell_environment_policy]` guard so loader/interpreter injection variables are
+removed before a launcher executes outside the sandbox; an owner-authored or
+edited policy is preserved with a warning. Provenance-marked rules match only
+the absolute managed launchers for the Claude,
 Antigravity, and Gemini wrappers and use `decision = "prompt"`. They do not grant
 a broad shell, generic Python, or repository-wrapper prefix. The prompt
 justification identifies the exact call as an owner-authorized triad review and
 requires provider-visible input to exclude credentials, tokens, cookies,
-authentication files, environment dumps, and unrelated paths.
+authentication files, environment dumps, provider logs, and unrelated paths.
+
+Those prompts reach Agent Review only when the active configuration uses
+`approvals_reviewer = "auto_review"` and keeps the relevant categories
+interactive. `approval_policy = "on-request"` is sufficient. Under an existing
+granular policy, both `granular.rules = true` and
+`granular.sandbox_approval = true` are required; every other category remains
+owner-controlled. `approvals_reviewer = "user"` sends the prompt to the person,
+and `approval_policy = "never"` means Agent Review does not run.
+
+When rules are opted out and no configured rules path remains
+(`TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0`), bootstrap may skip the native loader
+guard. If an owner-managed rules file remains at that path, the guard is
+retained because it may still activate a managed launcher; the launcher's own
+scrub remains defense in depth in either case.
+
+Bootstrap keeps selected profile, rules, and shell targets under strict,
+no-follow preflight. If an unsafe or unreadable legacy profile or shell path is
+not selected, its inspection failure is instead a warning: the refusal detail
+and path are reported, the target is not followed or changed, and installation
+of selected ordinary artifacts continues. The legacy profile requires
+`TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1`; the legacy shell entry requires both
+that flag and `TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`.
+
+All ownership preflights run before persistent publication. Provider wrapper
+commands are staged and published only after the repair lifecycle has installed
+the analyzer, registration, and `triad-apply-repair` transaction successfully.
+A late repair-registration failure therefore leaves the provider launchers,
+`triad-apply-repair`, analyzer/registration, command rules, and shell entry
+absent while preserving unrelated owner bytes.
+
+The setting and rule semantics follow OpenAI's
+[Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review),
+[rules](https://learn.chatgpt.com/docs/agent-configuration/rules), and
+[approval-policy](https://learn.chatgpt.com/docs/config-file/config-advanced#approval-policies-and-sandbox-modes)
+documentation.
+
+Bootstrap does not install `[auto_review].policy`, because replacing the owner's
+reviewer instructions is broader than this plugin and managed policy has higher
+precedence. The explicit owner request plus the exact rule justification is the
+default-policy authorization evidence. `/approve` is a narrow, owner-operated
+retry for one recorded denial and never becomes a broad allow rule.
 
 Automatic review is an execution-time security decision, not a new source of
 workflow authorization. Denial, timeout, missing authorization, and unsafe
 input fail closed. Commit, push, plugin or dependency install/update, merge,
-release, and publication still require separate owner authorization. The
-explicit `TRIAD_CODEX_PROFILE_APPROVAL_POLICY=never` compatibility posture is an
-advanced exception: it rewrites the managed rules to `allow`, disables automatic
-review for that dedicated session, and must not be treated as the default.
+release, and publication still require separate owner authorization. The normal
+distribution does not create a no-prompt or session-wide `never` posture.
+
+The ordinary-Codex path also does not install the legacy profile's per-session
+exec-target write denies. Bootstrap checks at install time that its launcher,
+runtime, `$CODEX_HOME`, and plugin checkout are outside the
+directory from which bootstrap runs. It cannot constrain a later Codex session
+started with a broader writable root. Start ordinary Codex at the actual project
+or workspace root, not `$HOME` or another ancestor of the managed launchers,
+`$CODEX_HOME`, or plugin cache. Otherwise workspace-write access can make a
+policy-matched executable rewritable. The legacy profile is explicit opt-in
+migration compatibility for owners who require that additional per-session deny.
+
+Bootstrap pins the installer-selected Python into generated launchers. This is
+an explicit installation and operation precondition, not a fully closed launcher
+guarantee: credential-compatible user-site mode requires a trusted `HOME`,
+because `sitecustomize.py`/`usercustomize.py` from the HOME-selected user site can
+run before launcher scrubbing. The installer may instead select a trusted
+isolated Python environment only if it preserves the provider login workflow.
 
 ## Authentication and reports
 

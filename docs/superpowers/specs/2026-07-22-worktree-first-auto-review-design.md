@@ -1,5 +1,10 @@
 # Worktree-First Review and Auto-Review Distribution Design
 
+> **Historical and superseded (0.2.529 decision record).** Current authority is
+> `skills/triad-cross-family-review/SKILL.md` plus
+> `2026-07-23-r11-minor-hardening-design.md`, section `Active shared-directory formal-review correction`. This historical record does not direct the current
+> shared-directory flow.
+
 ## Problem
 
 The current formal-review path turns every cross-family review into a sealed,
@@ -8,8 +13,8 @@ prevents the normal workflow the owner wants: reviewers enter the existing Git
 worktree, inspect one trusted leader-captured diff, and follow affected callers, tests,
 configuration, and documentation directly from the repository.
 
-The distribution also currently installs exact wrapper rules with
-`decision = "allow"`. Those rules avoid prompts, but bypass Codex Auto-review.
+Before this 0.2.529 design, the distribution installed exact wrapper rules with
+`decision = "allow"`. Those historical rules avoided prompts but bypassed Codex Auto-review.
 The intended boundary is instead: the owner authorizes a triad review once,
 exact managed provider calls are reviewed automatically, and unrelated external
 or destructive operations retain their existing boundaries.
@@ -30,9 +35,8 @@ or destructive operations retain their existing boundaries.
   for the named Claude and Google-family review calls over the stated source
   scope. Do not ask again for each leg.
 - Route exact installed provider-wrapper commands through Codex Auto-review.
-- Ship the required Codex profile and rules through the existing human-run
-  bootstrap because a sandboxed Codex session cannot reliably write the user's
-  `$CODEX_HOME`.
+- Ship exact wrapper rules through the existing human-run bootstrap because a
+  sandboxed Codex session cannot reliably write the user's `$CODEX_HOME`.
 - Preserve separate owner authorization before commit, push, plugin install or
   update, release, merge, or publication.
 
@@ -103,19 +107,28 @@ backward compatibility, but no skill or default gate directs users through it.
 
 ## Auto-review boundary
 
-The generated triad Codex profile uses:
+The normal path uses the owner's ordinary Codex session. Agent Review needs:
 
 ```toml
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 ```
 
-The settings apply to the dedicated triad profile installed by bootstrap, not
-to the owner's normal Codex configuration.
+Bootstrap does not change these owner settings. If the owner already uses a
+granular policy, `granular.rules = true` and
+`granular.sandbox_approval = true` are also required; every other granular
+category remains owner-controlled. `approvals_reviewer = "user"` keeps manual
+approval, while `approval_policy = "never"` means Agent Review does not run.
+
+The ordinary path has no dedicated profile. Its executable-integrity boundary
+is the install-time placement check plus the owner's later session root: start
+Codex at the actual project/workspace, not an ancestor of the managed launcher,
+`$CODEX_HOME`, or plugin cache. The plugin documents this residual rather than
+silently reintroducing a profile or changing global sandbox settings.
 
 Bootstrap-generated rules match only the absolute managed launchers for
 `claude_wrapper.py`, `antigravity_wrapper.py`, and `gemini_wrapper.py`. Each rule
-uses `decision = "prompt"`. With the profile above, the prompt is sent to the
+uses `decision = "prompt"`. With the settings above, the prompt is sent to the
 Agent reviewer rather than the person. The justification states that an exact
 managed wrapper call is an owner-authorized triad review and may send relevant
 review source to the authenticated named provider while excluding credentials,
@@ -130,11 +143,11 @@ skill must not repeatedly ask the owner to approve each already-authorized leg.
 
 The plugin installation continues to print the absolute bootstrap command. The
 owner runs that command once in a normal authenticated terminal. Bootstrap owns
-the generated profile, exact launcher rules, and launchers under `$CODEX_HOME`
+the exact launcher rules and launchers under `$CODEX_HOME`
 and the configured launcher directory.
 
 Re-running bootstrap replaces its provenance-marked old `allow` rules with the
-new `prompt` rules and refreshes the dedicated profile. It preserves foreign
+new `prompt` rules. It preserves foreign
 files and refuses to overwrite unmanaged same-name artifacts. No post-install
 hook silently edits `$CODEX_HOME`.
 
@@ -142,7 +155,7 @@ README instructions must describe this exact flow:
 
 1. install the plugin;
 2. run the printed bootstrap command in the owner's terminal;
-3. start a new session with the installed triad profile; and
+3. start a new ordinary Codex session; and
 4. invoke the triad skill once without per-leg approval repetition.
 
 ## Acceptance criteria
@@ -151,8 +164,8 @@ README instructions must describe this exact flow:
   not create a packet or snapshot.
 - The skill explicitly requires review beyond changed files into affected
   unchanged files.
-- Distribution tests prove the generated profile selects Auto-review and the
-  exact wrapper rules evaluate to `prompt`.
+- Distribution tests prove the default install creates no profile, preserves
+  owner settings, and makes the exact wrapper rules evaluate to `prompt`.
 - Tests prove broad shell, raw repository wrapper, and generic Python forms do
   not match the installed rules.
 - Documentation states that bootstrap is human-run and that commit, push,

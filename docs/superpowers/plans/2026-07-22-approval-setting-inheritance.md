@@ -1,5 +1,9 @@
 # Approval Setting Inheritance Implementation Plan
 
+> **Status:** Superseded by the shipped ordinary-Codex contract in
+> `../../../README.md`. This file is a historical implementation record; its
+> generated-profile defaults are not current deployment instructions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the generated triad runtime profile inherit the owner's `approval_policy` and `approvals_reviewer` by default while preserving the explicit `TRIAD_CODEX_PROFILE_APPROVAL_POLICY` advanced override.

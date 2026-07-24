@@ -7,8 +7,9 @@
 # variables before Codex spawns anything.
 #
 # Why it matters: the triad-codex-dispatch launchers (installed by
-# scripts/bootstrap.sh --install) are allow-listed to run OUTSIDE the Codex
-# sandbox, so their inherited ENVIRONMENT is a trust boundary. A poisoned
+# scripts/bootstrap.sh --install) are routed through exact `prompt` rules for
+# approval-reviewed execution OUTSIDE the Codex sandbox, so their inherited
+# ENVIRONMENT is a trust boundary. A poisoned
 # loader var (e.g. an LD_PRELOAD from an un-audited project direnv) would make
 # an outside-sandbox process load workspace code. The launcher already
 # CONSTRUCTS a clean env (dropping those vars + pinning PATH) as always-on
@@ -32,7 +33,8 @@
 #   # <<< triad-codex-dispatch managed shell_environment_policy <<<
 # The merge preserves every other key in your config.toml (it appends the
 # marker block; it never rewrites the rest of the file) and writes a .bak
-# backup first. --remove strips exactly that marker block back out. Re-running
+# backup first, except for a fresh config containing only the managed
+# registration. --remove strips exactly that marker block back out. Re-running
 # --install is a no-op once the block is present.
 #
 # If you ALREADY have your own [shell_environment_policy] table, --install does

@@ -104,8 +104,20 @@ def _seal_pydantic_prompt(unsealed_prompt: str, sentinel: str) -> str:
     )
 
 
-def _build_cmd(prompt, sentinel, agy_sandbox, model, timeout, *, pydantic=False,
-               skip_permissions=False):
+def _build_route_args(agy_sandbox, model, effort):
+    """Build the provider route flags shared by preflight and dispatch."""
+    route_args = []
+    if agy_sandbox:
+        route_args.append("--sandbox")
+    if model:
+        route_args += ["--model", model]
+    if effort:
+        route_args += ["--effort", effort]
+    return route_args
+
+
+def _build_cmd(prompt, sentinel, agy_sandbox, model, timeout, *, effort=None,
+               pydantic=False, skip_permissions=False):
     if pydantic:
         sealed = _seal_pydantic_prompt(prompt, sentinel)
     else:
@@ -116,10 +128,7 @@ def _build_cmd(prompt, sentinel, agy_sandbox, model, timeout, *, pydantic=False,
         )
     print_to = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = ["agy", "-p", sealed, "--print-timeout", f"{print_to}s"]
-    if agy_sandbox:
-        cmd.append("--sandbox")
-    if model:
-        cmd += ["--model", model]
+    cmd += _build_route_args(agy_sandbox, model, effort)
     if skip_permissions:
         cmd = _add_skip_permissions(cmd)
     return cmd
@@ -521,6 +530,7 @@ def main() -> int:
                    help="read-only|workspace-write — per-call deny transaction "
                         "(global settings mutate+restore). Omit = permissive baseline.")
     p.add_argument("--model", default=None)
+    p.add_argument("--effort", choices=["low", "medium", "high"], default=None)
     p.add_argument("--timeout", type=int, default=600)
     p.add_argument("--repair-mode", action="store_true")
     p.add_argument("--debug", action="store_true")
@@ -599,16 +609,23 @@ def main() -> int:
         return _common.EXIT_ARG_ERROR
 
     if args.preflight_only:
+        route_args = _build_route_args(
+            sandbox_mode is not None,
+            args.model,
+            args.effort,
+        )
         receipt = {
             "provider_started": False,
             "dispatch_phase": "preflight",
             "model": args.model,
+            "effort": args.effort,
             "pydantic": args.pydantic,
             "sealed_packet_root": validation_context.get("sealed_packet_root"),
             "expected_packet_sha256": validation_context.get(
                 "expected_packet_sha256"
             ),
             "sandbox": sandbox_mode,
+            "route_args": route_args,
             "timeout": args.timeout,
             "skip_permissions": None,
         }
@@ -632,7 +649,7 @@ def main() -> int:
     # mode). Explicit injected denies remain higher precedence, and `_build_cmd`
     # retains `--sandbox` for both the initial call and any targeted retry.
     cmd = _build_cmd(eff_prompt, sentinel, agy_sandbox, args.model, args.timeout,
-                     pydantic=pydantic_cls is not None,
+                     effort=args.effort, pydantic=pydantic_cls is not None,
                      skip_permissions=skip_permissions)
     # argv[0] = resolved/pinned agy path (finding #3). _build_cmd stays pure ("agy"
     # literal) so its unit test is unaffected; the pin is substituted here at the

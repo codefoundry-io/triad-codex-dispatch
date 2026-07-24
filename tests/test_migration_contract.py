@@ -55,17 +55,20 @@ def test_migration_rules_follow_the_current_bootstrap_generated_shape() -> None:
     assert "--install" in rules
     assert "Gemini 3.1 Pro (High)" not in rules
     assert "agy models" in rules
+    assert rules.count('decision = "prompt"') == 3
+    assert 'decision = "allow"' not in rules
+    assert "Agent Review" in rules
 
     blocks = rules.split("prefix_rule(")[1:]
-    for wrapper, label in (
-        ("claude_wrapper.py", "Claude wrapper"),
-        ("antigravity_wrapper.py", "Antigravity wrapper"),
-        ("gemini_wrapper.py", "Gemini business-tier wrapper"),
+    for wrapper in (
+        "claude_wrapper.py",
+        "antigravity_wrapper.py",
+        "gemini_wrapper.py",
     ):
         text = next(
             block
             for block in blocks
-            if f"Allow authenticated triad {label} commands outside the sandbox." in block
+            if f'"/path/to/launcher-dir/{wrapper}"' in block
         )
         assert text.count('"/path/to/launcher-dir/') == 3
         assert f'"{wrapper} --prompt hi --sandbox read-only"' in text
@@ -74,6 +77,35 @@ def test_migration_rules_follow_the_current_bootstrap_generated_shape() -> None:
         assert "--approval-mode" not in text
         assert "--model" not in text
         assert "workspace-write" not in text
+        assert "credentials, tokens, cookies, authentication files" in text
+        assert "environment dumps, provider logs, and unrelated paths" in text
+
+
+def test_release_headers_are_in_descending_order() -> None:
+    changelog = _text(ROOT / "CHANGELOG.md")
+
+    assert changelog.index("## 0.2.529") < changelog.index("## 0.2.528")
+    assert changelog.index("## 0.2.528") < changelog.index("## 0.2.527")
+
+
+def test_requirements_template_is_explicit_legacy_profile_material() -> None:
+    requirements = _text(REQUIREMENTS)
+
+    assert "legacy opt-in" in requirements.lower()
+
+
+def test_current_migration_guidance_never_describes_wrapper_rules_as_allow() -> None:
+    current_guidance = "\n".join(
+        (
+            _text(CONFIG_FRAGMENT),
+            _text(REQUIREMENTS),
+            _text(ROOT / "docs" / "superpowers" / "specs" / "2026-07-22-worktree-first-auto-review-design.md"),
+        )
+    )
+
+    assert "are allow-listed" not in current_guidance
+    assert "currently installs exact wrapper rules" not in current_guidance
+    assert "decision = `allow`" not in current_guidance
 
 
 def test_requirements_admin_copy_is_absolute_argv_safe_and_cwd_independent(

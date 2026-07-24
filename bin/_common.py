@@ -310,7 +310,8 @@ def require_binary(name: str) -> str:
     A codex-host launcher execs the wrapper with
     `TRIAD_<name.upper()>_BIN=<resolved absolute path>` and
     `TRIAD_REQUIRE_PINNED_VENDOR=1`, so a workspace-planted `<name>` earlier on
-    PATH cannot shadow the real vendor CLI an allow-listed launcher executes.
+    PATH cannot shadow the real vendor CLI an approval-reviewed, policy-matched
+    launcher executes.
     Lab default (neither env set) = `shutil.which` (PATH), unchanged.
 
     - a valid pin (absolute, existing, executable) always wins over PATH;
@@ -396,7 +397,8 @@ def _load_classifier_extension() -> dict:
 
 # ─── Product hardening mode (L8 twin→SoT port, owner adjudications 2026-07-05) ───
 # The lab (SoT callers, skill contracts) runs UNRESTRICTED by default; the
-# public codex-host product's bootstrap sets TRIAD_WRAPPER_HARDENED=1, which
+# explicitly opted-in legacy codex-triad shell entry sets
+# TRIAD_WRAPPER_HARDENED=1 and pins TRIAD_WRAPPER_ALLOWED_ROOTS, which
 # activates: allowed-roots containment (required), the pydantic import gate,
 # and audit prompt redaction. Each control also has an individual env so it
 # can be engaged on its own (set TRIAD_WRAPPER_ALLOWED_ROOTS to enforce
@@ -424,8 +426,8 @@ def runtime_allowed_roots() -> list[Path]:
     """Containment roots for --cwd / --prompt-file. Env unset → NO containment
     in the lab (callers own isolation per the SKILL contracts); under
     TRIAD_WRAPPER_HARDENED=1 the env is REQUIRED (refuse rather than guess —
-    the public product's bootstrap pins it; a hardened run without pinned
-    roots must not silently fall back to cwd)."""
+    the explicitly opted-in legacy codex-triad shell entry pins it; a hardened
+    run without pinned roots must not silently fall back to cwd)."""
     raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
     if not raw:
         if _wrapper_hardened():

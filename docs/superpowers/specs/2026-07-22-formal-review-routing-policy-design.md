@@ -1,5 +1,10 @@
 # Formal Review Routing Policy Design
 
+> **Superseded (historical):** This dated design is retained for review history
+> only. Use the current [formal reviewer routing reference](../../../skills/triad-cross-family-review/references/reviewer-routing.md)
+> and the [2026-07-23 R11 Minor Hardening design](2026-07-23-r11-minor-hardening-design.md)
+> for active routing decisions.
+
 Date: 2026-07-22
 
 ## Goal
@@ -21,6 +26,14 @@ select a deeper or longer-horizon route, including a Sol- or Fable-class model,
 for an ambiguous, security-sensitive, deeply integrative, or adjudication-heavy
 review. The review record must identify the exact route and the reason. A
 Sol/Fable selection does not itself invalidate a review.
+
+The transport contract is scope-specific and fail-closed: uncommitted uses status
+→ staged diff → unstaged diff; base/range requires immutable merge-base/tip OIDs,
+tip == guarded HEAD, and clean approved paths before the exact range diff; commit
+requires an immutable OID == guarded HEAD and clean approved paths before a
+root-commit-safe `git show`. Actual repo-relative path arguments use `shlex.join`
+and `git --literal-pathspecs`; ignored paths remain outside the Git-visible guard
+unless explicitly owner-approved.
 
 The leader continues to decide convergence from frozen reproducible evidence.
 An unresolved head-on contradiction or evidence-free oscillation remains
