@@ -1,6 +1,6 @@
 ---
 name: triad-claude-dispatch
-description: Use when the Codex leader needs one Claude Code answer through the installed wrapper, including the Claude leg of a review or a classified repair handoff.
+description: Use when an owner explicitly requests a Claude Code consult or an authorized cross-family workflow assigns the Claude review leg.
 ---
 
 # triad-claude-dispatch
@@ -21,6 +21,19 @@ worktree, task, and data boundary remain unchanged. For worktree review, that
 scope is the repository data admitted by the shared review contract. Credentials,
 tokens, cookies, authentication files, environment dumps, provider logs, and unrelated
 paths remain excluded.
+
+## Review prompts
+
+For a review request, read and render the
+[shared review prompt contract](../triad-cross-family-review/references/review-prompt-contract.md).
+Select `consult` or `advisory-review` for a standalone request and
+`formal-gate` for a formal cross-family leg. Dispatch only after the objective,
+target, approved data, exclusions, and selected result profile are determined.
+For this skill, `provider` is Claude and `destination` is the installed Claude
+Code wrapper route in the owner's authenticated terminal unless the owner
+authorizes a narrower destination.
+The wrapper remains a transport; it does not define a provider-specific review
+shape.
 
 ## Invocation
 

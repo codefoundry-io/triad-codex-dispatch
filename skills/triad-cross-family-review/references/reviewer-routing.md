@@ -1,5 +1,14 @@
 # Formal reviewer routing contract
 
+## Contents
+
+- [Scope](#scope)
+- [Bounded formal routes](#bounded-formal-routes)
+- [Approval behavior](#approval-behavior)
+- [Google route and fallback](#google-route-and-fallback)
+- [Conditional escalation and convergence](#conditional-escalation-and-convergence)
+- [Failure handling](#failure-handling)
+
 ## Scope
 
 This review-only routing policy is an owner routing policy, not a vendor

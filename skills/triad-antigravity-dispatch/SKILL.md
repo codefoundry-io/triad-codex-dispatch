@@ -1,6 +1,6 @@
 ---
 name: triad-antigravity-dispatch
-description: Use when the Codex leader needs one Antigravity (agy) answer through the installed wrapper, including the primary Google-family leg of a review or a classified repair handoff.
+description: Use when an owner explicitly requests an Antigravity consult or an authorized cross-family workflow assigns the primary Google-family review leg.
 ---
 
 # triad-antigravity-dispatch
@@ -43,6 +43,19 @@ worktree, task, and data boundary remain unchanged. For worktree review, that
 scope is the repository data admitted by the shared review contract. Credentials,
 tokens, cookies, authentication files, environment dumps, provider logs, and unrelated
 paths remain excluded.
+
+## Review prompts
+
+For a review request, read and render the
+[shared review prompt contract](../triad-cross-family-review/references/review-prompt-contract.md).
+Select `consult` or `advisory-review` for a standalone request and
+`formal-gate` for a formal cross-family leg. Dispatch only after the objective,
+target, approved data, exclusions, and selected result profile are determined.
+For this skill, `provider` is Antigravity and `destination` is the installed
+Antigravity wrapper route in the owner's authenticated terminal unless the
+owner authorizes a narrower destination.
+Route selection and prompt construction remain separate decisions.
+
 ## Cross-family review invocation
 Formal three-family preparation is defined by the
 [triad-cross-family-review skill](../triad-cross-family-review/SKILL.md). Use

@@ -1,6 +1,6 @@
 ---
 name: triad-gemini-dispatch
-description: Use when the Codex leader needs one business, Vertex, or API-key Gemini answer after the agy route is unavailable before dispatch, including a classified repair handoff.
+description: Use when an authorized Google-family request needs a business, Vertex, or API-key Gemini route after agy is proven unavailable before submission.
 ---
 
 # triad-gemini-dispatch
@@ -51,6 +51,18 @@ scope includes only repository data admitted by the approved boundary. It
 excludes credentials, tokens, cookies, authentication files, environment
 dumps, provider logs, and unrelated paths; affected unchanged files are included
 only when that approved boundary permits them.
+
+## Review prompts
+
+For a review request, read and render the
+[shared review prompt contract](../triad-cross-family-review/references/review-prompt-contract.md).
+Select `consult` or `advisory-review` for an eligible non-formal fallback and
+`formal-gate` only when the formal reviewer routing contract independently
+admits this route. Dispatch only after the objective, target, approved data,
+exclusions, and selected result profile are determined.
+For this skill, `provider` is Gemini and `destination` is the eligible
+installed Gemini wrapper route in the owner's authenticated terminal unless
+the owner authorizes a narrower destination.
 
 ## Invocation
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.531 — 2026-07-25
+
+- Adds one provider-neutral review prompt contract for Claude, Google-family,
+  and fresh Codex legs. It records the review mode, objective, perspective,
+  provider and destination, approved and excluded data, test-source boundary,
+  digest, inspection rules, evidence rules, and selected result profile before
+  dispatch.
+- Separates `consult`, `advisory-review`, and `formal-gate` result profiles.
+  Formal review retains the existing semantic verdict, evidence, citation,
+  digest, and invalidation rules; consult and advisory results cannot be
+  promoted to formal gate passes.
+- Requires explicit invocation for Claude, Antigravity, and Gemini provider
+  dispatch skills. Implicit cross-family activation may prepare a bounded review
+  but waits for an explicit owner request or matching standing authorization
+  before sending repository data externally.
+- Replaces broad independent-opinion defaults with prompts that require the
+  objective, approved data, exclusions, and result profile. Wrapper, model,
+  effort, fallback, extraction, repair, and AGY compatibility behavior remain
+  unchanged.
+
 ## 0.2.530 — 2026-07-25
 
 - Revalidates the formal AGY route against authenticated AGY 1.1.7. Controlled
