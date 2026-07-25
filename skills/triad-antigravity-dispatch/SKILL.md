@@ -65,9 +65,18 @@ review_argv = [
 Wrapper preflight reports the requested `model` and `effort` values and proves
 argv construction only; it does not claim an `effective_model`. If provider
 output exposes identity, it must agree with the requested route; absent
-telemetry is recorded as `unexposed` once. After an AGY update, adopt the base
-slug plus `--effort high` only after a fresh successful runtime probe confirms
-provider acceptance and identity agreement.
+telemetry is recorded as `unexposed` once. After an AGY update, rerun these
+three candidates as separate fresh runtime probes:
+
+- `--model gemini-3.1-pro-high` with no `--effort`;
+- `--model gemini-3.1-pro --effort high`; and
+- `--model "Gemini 3.1 Pro (High)"` with no `--effort` as the control.
+
+Catalog presence or provider acceptance alone does not authorize a route
+change. Keep the control route unless another candidate is accepted and its
+runtime-exposed identity agrees with the requested Pro High route. Any
+alternative remains unselected until its fresh successful runtime probe
+confirms both conditions.
 
 For formal review, return the semantic fields required by the shared contract:
 `verdict`, `findings`, `affected_surfaces_inspected`, and `open_questions`.
