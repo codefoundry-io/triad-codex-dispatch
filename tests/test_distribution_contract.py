@@ -743,7 +743,7 @@ def test_package_version_and_removed_release_aliases_are_current() -> None:
     changelog = _text(CHANGELOG)
     bootstrap = _text(ROOT / "scripts" / "bootstrap.sh")
 
-    assert manifest["version"] == "0.2.529"
+    assert manifest["version"] == "0.2.530"
     interface = manifest["interface"]
     assert interface["displayName"] == "Triad Codex Dispatch"
     for required in (
@@ -752,7 +752,7 @@ def test_package_version_and_removed_release_aliases_are_current() -> None:
         assert isinstance(interface[required], str) and interface[required]
     assert interface["capabilities"] == ["Interactive", "Read", "Write"]
     assert 1 <= len(interface["defaultPrompt"]) <= 3
-    assert changelog.startswith("# Changelog\n\n## 0.2.529 — 2026-07-23\n")
+    assert changelog.startswith("# Changelog\n\n## 0.2.530 — 2026-07-25\n")
     assert "## 0.2.527 — 2026-07-21" in changelog
     for shipped in (
         "triad-apply-repair",
@@ -1144,6 +1144,20 @@ def test_formal_review_uses_owner_routing_baseline_and_bounded_escalation(
     assert "catalog selector remains evidence only" in flat
     assert "exact display label `Gemini 3.1 Pro (High)`" in flat
     assert "fresh successful runtime probe" in flat
+    antigravity_flat = " ".join(antigravity.split())
+    for probe in (
+        "`--model gemini-3.1-pro-high` with no `--effort`",
+        "`--model gemini-3.1-pro --effort high`",
+        '`--model "Gemini 3.1 Pro (High)"` with no `--effort` as the control',
+    ):
+        assert probe in flat
+        assert probe in antigravity_flat
+    route_change_gate = (
+        "Catalog presence or provider acceptance alone does not authorize a "
+        "route change."
+    )
+    assert route_change_gate in flat
+    assert route_change_gate in antigravity_flat
     assert "effective_model" in flat
     assert "invented `effective_model`" in flat
     assert "--effort high" in flat

@@ -66,8 +66,17 @@ locally invented `effective_model`. Record actual provider request acceptance
 and require any runtime-exposed identity to agree with the requested label. If
 runtime telemetry is absent after the successful preflight, record it as
 `unexposed` once without guessing the hidden actual model. After an AGY update,
-adopt `--model gemini-3.1-pro --effort high` only after a fresh successful
-runtime probe confirms provider acceptance and identity agreement.
+rerun these three candidates as separate fresh runtime probes:
+
+- `--model gemini-3.1-pro-high` with no `--effort`;
+- `--model gemini-3.1-pro --effort high`; and
+- `--model "Gemini 3.1 Pro (High)"` with no `--effort` as the control.
+
+Catalog presence or provider acceptance alone does not authorize a route
+change. Keep the control route unless another candidate is accepted and its
+runtime-exposed identity agrees with the requested Pro High route. Any
+alternative remains unselected until its fresh successful runtime probe
+confirms both conditions.
 
 A Gemini preflight/dispatch proves route availability only, not formal
 read-only containment. The checked-in distribution is not end-to-end

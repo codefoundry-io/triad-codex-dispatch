@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.530 — 2026-07-25
+
+- Revalidates the formal AGY route against authenticated AGY 1.1.7. Controlled
+  runtime probes and AGY's `/model` response exposed both
+  `--model gemini-3.1-pro-high` and
+  `--model gemini-3.1-pro --effort high` as Gemini 3.6 Flash High, while
+  `--model "Gemini 3.1 Pro (High)"` with no `--effort` exposed Gemini 3.1 Pro
+  High. The current formal display-label route therefore remains selected.
+- Requires every future AGY update to compare the completed catalog selector,
+  base selector plus effort, and current display-label control as separate
+  runtime probes. Catalog presence or provider acceptance alone never
+  authorizes a formal-route change; exposed identity must also agree.
+- Keeps the wrapper transport unchanged because its exact `--model` and optional
+  `--effort` passthrough already supports all three candidates without
+  inventing an effective model.
+
 ## 0.2.529 — 2026-07-23
 
 - Applies the owner-approved minimal formal-review correction: formal plan and
