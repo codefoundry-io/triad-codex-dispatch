@@ -133,7 +133,9 @@ not a viable common requirement.
 - Modify `skills/triad-claude-dispatch/SKILL.md`.
 - Modify `skills/triad-antigravity-dispatch/SKILL.md`.
 - Modify `skills/triad-gemini-dispatch/SKILL.md`.
-- Regenerate or update all four `skills/*/agents/openai.yaml` files only when their default prompts are stale.
+- Inspect all four `skills/*/agents/openai.yaml` files unchanged. Their current
+  provider-neutral prompts already delegate result-profile details to the
+  skills and are not stale for this change; do not regenerate them.
 - Modify `docs/references/repair-protocol.md`.
 - Modify `tests/test_distribution_contract.py`.
 - Inspect unchanged `bin/triad_formal_review_schema.py` and
@@ -277,7 +279,7 @@ python3 bin/review_evidence.py validate \
   reproducible proof edge. Do not duplicate path rows or add a multi-edge
   protocol; full source coverage, not exhaustive graph-edge enumeration, is
   the release requirement.
-- `PATCH_FILES_PER_GROUP = 100`. File sections 1-100 are `group-0001`,
+- `DIFF_FILE_SECTIONS_PER_GROUP = 100`. File sections 1-100 are `group-0001`,
   101-200 are `group-0002`, and so on; `GROUP_COUNT` is the exact number of
   non-empty groups. `DIFF_FILE_SECTION_COUNT` counts canonical `diff --git`
   sections. `PATCH_FILE_COUNT` counts actual patch artifacts and equals
@@ -462,8 +464,11 @@ Implement the following additional named tests in the same file:
 - `test_unified_hunk_must_match_current_source`: independently reject a
   malformed header, old/new body-count mismatch, out-of-range new-side span,
   context/added body mismatch, and incorrect no-final-newline marker with
-  stable `EvidenceError("invalid unified hunk")`; include one two-hunk file and
-  assert `DIFF_FILE_SECTION_COUNT=1`, `PATCH_FILE_COUNT=2`.
+  stable `EvidenceError("invalid unified hunk")`; admit added
+  `@@ -0,0 +1,N @@`, deleted `@@ -1,N +0,0 @@`, and nonzero-start
+  zero-count insertion/deletion headers; include 99 one-hunk sections followed
+  by one two-hunk section and assert both hunks remain in `group-0001`,
+  `DIFF_FILE_SECTION_COUNT=100`, and `PATCH_FILE_COUNT=101`.
 
 - [ ] **Step 3: Run the evidence tests to verify RED**
 
@@ -530,11 +535,19 @@ literal `$()` remain data and execute nothing. This is an intentional
 For each supported textual hunk, parse the complete
 `@@ -old_start,old_count +new_start,new_count @@` form (including the
 single-line omitted-count shorthand). Require header old/new counts to equal
-the respective deletion/context and addition/context body counts. Require the
-new-side range to be in bounds and the ordered context plus added lines,
-including `\ No newline at end of file` semantics, to equal that exact range in
-the digest-bound current UTF-8 source. Reject malformed, count-mismatched,
-out-of-range, or content-mismatched hunks with
+the respective deletion/context and addition/context body counts. For a
+positive new count, require `new_start >= 1` and
+`new_start + new_count - 1 <= line_count`; compare the ordered context plus
+added lines against that exact inclusive current-source range. For a zero new
+count, require `0 <= new_start <= line_count` and compare the empty new-side
+body against the empty boundary after `new_start` lines; do not require a zero
+start because a zero-count deletion can occur within a current file. For a
+deleted row only, use its already specified empty byte string as the new-side
+comparison source while still requiring the current path to be absent. Require
+`old_start >= 1` for a positive old count and `old_start >= 0` for a zero old
+count; a zero-count insertion may have a nonzero old start. Include
+`\ No newline at end of file` semantics in the exact comparison. Reject
+malformed, count-mismatched, out-of-range, or content-mismatched hunks with
 `EvidenceError("invalid unified hunk")`. Implement only this bounded
 unified-text validator; do not add a general patch-application engine.
 
@@ -689,13 +702,15 @@ path is invalid.
   `observation_line=None` plus empty observation text only when the validator
   proves that condition. Deleted paths require no current-source observation,
   symbol, or line evidence.
-- For a changed current source with at least one line outside the validated
-  new-side ranges of its canonical patch hunks, require `observation_line` to
-  name an outside-hunk line. Parse those ranges from the digest-bound patch
-  artifacts; do not add another index field. If the validated hunks cover
-  every current line, admit a patch-derived observation because the patch
-  already contains the complete current source. This is the only changed-path
-  anti-echo exception.
+- For a changed current source with at least one non-whitespace character and
+  at least one line outside the validated new-side ranges of its canonical
+  patch hunks, require `observation_line` to name an outside-hunk line. The
+  validator-proven whitespace-only exception takes precedence and retains
+  `observation_line=None`. Parse ranges from the digest-bound patch artifacts;
+  do not add another index field. If the validated hunks cover every current
+  line, admit a patch-derived observation because the patch already contains
+  the complete current source. This is the only changed-path anti-echo
+  exception.
 - Every finding location is an exact review-relative `path:positive-line`.
   Admit only a current closure path or
   `change-evidence/patches/<group-id>/<patch-id>.patch`, re-open it without
@@ -809,7 +824,8 @@ Implement these named tests with `evidence_fixture` and require
 - `test_empty_source_observation_exception_is_narrow`: admit empty observation
   only for validator-proven empty or whitespace-only current source; require
   `line_start=line_end=None` for a zero-byte source but the exact full-file
-  line range for a non-empty whitespace-only source;
+  line range for a non-empty whitespace-only source, including a modified
+  whitespace-only source with a line outside the validated hunk ranges;
 - `test_changed_observation_outside_hunks_is_required`: reject a partial-file
   changed path whose observation line is inside a visible patch hunk;
 - `test_full_file_hunks_allow_patch_derived_observation`: admit an observation
@@ -1420,7 +1436,7 @@ git commit -m "refactor: use native repair children"
 
 **Files:**
 - Modify: `bin/_common.py:398-406`
-- Modify: `scripts/bootstrap.sh:16-142,540-650,1086-1935,2180-2243`
+- Modify: `scripts/bootstrap.sh:16-142,540-650,1086-1935,2146-2243`
 - Modify: `bin/bootstrap_repair.py:23-43,652-772,1411-1520,1760-1835,2163-2245`
 - Modify: `migration/AGENTS.recommended.md`
 - Modify: `tests/test_bootstrap.py`
@@ -1574,7 +1590,7 @@ git commit -m "refactor: remove plugin permission policy"
 - Modify: `skills/triad-claude-dispatch/SKILL.md`
 - Modify: `skills/triad-antigravity-dispatch/SKILL.md`
 - Modify: `skills/triad-gemini-dispatch/SKILL.md`
-- Modify when stale: `skills/*/agents/openai.yaml`
+- Inspect unchanged: `skills/*/agents/openai.yaml`
 - Modify: `tests/test_distribution_contract.py`
 
 **Interfaces:**
@@ -1724,14 +1740,23 @@ leg is invalid and, because it is post-dispatch, cannot trigger Gemini fallback
 in the same round. Keep Gemini fallback eligible only for the exact
 no-final-summary `EXIT_BINARY_MISSING` plus wrapper-owned pre-submission
 `PtyStartError` diagnostic defined in Task 3. Any final summary is
-post-dispatch and fallback-ineligible. Remove stale
+post-dispatch and fallback-ineligible. For a formal round, require separate
+owner authorization for the exact Gemini route, provider, data boundary, and
+objective, then retain the same immutable prepared directory,
+prompt-controlled no-edit contract, digest/mutation invalidation, and strict
+result admission. Remove the retired exact-route read-only-denial proof as an
+owner-visible native-permission relaxation; do not replace it with a new
+enforcement probe. Remove stale
 `phase=pre-dispatch-settings`, `dispatch-uncertain`, and
 `post-dispatch-cleanup` eligibility language without adding a detector or
 restoring a TRIAD-installed read-only policy, bypass, or provider substitution.
 
 - [ ] **Step 4: Validate metadata and run skill/prompt lint**
 
-Regenerate `agents/openai.yaml` only if the default prompt no longer matches the skill. Run the skill validator and prompt linter from the login-shell Python environment:
+Verify that the four current provider-neutral `agents/openai.yaml` prompts
+still delegate result-profile details to their skills and leave their bytes
+unchanged. Run the skill validator and prompt linter from the login-shell
+Python environment:
 
 ```bash
 /bin/zsh -lic 'python3 /Users/chaniri/.codex/skills/.system/skill-creator/scripts/quick_validate.py /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/skills/triad-cross-family-review'
@@ -1775,6 +1800,18 @@ Additionally:
   the exact no-summary exit-4/diagnostic proof, reject every final-summary
   result, and remove the retired phase taxonomy from both provider skills,
   reviewer routing, and public docs;
+- rewrite
+  `test_gemini_formal_fallback_requires_separate_exact_route_enforcement_proof`
+  to preserve pre-dispatch AGY-unavailability, separate owner authorization,
+  exact-route/data-boundary, unavailable-leg, and invalid-round assertions
+  while replacing only the retired read-only-policy denial proof with the
+  immutable-directory, prompt/no-edit, digest/mutation, and strict-admission
+  contract;
+- rewrite
+  `test_task_2b_routing_reference_keeps_routes_and_outcomes_without_git_protocol`
+  to preserve route, availability, no-substitution, `CONFLICTED`, and owner
+  adjudication assertions while removing only the retired Codex
+  approval/profile configuration assertions;
 - rewrite `test_agy_truncated_answer_is_terminal_without_repair_or_provider_switch`
   to retain every truncated-answer terminality assertion while removing only
   the retired `--sandbox read-only` requirement; and
@@ -1805,13 +1842,9 @@ git add \
   skills/triad-cross-family-review/references/review-prompt-contract.md \
   skills/triad-cross-family-review/references/reviewer-routing.md \
   skills/triad-cross-family-review/references/fresh-codex-formal-review.md \
-  skills/triad-cross-family-review/agents/openai.yaml \
   skills/triad-claude-dispatch/SKILL.md \
-  skills/triad-claude-dispatch/agents/openai.yaml \
   skills/triad-antigravity-dispatch/SKILL.md \
-  skills/triad-antigravity-dispatch/agents/openai.yaml \
   skills/triad-gemini-dispatch/SKILL.md \
-  skills/triad-gemini-dispatch/agents/openai.yaml \
   tests/test_distribution_contract.py
 git commit -m "feat: require full-coverage triad review"
 ```
@@ -2000,7 +2033,9 @@ reports `permission-unavailable`, stop the formal gate and report the required
 user/project permission decision. This is post-dispatch and cannot activate
 Gemini fallback in the same round; do not insert a bypass or count a different
 family twice. A separately authorized Gemini formal fallback remains limited
-to proven pre-dispatch AGY unavailability.
+to the exact proven pre-dispatch AGY-unavailability signal and must retain the
+same prepared-directory, prompt/no-edit, digest/mutation, and admission
+contracts.
 
 Expected: three valid family coverages, no unresolved path, identical pre/post
 candidate digest, identical pre/post canonical-worktree fingerprint, and either

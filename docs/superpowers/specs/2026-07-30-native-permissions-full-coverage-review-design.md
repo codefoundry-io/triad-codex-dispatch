@@ -212,11 +212,18 @@ finding-location surface.
 
 For every textual hunk, preparation and validation parse the complete unified
 hunk header and body. Header old/new counts must equal the respective body
-line counts; the new-side range must be in bounds; and the ordered context plus
-added lines, including the no-final-newline marker semantics, must equal the
-same range in the digest-bound current UTF-8 source. A malformed,
-count-mismatched, out-of-range, or content-mismatched hunk is invalid. This is
-the bounded supported unified-text format, not a general patch engine.
+line counts. A positive new count uses the inclusive current-source range
+`new_start..new_start + new_count - 1`; it must start at one or later and end
+within `line_count`. A zero new count uses a valid empty boundary
+`0 <= new_start <= line_count`; it does not require `new_start == 0`. The
+ordered context plus added lines, including the no-final-newline marker
+semantics, must equal that exact current-source slice. For a deleted row only,
+the new-side comparison source is the already specified empty byte string
+while the current path must remain absent. Old-side starts are positive for a
+positive count and non-negative for a zero count, because a zero-count
+insertion may occur after any old-side line. A malformed, count-mismatched,
+out-of-range, or content-mismatched hunk is invalid. This is the bounded
+supported unified-text format, not a general patch engine.
 
 `IMPACT_CLOSURE.tsv` is also normative. It contains one row per affected
 production source, with this exact header and column order:
@@ -354,12 +361,12 @@ family
 batch_id
 source_tree_digest
 change_evidence_digest
+verdict
 path_evidence
 findings
 affected_surfaces_inspected
 unresolved_paths
 open_questions
-verdict
 ```
 
 `path_evidence` is not a list of manifest paths. Every affected source path has
@@ -378,10 +385,12 @@ has no non-whitespace character. A zero-byte current source uses
 `line_start=line_end=None`. Deleted paths retain patch evidence but require no
 current-source observation or line range.
 
-For a changed current source with at least one current line outside all
-validated new-side hunk ranges, `observation_line` must name one of those
-outside-hunk lines. If the canonical patch hunks cover every current line, the
-patch artifact already contains the complete current source and a
+For a changed current source containing at least one non-whitespace character
+and at least one current line outside all validated new-side hunk ranges,
+`observation_line` must name one of those outside-hunk lines. The
+validator-proven whitespace-only exception takes precedence and keeps
+`observation_line=None`. If the canonical patch hunks cover every current line,
+the patch artifact already contains the complete current source and a
 patch-derivable observation is allowed. This exception is explicit evidence
 that the whole source was present in the patch, not a claim that patch-only
 inspection generally proves full-file review. A receipt built only by echoing
@@ -575,8 +584,13 @@ fallback remains eligible only when the wrapper exits without a final summary
 using `EXIT_BINARY_MISSING` and emits its exact pre-submission
 `PtyStartError(stage=exec, errno in the supported missing/unstartable set)`
 diagnostic. Any emitted final summary is post-dispatch and
-fallback-ineligible. Native owner/project permissions govern both routes, not a
-TRIAD-installed read-only policy.
+fallback-ineligible. For a formal round, that same proof permits Gemini only
+when the owner separately authorizes the exact Gemini route, provider, data
+boundary, and objective for the new round. The immutable prepared directory,
+prompt-controlled no-edit contract, digest/mutation invalidation, and strict
+result admission remain mandatory; retired read-only-policy denial evidence is
+not replaced by a new enforcement probe. Native owner/project permissions
+govern both routes, not a TRIAD-installed read-only policy.
 
 ## Verification strategy
 
@@ -615,6 +629,9 @@ Implementation follows test-driven development.
 - RED: malformed, count-mismatched, out-of-range, or current-source-mismatched
   unified-text hunks are rejected before their ranges can enable the
   full-file-hunk observation exception.
+- GREEN: added/deleted file headers and zero-count insertion/deletion headers
+  use valid empty-boundary semantics without requiring a zero start for every
+  zero count.
 - RED: an external, alternate, or symlinked evidence directory is rejected by
   preparation, validation, and admission.
 - RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
@@ -626,7 +643,7 @@ Implementation follows test-driven development.
   patch-derived observation exception is admitted.
 - GREEN: a validator-proven zero-byte current source uses no line range or
   observation, while a non-empty whitespace-only source still carries its
-  complete line range.
+  complete line range and remains exempt from the outside-hunk observation.
 - GREEN: terminated, unterminated, newline-only, and zero-byte UTF-8 sources
   share the exact `len(text.splitlines())` line-count convention.
 - RED: `finding`, `no-finding`, and `unresolved` dispositions that contradict
