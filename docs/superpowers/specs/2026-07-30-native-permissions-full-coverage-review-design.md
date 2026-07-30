@@ -92,11 +92,11 @@ permission-mode synthesis path. They never add yolo, bypass, accept-edits,
 dont-ask, or equivalent controls. The CLI's native user/project settings decide
 whether a tool call is allowed, denied, or requires interaction.
 
-If a non-interactive provider cannot obtain a native permission, the wrapper
-returns a distinct permission-unavailable terminal result. It includes the
-provider's bounded diagnostic and does not reinterpret the result as
-authentication failure, retry it with broader authority, or admit it as a
-review verdict.
+The empirically observed native AGY headless denial returns the distinct
+`permission-unavailable` terminal result. It retains AGY's bounded diagnostic
+and is not reinterpreted as authentication failure, retried with broader
+authority, or admitted as a review verdict. This design does not add message
+detectors for Claude or Gemini without current evidence.
 
 ### Boundaries retained
 
@@ -129,6 +129,7 @@ review-root/
 └── change-evidence/
     ├── CHANGESET.md
     ├── IMPACT_CLOSURE.tsv
+    ├── PATCH_INDEX.tsv
     ├── MANIFEST.sha256
     ├── patches/
     │   └── <group>/<file-or-hunk>.patch
@@ -149,11 +150,38 @@ SOURCE_TREE_DIGEST=<sha256>
 CHANGE_EVIDENCE_DIGEST=<sha256>
 ```
 
-`IMPACT_CLOSURE.tsv` contains one row per affected production source:
+`PATCH_INDEX.tsv` is normative. It contains one row for each canonical patch
+receipt, with this exact header and column order:
 
 ```text
-path	reason	reached_from	content_sha256	batch_id
+patch_id	group_id	section_ordinal	hunk_ordinal	change_kind	previous_path	path	sha256	byte_count
 ```
+
+`patch_id` is the canonical receipt identifier. A file section without a
+textual hunk has one file-level `patch_id`; use `-` for its `hunk_ordinal`.
+Use `-` for an absent `previous_path`. The allowed `change_kind` values are
+exactly `modified`, `added`, `deleted`, `renamed`, and `affected-unchanged`.
+
+`IMPACT_CLOSURE.tsv` is also normative. It contains one row per affected
+production source, with this exact header and column order:
+
+```text
+path	reason	reached_from	change_kind	previous_path	content_sha256	byte_count	line_count	impact_edge_id	batch_id
+```
+
+`ImpactRow` therefore includes `change_kind`, `previous_path`, `line_count`,
+and `impact_edge_id` in addition to the existing path, reason, reachability,
+digest, byte-count, and batch fields. Changed rows use `impact_edge_id=-`.
+For an `affected-unchanged` row, derive `impact_edge_id` deterministically from
+the exact UTF-8 bytes of `path`, `reason`, and `reached_from`.
+
+For a deleted path, no current source file is permitted: record the SHA-256 of
+empty bytes, `byte_count=0`, `line_count=0`, its old path in `previous_path`,
+and its exact patch IDs. It needs exact patch evidence but no current
+symbol/line evidence. For a renamed path, `previous_path` is the old path, the
+new current source is required, and the rename/file-level patch ID is bound.
+For modified and added rows, `previous_path=-` unless the diff explicitly
+describes a rename.
 
 Reasons use a small stable vocabulary:
 
@@ -174,8 +202,9 @@ Reasons use a small stable vocabulary:
 The vocabulary records why a path is present. It does not attempt to implement
 a universal static analyzer.
 
-Each batch manifest lists the affected source paths, their complete patch-shard
-set where applicable, content digests, and source byte counts. A large source
+Each batch manifest lists the affected source paths, their complete canonical
+`patch_id` set where applicable, content digests, byte counts, and line counts.
+A large source
 file may be split at deterministic symbol boundaries, but all of that file's
 source shards remain in the batch set. Batching never samples lines or omits
 low-risk files.
@@ -198,6 +227,15 @@ The leader performs these bounded preparation actions:
 7. Partition the complete closure deterministically by size and semantic
    boundaries.
 8. Record the source-tree and change-evidence digests before dispatch.
+
+`prepare_review_evidence` and `validate_review_evidence` fail when a parsed
+diff target lacks a `reason=changed` closure row or when a changed closure row
+lacks a diff section. They also reject NUL, LF, CR, and TAB in `path` and
+`reached_from` before TSV emission. Git-quoted diff fields are decoded only far
+enough to detect and reject those controls; no reversible generic field codec
+is introduced. Spaces, quotes, backticks, and literal `$()` remain inert data
+and execute nothing. This intentional `0.2.532` input limit never silently
+omits a path or admits partial coverage.
 
 The implementation supplies deterministic inventory, manifest, digest, and
 batching utilities. It does not claim language-independent impact discovery.
@@ -224,16 +262,32 @@ complete current production file and verifies the recorded impact edge. A
 family may process deterministic batches in separate fresh contexts, but its
 family result is incomplete until every batch has a valid receipt.
 
-Each batch receipt contains:
+The following is the one normative receipt schema in both the design and the
+implementation plan. Each provider prompt returns exactly one strict
+`BatchReceipt` JSON document per batch:
 
 ```text
+PathEvidence:
+  path
+  content_sha256
+  line_start
+  line_end
+  symbols
+  changed_hunks
+  verified_impact_edges
+  disposition
+
+BatchReceipt:
+family
 batch_id
 source_tree_digest
 change_evidence_digest
 path_evidence
-verified_impact_edges
 findings
+affected_surfaces_inspected
 unresolved_paths
+open_questions
+verdict
 ```
 
 `path_evidence` is not a list of manifest paths. Every affected source path has
@@ -242,9 +296,20 @@ line range, every changed hunk or recorded impact edge relevant to that path,
 and the reviewer's disposition. A path echoed from the manifest without this
 source-grounded evidence is uncovered.
 
-The family-level result contains the ordered batch-receipt digests, complete
-affected-path coverage, consolidated findings, unresolved questions, and the
-normal result-profile fields.
+`PathEvidence` retains per-path `changed_hunks` and
+`verified_impact_edges`; there is no redundant top-level
+`verified_impact_edges` promise. Each receipt's `changed_hunks` set must
+exactly equal the canonical `patch_id` set for its path. Each receipt's
+`verified_impact_edges` set must exactly equal the expected `impact_edge_id`
+set. Omitted, extra, duplicated, and forged IDs are invalid.
+
+`FamilyCoverage` retains ordered receipt digests, covered paths, consolidated
+findings, unresolved paths/questions, affected surfaces, and a verdict. The
+leader persists the exact UTF-8 response bytes under a family/batch-specific
+result path and passes those paths to `validate_family_receipts`. A Markdown
+fence, prose wrapper, missing field, or family/batch mismatch is invalid.
+Fresh Codex terminal text follows the same custody rule; this is operational
+custody, not a new wrapper responsibility.
 
 Provider-native file-read telemetry is retained and digest-bound when the
 provider exposes it. When a provider does not expose such telemetry, coverage
@@ -269,6 +334,13 @@ A formal result is admissible only when:
 - the leader independently reproduces material caller, consumer, schema,
   configuration, and build relationships; and
 - the existing finding, severity, evidence, and verdict contract passes.
+
+`SAFE` is impossible when findings include Critical or Major, any receipt is
+`NOT-SAFE`, or any unresolved path or open question exists. For current source,
+`line_start` and `line_end` must satisfy
+`line_start <= line_end <= ImpactRow.line_count`; deleted rows require no
+symbol/line evidence. No review-root parameter is introduced merely to make
+that check.
 
 If any family discovers an affected source path that is absent from
 `IMPACT_CLOSURE.tsv`, the leader expands the closure and invalidates the round.
@@ -344,8 +416,11 @@ The round stops or becomes invalid on:
 - provider route or result-profile mismatch; or
 - semantically incomplete findings or verdicts.
 
-Permission denial, authentication failure, capacity failure, extraction
-failure, and review finding remain distinct terminal classifications.
+The observed native AGY headless permission denial, authentication failure,
+capacity failure, extraction failure, and review finding remain distinct
+terminal classifications. A required leg denied by native permissions is
+invalid; native owner/project permissions govern AGY and any separately
+authorized Google fallback, not a TRIAD-installed read-only policy.
 
 ## Verification strategy
 
@@ -361,8 +436,9 @@ Implementation follows test-driven development.
   plugin-owned sandbox policy.
 - GREEN: install and cleanup preserve owner settings while eliminating exact
   plugin-owned permission-controller artifacts.
-- GREEN: native permission denial returns the new terminal classification
-  without a broader retry.
+- GREEN: the observed native AGY headless denial returns the new terminal
+  classification without a broader retry; `_common.py` documents
+  `permission-unavailable` as its classification source.
 - GREEN: fresh Codex behavior proof observes parent-mode inheritance.
 
 ### Evidence RED/GREEN tests
@@ -372,10 +448,14 @@ Implementation follows test-driven development.
 - GREEN: named fields are required and validated.
 - GREEN: 1,200 synthetic patch shards and a roughly ten-megabyte diff produce
   deterministic indexes, batches, and manifests.
-- GREEN: paths containing spaces, quotes, newlines, and `$()` remain data and
-  execute nothing.
+- GREEN: paths containing spaces, quotes, backticks, and literal `$()` remain
+  data and execute nothing; newline and tab pathnames fail closed.
 - GREEN: every changed and affected path appears once in the closure and in
   every family coverage set.
+- RED: a missing diff row, a missing changed closure row, or deletion/rename
+  evidence mismatch is rejected.
+- RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
+  are rejected.
 - GREEN: an echoed path without source-grounded symbol/line and hunk/edge
   evidence is rejected as uncovered.
 - GREEN: a missing path, missing batch, digest mismatch, or newly discovered
