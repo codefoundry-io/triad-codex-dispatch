@@ -112,7 +112,7 @@ not a viable common requirement.
 
 ### Plugin-owned permission-controller retirement
 
-- Modify `bin/bootstrap_repair.py:16-50,97-123,1760-1835,1969-2245`: retain exact removal and generic transaction helpers; retire repair-agent and shell-entry installation/registration.
+- Modify `bin/bootstrap_repair.py:16-50,97-123,652-772,1411-1704,1760-1857,1969-2245`: retain exact removal and generic transaction helpers; retire repair-agent, installed apply-launcher, profile/rule/config-fragment creation, and shell-entry installation/registration.
 - Modify `scripts/bootstrap.sh:16-142,381-428,540-838,1086-2243`: install wrapper launchers only, clean exact legacy artifacts, delete the shell-entry preflight/install surface, and stop generating Codex permission state.
 - Modify `bin/apply_patch.py:1-9`: describe the proposal-only native child rather than the retired Custom Agent.
 - Delete `agents/triad-repair-analyzer.toml`.
@@ -233,17 +233,20 @@ canonical review root and parent, create only that exact absent output leaf,
 and reject an existing symlink or non-directory. Validation and admission
 recheck the same equality before reading evidence.
 
-- CLI:
+- CLI: resolve `toolkit_root` once as the canonical absolute root that owns the
+  selected local or installed `triad-cross-family-review` skill, and replace
+  `/absolute/toolkit-root` below with that exact value. Never resolve these
+  modules relative to the developer worktree cwd.
 
 ```text
-python3 bin/review_evidence.py prepare \
+python3 /absolute/toolkit-root/bin/review_evidence.py prepare \
   --review-root /absolute/project/worktree/_runs/reviews/<id>/prepared \
   --diff-file /absolute/project/worktree/_runs/reviews/<id>/candidate.diff \
   --impact-input /absolute/project/worktree/_runs/reviews/<id>/impact-closure.tsv \
   --output-dir /absolute/project/worktree/_runs/reviews/<id>/prepared/change-evidence \
   --batch-byte-limit 262144
 
-python3 bin/review_evidence.py validate \
+python3 /absolute/toolkit-root/bin/review_evidence.py validate \
   --review-root /absolute/project/worktree/_runs/reviews/<id>/prepared \
   --evidence-dir /absolute/project/worktree/_runs/reviews/<id>/prepared/change-evidence
 ```
@@ -296,6 +299,7 @@ python3 bin/review_evidence.py validate \
 Run from `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability`:
 
 ```bash
+set -eu
 triad_planning_branch="$(git branch --show-current)"
 triad_planning_head="$(git rev-parse HEAD)"
 test "$triad_planning_branch" = "release/0.2.530"
@@ -466,9 +470,11 @@ Implement the following additional named tests in the same file:
   context/added body mismatch, and incorrect no-final-newline marker with
   stable `EvidenceError("invalid unified hunk")`; admit added
   `@@ -0,0 +1,N @@`, deleted `@@ -1,N +0,0 @@`, and nonzero-start
-  zero-count insertion/deletion headers; include 99 one-hunk sections followed
-  by one two-hunk section and assert both hunks remain in `group-0001`,
-  `DIFF_FILE_SECTION_COUNT=100`, and `PATCH_FILE_COUNT=101`.
+  zero-count insertion/deletion headers; admit and byte-preserve a standard
+  optional section/function heading after the closing `@@`; include 99
+  one-hunk sections followed by one two-hunk section and assert both hunks
+  remain in `group-0001`, `DIFF_FILE_SECTION_COUNT=100`, and
+  `PATCH_FILE_COUNT=101`.
 
 - [ ] **Step 3: Run the evidence tests to verify RED**
 
@@ -534,8 +540,11 @@ literal `$()` remain data and execute nothing. This is an intentional
 
 For each supported textual hunk, parse the complete
 `@@ -old_start,old_count +new_start,new_count @@` form (including the
-single-line omitted-count shorthand). Require header old/new counts to equal
-the respective deletion/context and addition/context body counts. For a
+single-line omitted-count shorthand). Accept the standard optional text after
+the closing `@@` as an opaque section/function heading. Preserve its exact
+bytes in the shard, but do not interpret it or include it in range/body
+counts. Require header old/new counts to equal the respective
+deletion/context and addition/context body counts. For a
 positive new count, require `new_start >= 1` and
 `new_start + new_count - 1 <= line_count`; compare the ordered context plus
 added lines against that exact inclusive current-source range. For a zero new
@@ -660,7 +669,7 @@ def admit_full_coverage(
 - Operational CLI:
 
 ```text
-python3 bin/review_coverage.py admit \
+python3 /absolute/toolkit-root/bin/review_coverage.py admit \
   --review-root /absolute/project/worktree/_runs/reviews/<id>/prepared \
   --evidence-dir /absolute/project/worktree/_runs/reviews/<id>/prepared/change-evidence \
   --receipts-root /absolute/project/worktree/_runs/reviews/<id>/results \
@@ -915,7 +924,7 @@ git commit -m "feat: require full-family source coverage"
 ### Task 3: Native AGY Permissions and Fail-Closed Denial
 
 **Files:**
-- Modify: `bin/_common.py:55-87,296-297,2492-2497`
+- Modify: `bin/_common.py:55-87,296-297,2492-2542`
 - Modify: `bin/antigravity_wrapper.py:1-60,107-134,209-301,304-506,518-790`
 - Modify: `tests/test_antigravity_packet_context.py`
 - Modify: `tests/test_distribution_contract.py`
@@ -927,6 +936,10 @@ git commit -m "feat: require full-family source coverage"
 - `_build_cmd(prompt, sentinel, model, timeout, *, effort=None, pydantic=False) -> list[str]`
 - `_is_headless_softdeny(text: str) -> bool` remains the exact empirical detector.
 - `map_classification_to_exit("permission-unavailable") == EXIT_TERMINAL`.
+- The exact post-change preflight receipt keys are `provider_started`,
+  `dispatch_phase`, `model`, `effort`, `pydantic`, `sealed_packet_root`,
+  `expected_packet_sha256`, `route_args`, and `timeout`. Permission inheritance
+  is the absence of permission-control fields, not a new receipt key.
 
 - [ ] **Step 1: Replace the auto-approve regression with failing native-mode tests**
 
@@ -966,6 +979,8 @@ def test_native_headless_permission_denial_is_terminal_without_retry(
     assert "--sandbox" not in calls[0]
     assert result.classification == "permission-unavailable"
     assert result.exit_code == wrapper._common.EXIT_TERMINAL
+    assert "permission-unavailable" not in wrapper._common.CLASSIFICATION_TOKENS
+    assert "permission-unavailable" not in wrapper._common.REPAIR_CLASSIFICATION_TOKENS
 
 
 def test_route_builder_contains_only_selector_and_effort() -> None:
@@ -992,11 +1007,12 @@ their schema/custody assertions while using `post-dispatch-result`.
 
 Update all three existing preflight tests that assert sandbox,
 `skip_permissions`, or the old `_build_route_args` arity so their expected
-preflight receipt has only the post-change fields: selector/model, optional
-effort, native permission inheritance, and `permission-unavailable` terminal
-classification. Patch the transcript extractor mock with the current helper
-signature exactly as the surrounding tests do. Update the `_common.py`
-classification-source comment when adding `permission-unavailable`. Rewrite
+preflight receipt has exactly the nine keys listed in the Task 3 interface,
+with selector/model and optional effort carried by `route_args` and no
+`sandbox`, `skip_permissions`, or invented permission/classification key.
+Patch the transcript extractor mock with the current helper signature exactly
+as the surrounding tests do. Update the `_common.py` classification-source
+comment when adding `permission-unavailable`. Rewrite
 `test_formal_review_uses_owner_routing_baseline_and_bounded_escalation` so its
 wrapper-source assertion expects `_build_route_args(model, effort)` and retains
 all unrelated routing assertions.
@@ -1035,6 +1051,12 @@ if _is_headless_softdeny(scrubbed):
 ```
 
 Add `"permission-unavailable": EXIT_TERMINAL` to `map_classification_to_exit`.
+Do not add it to `CLASSIFICATION_TOKENS` or
+`REPAIR_CLASSIFICATION_TOKENS`: like `vendor-error` and
+`truncated-answer`, it is emitted directly by the AGY driver and is never a
+classifier-repair target. Extend the nearby exception comment and retain the
+focused non-membership assertions from Step 1. Remove the now-unused
+`subprocess` import together with `_agy_needs_skip_permissions`.
 Remove only the `_agy_settings.agy_settings_guard(...)` lease, the
 `pre-dispatch-settings` / `dispatch-uncertain` / `post-dispatch-cleanup` phase
 assignments, and the settings-release suppression clause. Call
@@ -1244,7 +1266,7 @@ git commit -m "fix: inherit native provider permissions"
 - Modify: `docs/references/repair-protocol.md`
 - Modify: `bin/apply_patch.py:1-9`
 - Modify: `bin/antigravity_wrapper.py:347,746`
-- Modify: `bin/bootstrap_repair.py:16-50,97-123,1969-2245`
+- Modify: `bin/bootstrap_repair.py:16-50,97-123,1838-1857,1969-2245`
 - Modify: `scripts/bootstrap.sh:381-428,650-838,1908-2145,2180-2243`
 - Modify: `tests/test_bootstrap.py`
 - Modify: `tests/test_bootstrap_repair_transaction.py`
@@ -1327,9 +1349,11 @@ def test_install_removes_only_exact_legacy_repair_agent_artifacts(
 Use the production ownership parser for the registration block and the
 production marker constants. The test's five-line launcher is the legacy
 managed form already accepted by `launcher_is_managed`. Parameterize the test
-over that five-line legacy form and the current seven-line pinned form emitted
-by `bootstrap_repair.launcher_text`, so the actual `0.2.531 -> 0.2.532`
-upgrade is covered. Do not add a second removal predicate.
+over that five-line legacy form and a frozen exact fixture of the current
+seven-line pinned form before deleting `bootstrap_repair.launcher_text`, so
+the actual `0.2.531 -> 0.2.532` upgrade is covered without retaining a
+production launcher generator solely for a test. Do not add a second removal
+predicate.
 
 Rewrite the existing
 `test_repair_handoff_uses_one_json_input_envelope_and_valid_output_examples`
@@ -1387,6 +1411,13 @@ owner_argv = [
 ]
 ```
 
+Preserve the existing collision-resistant task-label contract asserted by
+`test_documented_native_task_names_match_the_callable_schema`: keep
+`from secrets import token_hex`,
+`task_name=f"repair_analyzer_{token_hex(8)}"`, and the retry-with-new-suffix
+wording while removing only the retired `agent_type` and pinned read-only
+agent claims.
+
 Update `bin/apply_patch.py`'s module docstring to describe the proposal-only
 native child, and update both AGY runtime comments at the retry driver and
 result-custody path so neither claims a shipped read-only analyzer exists.
@@ -1395,7 +1426,11 @@ behavior.
 
 - [ ] **Step 4: Make bootstrap repair-agent support remove-only**
 
-Remove `install`, `preflight-install`, analyzer source validation, analyzer registration creation, and installed apply-launcher creation from `bin/bootstrap_repair.py`. Retain the exact managed `remove` path and generic transaction helpers required to clean old installations.
+Remove `install`, `preflight-install`, analyzer source validation, analyzer
+registration creation, `launcher_text`, and installed apply-launcher creation
+from `bin/bootstrap_repair.py`. Retain the exact managed `remove` path,
+`launcher_is_managed`, and generic transaction helpers required to clean old
+installations.
 
 Change `scripts/bootstrap.sh --install` to invoke exact repair cleanup before installing wrapper launchers. A foreign registration, analyzer, or launcher is reported and preserved. Delete the shipped analyzer TOML.
 
@@ -1415,11 +1450,16 @@ the owner-controlled proposal/no-provider-invocation assertions without the
 retired agent phrase. Update `_make_repo_root` and related bootstrap fixtures
 so deleting the shipped analyzer and the migration requirements template does
 not leave a fixture-generated stale file.
+Rewrite the two current `tests/test_bootstrap.py` users of
+`bootstrap_repair.launcher_text` to use the frozen five-line/seven-line managed
+launcher fixtures above. Preserve
+`test_documented_native_task_names_match_the_callable_schema` as specified in
+Step 3.
 
 Run:
 
 ```bash
-/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py workspace/triad-codex-dispatch-reliability/tests/test_bootstrap_repair_transaction.py workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k "repair or analyzer or bootstrap_repair"'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py workspace/triad-codex-dispatch-reliability/tests/test_bootstrap_repair_transaction.py workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k "repair or analyzer or bootstrap_repair or documented_native_task_names"'
 ```
 
 Expected: selected tests pass and no shipped/installed read-only repair agent remains.
@@ -1437,7 +1477,7 @@ git commit -m "refactor: use native repair children"
 **Files:**
 - Modify: `bin/_common.py:398-406`
 - Modify: `scripts/bootstrap.sh:16-142,540-650,1086-1935,2146-2243`
-- Modify: `bin/bootstrap_repair.py:23-43,652-772,1411-1520,1760-1835,2163-2245`
+- Modify: `bin/bootstrap_repair.py:23-43,652-772,1411-1704,1760-1835,2163-2245`
 - Modify: `migration/AGENTS.recommended.md`
 - Modify: `tests/test_bootstrap.py`
 - Modify: `tests/test_bootstrap_repair_transaction.py`
@@ -1501,12 +1541,27 @@ Expected: default installation creates rules and the migration tests require the
 Delete profile/rules selection, preflight, generation, config-fragment merge,
 requirements guidance, shell-entry installation, and Agent Review/sandbox
 messaging from `scripts/bootstrap.sh`. In `bootstrap_repair.py`, delete
+`preflight_managed_artifact`, `install_managed_artifact`, the
+`managed-artifact` CLI subcommand, `merge_config_fragment`,
+`_publish_config_backup`, the `config-fragment --action merge` choice,
 `preflight_shell_entry`, `_shell_entry_block`, and the install branch of
-`update_shell_entry`; retain only exact ownership inspection/removal needed for
+`update_shell_entry`. Retain `remove_managed_artifact`,
+`remove_config_fragment`, their exact marker/text ownership helpers, and only
+the remove action of the config-fragment/shell-entry CLI surfaces needed for
 upgrade cleanup. Keep exact ownership inspectors/removers in
-`bootstrap_repair.py` only as needed for upgrade cleanup. Preserve the existing
-all-or-nothing command-group staged publication for wrapper launchers;
-repair-agent retirement cannot weaken that transaction boundary.
+`bootstrap_repair.py` only as needed for upgrade cleanup. Preserve the
+existing all-or-nothing command-group staged publication for wrapper
+launchers; repair-agent retirement cannot weaken that transaction boundary.
+
+Delete or rewrite only the
+`tests/test_bootstrap_repair_transaction.py` cases whose contract is
+managed-artifact preflight/install/CLI access or config-fragment merge,
+including the current merge group around lines 1220-1295 and the CLI/rollback
+merge cases around lines 1399-1430 and 1550. Retain direct exact-ownership,
+foreign-preservation, config-fragment removal, rollback, and transaction
+tests. Rewrite current `tests/test_bootstrap.py` merge assertions to exercise
+remove-only upgrade cleanup; no test may retain a production creation helper
+solely to synthesize legacy state.
 
 Remove all `scripts/bootstrap.sh` calls to the deleted
 `preflight_shell_entry` and delete that Bash wrapper function itself
@@ -1685,7 +1740,8 @@ Expected: the full-coverage fields are missing and provider examples still conta
 
 Keep `SKILL.md` as the concise workflow entry point. Move format detail into the existing references. Require:
 
-- leader preparation through `review_evidence.py`;
+- leader preparation through the exact absolute
+  `toolkit_root / "bin" / "review_evidence.py"` path;
 - validation before dispatch;
 - all families over all batches;
 - complete current source for changed and affected unchanged files;
@@ -1694,7 +1750,8 @@ Keep `SKILL.md` as the concise workflow entry point. Move format detail into the
   observation for every non-empty non-deleted path, with the validator-proven
   zero-byte exception stated explicitly;
 - invalidation on newly discovered paths;
-- coverage admission through `review_coverage.py`;
+- coverage admission through the exact absolute
+  `toolkit_root / "bin" / "review_coverage.py"` path;
 - native permission inheritance;
 - `permission-unavailable` as an invalid required leg; and
 - fresh complete reruns after closure changes.
@@ -1711,7 +1768,10 @@ canonical `PATCH_INDEX.tsv` IDs and `verified_impact_edges` to exactly equal
 its expected closure IDs. `SAFE` is impossible for Critical/Major findings,
 any `NOT-SAFE` receipt, unresolved paths, or open questions.
 Require the exact `<family>/<batch-id>.json` receipt tree and admit a formal
-round only through the deterministic `review_coverage.py admit` output.
+round only through the deterministic absolute-toolkit-path
+`review_coverage.py admit` output. Resolve `toolkit_root` from the selected
+local checkout or installed skill package once; do not rely on the caller's
+cwd and do not add a helper or environment policy.
 In `review-prompt-contract.md`, preserve the existing unbatched
 `formal-gate -> verdict, findings, affected_surfaces_inspected, open_questions`
 profile verbatim and add the separately selected batched profile. Do not

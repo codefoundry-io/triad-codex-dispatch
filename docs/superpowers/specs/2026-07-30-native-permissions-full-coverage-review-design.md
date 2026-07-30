@@ -211,8 +211,11 @@ The canonical artifact for each row is
 finding-location surface.
 
 For every textual hunk, preparation and validation parse the complete unified
-hunk header and body. Header old/new counts must equal the respective body
-line counts. A positive new count uses the inclusive current-source range
+hunk header and body. The standard optional text after the closing `@@` is an
+opaque section/function heading: accept and preserve its exact bytes in the
+patch shard, but do not interpret it or include it in range/body counts. Header
+old/new counts must equal the respective body line counts. A positive new count
+uses the inclusive current-source range
 `new_start..new_start + new_count - 1`; it must start at one or later and end
 within `line_count`. A zero new count uses a valid empty boundary
 `0 <= new_start <= line_count`; it does not require `new_start == 0`. The
@@ -632,6 +635,9 @@ Implementation follows test-driven development.
 - GREEN: added/deleted file headers and zero-count insertion/deletion headers
   use valid empty-boundary semantics without requiring a zero start for every
   zero count.
+- GREEN: a standard optional section/function heading after the closing `@@`
+  is accepted and preserved as opaque patch text without changing range/body
+  validation.
 - RED: an external, alternate, or symlinked evidence directory is rejected by
   preparation, validation, and admission.
 - RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
