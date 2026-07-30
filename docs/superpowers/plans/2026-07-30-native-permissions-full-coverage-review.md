@@ -27,6 +27,43 @@
 - Keep legacy packet validation reachable only from its existing explicit compatibility arguments.
 - Use `0.2.532` for release metadata.
 
+## Mandatory Review Gates and Scope Breaker
+
+Before Task 1, run a `formal-gate` plan round with fresh independent Claude,
+Google-family, and Codex legs over one leader-prepared immutable directory.
+Include this executable plan, the approved design, every current production,
+configuration, documentation, migration, skill, bootstrap, and wrapper file
+named in the File Map, plus all repository test source. The exact test-source
+boundary is `no test-source exclusions; all repository test source is
+included`. Every leg receives the same directory, objective, digest, and
+no-edit/no-execution contract. Implementation may begin only after all three
+legs are valid and `SAFE`, with no open question and an unchanged digest.
+
+After all implementation and local verification, but before installation,
+push, PR creation, merge, tag, or release, run a fresh `formal-gate` pre-merge
+round with the same three families and the same exact no-exclusion test-source
+boundary. The candidate contains the complete branch diff, every changed
+production file, every affected unchanged production file, relevant
+configuration/build/documentation, and all repository test source. Every family
+reviews every deterministic batch and every affected source. A candidate-byte,
+closure, or digest change invalidates the round and requires all three fresh
+legs again.
+
+For findings from either formal round or any task review, the root leader first
+reproduces the claim and classifies it:
+
+1. A defect or underspecification inside the approved design permits only the
+   smallest bounded correction and a fresh applicable review.
+2. A design change, generalized abstraction, new validator/protocol/runtime
+   capability, speculative edge-case handler, unrelated cleanup, or broader
+   compatibility surface stops for owner approval before editing.
+
+Reviewer confidence or a `NOT-SAFE` label never authorizes category 2. Do not
+implement a universal impact analyzer, provider permission manager, speculative
+framework, or cleanup outside the File Map merely to satisfy a reviewer. This
+scope breaker governs every implementer, task reviewer, fix round, and final
+review.
+
 ## File Map
 
 ### New focused modules
@@ -1248,7 +1285,7 @@ release notes.
 
 Expected: complete evidence admits, missing evidence fails, no hostile path executes, and the pre/post review-root digest is unchanged.
 
-- [ ] **Step 8: Run the fresh three-family candidate review**
+- [ ] **Step 8: Run the mandatory pre-merge three-family candidate review**
 
 Prepare one immutable candidate directory containing current approved
 production source, configuration, documentation, `change-evidence`, and the

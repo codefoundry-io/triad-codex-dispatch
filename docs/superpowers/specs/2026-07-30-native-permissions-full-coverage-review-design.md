@@ -384,15 +384,34 @@ Implementation follows test-driven development.
 
 ### Quality gates
 
+- a mandatory fresh Claude, Google-family, and Codex formal plan review before
+  implementation begins, over one immutable directory containing the approved
+  design, executable plan, every current production/configuration/documentation
+  file named by that plan, and all repository test source;
 - focused wrapper, distribution, bootstrap, skill, and evidence tests;
 - the complete test suite through the workspace login-shell Python boundary;
 - skill and prompt lint on every changed skill and authored prompt;
 - hostile-input behavior probes;
-- fresh Claude, Google-family, and Codex full-coverage review over one
-  immutable candidate directory;
+- a mandatory fresh Claude, Google-family, and Codex pre-merge full-coverage
+  review over one immutable candidate directory;
 - source/cache hash comparison after installation; and
 - fresh `codex exec --ephemeral` proof that the installed skill catalog exposes
   the new contract.
+
+Both formal rounds use the exact test-source boundary `no test-source
+exclusions; all repository test source is included`. All three legs must be
+valid and `SAFE`, and a changed reviewed byte invalidates the round. The leader
+reproduces every finding and classifies it before any edit:
+
+- a defect or underspecification inside this approved design permits only the
+  smallest bounded correction; or
+- a design change, generalized abstraction, new validator/protocol/runtime
+  capability, speculative edge-case handler, or unrelated cleanup stops for
+  owner approval.
+
+A reviewer finding never authorizes the second category. This classification,
+plus the non-goals below, is the overimplementation breaker for both rounds and
+for every task review between them.
 
 ## Release boundary
 
