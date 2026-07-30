@@ -315,7 +315,12 @@ def test_prepare_rejects_symlinked_affected_source(tmp_path: Path) -> None:
     outside.write_text("secret = True\n", encoding="utf-8")
     (review_root / "linked.py").symlink_to(outside)
     diff_file = tmp_path / "change.diff"
-    diff_file.write_bytes(b"")
+    diff_file.write_text(
+        "diff --git a/linked.py b/linked.py\n"
+        "--- a/linked.py\n+++ b/linked.py\n"
+        "@@ -1 +1 @@\n-secret = False\n+secret = True\n",
+        encoding="utf-8",
+    )
     impact = tmp_path / "impact.tsv"
     impact.write_text(
         "path\treason\treached_from\tchange_kind\tprevious_path\n"
@@ -456,6 +461,7 @@ git commit -m "feat: prepare deterministic review evidence"
 
 **Interfaces:**
 - Consumes: a validated `EvidenceSummary` and JSON batch receipts.
+- Reuses: `FormalFinding` from `bin/triad_formal_review_schema.py`.
 - Produces:
 
 ```python
@@ -478,7 +484,7 @@ class BatchReceipt(BaseModel):
     change_evidence_digest: str
     verdict: Literal["SAFE", "NOT-SAFE"]
     path_evidence: tuple[PathEvidence, ...]
-    findings: tuple[dict[str, object], ...]
+    findings: tuple[FormalFinding, ...]
     affected_surfaces_inspected: tuple[str, ...]
     unresolved_paths: tuple[str, ...]
     open_questions: tuple[str, ...]
@@ -488,7 +494,7 @@ class FamilyCoverage:
     family: str
     receipt_digests: tuple[str, ...]
     covered_paths: tuple[str, ...]
-    consolidated_findings: tuple[dict[str, object], ...]
+    consolidated_findings: tuple[FormalFinding, ...]
     unresolved_paths: tuple[str, ...]
     open_questions: tuple[str, ...]
     affected_surfaces_inspected: tuple[str, ...]
@@ -517,10 +523,11 @@ def admit_full_coverage(
 - An affected unchanged row's `verified_impact_edges` set exactly equals its
   expected `impact_edge_id` set. An omitted, extra, duplicated, or forged ID
   is rejected.
-- `line_start` and `line_end` are both absent or both present. Every path
-  requires a non-empty symbol tuple or a present positive line range satisfying
-  `line_start <= line_end <= ImpactRow.line_count`; deleted paths need no
-  current source symbol/line evidence.
+- `line_start` and `line_end` are both absent or both present. Every
+  non-deleted path requires a positive line range satisfying
+  `line_start <= line_end <= ImpactRow.line_count`; `symbols` are optional
+  annotations and never replace line evidence. Deleted paths need no current
+  source symbol/line evidence.
 - `disposition="unresolved"`, a non-empty `unresolved_paths`, an
   `open_questions` entry, Critical/Major finding, or any `NOT-SAFE` receipt
   blocks admission.
@@ -560,7 +567,7 @@ def test_manifest_path_echo_without_source_grounding_is_rejected(
     )
     with pytest.raises(
         review_coverage.CoverageError,
-        match="source-grounded path evidence",
+        match="positive line range required",
     ):
         review_coverage.validate_family_receipts(
             evidence, "claude", receipts
@@ -590,6 +597,12 @@ Implement these named tests with `evidence_fixture` and require
   IDs and require `changed hunk IDs do not match PATCH_INDEX`;
 - `test_impact_edge_ids_are_exact`: use omitted, extra, duplicated, and forged
   IDs and require `impact edge IDs do not match closure`;
+- `test_symbols_without_line_range_are_rejected`: keep non-empty `symbols` but
+  omit both line fields and require `positive line range required`;
+- `test_line_range_beyond_current_source_is_rejected`: set `line_end` above
+  `ImpactRow.line_count` and require `line range exceeds current source`;
+- `test_malformed_finding_is_rejected`: omit each required `FormalFinding`
+  field in turn and require strict receipt validation failure;
 - `test_unresolved_disposition_is_rejected` -> `unresolved path`;
 - `test_admission_rejects_duplicate_family` -> `duplicate family coverage`;
 - `test_admission_rejects_missing_family` -> `missing family coverage`.
@@ -607,12 +620,15 @@ Expected: collection fails because `review_coverage` does not exist.
 - [ ] **Step 3: Implement strict coverage models and admission**
 
 Create `bin/review_coverage.py`. Validate JSON with Pydantic 2 strict models,
+reuse `FormalFinding` from `triad_formal_review_schema`,
 compute receipt SHA-256 from the original bytes, require exact batch and path
 sets, exact per-path patch and edge sets, and compare every receipt digest with
 `EvidenceSummary`. Raise `CoverageError` on the first deterministic mismatch
-and never coerce strings to numbers. Reject a deleted row with current
-symbol/line requirements, and use `ImpactRow.line_count` rather than adding a
-review-root parameter for line-range validation.
+and never coerce strings to numbers. Require a positive line range for every
+non-deleted row even when symbols are present; symbols remain optional
+annotations. Exempt deleted rows from current symbol/line requirements, and
+use `ImpactRow.line_count` rather than adding a review-root parameter for
+line-range validation.
 
 - [ ] **Step 4: Run focused GREEN tests**
 

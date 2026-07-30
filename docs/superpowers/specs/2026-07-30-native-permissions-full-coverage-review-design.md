@@ -290,11 +290,13 @@ open_questions
 verdict
 ```
 
-`path_evidence` is not a list of manifest paths. Every affected source path has
-one compact record containing its content digest, inspected symbol or positive
-line range, every changed hunk or recorded impact edge relevant to that path,
-and the reviewer's disposition. A path echoed from the manifest without this
-source-grounded evidence is uncovered.
+`path_evidence` is not a list of manifest paths. Every non-deleted affected
+source path has one compact record containing its content digest, a positive
+inspected line range, optional symbol annotations, every changed hunk or
+recorded impact edge relevant to that path, and the reviewer's disposition.
+Deleted paths retain patch evidence but require no current-source line range.
+A path echoed from the manifest without this source-grounded evidence is
+uncovered.
 
 `PathEvidence` retains per-path `changed_hunks` and
 `verified_impact_edges`; there is no redundant top-level
@@ -303,8 +305,11 @@ exactly equal the canonical `patch_id` set for its path. Each receipt's
 `verified_impact_edges` set must exactly equal the expected `impact_edge_id`
 set. Omitted, extra, duplicated, and forged IDs are invalid.
 
-`FamilyCoverage` retains ordered receipt digests, covered paths, consolidated
-findings, unresolved paths/questions, affected surfaces, and a verdict. The
+`BatchReceipt.findings` and `FamilyCoverage.consolidated_findings` use the
+existing strict `FormalFinding` contract; free-form finding dictionaries are
+not admitted. `FamilyCoverage` retains ordered receipt digests, covered paths,
+consolidated findings, unresolved paths/questions, affected surfaces, and a
+verdict. The
 leader persists the exact UTF-8 response bytes under a family/batch-specific
 result path and passes those paths to `validate_family_receipts`. A Markdown
 fence, prose wrapper, missing field, or family/batch mismatch is invalid.
@@ -324,7 +329,7 @@ A formal result is admissible only when:
 
 - every changed file and hunk is covered by every required family;
 - every row in `IMPACT_CLOSURE.tsv` is covered by every required family;
-- every covered path has non-empty, source-grounded `path_evidence`;
+- every non-deleted covered path has a positive, source-grounded line range;
 - every covered path has the expected content digest;
 - every recorded impact edge is either verified or produces an unresolved
   question;
@@ -337,7 +342,8 @@ A formal result is admissible only when:
 
 `SAFE` is impossible when findings include Critical or Major, any receipt is
 `NOT-SAFE`, or any unresolved path or open question exists. For current source,
-`line_start` and `line_end` must satisfy
+optional symbols are annotations only; `line_start` and `line_end` are
+mandatory and must satisfy
 `line_start <= line_end <= ImpactRow.line_count`; deleted rows require no
 symbol/line evidence. No review-root parameter is introduced merely to make
 that check.
