@@ -20,7 +20,7 @@ The expected observation was:
 
 - Claude Sonnet, low effort, authenticated native wrapper route: exact JSON
   returned using provider-native file read.
-- AGY Gemini 3.6 Flash Low, authenticated native route with dangerous
+- AGY `1.1.8`, Gemini 3.6 Flash Low, authenticated native route with dangerous
   auto-approval disabled: exact JSON returned when command execution was
   prohibited and provider-native file read was used.
 - Fresh Codex `gpt-5.6-terra`, low reasoning, `fork_turns="none"`: exact JSON

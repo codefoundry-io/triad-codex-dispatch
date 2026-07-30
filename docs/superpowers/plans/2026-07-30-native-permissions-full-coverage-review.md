@@ -19,9 +19,11 @@
 - Run every direct `python3` command from `/Users/chaniri/codex_workspace` through `/bin/zsh -lic`, after recording `command -v python3`, `python3 --version`, and `python3 -m pytest --version`.
 - Use TDD for every behavior change: run the focused RED test, confirm the expected failure, implement the minimum change, then run focused and neighboring GREEN tests.
 - Every formal-review family covers every deterministic batch. Family perspectives never partition source coverage.
-- A manifest path alone is not coverage. Each non-deleted path requires a
-  validated source observation absent from visible manifests, the exact full-file line
-  range, and changed-hunk or impact-edge disposition.
+- A manifest path alone is not coverage. Each non-empty non-deleted path
+  requires a validated source observation absent from visible manifests, the
+  exact full-file line range, and changed-hunk or impact-edge disposition. A
+  validator-proven zero-byte current source is the only no-range/no-observation
+  exception.
 - TRIAD never adds sandbox, permission-mode, yolo, bypass, accept-edits, auto-edit, dont-ask, or equivalent provider controls.
 - The owner-approved native boundary also removes wrapper-injected Claude tool
   allowlists/settings-source/MCP policy, AGY sandbox selection, Gemini policy,
@@ -36,6 +38,9 @@
 - Exact owner-authored provider settings, Codex approval/reviewer settings, credentials, rules, and unrelated files remain unchanged.
 - Plugin-owned legacy permission artifacts are removed only after exact marker/content ownership validation.
 - Keep legacy packet validation reachable only from its existing explicit compatibility arguments.
+- Keep `FormalReview` normative only for those legacy sealed-packet callers.
+  `BatchReceipt` is normative only for the new batched full-coverage route;
+  neither schema is an alternate admission path for the other.
 - Use `0.2.532` for release metadata.
 
 ## Mandatory Review Gates and Scope Breaker
@@ -93,10 +98,10 @@ not a viable common requirement.
 
 ### Native provider transport
 
-- Modify `bin/_common.py:55-87,296-297,2492-2497`: add the terminal `permission-unavailable` classification and keep custody/source comments current.
+- Modify `bin/_common.py:55-87,296-297,398-406,2492-2497`: add the terminal `permission-unavailable` classification, keep custody/source comments current, and remove the stale legacy shell-entry activation description.
 - Modify `bin/antigravity_wrapper.py:1-60,107-134,209-301,304-506,518-790`: remove sandbox/settings/bypass behavior and classify the observed native denial.
-- Modify `bin/claude_wrapper.py:1-59,80-235`: remove wrapper permission arguments and generated Claude permission flags.
-- Modify `bin/gemini_wrapper.py:1-28,50-182`: remove approval/sandbox policy arguments and generated Gemini permission flags.
+- Modify `bin/claude_wrapper.py:1-235`: remove wrapper permission arguments, their orphaned constants, and generated Claude permission flags.
+- Modify `bin/gemini_wrapper.py:1-182`: remove approval/sandbox policy arguments, orphaned imports, and generated Gemini permission flags.
 - Delete `bin/_agy_settings.py`.
 - Delete `bin/policies/gemini-readonly.toml`.
 - Modify `tests/test_antigravity_packet_context.py`.
@@ -130,6 +135,9 @@ not a viable common requirement.
 - Regenerate or update all four `skills/*/agents/openai.yaml` files only when their default prompts are stale.
 - Modify `docs/references/repair-protocol.md`.
 - Modify `tests/test_distribution_contract.py`.
+- Inspect unchanged `bin/triad_formal_review_schema.py` and
+  `tests/test_formal_review_schema.py` to preserve the legacy sealed-packet
+  `FormalReview` boundary while the new route reuses only `FormalFinding`.
 
 ### Public documentation and release
 
@@ -610,17 +618,27 @@ machine-admissible gate result; prose summaries cannot replace it.
 - Changed, added, deleted, and renamed rows have an empty
   `verified_impact_edges`; affected-unchanged rows have an empty
   `changed_hunks`.
-- Every non-deleted path requires `line_start == 1` and
+- Every non-empty non-deleted path requires `line_start == 1` and
   `line_end == ImpactRow.line_count`; `symbols` are optional annotations and
   never replace full-file evidence. For UTF-8 source with non-whitespace
   content, `observation_line` names a line within the file and
   `source_observation` is a 1-160 character exact substring of that line; when
   the line has at least eight characters the observation has at least eight.
   Observation text is absent from reviewer-visible manifests and is
-  revalidated from `EvidenceSummary.review_root`. Empty or whitespace-only
-  source uses `observation_line=None` and empty observation text only when the
-  validator proves that condition. Deleted paths require no current-source
-  observation, symbol, or line evidence.
+  revalidated from `EvidenceSummary.review_root`. A validator-proven zero-byte
+  current source uses `line_start=line_end=None`,
+  `observation_line=None`, and empty observation text. A non-empty
+  whitespace-only source keeps its exact full-file line range and uses
+  `observation_line=None` plus empty observation text only when the validator
+  proves that condition. Deleted paths require no current-source observation,
+  symbol, or line evidence.
+- For a changed current source with at least one line outside the validated
+  new-side ranges of its canonical patch hunks, require `observation_line` to
+  name an outside-hunk line. Parse those ranges from the digest-bound patch
+  artifacts; do not add another index field. If the validated hunks cover
+  every current line, admit a patch-derived observation because the patch
+  already contains the complete current source. This is the only changed-path
+  anti-echo exception.
 - Every finding location is an exact review-relative `path:positive-line`.
   Admit only a current closure path or
   `change-evidence/patches/<group-id>/<patch-id>.patch`, re-open it without
@@ -632,11 +650,17 @@ machine-admissible gate result; prose summaries cannot replace it.
 - Each provider returns exactly one strict `BatchReceipt` JSON document per
   batch. The leader saves the exact UTF-8 response bytes under a
   family/batch-specific result path and gives those paths to
-  `validate_family_receipts`; Markdown fences, prose wrappers, missing fields,
-  or family/batch mismatch are invalid. Fresh Codex terminal text is persisted
-  under the same rule; no wrapper responsibility is added.
-  Parse exact response bytes with
-  `BatchReceipt.model_validate_json(raw_bytes, strict=True)` so JSON arrays
+  `validate_family_receipts`. Hash the original response bytes for custody.
+  Deterministically accept either raw JSON or exactly one outer Markdown fence
+  with an optional `json` info string, then pass only its inner bytes to strict
+  JSON validation. Trim only outer ASCII whitespace for envelope detection.
+  The opening line is exactly three backticks or three backticks plus `json`,
+  the closing line is exactly three backticks, and the inner payload contains
+  no fence token. Reject leading/trailing prose, nested or multiple fences,
+  missing fields, or family/batch mismatch. Fresh Codex terminal text is
+  persisted under the same rule; no wrapper responsibility is added.
+  Parse the raw-or-unfenced JSON bytes with
+  `BatchReceipt.model_validate_json(json_bytes, strict=True)` so JSON arrays
   use Pydantic's strict JSON path for tuple fields; do not pre-decode into
   strict Python-mode tuple validation. Schema enforcement is offline. A
   malformed receipt invalidates that family and requires its complete fresh
@@ -718,12 +742,24 @@ Implement these named tests with `evidence_fixture` and require
   160 characters, and an under-eight observation when the selected line is at
   least eight characters;
 - `test_empty_source_observation_exception_is_narrow`: admit empty observation
-  only for validator-proven empty or whitespace-only current source;
+  only for validator-proven empty or whitespace-only current source; require
+  `line_start=line_end=None` for a zero-byte source but the exact full-file
+  line range for a non-empty whitespace-only source;
+- `test_changed_observation_outside_hunks_is_required`: reject a partial-file
+  changed path whose observation line is inside a visible patch hunk;
+- `test_full_file_hunks_allow_patch_derived_observation`: admit an observation
+  inside a hunk only when validated new-side hunk ranges cover every current
+  source line;
 - `test_malformed_finding_is_rejected`: omit each required `FormalFinding`
   field in turn and require strict receipt validation failure;
 - `test_strict_json_receipt_accepts_json_arrays_for_tuple_fields`: persist an
   otherwise valid raw JSON receipt and prove `model_validate_json` is the
   parsing path; the validator must not pre-decode it into strict Python mode;
+- `test_single_outer_json_fence_preserves_raw_receipt_digest`: admit one exact
+  outer JSON fence, assert the receipt digest hashes the original fenced bytes,
+  and reject prose wrappers plus nested or multiple fences;
+- `test_deleted_row_requires_patch_only_path_evidence`: include a deleted row
+  in the exact receipt path set with patch IDs and no current-source fields;
 - `test_finding_location_is_source_grounded`: reject malformed, out-of-closure,
   out-of-range, and digest-mismatched source or canonical patch locations;
 - `test_unresolved_disposition_is_rejected` -> `unresolved path`;
@@ -747,16 +783,21 @@ Expected: collection fails because `review_coverage` does not exist.
 
 Create `bin/review_coverage.py`. Validate JSON with Pydantic 2 strict models,
 reuse `FormalFinding` from `triad_formal_review_schema`,
-parse raw response bytes through
-`BatchReceipt.model_validate_json(raw_bytes, strict=True)`,
-compute receipt SHA-256 from the original bytes, require exact batch and path
+hash the original response bytes, deterministically remove at most one exact
+outer JSON Markdown fence, parse the raw-or-unfenced JSON bytes through
+`BatchReceipt.model_validate_json(json_bytes, strict=True)`, compute receipt
+SHA-256 from the original bytes, require exact batch and path
 sets, exact per-path patch and edge sets, and compare every receipt digest with
 `EvidenceSummary`. Raise `CoverageError` on the first deterministic mismatch
 and never coerce strings to numbers. Require `1..ImpactRow.line_count` for
-every non-deleted row, validate its bounded exact source observation from
-`EvidenceSummary.review_root`, and keep symbols optional. Exempt deleted rows
-from current observation/symbol/line requirements. Validate finding locations
-against digest-bound current closure paths or canonical patch artifacts.
+every non-empty non-deleted row, validate its bounded exact source observation
+from `EvidenceSummary.review_root`, and keep symbols optional. Require a
+changed-path observation outside validated current-side hunk ranges whenever
+such a line exists; allow a hunk-derived observation only when those ranges
+cover every current line. Exempt validator-proven zero-byte current sources
+and deleted rows from current observation/symbol/line requirements. Validate
+finding locations against digest-bound current closure paths or canonical
+patch artifacts.
 Implement only the exact `admit` CLI and receipt layout above; do not add a
 general orchestration framework or source sharding.
 
@@ -916,8 +957,8 @@ git commit -m "fix: inherit native agy permissions"
 ### Task 4: Native Claude and Gemini Permissions
 
 **Files:**
-- Modify: `bin/claude_wrapper.py:1-59,80-235`
-- Modify: `bin/gemini_wrapper.py:1-28,50-182`
+- Modify: `bin/claude_wrapper.py:1-235`
+- Modify: `bin/gemini_wrapper.py:1-182`
 - Modify: `tests/test_provider_packet_context.py`
 - Delete: `bin/policies/gemini-readonly.toml`
 - Delete: `tests/test_gemini_sandbox.py`
@@ -932,6 +973,9 @@ git commit -m "fix: inherit native agy permissions"
   workspace-trust policy. TRIAD reports the native failure and adds neither a
   trust bypass nor a speculative denial detector.
 - Removed wrapper arguments are rejected by `argparse` rather than translated.
+- Remove orphaned `PERMISSION_CHOICES` / `PERMISSION_FORBIDDEN` constants from
+  Claude and orphaned `_wrapper_hardened` / `Path` imports from Gemini with
+  their consumers.
 
 - [ ] **Step 1: Write failing argv tests**
 
@@ -1254,6 +1298,7 @@ git commit -m "refactor: use native repair children"
 ### Task 6: Remove Plugin-Owned Permission Profiles, Rules, and Migration Templates
 
 **Files:**
+- Modify: `bin/_common.py:398-406`
 - Modify: `scripts/bootstrap.sh:16-142,540-650,1086-1810,1834-1935,2180-2243`
 - Modify: `bin/bootstrap_repair.py:23-43,652-772,1411-1520,1760-1835,2163-2245`
 - Modify: `migration/AGENTS.recommended.md`
@@ -1326,6 +1371,11 @@ upgrade cleanup. Keep exact ownership inspectors/removers in
 all-or-nothing command-group staged publication for wrapper launchers;
 repair-agent retirement cannot weaken that transaction boundary.
 
+Rewrite the `bin/_common.py` hardening comment so it no longer claims that the
+retired shell entry activates `TRIAD_WRAPPER_HARDENED`. Describe only the
+remaining explicit environment-variable activation used by compatibility
+callers; do not add a new installer path.
+
 On both `--install` and `--remove`, clean exact legacy artifacts in this order:
 
 1. repair registration/analyzer/apply launcher;
@@ -1351,6 +1401,9 @@ Remove tests for optional profile/rules/config/shell installation. Retain tests 
 In `tests/test_distribution_contract.py`, delete
 `test_task2_config_backup_guidance_qualifies_registration_only_fresh_config`,
 rewrite
+`test_task2_hardened_comments_name_opted_in_legacy_shell_entry` to assert the
+post-retirement environment-only compatibility wording,
+rewrite
 `test_company_fleet_guides_and_terms_are_removed_but_personal_templates_remain`
 to require only the retained non-permission migration guidance, and rewrite
 `test_bootstrap_usage_describes_ordinary_codex_agent_review_requirements` to
@@ -1370,6 +1423,7 @@ Expected: all tests pass.
 
 ```bash
 git add scripts/bootstrap.sh bin/bootstrap_repair.py migration/AGENTS.recommended.md tests/test_bootstrap.py tests/test_bootstrap_repair_transaction.py tests/test_migration_contract.py tests/test_distribution_contract.py
+git add bin/_common.py
 git add -u migration/config-fragment.recommended.toml migration/requirements.recommended.toml migration/triad-codex-dispatch.rules
 git commit -m "refactor: remove plugin permission policy"
 ```
@@ -1404,6 +1458,9 @@ git commit -m "refactor: remove plugin permission policy"
   consolidated findings, unresolved paths/questions, affected surfaces, and a
   verdict. The leader retains exact UTF-8 response bytes at a
   family/batch-specific result path for `validate_family_receipts`.
+- `BatchReceipt` is normative only for this batched route. The unchanged
+  `FormalReview` model remains normative only for explicit legacy sealed-packet
+  compatibility callers.
 
 - [ ] **Step 1: Load the skill-writing contracts and write failing distribution tests**
 
@@ -1476,17 +1533,22 @@ Keep `SKILL.md` as the concise workflow entry point. Move format detail into the
 - complete current source for changed and affected unchanged files;
 - source-grounded `path_evidence`;
 - exact `1..line_count` source coverage and a validated bounded exact source
-  observation for every non-deleted path;
+  observation for every non-empty non-deleted path, with the validator-proven
+  zero-byte exception stated explicitly;
 - invalidation on newly discovered paths;
 - coverage admission through `review_coverage.py`;
 - native permission inheritance;
 - `permission-unavailable` as an invalid required leg; and
 - fresh complete reruns after closure changes.
 
-Require exactly one strict `BatchReceipt` JSON document per provider/batch;
-reject Markdown fences, prose wrappers, missing fields, and family/batch
-mismatches. Fresh Codex terminal text is persisted as exact UTF-8 bytes under
-the same custody rule. Require `changed_hunks` to exactly equal each path's
+Require exactly one strict `BatchReceipt` JSON document per provider/batch.
+Persist and hash the exact original UTF-8 response bytes. Accept raw JSON or
+exactly one outer Markdown fence with optional `json` info, then strictly
+validate only the inner JSON bytes. Use the exact outer-fence grammar and
+ASCII-whitespace handling from Task 2. Reject prose wrappers, nested or
+multiple fences, missing fields, and family/batch mismatches. Fresh Codex
+terminal text is persisted under the same custody rule. Require
+`changed_hunks` to exactly equal each path's
 canonical `PATCH_INDEX.tsv` IDs and `verified_impact_edges` to exactly equal
 its expected closure IDs. `SAFE` is impossible for Critical/Major findings,
 any `NOT-SAFE` receipt, unresolved paths, or open questions.
@@ -1511,8 +1573,10 @@ prohibited for every formal leg.
 
 Rewrite reviewer routing so native owner/project permissions govern AGY and
 any separately authorized Google fallback. A native-permission-denied required
-leg is invalid; do not restore a TRIAD-installed read-only policy, bypass, or
-provider substitution.
+leg is invalid and, because it is post-dispatch, cannot trigger Gemini fallback
+in the same round. Keep Gemini fallback eligible only for the existing proven
+pre-dispatch AGY-unavailability route. Do not restore a TRIAD-installed
+read-only policy, bypass, or provider substitution.
 
 - [ ] **Step 4: Validate metadata and run skill/prompt lint**
 
@@ -1558,6 +1622,10 @@ Additionally:
 - rewrite `test_agy_truncated_answer_is_terminal_without_repair_or_provider_switch`
   to retain every truncated-answer terminality assertion while removing only
   the retired `--sandbox read-only` requirement; and
+- preserve `test_fresh_codex_native_result_admission_is_semantic_not_json` and
+  `test_fresh_codex_admission_docs_record_agy_fence_tolerance`, while adding
+  route-specific assertions that the new `BatchReceipt` admission accepts only
+  one outer fence and hashes the original bytes; and
 - preserve the complete distribution test as the Task 7 GREEN gate so no
   stale assertion is deferred to release documentation.
 
@@ -1648,6 +1716,9 @@ Document:
   `shell_environment_policy`, including the trusted terminal/Python/PATH
   prerequisite;
 - native AGY headless fail-closed behavior and narrow user/project remediation;
+- `permission-unavailable` in both README exit-65 legends and the matching
+  `test_task2_readme_exit_code_legends_match_reachable_classes` assertion,
+  distinct from authentication, quota, and truncated-answer classifications;
 - Gemini's provider-owned workspace-trust requirement after `--skip-trust`
   removal, with no TRIAD bypass or speculative detector;
 - full diff plus complete affected-source closure;
@@ -1746,7 +1817,13 @@ Expected: complete evidence admits, missing evidence fails, no hostile path exec
 Prepare one immutable candidate directory containing current approved
 production source, configuration, documentation, `change-evidence`, and the
 exact owner/project test-source boundary. Record its digest and the canonical
-worktree fingerprint before dispatch.
+worktree fingerprint before dispatch. The leader-only fingerprint uses the
+design's exact length-prefixed tagged-record algorithm over current `HEAD`,
+full `GIT_OPTIONAL_LOCKS=0` porcelain status, binary/full-index staged and
+unstaged diffs, and NUL-sorted nonignored untracked path plus content/link-text
+digests. An unreadable or unsupported untracked entry stops the gate. It is an
+operational record only: do not restore the retired
+`canonical_git_visible_fingerprint` helper or ask provider legs to execute Git.
 
 Dispatch:
 
@@ -1754,7 +1831,12 @@ Dispatch:
 - current accepted Google-family Pro High route without a TRIAD permission override; and
 - fresh Codex default child with `fork_turns="none"` and the current approved formal-review model/effort.
 
-Every family reviews every batch and returns valid receipts. If native AGY reports `permission-unavailable`, stop the formal gate and report the required user/project permission decision; do not insert a bypass or count a different family twice.
+Every family reviews every batch and returns valid receipts. If native AGY
+reports `permission-unavailable`, stop the formal gate and report the required
+user/project permission decision. This is post-dispatch and cannot activate
+Gemini fallback in the same round; do not insert a bypass or count a different
+family twice. A separately authorized Gemini formal fallback remains limited
+to proven pre-dispatch AGY unavailability.
 
 Expected: three valid family coverages, no unresolved path, identical pre/post
 candidate digest, identical pre/post canonical-worktree fingerprint, and either
@@ -1769,7 +1851,8 @@ Expected: no finding is applied solely because a provider requested it, and no c
 - [ ] **Step 10: Install, compare cache bytes, and prove native inheritance**
 
 Record the root session's current effective permission profile and canonical
-worktree fingerprint. Create one owner-authorized disposable directory with
+worktree fingerprint using the same leader-only algorithm from Step 8. Create
+one owner-authorized disposable directory with
 `mktemp -d` outside the worktree. Spawn a fresh default child with
 `fork_turns="none"`, the current approved model, and low effort; ask it to
 write one exact marker only in that directory. Record requested model/effort,

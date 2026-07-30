@@ -122,7 +122,7 @@ TRIAD retains:
 - argv-array construction, executable-path pinning, prompt-file validation,
   and wrapper child-process environment scrubbing after trusted startup;
 - one immutable shared review root and its before/after digest;
-- canonical-worktree fingerprints;
+- leader-only canonical-worktree fingerprints;
 - the no-edit and no-execution review task contract;
 - mutation and digest-mismatch invalidation;
 - strict result extraction and semantic admission;
@@ -131,6 +131,26 @@ TRIAD retains:
 
 These controls validate data and result custody. They do not choose the
 developer's permission mode.
+
+The canonical-worktree fingerprint is an operational leader record, not a
+skill API or reviewer command. It SHA-256 hashes length-prefixed, tagged byte
+records in this order: current `HEAD`; full
+`GIT_OPTIONAL_LOCKS=0 git status --porcelain=v1 -z --untracked-files=all`;
+full staged and unstaged
+`git diff --binary --full-index --no-ext-diff`; then the NUL-sorted output of
+`git ls-files --others --exclude-standard -z` paired with each nonignored
+untracked regular file's content digest or symlink's link-text digest. An
+unreadable or unsupported untracked entry fails the fingerprint. The leader
+compares the same record before and after a round. This design does not restore
+the retired `canonical_git_visible_fingerprint` helper or expose Git execution
+to provider legs.
+
+Each fingerprint record is serialized as ASCII tag, NUL, decimal payload byte
+length, NUL, then the exact payload bytes. The fixed tags are `HEAD`, `STATUS`,
+`STAGED`, `UNSTAGED`, and one `UNTRACKED` record per sorted path. An
+`UNTRACKED` payload is the ASCII kind `file` or `symlink`, NUL, the raw Git path
+bytes, NUL, and the lowercase content or link-text SHA-256 hex digest. Command
+failure or a non-regular/non-symlink untracked entry stops the round.
 
 ## Change-evidence format
 
@@ -314,19 +334,30 @@ open_questions
 verdict
 ```
 
-`path_evidence` is not a list of manifest paths. Every non-deleted affected
-source path has one compact record containing its content digest, the exact
-full-file line range `1..line_count`, one bounded exact source observation and
-its line number, optional symbol annotations, every changed hunk or recorded
-impact edge relevant to that path, and the reviewer's disposition.
+`path_evidence` is not a list of manifest paths. Every affected source path has
+one compact record. A current non-empty source record contains its content
+digest, the exact full-file line range `1..line_count`, one bounded exact
+source observation and its line number, optional symbol annotations, every
+changed hunk or recorded impact edge relevant to that path, and the reviewer's
+disposition.
 `source_observation` is a 1-160 character exact substring of the UTF-8 logical
 line named by `observation_line`; when that line has at least eight characters,
 the observation has at least eight. It is never written into
-reviewer-visible manifests. A whitespace-only or empty source uses empty
-observation text only when validation proves it has no non-whitespace
-character. Deleted paths retain patch evidence but require no current-source
-observation or line range. A receipt built only by echoing manifest and index
-fields is uncovered.
+reviewer-visible manifests. A non-empty whitespace-only source retains its
+full line range but uses empty observation text only when validation proves it
+has no non-whitespace character. A zero-byte current source uses
+`observation_line=None`, empty observation text, and
+`line_start=line_end=None`. Deleted paths retain patch evidence but require no
+current-source observation or line range.
+
+For a changed current source with at least one current line outside all
+validated new-side hunk ranges, `observation_line` must name one of those
+outside-hunk lines. If the canonical patch hunks cover every current line, the
+patch artifact already contains the complete current source and a
+patch-derivable observation is allowed. This exception is explicit evidence
+that the whole source was present in the patch, not a claim that patch-only
+inspection generally proves full-file review. A receipt built only by echoing
+manifest and index fields is otherwise uncovered.
 
 `PathEvidence` retains per-path `changed_hunks` and
 `verified_impact_edges`; there is no redundant top-level
@@ -342,22 +373,31 @@ canonical patch-ID sets rather than admitting arbitrary IDs.
 existing strict `FormalFinding` contract; free-form finding dictionaries are
 not admitted. `FamilyCoverage` retains ordered receipt digests, covered paths,
 consolidated findings, unresolved paths/questions, affected surfaces, and a
-verdict. The
-leader persists the exact UTF-8 response bytes under a family/batch-specific
-result path and passes those paths to `validate_family_receipts`. A Markdown
-fence, prose wrapper, missing field, or family/batch mismatch is invalid.
-Fresh Codex terminal text follows the same custody rule; this is operational
-custody, not a new wrapper responsibility.
+verdict. The leader persists the exact UTF-8 response bytes under a
+family/batch-specific result path and passes those paths to
+`validate_family_receipts`. Admission hashes those original bytes, then accepts
+either raw JSON or exactly one outer Markdown fence whose optional info string
+is `json`. For envelope detection it trims only outer ASCII whitespace; the
+opening line is exactly three backticks or three backticks plus `json`, the
+closing line is exactly three backticks, and the inner payload contains no
+fence token. Only the extracted inner bytes are passed to strict JSON
+validation. Leading or trailing prose, nested or multiple fences, a missing
+field, or a family/batch mismatch is invalid. This deterministic outer-fence
+step preserves the repository's observed AGY fence tolerance without adding
+wrapper repair or changing response custody. Fresh Codex terminal text follows
+the same custody rule; this is operational custody, not a new wrapper
+responsibility.
 
 The operational admission command consumes the validated evidence directory
 and an exact receipt tree of `<family>/<batch-id>.json`, rejects missing and
 extra receipt files, and atomically emits the sole machine-admissible
 `coverage-admission.json`. A prose summary or manually assembled family result
 cannot replace this command.
-Receipt schema enforcement is offline and uses the exact raw response bytes;
-wrappers do not add an in-band Pydantic repair route. A malformed receipt makes
-that family leg invalid and requires its complete fresh re-dispatch under the
-round contract.
+Receipt schema enforcement is offline. Original response bytes are the custody
+and receipt-digest source; only the deterministic optional outer-fence removal
+precedes strict JSON parsing. Wrappers do not add an in-band Pydantic repair
+route. A malformed receipt makes that family leg invalid and requires its
+complete fresh re-dispatch under the round contract.
 
 Provider-native file-read telemetry is retained and digest-bound when the
 provider exposes it. When a provider does not expose such telemetry, coverage
@@ -373,7 +413,9 @@ A formal result is admissible only when:
 - every changed file and hunk is covered by every required family;
 - every row in `IMPACT_CLOSURE.tsv` is covered by every required family;
 - every non-deleted covered path has the exact `1..line_count` range and a
-  validated source observation absent from reviewer-visible manifests;
+  validated source observation absent from reviewer-visible manifests, except
+  that a validator-proven zero-byte current source has no line range or
+  observation;
 - every covered path has the expected content digest;
 - every recorded impact edge is either verified or produces an unresolved
   question;
@@ -387,10 +429,11 @@ A formal result is admissible only when:
 `SAFE` is impossible when findings include Critical or Major, any receipt is
 `NOT-SAFE`, or any unresolved path or open question exists. For current source,
 optional symbols are annotations only; `line_start` and `line_end` are
-mandatory and must equal `1` and `ImpactRow.line_count`. Deleted rows require
-no observation, symbol, or line evidence. Current non-deleted source must be
-UTF-8 for exact observation and finding-location validation; invalid UTF-8
-stops evidence preparation rather than reducing coverage.
+mandatory and must equal `1` and `ImpactRow.line_count` for every non-empty
+current source. A validator-proven zero-byte current source and a deleted row
+require no observation, symbol, or line evidence. Current non-deleted source
+must be UTF-8 for exact observation and finding-location validation; invalid
+UTF-8 stops evidence preparation rather than reducing coverage.
 
 Every `FormalFinding.location` is an exact review-relative `path:positive-line`
 reference. The validator admits only a digest-bound current closure path or
@@ -459,7 +502,10 @@ that permission selection now belongs to the provider's user/project settings.
 
 Legacy sealed-packet arguments remain available only to their existing explicit
 compatibility callers. They do not become an active worktree-review
-prerequisite and are not described as a permission boundary.
+prerequisite and are not described as a permission boundary. The existing
+`FormalReview` model remains normative only for those legacy sealed-packet
+callers. `BatchReceipt` is normative only for the new batched full-coverage
+route; the two schemas are not interchangeable or competing admission paths.
 
 ## Error handling
 
@@ -480,8 +526,11 @@ The round stops or becomes invalid on:
 The observed native AGY headless permission denial, authentication failure,
 capacity failure, extraction failure, and review finding remain distinct
 terminal classifications. A required leg denied by native permissions is
-invalid; native owner/project permissions govern AGY and any separately
-authorized Google fallback, not a TRIAD-installed read-only policy.
+invalid. Because `permission-unavailable` is a post-dispatch failure, it cannot
+trigger Gemini fallback in the same round. A separately authorized Google
+fallback remains eligible only for the existing proven pre-dispatch AGY
+unavailability route. Native owner/project permissions govern both routes, not
+a TRIAD-installed read-only policy.
 
 ## Verification strategy
 
@@ -519,6 +568,15 @@ Implementation follows test-driven development.
   are rejected.
 - GREEN: an echoed path without a valid source observation, exact full-file range,
   and hunk/edge evidence is rejected as uncovered.
+- RED: a partial-file changed path whose observation is derived from a visible
+  hunk is rejected; when validated hunks cover every current line, the
+  patch-derived observation exception is admitted.
+- GREEN: a validator-proven zero-byte current source uses no line range or
+  observation, while a non-empty whitespace-only source still carries its
+  complete line range.
+- GREEN: raw and single-outer-fenced JSON receipts share strict schema
+  validation while prose-wrapped and multiple-fence responses remain invalid;
+  receipt digests always use the original bytes.
 - GREEN: a missing path, missing batch, digest mismatch, or newly discovered
   affected path invalidates the round.
 - GREEN: an oversized source receives one complete single-path batch.
