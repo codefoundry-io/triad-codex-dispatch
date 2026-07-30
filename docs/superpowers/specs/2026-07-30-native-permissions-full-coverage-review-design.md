@@ -53,7 +53,9 @@ terminal settings and no override, failed because it could not prompt for the
 required `command` permission.
 
 The new design removes the hidden policy layer. It does not hide the resulting
-native AGY availability constraint.
+native AGY availability constraint or Gemini's provider-owned workspace-trust
+requirement. A trust denial is surfaced as the provider's native failure; no
+speculative Gemini message detector or trust bypass is added.
 
 ### Missing large-diff evidence
 
@@ -132,7 +134,7 @@ review-root/
     ├── PATCH_INDEX.tsv
     ├── MANIFEST.sha256
     ├── patches/
-    │   └── <group>/<file-or-hunk>.patch
+    │   └── <group-id>/<patch-id>.patch
     └── batches/
         └── <batch-id>.tsv
 ```
@@ -161,6 +163,9 @@ patch_id	group_id	section_ordinal	hunk_ordinal	change_kind	previous_path	path	sh
 textual hunk has one file-level `patch_id`; use `-` for its `hunk_ordinal`.
 Use `-` for an absent `previous_path`. The allowed `change_kind` values are
 exactly `modified`, `added`, `deleted`, `renamed`, and `affected-unchanged`.
+The canonical artifact for each row is
+`patches/<group_id>/<patch_id>.patch`; this exact path is also an allowed
+finding-location surface.
 
 `IMPACT_CLOSURE.tsv` is also normative. It contains one row per affected
 production source, with this exact header and column order:
@@ -175,13 +180,14 @@ digest, byte-count, and batch fields. Changed rows use `impact_edge_id=-`.
 For an `affected-unchanged` row, derive `impact_edge_id` deterministically from
 the exact UTF-8 bytes of `path`, `reason`, and `reached_from`.
 
-For a deleted path, no current source file is permitted: record the SHA-256 of
-empty bytes, `byte_count=0`, `line_count=0`, its old path in `previous_path`,
-and its exact patch IDs. It needs exact patch evidence but no current
-symbol/line evidence. For a renamed path, `previous_path` is the old path, the
-new current source is required, and the rename/file-level patch ID is bound.
-For modified and added rows, `previous_path=-` unless the diff explicitly
-describes a rename.
+For a deleted path, no current source file is permitted: `path` and
+`previous_path` both contain the canonical old path, record the SHA-256 of
+empty bytes, `byte_count=0`, `line_count=0`, and retain its exact patch IDs.
+The duplication is intentional: `path` remains the coverage key and
+`previous_path` records change provenance. It needs exact patch evidence but no
+current source evidence. For a renamed path, `previous_path` is the old path,
+the new current source is required, and the rename/file-level patch ID is
+bound. Modified, added, and affected-unchanged rows use `previous_path=-`.
 
 Reasons use a small stable vocabulary:
 
@@ -204,10 +210,10 @@ a universal static analyzer.
 
 Each batch manifest lists the affected source paths, their complete canonical
 `patch_id` set where applicable, content digests, byte counts, and line counts.
-A large source
-file may be split at deterministic symbol boundaries, but all of that file's
-source shards remain in the batch set. Batching never samples lines or omits
-low-risk files.
+An oversized source receives one single-path batch and remains a complete file;
+there is no source-shard or symbol-boundary protocol. Provider file-read ranges
+may bound individual tool outputs, but all ranges remain required. Batching
+never samples lines or omits low-risk files.
 
 ## Impact-closure preparation
 
@@ -270,6 +276,7 @@ implementation plan. Each provider prompt returns exactly one strict
 PathEvidence:
   path
   content_sha256
+  source_probe_sha256
   line_start
   line_end
   symbols
@@ -291,12 +298,16 @@ verdict
 ```
 
 `path_evidence` is not a list of manifest paths. Every non-deleted affected
-source path has one compact record containing its content digest, a positive
-inspected line range, optional symbol annotations, every changed hunk or
-recorded impact edge relevant to that path, and the reviewer's disposition.
-Deleted paths retain patch evidence but require no current-source line range.
-A path echoed from the manifest without this source-grounded evidence is
-uncovered.
+source path has one compact record containing its content digest, a
+`source_probe_sha256` derived from the raw current-source bytes, the exact full
+file line range `1..line_count`, optional symbol annotations, every changed
+hunk or recorded impact edge relevant to that path, and the reviewer's
+disposition. The probe is
+`SHA256(b"triad-source-probe-v1\0" + path_utf8 + b"\0" + source_bytes)` and is
+never written into reviewer-visible manifests. The validator recomputes it
+from the immutable source. Deleted paths retain patch evidence but require no
+current-source probe or line range. A receipt built only by echoing manifest
+and index fields is uncovered.
 
 `PathEvidence` retains per-path `changed_hunks` and
 `verified_impact_edges`; there is no redundant top-level
@@ -304,6 +315,9 @@ uncovered.
 exactly equal the canonical `patch_id` set for its path. Each receipt's
 `verified_impact_edges` set must exactly equal the expected `impact_edge_id`
 set. Omitted, extra, duplicated, and forged IDs are invalid.
+Changed rows must have an empty `verified_impact_edges`; affected-unchanged
+rows must have an empty `changed_hunks`. Deleted and renamed rows follow their
+canonical patch-ID sets rather than admitting arbitrary IDs.
 
 `BatchReceipt.findings` and `FamilyCoverage.consolidated_findings` use the
 existing strict `FormalFinding` contract; free-form finding dictionaries are
@@ -315,6 +329,12 @@ result path and passes those paths to `validate_family_receipts`. A Markdown
 fence, prose wrapper, missing field, or family/batch mismatch is invalid.
 Fresh Codex terminal text follows the same custody rule; this is operational
 custody, not a new wrapper responsibility.
+
+The operational admission command consumes the validated evidence directory
+and an exact receipt tree of `<family>/<batch-id>.json`, rejects missing and
+extra receipt files, and atomically emits the sole machine-admissible
+`coverage-admission.json`. A prose summary or manually assembled family result
+cannot replace this command.
 
 Provider-native file-read telemetry is retained and digest-bound when the
 provider exposes it. When a provider does not expose such telemetry, coverage
@@ -329,7 +349,8 @@ A formal result is admissible only when:
 
 - every changed file and hunk is covered by every required family;
 - every row in `IMPACT_CLOSURE.tsv` is covered by every required family;
-- every non-deleted covered path has a positive, source-grounded line range;
+- every non-deleted covered path has the exact `1..line_count` range and a
+  valid raw-source probe absent from reviewer-visible manifests;
 - every covered path has the expected content digest;
 - every recorded impact edge is either verified or produces an unresolved
   question;
@@ -343,10 +364,14 @@ A formal result is admissible only when:
 `SAFE` is impossible when findings include Critical or Major, any receipt is
 `NOT-SAFE`, or any unresolved path or open question exists. For current source,
 optional symbols are annotations only; `line_start` and `line_end` are
-mandatory and must satisfy
-`line_start <= line_end <= ImpactRow.line_count`; deleted rows require no
-symbol/line evidence. No review-root parameter is introduced merely to make
-that check.
+mandatory and must equal `1` and `ImpactRow.line_count`. Deleted rows require
+no probe, symbol, or line evidence.
+
+Every `FormalFinding.location` is an exact review-relative `path:positive-line`
+reference. The validator admits only a digest-bound current closure path or
+canonical patch artifact, reopens it without following symlinks, and rejects
+an absent, out-of-range, or digest-mismatched location. A finding can never be
+grounded only by a non-empty location string.
 
 If any family discovers an affected source path that is absent from
 `IMPACT_CLOSURE.tsv`, the leader expands the closure and invalidates the round.
@@ -384,6 +409,11 @@ The English and Korean READMEs state:
 > used for development. Select provider permissions in that environment before
 > dispatch. TRIAD inherits those permissions and does not install or inject a
 > separate permission mode.
+
+Prepared review directories stay under that canonical project worktree so
+provider project/trust settings have the same scope. If a provider still
+requires a native workspace-trust decision, the owner makes it in that
+environment before dispatch; TRIAD neither skips nor synthesizes trust.
 
 Bootstrap stops installing permission profiles, sandbox-specific wrapper
 rules, read-only Custom Agents, or migration fragments that make TRIAD a
@@ -462,11 +492,14 @@ Implementation follows test-driven development.
   evidence mismatch is rejected.
 - RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
   are rejected.
-- GREEN: an echoed path without source-grounded symbol/line and hunk/edge
-  evidence is rejected as uncovered.
+- GREEN: an echoed path without a valid raw-source probe, exact full-file range,
+  and hunk/edge evidence is rejected as uncovered.
 - GREEN: a missing path, missing batch, digest mismatch, or newly discovered
   affected path invalidates the round.
-- GREEN: a large source split at symbol boundaries remains fully covered.
+- GREEN: an oversized source receives one complete single-path batch.
+- RED: malformed, out-of-closure, out-of-range, and digest-mismatched finding
+  locations are rejected.
+- GREEN: the receipt-tree CLI is the only path that emits an admitted result.
 
 ### Quality gates
 

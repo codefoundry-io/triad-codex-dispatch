@@ -18,7 +18,9 @@
 - Run every direct `python3` command from `/Users/chaniri/codex_workspace` through `/bin/zsh -lic`, after recording `command -v python3`, `python3 --version`, and `python3 -m pytest --version`.
 - Use TDD for every behavior change: run the focused RED test, confirm the expected failure, implement the minimum change, then run focused and neighboring GREEN tests.
 - Every formal-review family covers every deterministic batch. Family perspectives never partition source coverage.
-- A manifest path alone is not coverage. Each affected path requires digest-bound symbol/positive-line evidence plus changed-hunk or impact-edge disposition.
+- A manifest path alone is not coverage. Each non-deleted path requires a
+  raw-source probe absent from visible manifests, the exact full-file line
+  range, and changed-hunk or impact-edge disposition.
 - TRIAD never adds sandbox, permission-mode, yolo, bypass, accept-edits, auto-edit, dont-ask, or equivalent provider controls.
 - Native AGY headless permission denial is terminal `permission-unavailable`; it is never retried with broader authority.
 - The only permission-denial detector added in this release is the empirically
@@ -78,7 +80,7 @@ review.
 
 ### Native provider transport
 
-- Modify `bin/_common.py:55-87`: add the terminal `permission-unavailable` classification.
+- Modify `bin/_common.py:55-87,2492-2497`: add the terminal `permission-unavailable` classification and keep its source comment current.
 - Modify `bin/antigravity_wrapper.py:107-134,209-301,304-506,518-664`: remove sandbox/settings/bypass behavior and classify the observed native denial.
 - Modify `bin/claude_wrapper.py:80-235`: remove wrapper permission arguments and generated Claude permission flags.
 - Modify `bin/gemini_wrapper.py:50-182`: remove approval/sandbox policy arguments and generated Gemini permission flags.
@@ -93,6 +95,7 @@ review.
 
 - Modify `bin/bootstrap_repair.py:16-50,97-123,1969-2245`: retain exact removal and generic transaction helpers; retire repair-agent installation/registration.
 - Modify `scripts/bootstrap.sh:16-142,381-428,540-838,1086-1810,1834-2243`: install wrapper launchers only, clean exact legacy artifacts, and stop generating Codex permission state.
+- Modify `bin/apply_patch.py:1-9`: describe the proposal-only native child rather than the retired Custom Agent.
 - Delete `agents/triad-repair-analyzer.toml`.
 - Delete `migration/config-fragment.recommended.toml`.
 - Delete `migration/requirements.recommended.toml`.
@@ -170,6 +173,7 @@ class PatchShard:
 
 @dataclass(frozen=True)
 class EvidenceSummary:
+    review_root: Path
     format_version: int
     source_tree_digest: str
     change_evidence_digest: str
@@ -198,15 +202,15 @@ def validate_review_evidence(
 
 ```text
 python3 bin/review_evidence.py prepare \
-  --review-root /private/tmp/triad-review-candidate \
-  --diff-file /private/tmp/triad-review-input/candidate.diff \
-  --impact-input /private/tmp/triad-review-input/impact-closure.tsv \
-  --output-dir /private/tmp/triad-review-candidate/change-evidence \
+  --review-root /absolute/project/worktree/_runs/reviews/<id>/prepared \
+  --diff-file /absolute/project/worktree/_runs/reviews/<id>/candidate.diff \
+  --impact-input /absolute/project/worktree/_runs/reviews/<id>/impact-closure.tsv \
+  --output-dir /absolute/project/worktree/_runs/reviews/<id>/prepared/change-evidence \
   --batch-byte-limit 262144
 
 python3 bin/review_evidence.py validate \
-  --review-root /private/tmp/triad-review-candidate \
-  --evidence-dir /private/tmp/triad-review-candidate/change-evidence
+  --review-root /absolute/project/worktree/_runs/reviews/<id>/prepared \
+  --evidence-dir /absolute/project/worktree/_runs/reviews/<id>/prepared/change-evidence
 ```
 
 - The patch splitter treats `diff --git ` as a file-section boundary and `@@ ` as a hunk boundary. It carries the file header into each hunk shard and assigns ordinal IDs without interpreting shell syntax from path text.
@@ -214,18 +218,25 @@ python3 bin/review_evidence.py validate \
   `patch_id	group_id	section_ordinal	hunk_ordinal	change_kind	previous_path	path	sha256	byte_count`.
   `patch_id` is the canonical receipt identifier; a file section without a
   textual hunk gets one file-level ID. Use `-` for an absent `hunk_ordinal` or
-  `previous_path`.
+  `previous_path`. Each patch artifact has the exact relative path
+  `patches/<group_id>/<patch_id>.patch`.
 - `IMPACT_CLOSURE.tsv` is normative and has this exact ordered header:
   `path	reason	reached_from	change_kind	previous_path	content_sha256	byte_count	line_count	impact_edge_id	batch_id`.
   Allowed `change_kind` values are exactly `modified`, `added`, `deleted`,
   `renamed`, and `affected-unchanged`. Changed rows use
   `impact_edge_id=-`; affected unchanged rows derive it deterministically from
-  the exact UTF-8 bytes of `path`, `reason`, and `reached_from`.
+  the exact UTF-8 bytes of `path`, `reason`, and `reached_from`. For a deleted
+  row, `path` and `previous_path` both contain the canonical old path. Modified,
+  added, and affected-unchanged rows use `previous_path=-`; renamed rows use
+  the old path there.
 - `PATCH_FILES_PER_GROUP = 100`. File sections 1-100 are `group-0001`,
   101-200 are `group-0002`, and so on; `GROUP_COUNT` is the exact number of
   non-empty groups. `PATCH_FILE_COUNT` counts file sections, while
   `patch_shards` may be larger when a section contains multiple hunks.
 - Source files remain complete in the prepared root. An oversized file receives a single-path batch; provider file-read ranges may bound individual tool outputs, but every range remains required.
+- `EvidenceSummary.review_root` is the canonical prepared root used to
+  revalidate source probes and finding locations; no separate review-root
+  argument is added to coverage admission.
 
 - [ ] **Step 1: Create the branch and record the Python boundary**
 
@@ -355,9 +366,12 @@ Implement the following additional named tests in the same file:
   `reason=changed` closure row for a parsed diff target and require
   `EvidenceError("diff target lacks changed closure row")`.
 - `test_prepare_handles_deletion_and_rename`: assert a deletion records empty
-  SHA-256, byte count and line count zero, old `previous_path`, exact patch IDs
-  and no source requirement; assert a rename records old `previous_path`, the
-  new source, and its file-level rename ID.
+  SHA-256, byte count and line count zero, identical canonical old `path` and
+  `previous_path`, exact patch IDs, and no source requirement; assert a rename
+  records old `previous_path`, the new source, and its file-level rename ID.
+- `test_oversized_source_receives_complete_single_path_batch`: set the byte
+  limit below one source file's size and assert one batch contains that
+  complete path with the exact byte and line counts and no shard records.
 - `test_validate_rejects_source_digest_mutation`: prepare valid evidence,
   change the affected source bytes, and require
   `EvidenceError("source digest mismatch")`.
@@ -469,6 +483,7 @@ class PathEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     path: str
     content_sha256: str
+    source_probe_sha256: str
     line_start: int | None = Field(default=None, ge=1)
     line_end: int | None = Field(default=None, ge=1)
     symbols: tuple[str, ...]
@@ -517,17 +532,46 @@ def admit_full_coverage(
 ) -> CoverageAdmission: ...
 ```
 
+- Operational CLI:
+
+```text
+python3 bin/review_coverage.py admit \
+  --review-root /absolute/project/worktree/_runs/reviews/<id>/prepared \
+  --evidence-dir /absolute/project/worktree/_runs/reviews/<id>/prepared/change-evidence \
+  --receipts-root /absolute/project/worktree/_runs/reviews/<id>/results \
+  --output /absolute/project/worktree/_runs/reviews/<id>/coverage-admission.json
+```
+
+`receipts-root` contains exactly
+`<family>/<batch-id>.json` for every combination of `claude`, `google`,
+`codex`, and the validated batch IDs. Missing files, extra JSON files,
+symlinks, and non-regular files are invalid. The command validates evidence,
+each exact response byte stream, every family, and final admission, then
+atomically writes canonical UTF-8 JSON. It exits nonzero and writes no admitted
+artifact on any invalid or non-admitted result. This output is the sole
+machine-admissible gate result; prose summaries cannot replace it.
+
 - A `changed` row's `changed_hunks` set exactly equals its canonical
   `PATCH_INDEX.tsv` `patch_id` set. An omitted, extra, duplicated, or forged
   ID is rejected.
 - An affected unchanged row's `verified_impact_edges` set exactly equals its
   expected `impact_edge_id` set. An omitted, extra, duplicated, or forged ID
   is rejected.
-- `line_start` and `line_end` are both absent or both present. Every
-  non-deleted path requires a positive line range satisfying
-  `line_start <= line_end <= ImpactRow.line_count`; `symbols` are optional
-  annotations and never replace line evidence. Deleted paths need no current
-  source symbol/line evidence.
+- Changed, added, deleted, and renamed rows have an empty
+  `verified_impact_edges`; affected-unchanged rows have an empty
+  `changed_hunks`.
+- Every non-deleted path requires `line_start == 1` and
+  `line_end == ImpactRow.line_count`; `symbols` are optional annotations and
+  never replace full-file evidence. Its `source_probe_sha256` must equal
+  `SHA256(b"triad-source-probe-v1\0" + path_utf8 + b"\0" + source_bytes)`.
+  The probe is absent from reviewer-visible manifests and is recomputed from
+  `EvidenceSummary.review_root`. Deleted paths require empty probe text and no
+  current-source symbol/line evidence.
+- Every finding location is an exact review-relative `path:positive-line`.
+  Admit only a current closure path or
+  `change-evidence/patches/<group-id>/<patch-id>.patch`, re-open it without
+  symlink following, and validate its expected digest, UTF-8 decoding, and line
+  bound.
 - `disposition="unresolved"`, a non-empty `unresolved_paths`, an
   `open_questions` entry, Critical/Major finding, or any `NOT-SAFE` receipt
   blocks admission.
@@ -561,13 +605,14 @@ def test_manifest_path_echo_without_source_grounding_is_rejected(
     evidence, receipt_factory = evidence_fixture
     receipts = receipt_factory(
         "claude",
+        source_probe_sha256="0" * 64,
         symbols=(),
-        line_start=None,
-        line_end=None,
+        line_start=1,
+        line_end=evidence.affected_paths[0].line_count,
     )
     with pytest.raises(
         review_coverage.CoverageError,
-        match="positive line range required",
+        match="source probe mismatch",
     ):
         review_coverage.validate_family_receipts(
             evidence, "claude", receipts
@@ -597,15 +642,26 @@ Implement these named tests with `evidence_fixture` and require
   IDs and require `changed hunk IDs do not match PATCH_INDEX`;
 - `test_impact_edge_ids_are_exact`: use omitted, extra, duplicated, and forged
   IDs and require `impact edge IDs do not match closure`;
-- `test_symbols_without_line_range_are_rejected`: keep non-empty `symbols` but
-  omit both line fields and require `positive line range required`;
+- `test_cross_kind_evidence_ids_must_be_empty`: add an impact-edge ID to a
+  changed row and a hunk ID to an affected-unchanged row, requiring
+  `unexpected cross-kind evidence`;
+- `test_partial_full_file_range_is_rejected`: use `1..1` for a multi-line
+  source and require `complete source range required`;
 - `test_line_range_beyond_current_source_is_rejected`: set `line_end` above
-  `ImpactRow.line_count` and require `line range exceeds current source`;
+  `ImpactRow.line_count` and require `complete source range required`;
+- `test_manifest_only_probe_is_rejected`: populate every visible manifest and
+  index field correctly but forge `source_probe_sha256`, requiring
+  `source probe mismatch`;
 - `test_malformed_finding_is_rejected`: omit each required `FormalFinding`
   field in turn and require strict receipt validation failure;
+- `test_finding_location_is_source_grounded`: reject malformed, out-of-closure,
+  out-of-range, and digest-mismatched source or canonical patch locations;
 - `test_unresolved_disposition_is_rejected` -> `unresolved path`;
 - `test_admission_rejects_duplicate_family` -> `duplicate family coverage`;
 - `test_admission_rejects_missing_family` -> `missing family coverage`.
+- `test_admit_cli_is_the_only_persisted_gate`: build the exact three-family
+  receipt tree, run `main(["admit", ...])`, assert canonical admitted JSON,
+  then add one extra receipt and assert nonzero exit with no output.
 
 - [ ] **Step 2: Run the coverage tests to verify RED**
 
@@ -624,11 +680,13 @@ reuse `FormalFinding` from `triad_formal_review_schema`,
 compute receipt SHA-256 from the original bytes, require exact batch and path
 sets, exact per-path patch and edge sets, and compare every receipt digest with
 `EvidenceSummary`. Raise `CoverageError` on the first deterministic mismatch
-and never coerce strings to numbers. Require a positive line range for every
-non-deleted row even when symbols are present; symbols remain optional
-annotations. Exempt deleted rows from current symbol/line requirements, and
-use `ImpactRow.line_count` rather than adding a review-root parameter for
-line-range validation.
+and never coerce strings to numbers. Require `1..ImpactRow.line_count` for
+every non-deleted row, recompute its domain-separated source probe from
+`EvidenceSummary.review_root`, and keep symbols optional. Exempt deleted rows
+from current probe/symbol/line requirements. Validate finding locations
+against digest-bound current closure paths or canonical patch artifacts.
+Implement only the exact `admit` CLI and receipt layout above; do not add a
+general orchestration framework or source sharding.
 
 - [ ] **Step 4: Run focused GREEN tests**
 
@@ -650,9 +708,10 @@ git commit -m "feat: require full-family source coverage"
 ### Task 3: Native AGY Permissions and Fail-Closed Denial
 
 **Files:**
-- Modify: `bin/_common.py:55-87`
+- Modify: `bin/_common.py:55-87,2492-2497`
 - Modify: `bin/antigravity_wrapper.py:107-134,209-301,304-506,518-664`
 - Modify: `tests/test_antigravity_packet_context.py`
+- Modify: `tests/test_distribution_contract.py`
 - Delete: `bin/_agy_settings.py`
 - Delete: `tests/test_agy_settings.py`
 
@@ -717,7 +776,10 @@ preflight receipt has only the post-change fields: selector/model, optional
 effort, native permission inheritance, and `permission-unavailable` terminal
 classification. Patch the transcript extractor mock with the current helper
 signature exactly as the surrounding tests do. Update the `_common.py`
-classification-source comment when adding `permission-unavailable`.
+classification-source comment when adding `permission-unavailable`. Rewrite
+`test_formal_review_uses_owner_routing_baseline_and_bounded_escalation` so its
+wrapper-source assertion expects `_build_route_args(model, effort)` and retains
+all unrelated routing assertions.
 
 - [ ] **Step 2: Run the AGY tests to verify RED**
 
@@ -753,6 +815,7 @@ Delete `bin/_agy_settings.py` and `tests/test_agy_settings.py`, then run:
 
 ```bash
 /bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_antigravity_packet_context.py workspace/triad-codex-dispatch-reliability/tests/test_log_cleanup.py'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k formal_review_uses_owner_routing_baseline_and_bounded_escalation'
 ```
 
 Expected: all selected tests pass and `rg "_agy_settings|dangerously-skip-permissions|AGY_NO_HEADLESS_AUTOAPPROVE" bin tests` returns no active-code hit.
@@ -760,7 +823,7 @@ Expected: all selected tests pass and `rg "_agy_settings|dangerously-skip-permis
 - [ ] **Step 5: Commit native AGY behavior**
 
 ```bash
-git add bin/_common.py bin/antigravity_wrapper.py tests/test_antigravity_packet_context.py
+git add bin/_common.py bin/antigravity_wrapper.py tests/test_antigravity_packet_context.py tests/test_distribution_contract.py
 git add -u bin/_agy_settings.py tests/test_agy_settings.py
 git commit -m "fix: inherit native agy permissions"
 ```
@@ -780,6 +843,9 @@ git commit -m "fix: inherit native agy permissions"
   schema, packet-compatibility, repair, and debug controls. `--skip-trust` is
   removed from public and generated argv because it bypasses a provider-owned
   trust decision.
+- An untrusted prepared directory can therefore fail under Gemini's native
+  workspace-trust policy. TRIAD reports the native failure and adds neither a
+  trust bypass nor a speculative denial detector.
 - Removed wrapper arguments are rejected by `argparse` rather than translated.
 
 - [ ] **Step 1: Write failing argv tests**
@@ -868,8 +934,10 @@ git commit -m "fix: inherit native provider permissions"
 
 **Files:**
 - Modify: `docs/references/repair-protocol.md`
+- Modify: `bin/apply_patch.py:1-9`
+- Modify: `bin/antigravity_wrapper.py:347`
 - Modify: `bin/bootstrap_repair.py:16-50,97-123,1969-2245`
-- Modify: `scripts/bootstrap.sh:381-428,650-838,1908-2040,2180-2243`
+- Modify: `scripts/bootstrap.sh:381-428,650-838,1908-2145,2180-2243`
 - Modify: `tests/test_bootstrap.py`
 - Modify: `tests/test_bootstrap_repair_transaction.py`
 - Modify: `tests/test_distribution_contract.py`
@@ -958,7 +1026,8 @@ removal predicate.
 Run:
 
 ```bash
-/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k repair_protocol_uses_fresh_native_child workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py -k removes_only_exact_legacy_repair_agent_artifacts'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k repair_protocol_uses_fresh_native_child'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py -k removes_only_exact_legacy_repair_agent_artifacts'
 ```
 
 Expected: the protocol still names the registered agent and bootstrap still installs it.
@@ -994,6 +1063,11 @@ owner_argv = [
 ]
 ```
 
+Update `bin/apply_patch.py`'s module docstring to describe the proposal-only
+native child, and update the AGY retry-driver comment so it no longer claims a
+shipped read-only analyzer exists. These are wording-only changes; retain the
+validated apply path and retry behavior.
+
 - [ ] **Step 4: Make bootstrap repair-agent support remove-only**
 
 Remove `install`, `preflight-install`, analyzer source validation, analyzer registration creation, and installed apply-launcher creation from `bin/bootstrap_repair.py`. Retain the exact managed `remove` path and generic transaction helpers required to clean old installations.
@@ -1007,9 +1081,12 @@ Remove tests whose only contract is installing, refreshing, or selecting the rea
 Rewrite the named current test
 `test_recommended_agent_template_uses_current_read_only_repair_contract` to
 retain its still-valid native repair-envelope assertions while replacing only
-the retired read-only repair-agent expectation. Update `_make_repo_root` and
-related bootstrap fixtures so deleting the shipped analyzer and the migration
-requirements template does not leave a fixture-generated stale file.
+the retired read-only repair-agent expectation. Rewrite
+`test_runtime_comments_describe_the_current_read_only_analyzer_flow` to retain
+the owner-controlled proposal/no-provider-invocation assertions without the
+retired agent phrase. Update `_make_repo_root` and related bootstrap fixtures
+so deleting the shipped analyzer and the migration requirements template does
+not leave a fixture-generated stale file.
 
 Run:
 
@@ -1022,7 +1099,7 @@ Expected: selected tests pass and no shipped/installed read-only repair agent re
 - [ ] **Step 6: Commit repair-agent retirement**
 
 ```bash
-git add docs/references/repair-protocol.md bin/bootstrap_repair.py scripts/bootstrap.sh tests/test_bootstrap.py tests/test_bootstrap_repair_transaction.py tests/test_distribution_contract.py
+git add docs/references/repair-protocol.md bin/apply_patch.py bin/antigravity_wrapper.py bin/bootstrap_repair.py scripts/bootstrap.sh tests/test_bootstrap.py tests/test_bootstrap_repair_transaction.py tests/test_distribution_contract.py
 git add -u agents/triad-repair-analyzer.toml
 git commit -m "refactor: use native repair children"
 ```
@@ -1036,6 +1113,7 @@ git commit -m "refactor: use native repair children"
 - Modify: `tests/test_bootstrap.py`
 - Modify: `tests/test_bootstrap_repair_transaction.py`
 - Modify: `tests/test_migration_contract.py`
+- Modify: `tests/test_distribution_contract.py`
 - Delete: `migration/config-fragment.recommended.toml`
 - Delete: `migration/requirements.recommended.toml`
 - Delete: `migration/triad-codex-dispatch.rules`
@@ -1076,7 +1154,8 @@ def test_distribution_has_no_permission_migration_templates() -> None:
 Run:
 
 ```bash
-/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py -k native_install_does_not_create_codex_permission_state workspace/triad-codex-dispatch-reliability/tests/test_migration_contract.py'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py -k native_install_does_not_create_codex_permission_state'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_migration_contract.py'
 ```
 
 Expected: default installation creates rules and the migration tests require the templates.
@@ -1103,10 +1182,20 @@ Delete the three permission templates. Rewrite `migration/AGENTS.recommended.md`
 
 Remove tests for optional profile/rules/config/shell installation. Retain tests for exact cleanup, foreign preservation, symlink refusal, rollback, launcher installation, reinstall idempotence, Python boundary, provider binaries not being invoked during install, and all-or-nothing command-group staged publication. Update `_make_repo_root` and related bootstrap fixtures for the deleted repair analyzer and `migration/requirements.recommended.toml` rather than masking their absence.
 
+In `tests/test_distribution_contract.py`, delete
+`test_task2_config_backup_guidance_qualifies_registration_only_fresh_config`,
+rewrite
+`test_company_fleet_guides_and_terms_are_removed_but_personal_templates_remain`
+to require only the retained non-permission migration guidance, and rewrite
+`test_bootstrap_usage_describes_ordinary_codex_agent_review_requirements` to
+assert native permission neutrality and exact legacy cleanup without requiring
+profile/rule/repair-agent installation messaging.
+
 Run:
 
 ```bash
 /bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py workspace/triad-codex-dispatch-reliability/tests/test_bootstrap_repair_transaction.py workspace/triad-codex-dispatch-reliability/tests/test_migration_contract.py'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k "task2_config_backup_guidance or company_fleet_guides_and_terms_are_removed_but_personal_templates_remain or bootstrap_usage_describes_ordinary_codex_agent_review_requirements"'
 ```
 
 Expected: all tests pass.
@@ -1114,7 +1203,7 @@ Expected: all tests pass.
 - [ ] **Step 6: Commit permission-controller removal**
 
 ```bash
-git add scripts/bootstrap.sh bin/bootstrap_repair.py migration/AGENTS.recommended.md tests/test_bootstrap.py tests/test_bootstrap_repair_transaction.py tests/test_migration_contract.py
+git add scripts/bootstrap.sh bin/bootstrap_repair.py migration/AGENTS.recommended.md tests/test_bootstrap.py tests/test_bootstrap_repair_transaction.py tests/test_migration_contract.py tests/test_distribution_contract.py
 git add -u migration/config-fragment.recommended.toml migration/requirements.recommended.toml migration/triad-codex-dispatch.rules
 git commit -m "refactor: remove plugin permission policy"
 ```
@@ -1134,6 +1223,8 @@ git commit -m "refactor: remove plugin permission policy"
 
 **Interfaces:**
 - Formal prompt fields add `source_tree_digest`, `change_evidence_digest`, `batch_id`, `batch_manifest`, and the required `path_evidence` shape.
+- `path_evidence` includes a raw-source-derived `source_probe_sha256` absent
+  from visible manifests and the exact full-file line range.
 - Each family must cover the exact batch set.
 - A new affected path invalidates the complete round.
 - Provider examples omit every permission-control flag.
@@ -1168,6 +1259,9 @@ def test_formal_review_requires_full_family_batch_matrix_and_path_evidence() -> 
         "change_evidence_digest",
         "batch_id",
         "path_evidence",
+        "source_probe_sha256",
+        "complete source range",
+        "coverage-admission.json",
         "Every required family reviews every batch",
         "A manifest path alone is not coverage",
     ):
@@ -1207,6 +1301,8 @@ Keep `SKILL.md` as the concise workflow entry point. Move format detail into the
 - all families over all batches;
 - complete current source for changed and affected unchanged files;
 - source-grounded `path_evidence`;
+- exact `1..line_count` source coverage and the domain-separated raw-source
+  probe for every non-deleted path;
 - invalidation on newly discovered paths;
 - coverage admission through `review_coverage.py`;
 - native permission inheritance;
@@ -1220,6 +1316,8 @@ the same custody rule. Require `changed_hunks` to exactly equal each path's
 canonical `PATCH_INDEX.tsv` IDs and `verified_impact_edges` to exactly equal
 its expected closure IDs. `SAFE` is impossible for Critical/Major findings,
 any `NOT-SAFE` receipt, unresolved paths, or open questions.
+Require the exact `<family>/<batch-id>.json` receipt tree and admit a formal
+round only through the deterministic `review_coverage.py admit` output.
 
 Provider argv examples contain only prompt-file, cwd, selector, effort where
 applicable, and result controls. Keep stable instructions before batch-specific
@@ -1270,6 +1368,17 @@ still-valid distribution assertions and replace only retired
 permission-controller/repair-agent expectations. Also update
 `test_package_version_and_removed_release_aliases_are_current` only where its
 retired controller expectation conflicts with the `0.2.532` contract.
+Additionally:
+
+- rewrite `test_task_2a_provider_guides_delegate_shared_formal_preparation` and
+  `test_task_2b_gemini_guide_keeps_fallback_contract_without_shared_protocol`
+  to retain route/cwd/shared-directory assertions while requiring absence of
+  provider permission flags;
+- rewrite `test_agy_truncated_answer_is_terminal_without_repair_or_provider_switch`
+  to retain every truncated-answer terminality assertion while removing only
+  the retired `--sandbox read-only` requirement; and
+- preserve the complete distribution test as the Task 7 GREEN gate so no
+  stale assertion is deferred to release documentation.
 
 Run:
 
@@ -1354,9 +1463,12 @@ Document:
 
 - native permission inheritance and no hidden override;
 - native AGY headless fail-closed behavior and narrow user/project remediation;
+- Gemini's provider-owned workspace-trust requirement after `--skip-trust`
+  removal, with no TRIAD bypass or speculative detector;
 - full diff plus complete affected-source closure;
 - all-family/all-batch coverage;
-- source-grounded path evidence;
+- source-grounded raw-source probes, exact full-file ranges, and deterministic
+  coverage admission;
 - exact plugin-owned legacy cleanup and owner-setting preservation;
 - the `0.2.532` migration from removed wrapper flags; and
 - fresh-session verification requirements.
@@ -1376,7 +1488,10 @@ Rewrite the named current test
 still-valid public removal coverage and replace only retired
 permission-controller/repair-agent expectations. The Task 7 rewrite similarly
 updates the named current package/distribution assertions without broadening
-the public compatibility surface.
+the public compatibility surface. Rewrite
+`test_readmes_describe_agent_review_eligibility_truthfully` to require native
+provider/user/project permission ownership while retaining credential and
+provider-log boundaries; do not keep granular sandbox-approval requirements.
 
 - [ ] **Step 4: Run documentation and release GREEN tests**
 
