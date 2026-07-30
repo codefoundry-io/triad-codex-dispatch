@@ -113,7 +113,7 @@ not a viable common requirement.
 ### Plugin-owned permission-controller retirement
 
 - Modify `bin/bootstrap_repair.py:16-50,97-123,1760-1835,1969-2245`: retain exact removal and generic transaction helpers; retire repair-agent and shell-entry installation/registration.
-- Modify `scripts/bootstrap.sh:16-142,381-428,540-838,1086-1810,1834-2243`: install wrapper launchers only, clean exact legacy artifacts, and stop generating Codex permission state.
+- Modify `scripts/bootstrap.sh:16-142,381-428,540-838,1086-2243`: install wrapper launchers only, clean exact legacy artifacts, delete the shell-entry preflight/install surface, and stop generating Codex permission state.
 - Modify `bin/apply_patch.py:1-9`: describe the proposal-only native child rather than the retired Custom Agent.
 - Delete `agents/triad-repair-analyzer.toml`.
 - Delete `migration/config-fragment.recommended.toml`.
@@ -205,6 +205,7 @@ class EvidenceSummary:
     affected_paths: tuple[ImpactRow, ...]
     patch_shards: tuple[PatchShard, ...]
     group_ids: tuple[str, ...]
+    diff_file_section_count: int
     patch_file_count: int
     batch_ids: tuple[str, ...]
 
@@ -278,8 +279,10 @@ python3 bin/review_evidence.py validate \
   the release requirement.
 - `PATCH_FILES_PER_GROUP = 100`. File sections 1-100 are `group-0001`,
   101-200 are `group-0002`, and so on; `GROUP_COUNT` is the exact number of
-  non-empty groups. `PATCH_FILE_COUNT` counts file sections, while
-  `patch_shards` may be larger when a section contains multiple hunks.
+  non-empty groups. `DIFF_FILE_SECTION_COUNT` counts canonical `diff --git`
+  sections. `PATCH_FILE_COUNT` counts actual patch artifacts and equals
+  `len(patch_shards)` / the `PATCH_INDEX.tsv` row count; the two counts differ
+  when one section has multiple hunks.
 - Source files remain complete in the prepared root. An oversized file receives a single-path batch; provider file-read ranges may bound individual tool outputs, but every range remains required.
 - `EvidenceSummary.review_root` is the canonical prepared root used to
   revalidate source observations and finding locations. The coverage CLI
@@ -342,7 +345,7 @@ def test_prepare_emits_named_headers_and_deterministic_batches(tmp_path: Path) -
     diff_file.write_text(
         "diff --git a/src/caller.py b/src/caller.py\n"
         "--- a/src/caller.py\n+++ b/src/caller.py\n"
-        "@@ -1,2 +1,2 @@\n-def caller():\n+def caller():\n",
+        "@@ -1 +1 @@\n-def caller():\n+def caller():\n",
         encoding="utf-8",
     )
     impact = tmp_path / "impact.tsv"
@@ -363,12 +366,14 @@ def test_prepare_emits_named_headers_and_deterministic_batches(tmp_path: Path) -
     changeset = (review_root / "change-evidence" / "CHANGESET.md").read_text()
     assert "FORMAT_VERSION=1\n" in changeset
     assert "GROUP_COUNT=1\n" in changeset
+    assert "DIFF_FILE_SECTION_COUNT=1\n" in changeset
     assert "PATCH_FILE_COUNT=1\n" in changeset
     assert "AFFECTED_SOURCE_COUNT=1\n" in changeset
     assert "BATCH_COUNT=1\n" in changeset
     assert "SOURCE_TREE_DIGEST=" in changeset
     assert "CHANGE_EVIDENCE_DIGEST=" in changeset
     assert summary.group_ids == ("group-0001",)
+    assert summary.diff_file_section_count == 1
     assert summary.patch_file_count == 1
     assert summary.batch_ids == ("batch-0001",)
     assert review_evidence.validate_review_evidence(
@@ -454,6 +459,11 @@ Implement the following additional named tests in the same file:
   manifests, `group-0001` through `group-0012`,
   exactly 1,200 patch IDs, and absence of any filesystem marker named by the
   hostile path text.
+- `test_unified_hunk_must_match_current_source`: independently reject a
+  malformed header, old/new body-count mismatch, out-of-range new-side span,
+  context/added body mismatch, and incorrect no-final-newline marker with
+  stable `EvidenceError("invalid unified hunk")`; include one two-hunk file and
+  assert `DIFF_FILE_SECTION_COUNT=1`, `PATCH_FILE_COUNT=2`.
 
 - [ ] **Step 3: Run the evidence tests to verify RED**
 
@@ -516,6 +526,17 @@ and every evidence artifact. Reject NUL, LF, CR, and TAB in `path` and
 enough to detect and reject those controls. Spaces, quotes, backticks, and
 literal `$()` remain data and execute nothing. This is an intentional
 `0.2.532` input limit: do not silently omit a path or admit partial coverage.
+
+For each supported textual hunk, parse the complete
+`@@ -old_start,old_count +new_start,new_count @@` form (including the
+single-line omitted-count shorthand). Require header old/new counts to equal
+the respective deletion/context and addition/context body counts. Require the
+new-side range to be in bounds and the ordered context plus added lines,
+including `\ No newline at end of file` semantics, to equal that exact range in
+the digest-bound current UTF-8 source. Reject malformed, count-mismatched,
+out-of-range, or content-mismatched hunks with
+`EvidenceError("invalid unified hunk")`. Implement only this bounded
+unified-text validator; do not add a general patch-application engine.
 
 Before any output or evidence read, require the canonical non-symlink evidence
 directory to equal `review_root / "change-evidence"` exactly. This containment
@@ -683,11 +704,14 @@ path is invalid.
 - `disposition="unresolved"`, a non-empty `unresolved_paths`, an
   `open_questions` entry, Critical/Major finding, or any `NOT-SAFE` receipt
   blocks admission.
-- Cross-check each `PathEvidence.disposition`. It is `unresolved` exactly for a
-  path in `unresolved_paths`; otherwise it is `finding` exactly when an
-  admitted finding location maps to that current path or one of its canonical
-  patch IDs, and `no-finding` only when neither condition holds. Reject every
-  contradictory disposition.
+- Cross-check each `PathEvidence.disposition` within its receipt/batch. A
+  receipt finding location must map to a current path or canonical patch ID
+  owned by that same batch. The disposition is `unresolved` exactly for a path
+  in that receipt's `unresolved_paths`; otherwise it is `finding` exactly when
+  one of that receipt's admitted findings maps to the path, and `no-finding`
+  only when neither condition holds. Reject every cross-batch finding or
+  contradictory disposition; a finding belongs in the receipt that owns the
+  referenced path.
 - Each provider returns exactly one strict `BatchReceipt` JSON document per
   batch. The leader saves the exact UTF-8 response bytes under a
   family/batch-specific result path and gives those paths to
@@ -807,6 +831,9 @@ Implement these named tests with `evidence_fixture` and require
 - `test_disposition_must_match_findings_and_unresolved_paths`: reject
   `finding` with no path-mapped finding, `no-finding` with a path-mapped
   finding, and either resolved disposition for a path in `unresolved_paths`;
+- `test_finding_must_belong_to_receipt_batch`: reject a receipt whose finding
+  location maps only to a path or canonical patch ID owned by another batch,
+  even when that other receipt reports a compatible disposition;
 - `test_admission_rejects_duplicate_family` -> `duplicate family coverage`;
 - `test_admission_rejects_missing_family` -> `missing family coverage`.
 - `test_admit_cli_is_the_only_persisted_gate`: build the exact three-family
@@ -844,7 +871,9 @@ such a line exists; allow a hunk-derived observation only when those ranges
 cover every current line. Exempt validator-proven zero-byte current sources
 and deleted rows from current observation/symbol/line requirements. Validate
 finding locations against digest-bound current closure paths or canonical
-patch artifacts and use that mapping to enforce exact disposition consistency.
+patch artifacts, require each location to be owned by the same receipt batch,
+and use only that receipt's findings and `unresolved_paths` to enforce exact
+disposition consistency.
 Require `evidence_dir` to be the canonical non-symlink
 `review_root / "change-evidence"` before parsing receipts.
 Implement only the exact `admit` CLI and receipt layout above; do not add a
@@ -1000,6 +1029,15 @@ custody. Preserve the surrounding driver `try/except`, the pre-submission
 `json.JSONDecodeError`, `ValueError`, and `OSError`. Update the
 `RunResult.dispatch_phase` comment plus retired sandbox/settings module
 docstrings. Task 5 separately updates the analyzer wording.
+
+The retained ordinary/non-formal Gemini fallback proof no longer uses a
+settings phase. It is exactly the no-final-summary
+`EXIT_BINARY_MISSING` return paired with the wrapper-owned
+`agy start failed before request submission: stage=exec errno=<supported>`
+diagnostic from `PtyStartError(stage="exec", errno in
+_PRE_SUBMISSION_EXEC_ERRNOS)`. Any invocation that emits a final wrapper
+summary reached post-dispatch handling and is fallback-ineligible. Do not add a
+new detector or restore `pre-dispatch-settings`.
 
 - [ ] **Step 4: Delete retired settings code and run GREEN tests**
 
@@ -1351,8 +1389,11 @@ Remove tests whose only contract is installing, refreshing, or selecting the rea
 
 Rewrite the named current test
 `test_recommended_agent_template_uses_current_read_only_repair_contract` to
-retain its still-valid native repair-envelope assertions while replacing only
-the retired read-only repair-agent expectation. Rewrite
+retain its still-valid native repair-envelope, age-floor, and printed absolute
+bootstrap-command assertions while removing both the retired read-only
+repair-agent expectation and retired
+`triad-apply-repair --cli <cli> --proposal-file <absolute-path>` launcher argv.
+Rewrite
 `test_runtime_comments_describe_the_current_read_only_analyzer_flow` to retain
 the owner-controlled proposal/no-provider-invocation assertions without the
 retired agent phrase. Update `_make_repo_root` and related bootstrap fixtures
@@ -1379,7 +1420,7 @@ git commit -m "refactor: use native repair children"
 
 **Files:**
 - Modify: `bin/_common.py:398-406`
-- Modify: `scripts/bootstrap.sh:16-142,540-650,1086-1810,1834-1935,2180-2243`
+- Modify: `scripts/bootstrap.sh:16-142,540-650,1086-1935,2180-2243`
 - Modify: `bin/bootstrap_repair.py:23-43,652-772,1411-1520,1760-1835,2163-2245`
 - Modify: `migration/AGENTS.recommended.md`
 - Modify: `tests/test_bootstrap.py`
@@ -1452,10 +1493,12 @@ all-or-nothing command-group staged publication for wrapper launchers;
 repair-agent retirement cannot weaken that transaction boundary.
 
 Remove all `scripts/bootstrap.sh` calls to the deleted
-`preflight_shell_entry`. The retained `update_shell_entry --action remove`
-operation performs the exact marker/content ownership check and removal as one
-guarded upgrade-cleanup action; a foreign or edited block is preserved and
-reported. Do not replace the retired preflight with a new policy layer.
+`preflight_shell_entry` and delete that Bash wrapper function itself
+(`scripts/bootstrap.sh:1815-1832`). The retained
+`update_shell_entry --action remove` operation performs the exact
+marker/content ownership check and removal as one guarded upgrade-cleanup
+action; a foreign or edited block is preserved and reported. Do not replace
+the retired preflight with a new policy layer.
 
 Rewrite the `bin/_common.py` hardening comment so it no longer claims that the
 retired shell entry activates `TRIAD_WRAPPER_HARDENED`. Describe only the
@@ -1495,12 +1538,19 @@ to require only the retained non-permission migration guidance, and rewrite
 `test_bootstrap_usage_describes_ordinary_codex_agent_review_requirements` to
 assert native permission neutrality and exact legacy cleanup without requiring
 profile/rule/repair-agent installation messaging.
+Rewrite `test_readmes_use_ordinary_codex_without_profile_or_alias` to preserve
+ordinary-Codex and no-profile/no-alias assertions while removing retired
+rules-wired, repair-analyzer, and rules-opt-out claims. In
+`test_r14_corrected_round_ledger_and_upgrade_containment_contract_is_present`,
+preserve the historical R14 ledger literals and launcher child-scrub
+assertion, but replace only current-surface rules/profile/shell-entry claims
+with the `0.2.532` native-permission and exact-legacy-cleanup contract.
 
 Run:
 
 ```bash
 /bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_bootstrap.py workspace/triad-codex-dispatch-reliability/tests/test_bootstrap_repair_transaction.py workspace/triad-codex-dispatch-reliability/tests/test_migration_contract.py'
-/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k "task2_config_backup_guidance or company_fleet_guides_and_terms_are_removed_but_personal_templates_remain or bootstrap_usage_describes_ordinary_codex_agent_review_requirements"'
+/bin/zsh -lic 'python3 -m pytest -q workspace/triad-codex-dispatch-reliability/tests/test_distribution_contract.py -k "task2_config_backup_guidance or company_fleet_guides_and_terms_are_removed_but_personal_templates_remain or bootstrap_usage_describes_ordinary_codex_agent_review_requirements or readmes_use_ordinary_codex_without_profile_or_alias or r14_corrected_round_ledger"'
 ```
 
 Expected: all tests pass.
@@ -1671,9 +1721,13 @@ prohibited for every formal leg.
 Rewrite reviewer routing so native owner/project permissions govern AGY and
 any separately authorized Google fallback. A native-permission-denied required
 leg is invalid and, because it is post-dispatch, cannot trigger Gemini fallback
-in the same round. Keep Gemini fallback eligible only for the existing proven
-pre-dispatch AGY-unavailability route. Do not restore a TRIAD-installed
-read-only policy, bypass, or provider substitution.
+in the same round. Keep Gemini fallback eligible only for the exact
+no-final-summary `EXIT_BINARY_MISSING` plus wrapper-owned pre-submission
+`PtyStartError` diagnostic defined in Task 3. Any final summary is
+post-dispatch and fallback-ineligible. Remove stale
+`phase=pre-dispatch-settings`, `dispatch-uncertain`, and
+`post-dispatch-cleanup` eligibility language without adding a detector or
+restoring a TRIAD-installed read-only policy, bypass, or provider substitution.
 
 - [ ] **Step 4: Validate metadata and run skill/prompt lint**
 
@@ -1716,6 +1770,11 @@ Additionally:
   `test_task_2b_gemini_guide_keeps_fallback_contract_without_shared_protocol`
   to retain route/cwd/shared-directory assertions while requiring absence of
   provider permission flags;
+- rewrite `test_google_fallback_requires_pre_dispatch_agy_unavailability` and
+  `test_public_docs_state_formal_schema_and_phase_based_fallback` to require
+  the exact no-summary exit-4/diagnostic proof, reject every final-summary
+  result, and remove the retired phase taxonomy from both provider skills,
+  reviewer routing, and public docs;
 - rewrite `test_agy_truncated_answer_is_terminal_without_repair_or_provider_switch`
   to retain every truncated-answer terminality assertion while removing only
   the retired `--sandbox read-only` requirement; and
@@ -1817,6 +1876,10 @@ Document:
   `shell_environment_policy`, including the trusted terminal/Python/PATH
   prerequisite;
 - native AGY headless fail-closed behavior and narrow user/project remediation;
+- ordinary/non-formal Gemini fallback only for the exact no-final-summary
+  `EXIT_BINARY_MISSING` plus wrapper-owned pre-submission `PtyStartError`
+  diagnostic; every final-summary result is post-dispatch and
+  fallback-ineligible;
 - `permission-unavailable` in both README exit-65 legends and the matching
   `test_task2_readme_exit_code_legends_match_reachable_classes` assertion,
   distinct from authentication, quota, and truncated-answer classifications;

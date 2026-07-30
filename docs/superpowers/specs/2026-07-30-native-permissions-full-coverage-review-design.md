@@ -181,12 +181,19 @@ human summary:
 ```text
 FORMAT_VERSION=1
 GROUP_COUNT=<integer>
+DIFF_FILE_SECTION_COUNT=<integer>
 PATCH_FILE_COUNT=<integer>
 AFFECTED_SOURCE_COUNT=<integer>
 BATCH_COUNT=<integer>
 SOURCE_TREE_DIGEST=<sha256>
 CHANGE_EVIDENCE_DIGEST=<sha256>
 ```
+
+`DIFF_FILE_SECTION_COUNT` is the number of canonical `diff --git` file
+sections. `PATCH_FILE_COUNT` is the number of actual
+`patches/<group-id>/<patch-id>.patch` artifacts and therefore equals the
+`PATCH_INDEX.tsv` row count. They differ when a file section has multiple
+hunks.
 
 `PATCH_INDEX.tsv` is normative. It contains one row for each canonical patch
 receipt, with this exact header and column order:
@@ -202,6 +209,14 @@ exactly `modified`, `added`, `deleted`, and `renamed`.
 The canonical artifact for each row is
 `patches/<group_id>/<patch_id>.patch`; this exact path is also an allowed
 finding-location surface.
+
+For every textual hunk, preparation and validation parse the complete unified
+hunk header and body. Header old/new counts must equal the respective body
+line counts; the new-side range must be in bounds; and the ordered context plus
+added lines, including the no-final-newline marker semantics, must equal the
+same range in the digest-bound current UTF-8 source. A malformed,
+count-mismatched, out-of-range, or content-mismatched hunk is invalid. This is
+the bounded supported unified-text format, not a general patch engine.
 
 `IMPACT_CLOSURE.tsv` is also normative. It contains one row per affected
 production source, with this exact header and column order:
@@ -382,11 +397,14 @@ Changed rows must have an empty `verified_impact_edges`; affected-unchanged
 rows must have an empty `changed_hunks`. Deleted and renamed rows follow their
 canonical patch-ID sets rather than admitting arbitrary IDs.
 
-`disposition` is also source-grounded. It is `unresolved` exactly when the
-path appears in `unresolved_paths`; otherwise it is `finding` exactly when at
-least one admitted finding location maps to that current path or one of its
-canonical patch IDs, and `no-finding` only when neither condition holds. A
-contradictory disposition invalidates the receipt.
+`disposition` is also source-grounded within one receipt/batch. A receipt
+finding location must map to a current path or canonical patch ID owned by that
+same batch. For each path record, disposition is `unresolved` exactly when the
+path appears in that receipt's `unresolved_paths`; otherwise it is `finding`
+exactly when one of that receipt's admitted findings maps to the path, and
+`no-finding` only when neither condition holds. A cross-batch finding location
+or contradictory disposition invalidates the receipt; the finding must be
+reported in the receipt that owns the path.
 
 `BatchReceipt.findings` and `FamilyCoverage.consolidated_findings` use the
 existing strict `FormalFinding` contract; free-form finding dictionaries are
@@ -433,8 +451,8 @@ A formal result is admissible only when:
 - every row in `IMPACT_CLOSURE.tsv` is covered by every required family;
 - every non-deleted covered path has the exact `1..line_count` range and a
   validated source observation absent from reviewer-visible manifests, except
-  that a validator-proven zero-byte current source has no line range or
-  observation;
+  that a validator-proven non-empty whitespace-only source keeps its full
+  range with no observation and a zero-byte current source has neither;
 - every covered path has the expected content digest;
 - every recorded impact edge is either verified or produces an unresolved
   question;
@@ -449,10 +467,12 @@ A formal result is admissible only when:
 `NOT-SAFE`, or any unresolved path or open question exists. For current source,
 optional symbols are annotations only; `line_start` and `line_end` are
 mandatory and must equal `1` and `ImpactRow.line_count` for every non-empty
-current source. A validator-proven zero-byte current source and a deleted row
-require no observation, symbol, or line evidence. Current non-deleted source
-must be UTF-8 for exact observation and finding-location validation; invalid
-UTF-8 stops evidence preparation rather than reducing coverage.
+current source. A validator-proven non-empty whitespace-only source keeps that
+range but requires no observation. A validator-proven zero-byte current source
+and a deleted row require no observation, symbol, or line evidence. Current
+non-deleted source must be UTF-8 for exact observation and finding-location
+validation; invalid UTF-8 stops evidence preparation rather than reducing
+coverage.
 
 Every `FormalFinding.location` is an exact review-relative `path:positive-line`
 reference. The validator admits only a digest-bound current closure path or
@@ -551,9 +571,12 @@ capacity failure, extraction failure, and review finding remain distinct
 terminal classifications. A required leg denied by native permissions is
 invalid. Because `permission-unavailable` is a post-dispatch failure, it cannot
 trigger Gemini fallback in the same round. A separately authorized Google
-fallback remains eligible only for the existing proven pre-dispatch AGY
-unavailability route. Native owner/project permissions govern both routes, not
-a TRIAD-installed read-only policy.
+fallback remains eligible only when the wrapper exits without a final summary
+using `EXIT_BINARY_MISSING` and emits its exact pre-submission
+`PtyStartError(stage=exec, errno in the supported missing/unstartable set)`
+diagnostic. Any emitted final summary is post-dispatch and
+fallback-ineligible. Native owner/project permissions govern both routes, not a
+TRIAD-installed read-only policy.
 
 ## Verification strategy
 
@@ -589,6 +612,9 @@ Implementation follows test-driven development.
   evidence mismatch is rejected.
 - RED: a deleted closure row whose current path still exists, or whose
   canonical diff section is not a deletion, is rejected.
+- RED: malformed, count-mismatched, out-of-range, or current-source-mismatched
+  unified-text hunks are rejected before their ranges can enable the
+  full-file-hunk observation exception.
 - RED: an external, alternate, or symlinked evidence directory is rejected by
   preparation, validation, and admission.
 - RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
@@ -604,7 +630,8 @@ Implementation follows test-driven development.
 - GREEN: terminated, unterminated, newline-only, and zero-byte UTF-8 sources
   share the exact `len(text.splitlines())` line-count convention.
 - RED: `finding`, `no-finding`, and `unresolved` dispositions that contradict
-  path-mapped findings or unresolved paths are rejected.
+  receipt-local path-mapped findings or unresolved paths are rejected; a
+  finding that maps only to another batch is also rejected.
 - GREEN: raw and single-outer-fenced JSON receipts share strict schema
   validation while prose-wrapped and multiple-fence responses remain invalid;
   receipt digests always use the original bytes.
