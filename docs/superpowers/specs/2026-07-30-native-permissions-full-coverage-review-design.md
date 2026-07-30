@@ -170,6 +170,11 @@ review-root/
         └── <batch-id>.tsv
 ```
 
+The canonical non-symlink evidence directory is exactly
+`review-root/change-evidence`. Preparation, validation, and admission reject
+an external path, an alternate in-root path, or any symlinked component rather
+than excluding evidence from the immutable shared root.
+
 `CHANGESET.md` contains named machine-readable headers followed by a compact
 human summary:
 
@@ -193,7 +198,7 @@ patch_id	group_id	section_ordinal	hunk_ordinal	change_kind	previous_path	path	sh
 `patch_id` is the canonical receipt identifier. A file section without a
 textual hunk has one file-level `patch_id`; use `-` for its `hunk_ordinal`.
 Use `-` for an absent `previous_path`. The allowed `change_kind` values are
-exactly `modified`, `added`, `deleted`, `renamed`, and `affected-unchanged`.
+exactly `modified`, `added`, `deleted`, and `renamed`.
 The canonical artifact for each row is
 `patches/<group_id>/<patch_id>.patch`; this exact path is also an allowed
 finding-location surface.
@@ -208,6 +213,8 @@ path	reason	reached_from	change_kind	previous_path	content_sha256	byte_count	lin
 `ImpactRow` therefore includes `change_kind`, `previous_path`, `line_count`,
 and `impact_edge_id` in addition to the existing path, reason, reachability,
 digest, byte-count, and batch fields. Changed rows use `impact_edge_id=-`.
+The allowed closure `change_kind` values are exactly `modified`, `added`,
+`deleted`, `renamed`, and `affected-unchanged`.
 For an `affected-unchanged` row, derive `impact_edge_id` deterministically from
 the exact UTF-8 bytes of `path`, `reason`, and `reached_from`.
 The format records one canonical, leader-selected proof edge per affected
@@ -224,6 +231,12 @@ The duplication is intentional: `path` remains the coverage key and
 current source evidence. For a renamed path, `previous_path` is the old path,
 the new current source is required, and the rename/file-level patch ID is
 bound. Modified, added, and affected-unchanged rows use `previous_path=-`.
+`path` alone remains the coverage key. `change_kind` and `previous_path` are
+required provenance fields, not a composite `(path, change_kind)` key.
+
+For decoded UTF-8 current source, `line_count` is exactly
+`len(text.splitlines())`. This gives zero for a zero-byte file and counts the
+last logical line consistently whether or not the file ends in a newline.
 
 Reasons use a small stable vocabulary:
 
@@ -369,6 +382,12 @@ Changed rows must have an empty `verified_impact_edges`; affected-unchanged
 rows must have an empty `changed_hunks`. Deleted and renamed rows follow their
 canonical patch-ID sets rather than admitting arbitrary IDs.
 
+`disposition` is also source-grounded. It is `unresolved` exactly when the
+path appears in `unresolved_paths`; otherwise it is `finding` exactly when at
+least one admitted finding location maps to that current path or one of its
+canonical patch IDs, and `no-finding` only when neither condition holds. A
+contradictory disposition invalidates the receipt.
+
 `BatchReceipt.findings` and `FamilyCoverage.consolidated_findings` use the
 existing strict `FormalFinding` contract; free-form finding dictionaries are
 not admitted. `FamilyCoverage` retains ordered receipt digests, covered paths,
@@ -506,6 +525,10 @@ prerequisite and are not described as a permission boundary. The existing
 `FormalReview` model remains normative only for those legacy sealed-packet
 callers. `BatchReceipt` is normative only for the new batched full-coverage
 route; the two schemas are not interchangeable or competing admission paths.
+The existing four-labeled-element semantic `formal-gate` result remains an
+unbatched compatibility profile and is not machine-admissible as a batched
+coverage receipt. The operational `0.2.532` full-coverage workflow selects the
+separately named batched profile.
 
 ## Error handling
 
@@ -564,6 +587,10 @@ Implementation follows test-driven development.
   every family coverage set.
 - RED: a missing diff row, a missing changed closure row, or deletion/rename
   evidence mismatch is rejected.
+- RED: a deleted closure row whose current path still exists, or whose
+  canonical diff section is not a deletion, is rejected.
+- RED: an external, alternate, or symlinked evidence directory is rejected by
+  preparation, validation, and admission.
 - RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
   are rejected.
 - GREEN: an echoed path without a valid source observation, exact full-file range,
@@ -574,6 +601,10 @@ Implementation follows test-driven development.
 - GREEN: a validator-proven zero-byte current source uses no line range or
   observation, while a non-empty whitespace-only source still carries its
   complete line range.
+- GREEN: terminated, unterminated, newline-only, and zero-byte UTF-8 sources
+  share the exact `len(text.splitlines())` line-count convention.
+- RED: `finding`, `no-finding`, and `unresolved` dispositions that contradict
+  path-mapped findings or unresolved paths are rejected.
 - GREEN: raw and single-outer-fenced JSON receipts share strict schema
   validation while prose-wrapped and multiple-fence responses remain invalid;
   receipt digests always use the original bytes.

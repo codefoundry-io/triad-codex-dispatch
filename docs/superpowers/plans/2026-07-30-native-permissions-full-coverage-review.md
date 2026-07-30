@@ -20,10 +20,11 @@
 - Use TDD for every behavior change: run the focused RED test, confirm the expected failure, implement the minimum change, then run focused and neighboring GREEN tests.
 - Every formal-review family covers every deterministic batch. Family perspectives never partition source coverage.
 - A manifest path alone is not coverage. Each non-empty non-deleted path
-  requires a validated source observation absent from visible manifests, the
-  exact full-file line range, and changed-hunk or impact-edge disposition. A
-  validator-proven zero-byte current source is the only no-range/no-observation
-  exception.
+  requires the exact full-file line range and changed-hunk or impact-edge
+  disposition. It also requires a validated source observation absent from
+  visible manifests unless the validator proves the complete source is
+  whitespace-only. A validator-proven zero-byte current source has neither
+  range nor observation.
 - TRIAD never adds sandbox, permission-mode, yolo, bypass, accept-edits, auto-edit, dont-ask, or equivalent provider controls.
 - The owner-approved native boundary also removes wrapper-injected Claude tool
   allowlists/settings-source/MCP policy, AGY sandbox selection, Gemini policy,
@@ -148,7 +149,9 @@ not a viable common requirement.
 - Modify `.codex-plugin/plugin.json`.
 - Modify `docs/status/2026-07-22-current-state.md`.
 - Modify `docs/status/2026-07-22-resume-prompt.md`.
-- Create `docs/status/2026-07-30-native-source-observation-spike.md`.
+- Preserve the already committed
+  `docs/status/2026-07-30-native-source-observation-spike.md` proof; Task 8
+  updates no historical spike bytes.
 - Create `docs/status/2026-07-30-v0.2.532-release-notes.md`.
 - Preserve dated formal-round ledgers as historical records.
 
@@ -220,6 +223,13 @@ def validate_review_evidence(
 ) -> EvidenceSummary: ...
 ```
 
+For every callable and CLI path, the canonical non-symlink evidence directory
+must equal `review_root / "change-evidence"`. Reject an external path, an
+alternate in-root path, or any symlinked component. For preparation, require a
+canonical review root and parent, create only that exact absent output leaf,
+and reject an existing symlink or non-directory. Validation and admission
+recheck the same equality before reading evidence.
+
 - CLI:
 
 ```text
@@ -241,7 +251,9 @@ python3 bin/review_evidence.py validate \
   `patch_id` is the canonical receipt identifier; a file section without a
   textual hunk gets one file-level ID. Use `-` for an absent `hunk_ordinal` or
   `previous_path`. Each patch artifact has the exact relative path
-  `patches/<group_id>/<patch_id>.patch`.
+  `patches/<group_id>/<patch_id>.patch`. Its `change_kind` is exactly one of
+  `modified`, `added`, `deleted`, or `renamed`; `affected-unchanged` never has a
+  patch row.
 - `IMPACT_CLOSURE.tsv` is normative and has this exact ordered header:
   `path	reason	reached_from	change_kind	previous_path	content_sha256	byte_count	line_count	impact_edge_id	batch_id`.
   Allowed `change_kind` values are exactly `modified`, `added`, `deleted`,
@@ -254,6 +266,12 @@ python3 bin/review_evidence.py validate \
 - Enforce `reason == "changed"` if and only if `change_kind` is one of
   `modified`, `added`, `deleted`, or `renamed`; `affected-unchanged` requires a
   non-`changed` reason. Receipt hunk/edge rules key on `change_kind` only.
+- `path` alone remains the coverage key. `change_kind` and `previous_path` are
+  required deletion/rename provenance fields, not a composite
+  `(path, change_kind)` key.
+- For decoded UTF-8 current source, compute `line_count` exactly as
+  `len(text.splitlines())`; test newline-terminated, unterminated, and
+  newline-only files.
 - Each affected-unchanged path records one canonical, leader-selected
   reproducible proof edge. Do not duplicate path rows or add a multi-edge
   protocol; full source coverage, not exhaustive graph-edge enumeration, is
@@ -409,8 +427,16 @@ Implement the following additional named tests in the same file:
   `EvidenceError("reason/change_kind mismatch")`.
 - `test_prepare_handles_deletion_and_rename`: assert a deletion records empty
   SHA-256, byte count and line count zero, identical canonical old `path` and
-  `previous_path`, exact patch IDs, and no source requirement; assert a rename
-  records old `previous_path`, the new source, and its file-level rename ID.
+  `previous_path`, exact patch IDs, no current source, and a canonical deletion
+  diff section; require `EvidenceError("deleted path has current source")` when
+  that path still exists and `EvidenceError("deleted row lacks deletion diff")`
+  when the diff kind disagrees. Assert a rename records old `previous_path`,
+  the new source, and its file-level rename ID.
+- `test_evidence_directory_must_be_canonical_child`: reject an external
+  `output_dir`/`evidence_dir`, an alternate in-root directory, and a symlinked
+  `change-evidence` path; accept only the exact canonical child.
+- `test_line_count_matches_splitlines_convention`: assert exact counts for
+  newline-terminated, unterminated, newline-only, and zero-byte UTF-8 sources.
 - `test_oversized_source_receives_complete_single_path_batch`: set the byte
   limit below one source file's size and assert one batch contains that
   complete path with the exact byte and line counts and no shard records.
@@ -491,6 +517,10 @@ enough to detect and reject those controls. Spaces, quotes, backticks, and
 literal `$()` remain data and execute nothing. This is an intentional
 `0.2.532` input limit: do not silently omit a path or admit partial coverage.
 
+Before any output or evidence read, require the canonical non-symlink evidence
+directory to equal `review_root / "change-evidence"` exactly. This containment
+check is custody validation, not a generalized filesystem sandbox.
+
 Define `source_tree_digest` as SHA-256 over canonical
 `relative-path NUL file-sha256 NUL byte-count LF` records for every regular file
 below `review_root` except `output_dir`, sorted by UTF-8 path bytes. Reject every
@@ -503,9 +533,12 @@ completed `CHANGESET.md`; this ordering avoids a self-referential digest.
 `prepare_review_evidence` and `validate_review_evidence` reject every parsed
 diff target missing a `reason=changed` closure row and every changed closure
 row missing a diff section. They enforce the exact `reason`/`change_kind`
-equivalence above. A deleted path requires exact patch evidence but no current
-source observation or line evidence; a renamed path requires the new current
-source and its old path in `previous_path`.
+equivalence above. For a deleted row, both preparation and validation reject
+any existing current path and any canonical diff section that is not a
+deletion; valid deletion evidence has the empty digest/counts and exact patch
+IDs but no current observation or line evidence. A renamed path requires the
+new current source and its old path in `previous_path`. Compute every current
+source `line_count` with `len(decoded_text.splitlines())`.
 
 - [ ] **Step 5: Run focused and neighboring GREEN tests**
 
@@ -608,6 +641,9 @@ each exact response byte stream, every family, and final admission, then
 atomically writes canonical UTF-8 JSON. It exits nonzero and writes no admitted
 artifact on any invalid or non-admitted result. This output is the sole
 machine-admissible gate result; prose summaries cannot replace it.
+The CLI first requires canonical `evidence-dir` equality with
+`review-root/change-evidence`; an external, alternate, or symlinked evidence
+path is invalid.
 
 - A `changed` row's `changed_hunks` set exactly equals its canonical
   `PATCH_INDEX.tsv` `patch_id` set. An omitted, extra, duplicated, or forged
@@ -647,6 +683,11 @@ machine-admissible gate result; prose summaries cannot replace it.
 - `disposition="unresolved"`, a non-empty `unresolved_paths`, an
   `open_questions` entry, Critical/Major finding, or any `NOT-SAFE` receipt
   blocks admission.
+- Cross-check each `PathEvidence.disposition`. It is `unresolved` exactly for a
+  path in `unresolved_paths`; otherwise it is `finding` exactly when an
+  admitted finding location maps to that current path or one of its canonical
+  patch IDs, and `no-finding` only when neither condition holds. Reject every
+  contradictory disposition.
 - Each provider returns exactly one strict `BatchReceipt` JSON document per
   batch. The leader saves the exact UTF-8 response bytes under a
   family/batch-specific result path and gives those paths to
@@ -763,11 +804,17 @@ Implement these named tests with `evidence_fixture` and require
 - `test_finding_location_is_source_grounded`: reject malformed, out-of-closure,
   out-of-range, and digest-mismatched source or canonical patch locations;
 - `test_unresolved_disposition_is_rejected` -> `unresolved path`;
+- `test_disposition_must_match_findings_and_unresolved_paths`: reject
+  `finding` with no path-mapped finding, `no-finding` with a path-mapped
+  finding, and either resolved disposition for a path in `unresolved_paths`;
 - `test_admission_rejects_duplicate_family` -> `duplicate family coverage`;
 - `test_admission_rejects_missing_family` -> `missing family coverage`.
 - `test_admit_cli_is_the_only_persisted_gate`: build the exact three-family
   receipt tree, run `main(["admit", ...])`, assert canonical admitted JSON,
   then add one extra receipt and assert nonzero exit with no output.
+- `test_admit_rejects_external_or_symlinked_evidence_dir`: point the CLI at an
+  otherwise valid copied external evidence tree and then a symlinked
+  `change-evidence` path; require nonzero exit and no admitted output.
 
 - [ ] **Step 2: Run the coverage tests to verify RED**
 
@@ -797,7 +844,9 @@ such a line exists; allow a hunk-derived observation only when those ranges
 cover every current line. Exempt validator-proven zero-byte current sources
 and deleted rows from current observation/symbol/line requirements. Validate
 finding locations against digest-bound current closure paths or canonical
-patch artifacts.
+patch artifacts and use that mapping to enforce exact disposition consistency.
+Require `evidence_dir` to be the canonical non-symlink
+`review_root / "change-evidence"` before parsing receipts.
 Implement only the exact `admit` CLI and receipt layout above; do not add a
 general orchestration framework or source sharding.
 
@@ -882,6 +931,11 @@ def test_route_builder_contains_only_selector_and_effort() -> None:
 ```
 
 Remove test fixtures and monkeypatches that reference `_agy_settings`, sandbox modes, `_agy_needs_skip_permissions`, or `AGY_NO_HEADLESS_AUTOAPPROVE`.
+Remove every remaining `skip_permissions` argument/signature dependency,
+including the non-preflight `_build_cmd(..., skip_permissions=True)` call sites
+and the positional-arity assumption in
+`test_build_cmd_passes_model_and_optional_effort_unchanged`; preserve that
+test's selector/model/effort assertions.
 
 Delete
 `test_settings_guard_phase_is_preserved_in_custody_and_summary` and
@@ -901,6 +955,13 @@ classification-source comment when adding `permission-unavailable`. Rewrite
 `test_formal_review_uses_owner_routing_baseline_and_bounded_escalation` so its
 wrapper-source assertion expects `_build_route_args(model, effort)` and retains
 all unrelated routing assertions.
+Rewrite
+`test_nonroute_first_start_error_remains_ineligible_config_conflict`,
+`test_retry_pty_start_failure_remains_post_dispatch_and_ineligible`, and
+`test_schema_retry_transport_error_persists_attempt_state` to retain their
+driver exception containment, result custody, and fallback-ineligibility
+assertions while replacing the retired `dispatch-uncertain` phase with
+`post-dispatch-result`.
 
 - [ ] **Step 2: Run the AGY tests to verify RED**
 
@@ -929,9 +990,14 @@ if _is_headless_softdeny(scrubbed):
 ```
 
 Add `"permission-unavailable": EXIT_TERMINAL` to `map_classification_to_exit`.
-Remove the `pre-dispatch-settings`, `dispatch-uncertain` settings lease, and
-settings-release `config-conflict` branch. Call `_run_agy_with_retry` directly
-and retain its `post-dispatch-result` phase through result custody. Update the
+Remove only the `_agy_settings.agy_settings_guard(...)` lease, the
+`pre-dispatch-settings` / `dispatch-uncertain` / `post-dispatch-cleanup` phase
+assignments, and the settings-release suppression clause. Call
+`_run_agy_with_retry` directly and retain `post-dispatch-result` through result
+custody. Preserve the surrounding driver `try/except`, the pre-submission
+`EXIT_BINARY_MISSING` branch, and the custody-preserving terminal
+`config-conflict` result for `_pty.PtyStartError`, `TimeoutError`,
+`json.JSONDecodeError`, `ValueError`, and `OSError`. Update the
 `RunResult.dispatch_phase` comment plus retired sandbox/settings module
 docstrings. Task 5 separately updates the analyzer wording.
 
@@ -973,9 +1039,9 @@ git commit -m "fix: inherit native agy permissions"
   workspace-trust policy. TRIAD reports the native failure and adds neither a
   trust bypass nor a speculative denial detector.
 - Removed wrapper arguments are rejected by `argparse` rather than translated.
-- Remove orphaned `PERMISSION_CHOICES` / `PERMISSION_FORBIDDEN` constants from
-  Claude and orphaned `_wrapper_hardened` / `Path` imports from Gemini with
-  their consumers.
+- Remove orphaned `PERMISSION_CHOICES` / `PERMISSION_FORBIDDEN` constants and
+  the now-unused `os` import from Claude, and orphaned `_wrapper_hardened` /
+  `Path` imports from Gemini with their consumers.
 
 - [ ] **Step 1: Write failing argv tests**
 
@@ -1211,6 +1277,18 @@ over that five-line legacy form and the current seven-line pinned form emitted
 by `bootstrap_repair.launcher_text`, so the actual `0.2.531 -> 0.2.532`
 upgrade is covered. Do not add a second removal predicate.
 
+Rewrite the existing
+`test_repair_handoff_uses_one_json_input_envelope_and_valid_output_examples`
+to read `docs/references/repair-protocol.md` alone after the agent TOML is
+deleted. Preserve its one-envelope assertion and validate both `propose` and
+`escalate` examples against `_common.PATTERN_LIST_CLASS`,
+`_MIN_SUBSTRING_LEN`, and `_MAX_SUBSTRING_LEN`; remove only the
+`REPAIR_AGENT`, `developer_instructions`, and `agent_type` assertions. Fold the
+still-valid literal login-shell `bin/apply_patch.py` assertions from
+`test_repair_protocol_uses_the_exact_installed_agent_and_apply_contract` into
+`test_repair_protocol_uses_fresh_native_child_without_custom_agent`, then
+remove the retired exact-installed-agent half.
+
 - [ ] **Step 2: Run focused tests to verify RED**
 
 Run:
@@ -1224,7 +1302,9 @@ Expected: the protocol still names the registered agent and bootstrap still inst
 
 - [ ] **Step 3: Rewrite the repair protocol**
 
-Keep the fenced JSON envelope and proposal schema. Replace the Custom Agent call with:
+Keep the fenced JSON envelope and proposal schema, including both bounded
+example payloads validated by the rewritten distribution test. Replace the
+Custom Agent call with:
 
 ```python
 spawn_agent(
@@ -1371,6 +1451,12 @@ upgrade cleanup. Keep exact ownership inspectors/removers in
 all-or-nothing command-group staged publication for wrapper launchers;
 repair-agent retirement cannot weaken that transaction boundary.
 
+Remove all `scripts/bootstrap.sh` calls to the deleted
+`preflight_shell_entry`. The retained `update_shell_entry --action remove`
+operation performs the exact marker/content ownership check and removal as one
+guarded upgrade-cleanup action; a foreign or edited block is preserved and
+reported. Do not replace the retired preflight with a new policy layer.
+
 Rewrite the `bin/_common.py` hardening comment so it no longer claims that the
 retired shell entry activates `TRIAD_WRAPPER_HARDENED`. Describe only the
 remaining explicit environment-variable activation used by compatibility
@@ -1461,6 +1547,12 @@ git commit -m "refactor: remove plugin permission policy"
 - `BatchReceipt` is normative only for this batched route. The unchanged
   `FormalReview` model remains normative only for explicit legacy sealed-packet
   compatibility callers.
+- Keep the existing shared prompt contract's unbatched `formal-gate` line and
+  its four labeled semantic elements byte-identical as a compatibility
+  profile. Add a separately named `batched-full-coverage` profile selected only
+  when the exact batch metadata is present; it requires `BatchReceipt`. The
+  operational `0.2.532` skill selects the batched profile, and an unbatched
+  four-element answer is not coverage-admissible.
 
 - [ ] **Step 1: Load the skill-writing contracts and write failing distribution tests**
 
@@ -1554,6 +1646,11 @@ its expected closure IDs. `SAFE` is impossible for Critical/Major findings,
 any `NOT-SAFE` receipt, unresolved paths, or open questions.
 Require the exact `<family>/<batch-id>.json` receipt tree and admit a formal
 round only through the deterministic `review_coverage.py admit` output.
+In `review-prompt-contract.md`, preserve the existing unbatched
+`formal-gate -> verdict, findings, affected_surfaces_inspected, open_questions`
+profile verbatim and add the separately selected batched profile. Do not
+describe the legacy four-element semantic result or packet-bound
+`FormalReview` as an alternate receipt schema.
 
 Provider argv examples contain only prompt-file, cwd, selector, effort where
 applicable, and result controls. Keep stable instructions before batch-specific
@@ -1626,6 +1723,10 @@ Additionally:
   `test_fresh_codex_admission_docs_record_agy_fence_tolerance`, while adding
   route-specific assertions that the new `BatchReceipt` admission accepts only
   one outer fence and hashes the original bytes; and
+- update
+  `test_shared_review_prompt_contract_defines_envelope_and_mode_specific_results`
+  to preserve the byte-identical unbatched profile and assert the separately
+  selected `batched-full-coverage` profile; and
 - preserve the complete distribution test as the Task 7 GREEN gate so no
   stale assertion is deferred to release documentation.
 
