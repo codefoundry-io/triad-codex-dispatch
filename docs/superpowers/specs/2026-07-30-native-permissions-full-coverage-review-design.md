@@ -94,6 +94,17 @@ permission-mode synthesis path. They never add yolo, bypass, accept-edits,
 dont-ask, or equivalent controls. The CLI's native user/project settings decide
 whether a tool call is allowed, denied, or requires interaction.
 
+This owner-approved boundary also removes wrapper-injected read-only tool
+allowlists, strict MCP/settings-source overrides, AGY terminal sandbox
+selection, Gemini policy injection, and the plugin-managed pre-spawn
+`shell_environment_policy`. Those are permission/tool/environment policy
+controllers, not retained integrity controls. Review no-edit behavior is
+prompt-controlled and detected through immutable snapshots, digests, and
+pre/post fingerprints; TRIAD does not claim provider-enforced mutation
+prevention. Wrapper child-process environment scrubbing remains after the
+trusted launcher/interpreter starts, but TRIAD does not rewrite the developer's
+login environment before that point.
+
 The empirically observed native AGY headless denial returns the distinct
 `permission-unavailable` terminal result. It retains AGY's bounded diagnostic
 and is not reinterpreted as authentication failure, retried with broader
@@ -109,7 +120,7 @@ TRIAD retains:
 - credential, token, authentication-file, environment-dump, provider-log, and
   unrelated-path exclusions;
 - argv-array construction, executable-path pinning, prompt-file validation,
-  and environment scrubbing;
+  and wrapper child-process environment scrubbing after trusted startup;
 - one immutable shared review root and its before/after digest;
 - canonical-worktree fingerprints;
 - the no-edit and no-execution review task contract;
@@ -179,6 +190,11 @@ and `impact_edge_id` in addition to the existing path, reason, reachability,
 digest, byte-count, and batch fields. Changed rows use `impact_edge_id=-`.
 For an `affected-unchanged` row, derive `impact_edge_id` deterministically from
 the exact UTF-8 bytes of `path`, `reason`, and `reached_from`.
+The format records one canonical, leader-selected proof edge per affected
+path. Multiple discovery paths do not duplicate the source row or introduce an
+edge-list protocol; the leader selects the strongest reproducible edge and
+still reviews the complete source. This is provenance for path inclusion, not
+a claim that every possible graph edge is enumerated.
 
 For a deleted path, no current source file is permitted: `path` and
 `previous_path` both contain the canonical old path, record the SHA-256 of
@@ -276,7 +292,8 @@ implementation plan. Each provider prompt returns exactly one strict
 PathEvidence:
   path
   content_sha256
-  source_probe_sha256
+  observation_line
+  source_observation
   line_start
   line_end
   symbols
@@ -298,16 +315,18 @@ verdict
 ```
 
 `path_evidence` is not a list of manifest paths. Every non-deleted affected
-source path has one compact record containing its content digest, a
-`source_probe_sha256` derived from the raw current-source bytes, the exact full
-file line range `1..line_count`, optional symbol annotations, every changed
-hunk or recorded impact edge relevant to that path, and the reviewer's
-disposition. The probe is
-`SHA256(b"triad-source-probe-v1\0" + path_utf8 + b"\0" + source_bytes)` and is
-never written into reviewer-visible manifests. The validator recomputes it
-from the immutable source. Deleted paths retain patch evidence but require no
-current-source probe or line range. A receipt built only by echoing manifest
-and index fields is uncovered.
+source path has one compact record containing its content digest, the exact
+full-file line range `1..line_count`, one bounded exact source observation and
+its line number, optional symbol annotations, every changed hunk or recorded
+impact edge relevant to that path, and the reviewer's disposition.
+`source_observation` is a 1-160 character exact substring of the UTF-8 logical
+line named by `observation_line`; when that line has at least eight characters,
+the observation has at least eight. It is never written into
+reviewer-visible manifests. A whitespace-only or empty source uses empty
+observation text only when validation proves it has no non-whitespace
+character. Deleted paths retain patch evidence but require no current-source
+observation or line range. A receipt built only by echoing manifest and index
+fields is uncovered.
 
 `PathEvidence` retains per-path `changed_hunks` and
 `verified_impact_edges`; there is no redundant top-level
@@ -335,6 +354,10 @@ and an exact receipt tree of `<family>/<batch-id>.json`, rejects missing and
 extra receipt files, and atomically emits the sole machine-admissible
 `coverage-admission.json`. A prose summary or manually assembled family result
 cannot replace this command.
+Receipt schema enforcement is offline and uses the exact raw response bytes;
+wrappers do not add an in-band Pydantic repair route. A malformed receipt makes
+that family leg invalid and requires its complete fresh re-dispatch under the
+round contract.
 
 Provider-native file-read telemetry is retained and digest-bound when the
 provider exposes it. When a provider does not expose such telemetry, coverage
@@ -350,7 +373,7 @@ A formal result is admissible only when:
 - every changed file and hunk is covered by every required family;
 - every row in `IMPACT_CLOSURE.tsv` is covered by every required family;
 - every non-deleted covered path has the exact `1..line_count` range and a
-  valid raw-source probe absent from reviewer-visible manifests;
+  validated source observation absent from reviewer-visible manifests;
 - every covered path has the expected content digest;
 - every recorded impact edge is either verified or produces an unresolved
   question;
@@ -365,7 +388,9 @@ A formal result is admissible only when:
 `NOT-SAFE`, or any unresolved path or open question exists. For current source,
 optional symbols are annotations only; `line_start` and `line_end` are
 mandatory and must equal `1` and `ImpactRow.line_count`. Deleted rows require
-no probe, symbol, or line evidence.
+no observation, symbol, or line evidence. Current non-deleted source must be
+UTF-8 for exact observation and finding-location validation; invalid UTF-8
+stops evidence preparation rather than reducing coverage.
 
 Every `FormalFinding.location` is an exact review-relative `path:positive-line`
 reference. The validator admits only a digest-bound current closure path or
@@ -492,7 +517,7 @@ Implementation follows test-driven development.
   evidence mismatch is rejected.
 - RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
   are rejected.
-- GREEN: an echoed path without a valid raw-source probe, exact full-file range,
+- GREEN: an echoed path without a valid source observation, exact full-file range,
   and hunk/edge evidence is rejected as uncovered.
 - GREEN: a missing path, missing batch, digest mismatch, or newly discovered
   affected path invalidates the round.
@@ -500,6 +525,11 @@ Implementation follows test-driven development.
 - RED: malformed, out-of-closure, out-of-range, and digest-mismatched finding
   locations are rejected.
 - GREEN: the receipt-tree CLI is the only path that emits an admitted result.
+- GREEN: cheap native transport spikes prove Claude, Google, and fresh Codex
+  can return the same exact source observation without candidate execution or
+  mutation; provider-specific read mechanics do not change the common task.
+  The completed proof is recorded in
+  `docs/status/2026-07-30-native-source-observation-spike.md`.
 
 ### Quality gates
 
@@ -514,6 +544,8 @@ Implementation follows test-driven development.
 - a mandatory fresh Claude, Google-family, and Codex pre-merge full-coverage
   review over one immutable candidate directory;
 - source/cache hash comparison after installation; and
+- an owner-authorized disposable fresh-child probe that records the active
+  parent permission mode and the observed inherited child capability; and
 - fresh `codex exec --ephemeral` proof that the installed skill catalog exposes
   the new contract.
 
