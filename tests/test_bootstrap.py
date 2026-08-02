@@ -1438,6 +1438,209 @@ def test_managed_remove_preserves_marker_first_edited_legacy_policy(
     assert target.read_bytes() == edited
 
 
+@pytest.mark.parametrize(
+    ("variant", "edited"),
+    (
+        (
+            "inserted-read",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/usr/local/bin/agy" = "read"\n',
+                b'"/usr/local/bin/agy" = "read"\n"/owner/path" = "read"\n',
+                1,
+            ),
+        ),
+        (
+            "inserted-write",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/triad-codex-dispatch/bin/_debug" = "write"\n',
+                b'"/opt/triad-codex-dispatch/bin/_debug" = "write"\n'
+                b'"/owner/path" = "write"\n',
+                1,
+            ),
+        ),
+        (
+            "reordered-core-slots",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/triad-codex-dispatch/bin" = "read"\n'
+                b'"/Users/example/.local/bin" = "read"\n',
+                b'"/Users/example/.local/bin" = "read"\n'
+                b'"/opt/triad-codex-dispatch/bin" = "read"\n',
+                1,
+            ),
+        ),
+        (
+            "reordered-vendor-subsequence",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/usr/local/bin/claude" = "read"\n'
+                b'"/usr/local/bin/agy" = "read"\n',
+                b'"/usr/local/bin/agy" = "read"\n'
+                b'"/usr/local/bin/claude" = "read"\n',
+                1,
+            ),
+        ),
+        (
+            "inconsistent-log-parent",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/triad-codex-dispatch/bin/_logs" = "write"',
+                b'"/owner/bin/_logs" = "write"',
+                1,
+            ),
+        ),
+        (
+            "inconsistent-debug-parent",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/triad-codex-dispatch/bin/_debug" = "write"',
+                b'"/owner/bin/_debug" = "write"',
+                1,
+            ),
+        ),
+        (
+            "parent-traversal",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/Users/example/.local/bin" = "read"',
+                b'"/Users/example/.local/../bin" = "read"',
+                1,
+            ),
+        ),
+        (
+            "noncanonical-double-separator",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/Users/example/.config/triad-codex-dispatch" = "write"',
+                b'"/Users/example//.config/triad-codex-dispatch" = "write"',
+                1,
+            ),
+        ),
+        (
+            "noncanonical-double-root",
+            FROZEN_LEGACY_PROFILE.replace(
+                b"/opt/triad-codex-dispatch/bin",
+                b"//opt/triad-codex-dispatch/bin",
+            ),
+        ),
+        (
+            "broad-root-file-enumeration",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/triad-codex-dispatch/bin" = "read"',
+                b'"/opt/triad-codex-dispatch/bin/_common.py" = "read"',
+                1,
+            ),
+        ),
+        (
+            "slot-collision",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/Users/example/.local/bin" = "read"',
+                b'"/opt/triad-codex-dispatch/bin" = "read"',
+                1,
+            ),
+        ),
+        (
+            "unknown-vendor-basename",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/usr/local/bin/agy" = "read"',
+                b'"/usr/local/bin/owner-tool" = "read"',
+                1,
+            ),
+        ),
+        (
+            "unknown-python-basename",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/homebrew/opt/python@3.12/bin/python3.12" = "read"',
+                b'"/opt/homebrew/opt/python@3.12/bin/python3.owner" = "read"',
+                1,
+            ),
+        ),
+        (
+            "duplicate-vendor-slot",
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/usr/local/bin/agy" = "read"\n',
+                b'"/usr/local/bin/agy" = "read"\n'
+                b'"/opt/alternate/agy" = "read"\n',
+                1,
+            ),
+        ),
+    ),
+    ids=(
+        "inserted-read",
+        "inserted-write",
+        "reordered-core-slots",
+        "reordered-vendor-subsequence",
+        "inconsistent-log-parent",
+        "inconsistent-debug-parent",
+        "parent-traversal",
+        "noncanonical-double-separator",
+        "noncanonical-double-root",
+        "broad-root-file-enumeration",
+        "slot-collision",
+        "unknown-vendor-basename",
+        "unknown-python-basename",
+        "duplicate-vendor-slot",
+    ),
+)
+def test_managed_remove_preserves_unidentifiable_legacy_profile_slots(
+    tmp_path: Path, variant: str, edited: bytes
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    target = tmp_path / f"profile-{variant}"
+    target.write_bytes(edited)
+
+    assert not helper.managed_removal_data_is_owned(edited, "profile")
+    assert helper.remove_managed_artifact(target, "profile") == "unmanaged"
+    assert target.read_bytes() == edited
+
+
+def test_managed_remove_accepts_different_valid_legacy_profile_slots(
+    tmp_path: Path,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    alternate = (
+        FROZEN_LEGACY_PROFILE.replace(
+            b"/opt/triad-codex-dispatch/bin", b"/srv/triad/bin"
+        )
+        .replace(b"/Users/example/.local/bin", b"/var/lib/triad-launchers")
+        .replace(
+            b"/opt/homebrew/opt/python@3.12/bin/python3.12",
+            b"/usr/bin/python3",
+        )
+        .replace(
+            b"/Users/example/.config/triad-codex-dispatch",
+            b"/var/lib/triad-classifier",
+        )
+        .replace(b"/usr/local/bin/claude", b"/opt/vendor/claude")
+        .replace(b"/usr/local/bin/agy", b"/opt/vendor/agy")
+    )
+    target = tmp_path / "alternate-profile"
+    target.write_bytes(alternate)
+
+    assert helper.managed_removal_data_is_owned(alternate, "profile")
+    assert helper.remove_managed_artifact(target, "profile") == "removed"
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("mode", ("--install", "--remove"))
+def test_bootstrap_preserves_legacy_profile_with_inserted_read_slot(
+    tmp_path: Path, mode: str
+) -> None:
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    edited = FROZEN_LEGACY_PROFILE.replace(
+        b'"/usr/local/bin/agy" = "read"\n',
+        b'"/usr/local/bin/agy" = "read"\n"/owner/path" = "read"\n',
+        1,
+    )
+    profile.write_bytes(edited)
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg=mode,
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "leaving unmanaged Codex profile" in result.stdout
+    assert profile.read_bytes() == edited
+
+
 @pytest.mark.parametrize("mode", ("--install", "--remove"))
 def test_bootstrap_preserves_marker_first_edited_legacy_policy(
     tmp_path: Path, mode: str

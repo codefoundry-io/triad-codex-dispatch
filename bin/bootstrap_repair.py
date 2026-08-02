@@ -1378,6 +1378,8 @@ def _legacy_path_assignment(line: str, access: str) -> str | None:
         return None
     if not isinstance(value, str) or not Path(value).is_absolute():
         return None
+    if value.startswith("//") or os.path.normpath(value) != value:
+        return None
     canonical = '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return value if line == canonical + suffix else None
 
@@ -1442,14 +1444,41 @@ def _legacy_profile_data_is_owned(data: bytes) -> bool:
     ]:
         return False
     write_lines = lines[reallow_index + 1 : -3]
-    if not read_lines or not write_lines:
+    if not 3 <= len(read_lines) <= 6 or len(write_lines) != 3:
         return False
     read_paths = [_legacy_path_assignment(line, "read") for line in read_lines]
     write_paths = [_legacy_path_assignment(line, "write") for line in write_lines]
     if any(path is None for path in (*read_paths, *write_paths)):
         return False
     paths = [path for path in (*read_paths, *write_paths) if path is not None]
-    return len(paths) == len(set(paths))
+    if len(paths) != len(set(paths)):
+        return False
+    bin_directory = Path(paths[0])
+    if bin_directory.name != "bin":
+        return False
+    python_name = Path(paths[2]).name
+    python_name_parts = python_name.split(".")
+    if python_name_parts[0] != "python3" or any(
+        not part.isdecimal() for part in python_name_parts[1:]
+    ):
+        return False
+    historical_vendor_order = {"claude": 0, "gemini": 1, "agy": 2}
+    vendor_names = [Path(path).name for path in paths[3 : len(read_paths)]]
+    if any(name not in historical_vendor_order for name in vendor_names):
+        return False
+    if len(vendor_names) != len(set(vendor_names)):
+        return False
+    vendor_order = [historical_vendor_order[name] for name in vendor_names]
+    if vendor_order != sorted(vendor_order):
+        return False
+    classifier_directory, log_directory, debug_directory = map(
+        Path, paths[len(read_paths) :]
+    )
+    if log_directory != bin_directory / "_logs":
+        return False
+    if debug_directory != bin_directory / "_debug":
+        return False
+    return classifier_directory not in {bin_directory, log_directory, debug_directory}
 
 
 def _canonical_legacy_string_literal(value: str) -> str:
