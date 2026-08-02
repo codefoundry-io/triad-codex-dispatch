@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.532 — 2026-08-03
+
+- Candidate release: provider, user, and project settings now own permission
+  selection and workspace trust. TRIAD does not install or inject a permission
+  profile, command rule, pre-spawn `shell_environment_policy`, read-only repair
+  agent, sandbox mode, or bypass. Trusted terminal/Python/`PATH` startup remains
+  a prerequisite; wrapper child-process scrubbing remains after trusted startup.
+- Binds the full diff to the complete affected-source closure and exact current
+  candidate bytes. Formal plan and pre-merge gates include all repository test
+  source for this release, while normal SDD implementation review includes
+  relevant test source. Every required family reviews every affected production
+  source in every deterministic batch with source-grounded observations, exact
+  full-file ranges, and strict digest-bound coverage admission.
+- Retains the packaged `FormalReview` operand and unbatched `formal-gate` result
+  only for explicit compatibility callers. Operational pre-merge review uses
+  `batched-full-coverage` and the strict `BatchReceipt` contract; the two result
+  shapes are not interchangeable.
+- Makes native AGY `permission-unavailable` a terminal post-dispatch result.
+  Ordinary/non-formal Gemini fallback is limited to no-final-summary exit `4`
+  plus the wrapper-owned pre-submission `PtyStartError` diagnostic. Every
+  final-summary result is fallback-ineligible. Missing/invalid `TRIAD_AGY_BIN`
+  and missing `agy` on `PATH` are direct route-setup errors, not fallback
+  triggers.
+- Requires separate owner authorization for an exact formal Gemini route and
+  preserves the same immutable prepared directory, prompt-controlled no-edit
+  contract, digest/mutation invalidation, full batch matrix, and strict
+  admission. An unavailable required family leaves an invalid round.
+- Replaces the installed repair Custom Agent and apply launcher with a fresh
+  native proposal-only child and a bootstrap-printed login-shell
+  `python3 bin/apply_patch.py` owner argv carrying the same explicit pinned
+  `--classifier-file` used by provider launchers.
+- Removes wrapper `--sandbox` flags and current permission-controller setup.
+  Install/remove clean up only exact plugin-owned legacy profiles, rules,
+  repair registration, pre-spawn environment-policy fragments, and retired
+  launchers; owner-authored settings and credentials are preserved.
+- Current non-UTF-8 source fails closed with `non-UTF-8 source`; it cannot be
+  omitted from closure. Candidate verification, formal admission, installation,
+  and publication remain pending and are not release facts in this changelog.
+
 ## 0.2.531 — 2026-07-25
 
 - Adds one provider-neutral review prompt contract for Claude, Google-family,

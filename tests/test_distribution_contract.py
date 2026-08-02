@@ -101,6 +101,25 @@ def _heading_section(path: Path, heading: str) -> str:
     return text[match.start() : match.end() + (next_heading.start() if next_heading else len(remainder))]
 
 
+def test_02532_public_contract_is_native_and_full_coverage() -> None:
+    manifest = json.loads(_text(PLUGIN_MANIFEST))
+    english = " ".join(_text(ROOT / "README.md").split())
+    korean = " ".join(_text(ROOT / "README.ko.md").split())
+    security = " ".join(_text(SECURITY).split())
+    changelog = _text(CHANGELOG)
+
+    assert manifest["version"] == "0.2.532"
+    assert changelog.startswith("# Changelog\n\n## 0.2.532")
+    assert "same authenticated login terminal" in english
+    assert "동일한 인증된 로그인 터미널" in korean
+    assert "does not select or override a permission mode" in security
+    assert "every required family reviews every affected production source" in english
+    assert "agy calls may transact against Antigravity CLI runtime settings" not in english
+    assert "Antigravity settings under `~/.gemini/antigravity-cli/` are transacted" not in english
+    assert "agy 호출은 `~/.gemini/antigravity-cli/` 아래" not in korean
+    assert "Antigravity settings는 agy 호출 중" not in korean
+
+
 def test_formal_review_requires_full_family_batch_matrix_and_path_evidence() -> None:
     contract = "\n".join(
         _text(path)
@@ -297,37 +316,38 @@ def test_r14_corrected_round_ledger_and_upgrade_containment_contract_is_present(
             assert literal in section
 
     security = " ".join(_text(SECURITY).split())
-    assert "rules are opted out and no configured rules path remains" in security
-    assert "launcher\'s own scrub remains defense in depth" in security
+    assert "Wrapper child-process scrubbing remains defense in depth after trusted startup" in security
+    assert "does not install permission profiles, command rules, or a pre-spawn" in security
     changelog = _text(CHANGELOG)
     assert "## 0.2.529 — 2026-07-23" in changelog
     english = " ".join(_text(ROOT / "README.md").split())
     korean = " ".join(_text(ROOT / "README.ko.md").split())
-    assert "retained managed legacy" in english
+    assert "exact plugin-owned legacy" in english
     assert "ordinary `codex`" in english
-    assert "explicit legacy opt-in" in english
-    assert "no-prompt `allow`" in english or "no-prompt allow" in english
-    assert "stale `original config existed = true`" in english or "stale original config existed = true" in english
-    assert "남아 있는 managed legacy" in korean
+    assert "native provider permissions" in english
+    assert "does not install" in english
+    assert "plugin-owned permission profiles" in english
+    assert "정확한 plugin-owned legacy" in korean
     assert "일반 `codex`" in korean
-    assert "명시적 legacy opt-in" in korean
-    assert "no-prompt `allow`" in korean or "no-prompt allow" in korean
-    assert "stale original config existed = true" in korean
+    assert "provider native permission" in korean
+    assert "설치하지 않습니다" in korean
 
 
 def test_review_docs_distinguish_formal_advisory_and_sdd_test_boundaries() -> None:
-    english_paths = (
+    shared_contract_paths = (
         REVIEW_SKILL,
         FRESH_CODEX_REVIEW_REFERENCE,
-        ROOT / "README.md",
-        SECURITY,
-        CHANGELOG,
     )
-    for path in english_paths:
+    for path in shared_contract_paths:
         text = " ".join(_text(path).split())
         assert "formal plan and pre-merge" in text.casefold()
         assert "test source" in text.casefold()
         assert "normal sdd" in text.casefold() and "test source" in text.casefold()
+    for path in (ROOT / "README.md", SECURITY, CHANGELOG):
+        text = " ".join(_text(path).split()).casefold()
+        assert "formal plan and pre-merge" in text
+        assert "all repository test source" in text
+        assert "normal sdd" in text and "test source" in text
 
     for path in (PROVIDER_SKILLS[0], PROVIDER_SKILLS[1]):
         provider = " ".join(_text(path).split())
@@ -336,7 +356,7 @@ def test_review_docs_distinguish_formal_advisory_and_sdd_test_boundaries() -> No
 
     korean = " ".join(_text(ROOT / "README.ko.md").split())
     assert "정식 plan 및 pre-merge 3-패밀리 gate" in korean
-    assert "test-source exclusions" in korean
+    assert "모든 repository test source" in korean
     assert "일반 SDD 구현 리뷰" in korean and "test source" in korean
     assert (
         "다른 advisory review는 별도로 owner가 승인한 data scope를 따릅니다."
@@ -387,10 +407,16 @@ def test_task_3c_current_handoffs_use_shared_directory_and_label_history() -> No
     ):
         assert phrase in historical
 
-    for path in (ROOT / "README.md", ROOT / "README.ko.md", CHANGELOG):
+    for path in (ROOT / "README.md", ROOT / "README.ko.md"):
         text = " ".join(_text(path).split())
-        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in text
-        assert "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1" in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" not in text
+        assert "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1" not in text
+    current_release = _text(CHANGELOG).split("## 0.2.531", 1)[0]
+    historical_release = _heading_section(CHANGELOG, "## 0.2.529 — 2026-07-23")
+    assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" not in current_release
+    assert "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1" not in current_release
+    assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1" in historical_release
+    assert "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1" in historical_release
 
 
 def test_task2_active_handoffs_use_complete_shared_directory_input() -> None:
@@ -413,6 +439,17 @@ def test_task2_active_handoffs_use_complete_shared_directory_input() -> None:
         for phrase in required:
             assert phrase in flat, f"missing {phrase!r} in active {path}"
         assert "leader-captured non-test diff" not in flat
+    current_active = _text(handoffs[0]).split("## R14 corrected formal round", 1)[0]
+    resume_active = _text(handoffs[1]).split("## R14 corrected formal round", 1)[0]
+    routing_active = _text(handoffs[2]).split("## R14 corrected formal round", 1)[0]
+    assert "Test source stays out of reviewer scope" not in current_active
+    assert "Formal plan/pre-merge legs do not receive test source" not in resume_active
+    assert "Reviewers must not receive, open, or review test source" not in resume_active
+    assert "Provider read-only policy remains intact" in routing_active
+    assert "pre-0.2.532 history" in routing_active
+    assert "0.2.532 inherits provider permissions" in routing_active
+    assert "generates no Codex permission state" in routing_active
+    assert "0.2.532 formal plan/pre-merge rounds include all repository test source" in routing_active
 
 
 def test_task2_hardened_comments_name_opted_in_legacy_shell_entry() -> None:
@@ -431,6 +468,7 @@ def test_task2_readme_exit_code_legends_match_reachable_classes() -> None:
         exit_sixty_six = next(line for line in lines if line.startswith("| `66`"))
         exit_sixty_seven = next(line for line in lines if line.startswith("| `67`"))
         assert "extraction-error" in exit_one and "unknown" in exit_one
+        assert "permission-unavailable" in next(line for line in lines if line.startswith("| `65`"))
         assert "schema-rejected" in exit_sixty_seven
         assert "shared-directory formal path" in exit_sixty_six
         assert not any(line.startswith("| `69`") for line in lines)
@@ -670,6 +708,11 @@ def test_plugin_default_prompts_require_bounded_review_inputs() -> None:
         assert "exclusions" in folded
         assert "result profile" in folded
         assert "independent opinion on this code" not in folded
+    review_prompt = prompts[0]
+    assert "batched-full-coverage" in review_prompt
+    assert "operational pre-merge gate" in review_prompt
+    assert "formal-gate" in review_prompt
+    assert "unbatched compatibility formal-plan" in review_prompt
 
 
 def test_formal_review_uses_one_prepared_directory_and_bound_evidence_digests() -> None:
@@ -1142,20 +1185,26 @@ def test_readmes_explain_truncated_answer_terminal_recovery() -> None:
     assert "repair하거나 Gemini fallback으로 전환하지" in korean
 
 
-def test_status_handoff_records_current_release_branch_without_future_git_authority() -> None:
-    current = " ".join(
-        _text(ROOT / "docs" / "status" / "2026-07-22-current-state.md").split()
-    )
-    resume = " ".join(
-        _text(ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md").split()
+def test_status_handoff_records_frozen_02532_candidate_without_future_publication_claims() -> None:
+    current = _text(ROOT / "docs" / "status" / "2026-07-22-current-state.md")
+    resume = _text(ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md")
+    release_notes = _text(
+        ROOT / "docs" / "status" / "2026-07-30-v0.2.532-release-notes.md"
     )
 
-    assert "Branch: `release/0.2.529`" in current
-    assert "This branch has no configured upstream" in current
-    assert "Expected branch is release/0.2.529" in resume
-    assert "Do not commit, push" in current
-    assert "Do not commit, push" in resume
-    assert "authorized but pending at this review boundary" not in current
+    assert "Branch: `release/0.2.532`" in current
+    assert "Expected branch is release/0.2.532" in resume
+    for text in (current, resume, release_notes):
+        assert "external verification and publication remain pending" in " ".join(text.split())
+    frozen = " ".join(release_notes.split()).casefold()
+    for premature in (
+        "configured upstream",
+        "merged release",
+        "published tag",
+        "release url",
+        "completed release",
+    ):
+        assert premature not in frozen
 
 
 def test_status_records_native_execpolicy_evaluator_proof() -> None:
@@ -1180,7 +1229,7 @@ def test_package_version_and_removed_release_aliases_are_current() -> None:
     changelog = _text(CHANGELOG)
     bootstrap = _text(ROOT / "scripts" / "bootstrap.sh")
 
-    assert manifest["version"] == "0.2.531"
+    assert manifest["version"] == "0.2.532"
     interface = manifest["interface"]
     assert interface["displayName"] == "Triad Codex Dispatch"
     for required in (
@@ -1189,7 +1238,7 @@ def test_package_version_and_removed_release_aliases_are_current() -> None:
         assert isinstance(interface[required], str) and interface[required]
     assert interface["capabilities"] == ["Interactive", "Read", "Write"]
     assert 1 <= len(interface["defaultPrompt"]) <= 3
-    assert changelog.startswith("# Changelog\n\n## 0.2.531 — 2026-07-25\n")
+    assert changelog.startswith("# Changelog\n\n## 0.2.532 — 2026-08-03\n")
     assert "## 0.2.527 — 2026-07-21" in changelog
     for shipped in (
         "triad-apply-repair",
@@ -1881,7 +1930,7 @@ def test_formal_review_inspects_governing_documentation_in_the_worktree() -> Non
     assert "prepared directory" in skill
 
 
-def test_distribution_docs_describe_one_installed_analyzer_and_launcher() -> None:
+def test_distribution_docs_describe_native_repair_and_local_apply() -> None:
     docs = [
         ROOT / "README.md",
         ROOT / "README.ko.md",
@@ -1889,8 +1938,11 @@ def test_distribution_docs_describe_one_installed_analyzer_and_launcher() -> Non
     ]
     text = "\n".join(_text(path) for path in docs)
 
-    assert "triad-repair-analyzer" in text
-    assert "triad-apply-repair" in text
+    assert "fresh native proposal-only child" in text
+    assert "python3 bin/apply_patch.py" in text
+    assert "--classifier-file" in text
+    assert "triad-repair-analyzer" not in text
+    assert "triad-apply-repair" not in text
     assert "shlex.join" in text
     assert "features.multi_agent" not in text
     assert "scripts/apply-repair.sh" not in text
@@ -1904,6 +1956,23 @@ def test_distribution_docs_describe_one_installed_analyzer_and_launcher() -> Non
         "prompt.tmp",
     ):
         assert stale not in text
+
+
+def test_public_docs_remain_personal_without_company_fleet_guidance() -> None:
+    public = "\n".join(
+        _text(path) for path in (ROOT / "README.md", ROOT / "README.ko.md", SECURITY)
+    )
+    for stale in (
+        "COMPANY-SETUP",
+        "Company / fleet",
+        "company/fleet",
+        "managed fleet",
+        "회사 / fleet",
+        "회사/fleet",
+        "organization-approved elevation mechanism",
+        "macOS MDM",
+    ):
+        assert stale not in public
 
 
 def test_docs_use_current_google_preflight_instead_of_a_version_threshold() -> None:
@@ -2194,30 +2263,26 @@ def test_readmes_use_ordinary_codex_without_profile_or_alias() -> None:
     assert "--profile triad-codex-dispatch" not in korean
     assert "plugin, launchers, and profile are all wired" not in english
     assert "플러그인, launcher, profile 이 모두 연결" not in korean
-    assert "plugin, launchers, and rules are all wired" in english
-    assert "플러그인, launcher, rules 가 모두 연결" in korean
+    assert "same authenticated login terminal" in english
+    assert "동일한 인증된 로그인 터미널" in korean
     for document in (english, korean):
-        assert "repair-analyzer" in document
-        assert "loader-environment guard" in document
-        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0" in document
+        assert "repair-analyzer" not in document
+        assert "loader-environment guard" not in document
+        assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0" not in document
+        assert "permission opt-out" not in document
 
 
 def test_readmes_describe_agent_review_eligibility_truthfully() -> None:
     english = " ".join(_text(ROOT / "README.md").split())
     korean = " ".join(_text(ROOT / "README.ko.md").split())
 
-    assert 'approval_policy = "on-request"' in english
-    assert 'approvals_reviewer = "auto_review"' in english
-    assert "exact absolute-launcher rules use `prompt`" in english
-    assert "granular.rules = true" in english
-    assert "granular.sandbox_approval = true" in english
+    assert "provider, user, and project own permission selection" in english
+    assert "TRIAD does not select or override a permission mode" in english
+    assert "credentials" in english
     assert "provider logs" in english
-    assert "does not replace the owner's approval or reviewer settings" in english
-    assert 'approval_policy = "on-request"' in korean
-    assert 'approvals_reviewer = "auto_review"' in korean
-    assert "정확한 절대 launcher rule은 `prompt`" in korean
-    assert "granular.rules = true" in korean
-    assert "granular.sandbox_approval = true" in korean
+    assert "provider, user, project가 permission 선택을 소유" in korean
+    assert "TRIAD는 permission mode를 선택하거나 override하지 않습니다" in korean
+    assert "credential" in korean
     assert "provider log" in korean
 
 
@@ -2257,9 +2322,7 @@ def test_release_handoff_records_git_security_review_and_separate_boundaries() -
     )
 
     for handoff in handoffs:
-        assert "automatic security review" in handoff
-        assert "approval request" in handoff
-        assert "commit" in handoff
+        assert "external verification and publication remain pending" in handoff
         assert "push" in handoff
         assert "release" in handoff
         assert "pull request" in handoff or "pull-request creation" in handoff
@@ -2294,8 +2357,16 @@ def test_google_leg_prefers_agy_then_uses_configured_gemini_fallback() -> None:
         in " ".join(gemini_skill.split())
     )
 
-    readmes = _text(ROOT / "README.md") + _text(ROOT / "README.ko.md")
-    assert "Gemini fallback candidate" in readmes
+    english = " ".join(_text(ROOT / "README.md").split())
+    korean = " ".join(_text(ROOT / "README.ko.md").split())
+    assert "wrapper-owned pre-submission `PtyStartError`" in english
+    assert "missing or invalid `triad_agy_bin`" in english.casefold()
+    assert "missing `agy` on `PATH`" in english
+    assert "route-setup errors rather than fallback triggers" in english
+    assert "wrapper-owned 제출 전 `PtyStartError`" in korean
+    assert "missing/invalid `TRIAD_AGY_BIN`" in korean
+    assert "`PATH`에 `agy`가 없음" in korean
+    assert "fallback trigger가 아닌 route-setup error" in korean
 
 
 def test_google_fallback_requires_pre_dispatch_agy_unavailability() -> None:
@@ -2339,85 +2410,37 @@ def test_gemini_formal_fallback_requires_separate_exact_route_enforcement_proof(
     routing = " ".join(_text(REVIEW_ROUTING_REFERENCE).split())
     for phrase in (
         "A Gemini preflight/dispatch proves route availability only",
-        "not end-to-end enforcement-proven",
-        "separately recorded exact-route denial evidence",
-        "ineligible as a formal fallback",
+        "separately record owner authorization for the exact Gemini route",
+        "same immutable prepared directory",
+        "prompt-controlled no-edit/no-execution contract",
+        "digest and mutation invalidation",
+        "strict receipt admission",
         "required Google leg is unavailable",
-        "formal review round is invalid",
-        "ordinary/non-formal Gemini fallback remains available",
-        "does not create or run an automatic probe",
+        "formal round is invalid",
+        "TRIAD does not add an enforcement probe",
     ):
         assert phrase in routing
 
-    gemini = " ".join(
-        _text(ROOT / "skills" / "triad-gemini-dispatch" / "SKILL.md").split()
+    public_status = (
+        ROOT / "README.md",
+        ROOT / "README.ko.md",
+        SECURITY,
+        CHANGELOG,
+        ROOT / "docs" / "status" / "2026-07-22-current-state.md",
+        ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md",
     )
-    for phrase in (
-        "formal reviewer routing contract",
-        "ordinary/non-formal Gemini fallback remains available",
-        "checked-in distribution has no qualifying enforcement proof",
-        "required Google leg is unavailable",
-        "formal review round is invalid",
-        "does not create or run an automatic probe",
-    ):
-        assert phrase.casefold() in gemini.casefold()
-    assert "Gemini's formal leg uses provider-enforced reads/searches only" not in gemini
-
-    agy = " ".join(
-        _text(ROOT / "skills" / "triad-antigravity-dispatch" / "SKILL.md").split()
-    )
-    for phrase in (
-        "formal reviewer routing contract",
-        "ordinary/non-formal Gemini fallback remains available",
-        "canonical formal proof gate",
-    ):
-        assert phrase.casefold() in agy.casefold()
-
-    public_expectations = {
-        "README.md": (
-            "reviewer-routing.md",
-            "ordinary/non-formal Gemini fallback",
-            "formal Gemini fallback",
-        ),
-        "README.ko.md": (
-            "reviewer-routing.md",
-            "일반/비정식 Gemini fallback",
-            "정식 Gemini fallback",
-        ),
-        "SECURITY.md": (
-            "reviewer-routing.md",
-            "provider-side enforcement remains unproven",
-            "formal Gemini fallback",
-        ),
-        "CHANGELOG.md": (
-            "reviewer-routing.md",
-            "centralizes the complete formal Gemini admission policy",
-            "ordinary/non-formal fallback",
-        ),
-    }
-    for name, phrases in public_expectations.items():
-        flat = " ".join(_text(ROOT / name).split()).casefold()
-        for phrase in phrases:
-            assert phrase.casefold() in flat, f"{name} missing {phrase!r}"
-
-    status_expectations = {
-        "2026-07-22-current-state.md": (
-            "reviewer-routing.md",
-            "no qualifying enforcement proof",
-            "formal Gemini fallback remains unavailable",
-        ),
-        "2026-07-22-resume-prompt.md": (
-            "reviewer-routing.md",
-            "Do not admit a formal Gemini fallback",
-            "ordinary/non-formal fallback remains available",
-        ),
-    }
-    for name, phrases in status_expectations.items():
-        flat = " ".join(
-            _text(ROOT / "docs" / "status" / name).split()
-        ).casefold()
-        for phrase in phrases:
-            assert phrase.casefold() in flat, f"{name} missing {phrase!r}"
+    for path in public_status:
+        flat = " ".join(_text(path).split()).casefold()
+        for phrase in (
+            "separate owner authorization",
+            "immutable prepared directory",
+            "prompt-controlled no-edit",
+            "digest/mutation invalidation",
+            "strict admission",
+            "unavailable",
+            "invalid round",
+        ):
+            assert phrase in flat, f"{path} missing {phrase!r}"
 
 def test_gemini_discovery_and_readmes_are_fallback_only() -> None:
     metadata = _text(
@@ -2441,7 +2464,7 @@ def test_gemini_discovery_and_readmes_are_fallback_only() -> None:
     assert "설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음" in korean
 
 
-def test_public_docs_state_formal_schema_and_phase_based_fallback() -> None:
+def test_public_docs_state_formal_schema_and_exact_owned_fallback() -> None:
     english = _text(ROOT / "README.md")
     korean = _text(ROOT / "README.ko.md")
     security = _text(ROOT / "SECURITY.md")
@@ -2449,18 +2472,25 @@ def test_public_docs_state_formal_schema_and_phase_based_fallback() -> None:
     english_flat = " ".join(english.split())
     changelog_flat = " ".join(changelog.split())
 
-    assert (
-        "phase=pre-dispatch-settings` is necessary but not sufficient"
-        in english_flat
-    )
-    assert "uncertain or post-dispatch phases are ineligible" in english_flat
-    assert "`phase=pre-dispatch-settings`는 필요조건일 뿐 충분조건이 아니며" in korean
-    assert "post-dispatch phase는 fallback 대상이 아닙니다" in korean
-    assert "one leader-prepared shared review" in security.lower()
-    assert "one simple content digest" in security.lower()
-    assert "explicit pre-submission agy route unavailability" in security
+    assert "no-final-summary exit `4`" in english_flat
+    assert "wrapper-owned pre-submission `PtyStartError`" in english_flat
+    assert "every final-summary result is fallback-ineligible" in english_flat
+    assert "no-final-summary exit `4`" in korean
+    assert "wrapper-owned 제출 전 `PtyStartError`" in korean
+    assert "모든 final-summary result는 fallback-ineligible" in korean
+    for retired in (
+        "phase=pre-dispatch-settings",
+        "phase=dispatch-uncertain",
+        "phase=post-dispatch-cleanup",
+    ):
+        assert retired not in english
+        assert retired not in korean
+    security_flat = " ".join(security.lower().split())
+    assert "one leader-prepared shared review" in security_flat
+    assert "one simple content digest" in security_flat
+    assert "full affected-source coverage" in security
     assert "packaged `FormalReview` operand" in changelog_flat
-    assert "proven pre-dispatch agy-unavailability fallback" in changelog_flat
+    assert "`BatchReceipt`" in changelog_flat
 
 
 def test_public_distribution_describes_worktree_first_review_boundaries() -> None:
@@ -2496,19 +2526,18 @@ def test_task_3a_active_guidance_uses_minimal_shared_directory_contract() -> Non
         "Normal code-write dispatch should run", 1
     )[0]
 
-    for text in (root_policy, readme):
-        flat = " ".join(text.split())
-        for phrase in (
+    common = (
             "one leader-prepared shared review directory",
             "current approved production source, configuration, and documentation",
-            "exact test-source exclusions",
-            "stop and ask the owner",
             "Every leg receives the same directory and task",
             "No prompt inlines a diff or file body",
             "one simple content digest",
             "Normal SDD implementation review includes relevant test source",
             "classify every test failure as production defect, test-case defect, or intentional specification change",
-        ):
+    )
+    for text in (root_policy, readme):
+        flat = " ".join(text.split())
+        for phrase in common:
             assert phrase in flat
 
         for stale in (
@@ -2519,6 +2548,9 @@ def test_task_3a_active_guidance_uses_minimal_shared_directory_contract() -> Non
             "source archive",
         ):
             assert stale not in flat
+    assert "exact test-source exclusions" in " ".join(root_policy.split())
+    assert "stop and ask the owner" in " ".join(root_policy.split())
+    assert "all repository test source" in " ".join(readme.split())
 
 
 def test_task_3b_active_guidance_uses_minimal_shared_directory_contract() -> None:
@@ -2527,8 +2559,8 @@ def test_task_3b_active_guidance_uses_minimal_shared_directory_contract() -> Non
         "## 문제 해결", 1
     )[0]
     security = _text(ROOT / "SECURITY.md")
-    security = security.split("## Residual risk and formal review", 1)[1].split(
-        "## Auto-review boundary", 1
+    security = security.split("## Review and coverage boundary", 1)[1].split(
+        "## Google fallback boundary", 1
     )[0]
 
     for text in (korean, security):
@@ -2536,8 +2568,6 @@ def test_task_3b_active_guidance_uses_minimal_shared_directory_contract() -> Non
         for phrase in (
             "one leader-prepared shared review directory",
             "current approved production source, configuration, and documentation",
-            "exact test-source exclusions",
-            "stop and ask the owner",
             "Every leg receives the same directory and task",
             "No prompt inlines a diff or file body",
             "one simple content digest",
@@ -2554,6 +2584,8 @@ def test_task_3b_active_guidance_uses_minimal_shared_directory_contract() -> Non
             "source archive",
         ):
             assert stale not in flat
+    assert "모든 repository test source" in " ".join(korean.split())
+    assert "all repository test source" in " ".join(security.split())
 
 
 def test_task_3d_resume_and_routing_handoffs_stop_before_external_round() -> None:
@@ -2573,8 +2605,7 @@ def test_task_3d_resume_and_routing_handoffs_stop_before_external_round() -> Non
         for phrase in (
             "one leader-prepared shared review directory",
             "current approved production source, configuration, and documentation",
-            "Project instructions or the owner supply exact test-source exclusions",
-            "stop and ask the owner",
+            "all repository test source",
             "Every leg receives the same directory and task",
             "No prompt inlines a diff or file body",
             "one simple content digest",
@@ -2858,8 +2889,7 @@ def test_task_3d_current_handoffs_use_shared_directory_and_digest() -> None:
         for phrase in (
             "one leader-prepared shared review directory",
             "current approved production source, configuration, and documentation",
-            "exact test-source exclusions",
-            "stop and ask the owner",
+            "all repository test source",
             "every leg receives the same directory and task",
             "no prompt inlines a diff or file body",
             "one simple content digest",
@@ -2910,6 +2940,18 @@ def test_r17_leader_fingerprint_is_unscoped_and_current_surfaces_ban_only_separa
     for obsolete in ("canonical_git_visible_fingerprint", "path_args", "merge-base"):
         assert obsolete not in skill_flat
         assert obsolete not in fresh_flat
+    for path in (
+        ROOT / "README.md",
+        ROOT / "README.ko.md",
+        SECURITY,
+        CHANGELOG,
+        ROOT / "docs" / "status" / "2026-07-22-current-state.md",
+        ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md",
+    ):
+        flat = " ".join(_text(path).split()).casefold()
+        assert "full diff" in flat
+        assert "complete affected-source closure" in flat
+        assert "content_digest" in flat or "content digest" in flat
 
 
 def test_r17_scope_specific_reviewer_commands_are_fail_closed_and_literal_safe() -> None:
@@ -3103,12 +3145,15 @@ def test_public_remove_docs_cover_every_managed_config_surface() -> None:
     korean = " ".join(_text(ROOT / "README.ko.md").split())
 
     for document in (english, korean):
-        assert "triad-apply-repair" in document
+        assert "three provider wrapper launchers" in document
+        assert "exact plugin-owned legacy" in document
         assert "[shell_environment_policy]" in document
         assert "config.toml" in document
-        assert "repair-analyzer registration" in document
-    assert "only managed content" in english
-    assert "유일한 managed content" in korean
+        assert "owner-authored" in document
+        assert "triad-apply-repair" not in document
+        assert "triad-repair-analyzer" not in document
+    assert "preserves owner-authored settings" in english
+    assert "owner-authored 설정을 보존" in korean
 
 
 def test_current_security_and_runtime_wording_matches_prompt_rules() -> None:
@@ -3221,10 +3266,10 @@ def test_readme_summary_says_leader_persists_only_unique_proposal_json() -> None
     english = _text(ROOT / "README.md")
     korean = _text(ROOT / "README.ko.md")
 
-    assert "The analyzer returns a proposal; the leader writes only that proposal" in english
-    assert "to a unique UTF-8 JSON file" in english
-    assert "analyzer는 proposal을 반환하고, leader는 그 proposal만" in korean
-    assert "고유한 UTF-8 JSON 파일" in korean
+    assert "fresh native proposal-only child" in english
+    assert "stores only the proposal in a unique UTF-8 JSON file" in english
+    assert "fresh native proposal-only child" in korean
+    assert "proposal만 고유 UTF-8 JSON에 저장" in korean
 
 
 def test_distribution_text_has_no_stale_numbered_repair_workflow_claims() -> None:
@@ -3344,10 +3389,10 @@ def test_task4_readmes_preserve_preexisting_config_toml_bytes_on_remove() -> Non
     english = " ".join(_text(ROOT / "README.md").split())
     korean = " ".join(_text(ROOT / "README.ko.md").split())
 
-    assert "only when it did not exist before installation" in english
-    assert "owner bytes" in english
-    assert "설치 전에 존재하지 않았던 경우에만" in korean
-    assert "owner content" in korean
+    assert "Owner-authored `config.toml`" in english
+    assert "an owner file is never removed" in english
+    assert "owner-authored 설정을 보존" in korean
+    assert "`config.toml`" in korean
 
 
 def test_task4_cross_family_skill_names_catalog_selector_inline() -> None:
@@ -3546,10 +3591,18 @@ def test_r21_handoffs_date_current_result_and_mark_687_historical() -> None:
         ),
     }
     handoffs = {name: _text(path) for name, path in paths.items()}
+    release_notes = _text(
+        ROOT / "docs" / "status" / "2026-07-30-v0.2.532-release-notes.md"
+    )
     historical_result = "687 passed plus 6 subtests in 158.50s"
     current_result = "709 passed in 152.64s"
 
-    assert "Updated: 2026-07-24" in handoffs["current"]
+    current_date = re.search(r"^Updated: (\d{4}-\d{2}-\d{2})$", handoffs["current"], re.MULTILINE)
+    candidate_date = re.search(r"^Candidate date: (\d{4}-\d{2}-\d{2})$", release_notes, re.MULTILINE)
+    assert current_date is not None
+    assert candidate_date is not None
+    assert current_date.group(1) == candidate_date.group(1) == "2026-08-03"
+    assert current_date.group(1) >= "2026-08-02"
     assert "Updated: 2026-07-24" in handoffs["routing"]
 
     for text in handoffs.values():

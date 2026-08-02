@@ -21,6 +21,9 @@ def test_distribution_has_no_permission_migration_templates() -> None:
 def test_release_headers_are_in_descending_order() -> None:
     changelog = _text(ROOT / "CHANGELOG.md")
 
+    assert changelog.index("## 0.2.532") < changelog.index("## 0.2.531")
+    assert changelog.index("## 0.2.531") < changelog.index("## 0.2.530")
+    assert changelog.index("## 0.2.530") < changelog.index("## 0.2.529")
     assert changelog.index("## 0.2.529") < changelog.index("## 0.2.528")
     assert changelog.index("## 0.2.528") < changelog.index("## 0.2.527")
 

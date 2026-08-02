@@ -20,16 +20,16 @@ Read these documents completely, in this exact order:
 2. /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/docs/status/2026-07-22-current-state.md
 3. /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/docs/status/2026-07-22-resume-prompt.md
 
-First verify the exact worktree, branch, local HEAD, upstream state, and dirty
-source/documentation set. Expected branch is release/0.2.529 at local HEAD
-f0376dfc34006e0ee73e6ea4673a0d7f1c4a8586, with no configured upstream at this
-boundary. Derive the live state from Git rather than assuming it is unchanged.
+First verify the exact worktree, branch, local HEAD, and dirty
+source/documentation set. Expected branch is release/0.2.532. Derive the live
+state from Git rather than assuming it is unchanged; external verification and
+publication remain pending. Do not infer a post-candidate gate or release fact.
 
 Preserve the unrelated dirty checkout at
 /Users/chaniri/triad-codex-dispatch. Do not reset, clean, copy over, merge into,
 or otherwise modify it.
 
-Do not commit, push, merge to another branch, reinstall, release, or create a
+Do not push, merge to another branch, reinstall, tag, release, or create a
 pull request as an incidental step. Git history and remote-state mutations need
 their applicable authorization and may present an automatic security review
 approval request.
@@ -40,13 +40,12 @@ owner confirms local verification and fresh SDD review.
 
 Any formal plan/pre-merge review uses one leader-prepared shared review directory
 containing current approved production source, configuration, and documentation.
-Project instructions or the owner supply exact test-source exclusions; if those
-exclusions are unavailable, stop and ask the owner. Every leg receives the same
+For the 0.2.532 candidate, the exact no-exclusion boundary includes all
+repository test source. Every leg receives the same
 directory and task. No prompt inlines a diff or file body. Record one simple
 content digest before dispatch and compare it after every required leg terminates;
 a mismatch invalidates the round. Reviewers use only the approved data boundary.
-Formal plan/pre-merge legs do not receive test source; normal SDD implementation
-review includes relevant test source. Before a formal gate, classify every test
+Normal SDD implementation review includes relevant test source. Before a formal gate, classify every test
 failure as production defect, test-case defect, or intentional specification
 change and resolve or approve it.
 
@@ -54,26 +53,35 @@ Provider legs use only their approved read-only inspection route and must not ru
 candidate code, tests, builds, hooks, or generated scripts. Local test execution
 and result verification remain leader operations.
 
+The full diff is navigation evidence bound to the complete affected-source
+closure and exact current source bytes. Every required family reviews every
+affected production source in every deterministic batch, returning
+source-grounded observations, exact full-file ranges, and strict coverage
+receipts. A manifest path alone is not coverage.
+
 Use fresh Codex gpt-5.6-terra/xhigh/fork_turns none, Claude opus/xhigh, and
 primary agy authenticated `agy models` catalog selector
 `gemini-3.1-pro-high`; exact outbound model argument `Gemini 3.1 Pro (High)`
 with no `--effort`. Sol/Fable are conditional long-running escalations, not
-routine reviewers. Gemini is fallback-only after proven
-pre-submission agy route unavailability.
+routine reviewers. Gemini is fallback-only for the no-final-summary exit `4`
+plus wrapper-owned pre-submission `PtyStartError` proof. Every final-summary
+result is fallback-ineligible. Missing/invalid `TRIAD_AGY_BIN` and missing `agy`
+on `PATH` are direct route-setup errors.
 
-Do not admit a formal Gemini fallback: the shipped distribution has no qualifying
-enforcement proof and runs no automatic probe. Ordinary/non-formal fallback
-remains available after proven pre-submission agy unavailability. Apply the
+Formal Gemini fallback requires separate owner authorization for the exact route,
+provider, data boundary, and objective, plus the same immutable prepared
+directory, prompt-controlled no-edit contract, digest/mutation invalidation,
+full batch matrix, and strict admission. An unavailable required family leaves
+an invalid round. Apply the
 [formal reviewer routing contract](../../skills/triad-cross-family-review/references/reviewer-routing.md)
 if the owner later records route-specific proof.
 
-The normal bootstrap keeps ordinary codex, does not install a dedicated profile,
-and does not replace owner approval, reviewer, sandbox, or Auto-review policy.
-Exact managed launcher rules use decision=prompt. Agent Review requires
-approvals_reviewer=auto_review plus an interactive approval policy:
-approval_policy=on-request is sufficient; granular policy additionally needs
-granular.rules=true and granular.sandbox_approval=true. Do not auto-install an
-[auto_review].policy. The explicit owner skill invocation supplies one
+The normal bootstrap keeps ordinary codex and installs no permission profile,
+command rule, repair agent, or pre-spawn environment policy. Provider/user/project
+settings own permission and trust selection. Bootstrap publishes the three
+provider wrapper launchers, pins the classifier path, and prints the direct
+login-shell `python3 bin/apply_patch.py` owner argv with explicit
+`--classifier-file`. The explicit owner skill invocation supplies one
 authorization within an unchanged provider/worktree/scope/data boundary;
 credentials, authentication files, environment dumps, provider logs, and
 unrelated paths stay excluded. Do not ask again for each matching leg. `/approve`
@@ -244,9 +252,9 @@ current approved production source, configuration, and documentation plus a
 common task as the complete review input. Every leg receives the same directory
 and task; no prompt inlines a diff or file body. Record one simple content
 digest before dispatch and compare it after every required leg terminates; a
-mismatch invalidates the round. Reviewers must not receive, open, or review test
-source; local tests and the full-worktree mutation fingerprint remain leader
-operations.
+mismatch invalidates the round. Under the current 0.2.532 no-exclusion boundary,
+all repository test source is included; local tests and the full-worktree
+mutation fingerprint remain leader operations.
 
 The R14-R17 ledger blocks below are historical-only records. Their path-list-era
 next-run wording is superseded by the current shared-directory flow and must not

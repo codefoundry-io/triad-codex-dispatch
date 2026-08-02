@@ -26,23 +26,21 @@ reaches out to the other families for you.
 - Bootstrap newly publishes only three provider wrapper commands: Claude, agy,
   and Gemini. `triad-setup` and `triad-doctor` are remove-only legacy cleanup
   names.
-- Exact command rules for the three managed wrapper launchers. They use
-  `decision = "prompt"` and work from an ordinary `codex` session. Bootstrap
-  does not install a dedicated profile and does not replace the owner's approval
-  or reviewer settings, model, reasoning, or sandbox settings.
-- One installed read-only `triad-repair-analyzer` Custom Agent for classifier
-  gaps. The analyzer returns a proposal; the leader writes only that proposal
-  to a unique UTF-8 JSON file. The owner applies it with the deterministic
-  installed `triad-apply-repair` executable from a normal authenticated
-  terminal. Legacy three-agent files are migration quarantine or removal
-  material, not an active repair route.
+- Native provider permissions: provider, user, and project own permission
+  selection. TRIAD does not select or override a permission mode, install
+  plugin-owned permission profiles or command rules, or replace project trust.
+- Classifier gaps use a fresh native proposal-only child. The owner applies an
+  accepted proposal locally from the same authenticated login terminal with the
+  bootstrap-printed `python3 bin/apply_patch.py ... --classifier-file ...`
+  command. No repair Custom Agent or apply launcher is installed.
 
 ## Required (~2 minutes)
 
 Three steps get you a working install in ordinary Codex. Everything past this
 section is optional.
 
-1. **Native vendor logins.** Install and log in to the leader `codex` and the
+1. **Native vendor logins.** Use the same authenticated login terminal and
+   project worktree used for development. Install and log in to the leader `codex` and the
    workers you will use — the toolkit issues/refreshes no credentials:
    - `codex` — install, then `codex login`.
    - `agy` — install + OAuth sign-in (the Google-family worker for individual
@@ -86,70 +84,39 @@ section is optional.
    command in the Python environment you own, then rerun bootstrap. Bootstrap
    does not install Python packages itself.
 
-   The script installs exact command rules and three provider wrapper commands.
-   It also appends a provenance-marked repair-analyzer registration to
-   `$CODEX_HOME/config.toml` and, when no owner-authored policy exists, a
-   provenance-marked loader-environment guard. Every other config key is
-   preserved; an owner-authored or edited environment policy is left untouched
-   with a warning, and `--remove` strips only exact managed blocks. It does not
-   install a dedicated profile, alter the owner's Codex approval/reviewer/sandbox
-   keys, or run provider login or model probes. The exact absolute-launcher
-   rules use `prompt`.
+   The script installs the three provider wrapper launchers as one staged,
+   all-or-nothing command group. It does not install a Codex permission profile,
+   command rule, repair-agent registration, or pre-spawn
+   `[shell_environment_policy]`. It preserves owner-authored `config.toml`,
+   rules, permission settings, credentials, and unrelated files. Provider,
+   user, and project settings decide whether a native operation is allowed,
+   denied, or interactive.
 
-   Bootstrap publishes the provider wrapper commands only after the repair
-   lifecycle has installed its analyzer, registration, and
-   `triad-apply-repair` transaction successfully. A late repair-registration
-   failure therefore leaves the provider launchers, `triad-apply-repair`,
-   analyzer/registration, command rules, and legacy shell entry unpublished.
+   Bootstrap pins the install-resolved classifier path in every provider
+   launcher and prints the direct owner apply argv, rendered with Python
+   `shlex.join`, for login-shell `python3 bin/apply_patch.py` with the same
+   required explicit `--classifier-file`. There is no installed apply launcher,
+   and the owner apply path never recomputes an ambient classifier default.
 
-   For automatic Agent Review, use either:
-
-   ```toml
-   approval_policy = "on-request"
-   approvals_reviewer = "auto_review"
-   ```
-
-   or preserve an existing granular policy while ensuring
-   `granular.rules = true` and `granular.sandbox_approval = true`. The former
-   keeps every eligible approval category interactive; the latter is required
-   so exact rule prompts and sandbox escalation are not auto-rejected before
-   Agent Review. Keep all other granular category choices unchanged. With
-   `approvals_reviewer = "user"`, the wrappers still work but prompt the person.
-   With `approval_policy = "never"`, Agent Review does not run.
-
-   These settings follow OpenAI's [Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review),
-   [rules](https://learn.chatgpt.com/docs/agent-configuration/rules), and
-   [approval-policy](https://learn.chatgpt.com/docs/config-file/config-advanced#approval-policies-and-sandbox-modes)
-   documentation.
-
-   The plugin does not install `[auto_review].policy`; doing so could replace
-   the owner's reviewer instructions, and managed policy has higher precedence.
-   The explicit owner request plus the exact rule justification supplies the
-   authorization context. A denied exact action can be selected once through
-   `/approve`; do not replace that narrow override with a broad allow rule.
-
-   Automatic review is an execution-time security check, not owner workflow
+   Native permission handling is an execution-time boundary, not owner workflow
    authorization. Commit, push, plugin or dependency installation, release, and
    publication remain separate owner decisions; the leader must not initiate
    them merely because `approvals_reviewer = "auto_review"` is active.
 
    > **Placement invariant (hard).** Run bootstrap from your project workspace,
    > not from a directory that contains the install targets. Bootstrap writes the
-   > command rules and provenance-marked config registrations under `$CODEX_HOME`
-   > (default `~/.codex/`), classifier
-   > patches under `~/.config/triad-codex-dispatch/`, and launchers under
+   > classifier patches under `~/.config/triad-codex-dispatch/`, and launchers under
    > `~/.local/bin` (or `TRIAD_BOOTSTRAP_BIN_DIR`). Those targets — and everything
    > they exec (the plugin cache, the `python3` runtime) — must live outside all
    > sandbox-writable roots; bootstrap hard-fails if any resolves inside the
    > directory it runs from (for example `$HOME`).
 
-   The normal path intentionally has no dedicated permission profile. Start
-   ordinary `codex` at the actual project/workspace root, not `$HOME` or another
-   ancestor of `~/.local/bin`, `$CODEX_HOME`, or the plugin cache. A later
-   workspace-write session rooted above those managed executables could rewrite
-   them; the install-time placement check cannot enforce a different future
-   session root. The legacy profile remains an explicit migration-only option
-   for owners who need per-session exec-target denies.
+   Start ordinary `codex` from the same authenticated login terminal and actual
+   project worktree. Select provider permissions and provider-owned workspace
+   trust there before dispatch. TRIAD inherits those native decisions and does
+   not inject a separate permission or trust bypass. Trusted Python and `PATH`
+   are prerequisites; wrapper child-process scrubbing remains after the trusted
+   launcher and interpreter start.
 
    Then start a fresh ordinary Codex session from the target workspace:
 
@@ -160,8 +127,9 @@ section is optional.
    Use `/status` to verify the active approval policy and `/debug-config` when a
    project, profile, or managed layer changes the expected reviewer.
 
-That is the whole required path. Repair is a manual, read-only step surfaced only
-when needed (see [Custom Subagents](#custom-subagents) and [Security](#security)).
+That is the whole required path. Repair is a proposal-only native-child step
+surfaced only when needed (see [Custom Subagents](#custom-subagents) and
+[Security](#security)).
 
 ## Optional / Advanced
 
@@ -175,27 +143,23 @@ subsection only when its "do this ONLY if…" line applies to you.
 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1` if a team wants bootstrap to require it.
 Bootstrap labels executable presence as a Gemini fallback candidate only; it
 does not run authentication, model, or version probes. Ordinary/non-formal
-Gemini fallback is eligible only when the agy route is explicitly missing or
-unstartable before request submission; `phase=pre-dispatch-settings` is
-necessary but not sufficient, and uncertain or post-dispatch phases are
-ineligible. A direct Gemini request does not bypass the agy-first rule; content,
-schema, timeout, capacity, or post-dispatch failures remain on the agy failure
-path. A formal Gemini fallback is a separate gate: the distribution ships no
-qualifying enforcement proof and runs no automatic probe. See the
+Gemini fallback is eligible only for a no-final-summary exit `4`
+(`EXIT_BINARY_MISSING`) with the wrapper-owned pre-submission `PtyStartError`
+diagnostic for a supported missing or unstartable executable; every
+final-summary result is fallback-ineligible. Missing or invalid
+`TRIAD_AGY_BIN` and missing `agy` on `PATH` are direct, fallback-ineligible
+route-setup errors rather than fallback triggers. Install or configure AGY, or
+explicitly authorize a separate Google route. A direct Gemini request does not
+bypass the agy-first rule; content, schema, timeout, capacity, or post-dispatch
+failures—including native permission denial—remain on the agy failure path.
+
+A formal Gemini fallback requires separate owner authorization for the exact
+route, provider, data boundary, and objective. It retains the same immutable
+prepared directory, prompt-controlled no-edit/no-execution contract,
+digest/mutation invalidation, full batch matrix, and strict admission. An
+unavailable required family leaves an invalid round. See the
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md)
-for the owner-recorded proof required before formal admission.
-
-### Opt out of the default rules
-
-*Do this ONLY if you do not want the command rules installed.*
-
-Export `TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0` in the normal terminal, then run
-the freshly printed absolute bootstrap command. The equivalent skip flag is
-`TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1`. This also skips the managed
-loader-environment guard only when the configured rules path is absent. If that
-path already contains owner-maintained rules, bootstrap preserves them and
-keeps the guard because those rules may still enable a managed launcher. The
-repair-analyzer registration remains independent.
+for the complete gate.
 
 ### Linux / WSL2 sandbox support
 
@@ -216,31 +180,23 @@ model trust (summarized under [Security](#security) below).
   moving `claude`, `agy`, or optional `gemini`.
 - Existing Codex sessions may not see newly installed plugin skills; start a new
   session after install or update.
-- agy calls may transact against Antigravity CLI runtime settings under
-  `~/.gemini/antigravity-cli/`; that is provider runtime state, not a bootstrap
-  install target.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading from a pre-0.2.529 install
+### Upgrading to 0.2.532
 
-If an older install left a retained managed legacy profile or shell artifact,
-plain `--install` warns with the exact path and performs no automatic deletion.
-If an unselected legacy path is unsafe or unreadable, bootstrap reports the
-refusal detail, does not follow or change that path, and continues installing
-the selected ordinary artifacts. A selected profile, rules file, or shell entry
-remains a fatal preflight error.
+Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
+profiles, launcher rules, repair-agent registration, pre-spawn
+`[shell_environment_policy]`, and retired apply/repair launchers whose markers
+and expected bytes match. Foreign, edited, linked, or non-regular targets are
+preserved and reported. This cleanup preserves owner-authored settings, rules, permission profiles,
+credentials, and unrelated files remain untouched.
 
-Use deliberate `--remove` followed by ordinary reinstall, or set
-`TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1` when the legacy profile is intentional.
-The legacy shell entry requires both
-`TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1` and
-`TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`; the shell flag alone is rejected.
-This compatibility path is an explicit legacy opt-in. Ordinary `codex` remains
-the normal start path; the retired no-prompt `allow` posture is not restored. A
-pre-0.2.529 initially absent config with stale
-`original config existed = true` provenance is left as a safe zero-byte file
-because it cannot be distinguished from a genuinely pre-existing empty file.
+The wrapper `--sandbox` flags and missing-binary Gemini fallback triggers from
+older releases are removed. Delete those wrapper flags from callers. Missing or
+invalid `TRIAD_AGY_BIN` or missing `agy` on `PATH` now stops as a route-setup
+error; install/configure AGY or explicitly authorize a separate Google route.
+Ordinary `codex` remains the normal path.
 
 ## Use
 
@@ -287,10 +243,9 @@ unrelated paths.
 
 Formal plan and pre-merge three-family gates use one leader-prepared shared review
 directory containing current approved production source, configuration, and
-documentation. Project instructions or the owner supply exact test-source
-exclusions; do not infer them. If the exact boundary is unavailable, stop and ask
-the owner. Normal SDD implementation review includes relevant test source. Other
-advisory review follows its separately owner-approved data scope.
+documentation. For this release, the exact no-exclusion boundary includes all
+repository test source. Normal SDD implementation review includes relevant test
+source. Other advisory review follows its separately owner-approved data scope.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
 body. Record one simple content digest before dispatch and compare it after every
@@ -298,6 +253,21 @@ required leg terminates; a mismatch invalidates the round. Before a formal gate,
 classify every test failure as production defect, test-case defect, or intentional
 specification change and resolve or approve it. Reviewers do not run candidate
 code, tests, builds, hooks, or generated scripts.
+
+The full diff is navigation evidence, not the review boundary. The leader binds
+it to the complete affected-source closure, exact current source bytes, and a
+deterministic receipt contract, and every required family reviews every affected
+production source in every deterministic batch. Source-grounded observations,
+exact full-file ranges, changed-hunk or impact-edge evidence, and strict
+coverage admission are required. A manifest path alone is not coverage.
+Provider-native file-read telemetry is retained and digest-bound when exposed;
+otherwise coverage is prompt-controlled and admitted through source-grounded
+receipts, independent family review, and leader reproduction, not claimed as
+provider-enforced proof.
+
+The evidence boundary is intentional: a non-UTF-8 current source fails closed
+with `non-UTF-8 source`. Do not omit it from the closure; defer the candidate or
+obtain owner approval for a separately reviewed design that adds support.
 Commit, push, install/update, merge, release, and publication still require
 their own owner authorization.
 
@@ -306,16 +276,15 @@ containment is OPT-IN: the wrappers reject a `--cwd` / `--prompt-file` outside a
 trusted root ONLY when `TRIAD_WRAPPER_ALLOWED_ROOTS` is set by the operator. By
 default they do not constrain paths; approved-path containment is
 prompt-controlled unless a provider actually enforces it. The boundary otherwise
-rests on the selected `--cwd` worktree, requested wrapper sandbox, ordinary Codex
-sandbox, and exact rules.
+rests on the selected `--cwd` worktree, native provider permissions,
+immutable-directory digests, and leader mutation checks.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| A wrapper call pauses for manual approval instead of automatic review | The active reviewer is `user`, a higher-precedence layer overrides it, or the generated rules are missing/stale | Check `/status` and `/debug-config`, restore `approvals_reviewer = "auto_review"` in the applicable layer if desired, rerun bootstrap for stale rules, then restart ordinary `codex`. |
-| A wrapper rule is auto-rejected before Agent Review | The active granular policy has `rules = false` or `sandbox_approval = false`, or approvals are `never` | Preserve the other granular choices, enable those two interactive categories, and restart; or use `approval_policy = "on-request"`. |
-| Automatic review denies a wrapper call | Authorization is missing/out of scope, provider-visible input includes excluded credential material, or the reviewer found another unsafe condition | Narrow the input or obtain the missing owner authorization. The owner may use `/approve` for one exact recorded denial; never install a broad allow rule. |
+| A provider returns `permission-unavailable` | Native user/project permission or trust does not permit the headless action | Make the narrow provider/user/project permission decision in the same authenticated login terminal, then start a fresh round. TRIAD does not insert a bypass. |
+| Gemini rejects the project worktree as untrusted | Gemini owns workspace trust after removal of `--skip-trust` | Make the provider-native trust decision for that worktree, or stop. TRIAD has no trust bypass or speculative detector. |
 | A dispatch fails with `oauth-env` | The worker CLI's login expired or is missing | Re-run that vendor's native login (`claude` / `agy` OAuth, or `codex login`). The toolkit never re-authenticates for you — it surfaces the signal so you log in. |
 | The gemini leg fails with `IneligibleTier` | The Gemini CLI *individual* tier is deprecated | Use the `agy` (Antigravity) leg — it is the Google-family leg for individual users. `gemini` is only for business / Vertex / API-key accounts. |
 | A new skill isn't available after install/update | Existing Codex sessions don't see newly installed skills | Start a new Codex session (and rerun `bootstrap.sh --install` after a plugin update so launcher paths stay current). |
@@ -329,7 +298,7 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `0` | Success — the answer follows | Nothing. |
 | `4` | The configured provider binary was missing or not executable before submission | Fix that binary. For the AGY route only, Gemini Enterprise fallback is eligible when the wrapper-owned diagnostic also proves this pre-submit failure. |
 | `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
-| `65` | Auth / config / quota, or a lossy AGY answer (for example `oauth-env`, `cli-subscription-cap`, or `truncated-answer`) | For `truncated-answer`, do not repair it or switch to Gemini; request a new bounded, compact result. For other classes, re-login or wait for the quota reset — see the classification word. |
+| `65` | Auth / config / quota / native permission, or a lossy AGY answer (for example `oauth-env`, `cli-subscription-cap`, `permission-unavailable`, or `truncated-answer`) | `permission-unavailable` requires a provider/user/project decision and is distinct from authentication, quota, and truncated-answer. For `truncated-answer`, do not repair it or switch to Gemini; request a new bounded, compact result. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
@@ -345,8 +314,8 @@ Honest boundaries, so you know where the toolkit stops:
   flow, or authorization store.
 - **It does NOT install OS or Python packages.** You install the vendor CLIs,
   `python3`, the shipped Python requirements, and (on Linux/WSL2) `bubblewrap`
-  yourself; the installer writes exact rules, launchers, and a provenance-marked
-  loader-environment guard while preserving the other owner config keys. If the
+  yourself; the installer writes the three provider wrapper launchers while
+  preserving owner-authored configuration. If the
   selected Python is missing Pydantic 2, bootstrap stops before mutation and
   prints the exact `python3 -m pip install -r .../requirements.txt` command for
   that interpreter.
@@ -355,13 +324,14 @@ Honest boundaries, so you know where the toolkit stops:
   issue — a persistent routing mis-classification, NOT code execution (see
   [Security](#security)) — but you should periodically review the applied deltas in
   `~/.config/triad-codex-dispatch/classifier-patches.json`. Bootstrap pins the
-  resolved absolute path into every provider and apply launcher; rerun bootstrap
+  resolved absolute path into every provider launcher and the printed owner
+  apply argv; rerun bootstrap
   after changing `TRIAD_CLASSIFIER_EXTENSION`.
-- **Wrapper containment is process/permission-level, not OS-level confinement.**
+- **Wrapper containment is process-level, not OS-level confinement.**
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
   they are not a claim of OS-level isolation. The boundary rests on process
-  permissions, the selected `--cwd` worktree, the Codex rules, and your
-  review before commit.
+  permissions selected by the provider/user/project, the `--cwd` worktree,
+  digest and mutation checks, and your review before commit.
 
 ## Update
 
@@ -370,10 +340,10 @@ codex plugin marketplace upgrade triad-codex-dispatch
 python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
 ```
 
-Run the newly printed absolute command. A plain `--install` reapplies the exact
-rules, launchers, and managed loader-environment guard without creating a
-dedicated profile. Set any legacy opt-in flags again before running it. Start a
-new ordinary Codex session after updating.
+Run the newly printed absolute command. A plain `--install` republishes the
+three provider wrapper launchers and performs exact plugin-owned legacy cleanup
+without creating permission state. Start a new ordinary Codex session after
+updating.
 
 ## Verify The Install
 
@@ -397,8 +367,8 @@ Expect agy's answer plus a one-line success summary on stderr:
 [wrapper] antigravity ok exit=0 vendor=0 elapsed=6.4s
 ```
 
-That `[wrapper] antigravity ok …` line is your signal the dispatch worked — the plugin,
-launchers, and rules are all wired. `ok` is the classification; other values
+That `[wrapper] antigravity ok …` line is your signal the dispatch worked — the plugin
+and launchers are wired to the native provider environment. `ok` is the classification; other values
 (e.g. `oauth-env`, `server-capacity`) name a specific failure — see
 [Troubleshooting](#troubleshooting).
 
@@ -431,34 +401,29 @@ codex plugin remove triad-codex-dispatch@triad-codex-dispatch
 codex plugin marketplace remove triad-codex-dispatch
 ```
 
-`--remove` deletes the wrapper launchers, the installed
-`triad-repair-analyzer`, `triad-apply-repair`, the exact command rules, and any provenance-matched
-legacy profile or shell entry created by an older release. It also deletes
-legacy three-agent TOMLs left by an older install. It strips the managed
-repair-analyzer registration and exact managed `[shell_environment_policy]`
-block from `$CODEX_HOME/config.toml`; if those are the file's only managed
-content and no owner bytes remain, it removes `config.toml` only when it did not
-exist before installation. This absent-file restoration applies only when both
-provenance-marked managed registration and environment-policy blocks remain
-intact; a pre-existing file and its owner bytes are preserved.
+`--remove` deletes the three provider wrapper launchers and exact plugin-owned
+legacy launchers, profiles, command rules, repair-agent registration, and
+`[shell_environment_policy]` fragments only when their markers and expected
+bytes match. It also removes exact legacy three-agent TOMLs. Foreign, edited,
+linked, and non-regular targets are preserved and reported. Owner-authored
+`config.toml` settings, rules, permission profiles, credentials, and unrelated
+files are preserved; an owner file is never removed merely because no managed
+bytes remain.
 Learned classifier patches are intentionally preserved; they are
 outside managed uninstall and should be deleted separately only when the owner
 intends to discard learned routing.
 
 ## Custom Subagents
 
-Classifier repair uses the installed read-only
-`agent_type="triad-repair-analyzer"` with `fork_turns="none"`; `task_name` is
-only a label. The installed agent owns its model, effort, and sandbox settings.
-It returns a proposal or escalation and cannot apply a patch. The leader stores
-only the proposal in a unique UTF-8 JSON file, then renders the owner command
-from an argv list with Python `shlex.join`:
+Classifier repair uses a fresh native proposal-only child with prompt-controlled
+no-edit behavior. It returns a proposal or escalation and cannot apply a patch.
+The leader stores only the proposal in a unique UTF-8 JSON file. Bootstrap
+renders the direct owner command from an argv list with Python `shlex.join`:
 
-`triad-apply-repair --cli <cli> --proposal-file <absolute-path>`.
+`python3 bin/apply_patch.py --cli <cli> --proposal-file <absolute-path> --classifier-file <pinned-absolute-path>`.
 
-Run that installed executable in the owner's normal authenticated terminal. If
-the agent selector is unavailable, run bootstrap there and restart Codex; do not
-downgrade to a generic agent. The run log remains until age-floor cleanup.
+Run the printed absolute command in the same authenticated login terminal. The
+run log remains until age-floor cleanup.
 
 If you create your own Codex custom subagent that should call triad dispatch
 skills, opt in explicitly with Codex `skills.config` entries pointing at the
@@ -490,16 +455,12 @@ driver performs best-effort cleanup of managed UUID/file-IPC entries older than
 `--preflight-only` as well. Cleanup errors never block dispatch, and this is not
 a perfect garbage collector.
 
-Antigravity settings under `~/.gemini/antigravity-cli/` are transacted during
-agy calls. Avoid editing agy permissions during triad calls or running another
-Antigravity settings change at the same time.
-
 ## Security
 
-The durable control is **privilege separation**, not model trust: the installed
-read-only analyzer reads the untrusted run log and returns a proposal only; the
-owner-run deterministic `triad-apply-repair` executable validates and applies
-that proposal. Full threat model: [SECURITY.md](SECURITY.md).
+The durable controls are explicit data authorization, pinned executables,
+digest/mutation checks, strict result custody, and a native proposal-only repair
+child followed by deterministic owner apply. Permission selection remains with
+the provider/user/project. Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Support
 
@@ -509,12 +470,9 @@ that proposal. Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Notes
 
-- This plugin avoids `danger-full-access`.
-- Generated command rules match only the absolute launcher files installed
-  under `~/.local/bin` or `TRIAD_BOOTSTRAP_BIN_DIR`; those launchers validate
-  their argv and call the installed plugin cache. They always use `prompt`;
-  `approval_policy=never` fails closed because Agent Review is inactive.
-- Automatic review never supplies owner workflow authorization for commit,
+- TRIAD does not inject yolo, bypass, skip-trust, accept-edits, or equivalent
+  permission controls.
+- Native permission decisions never supply owner workflow authorization for commit,
   push, install, release, or publication.
-- The exact installed `triad-repair-analyzer` uses its pinned read-only sandbox;
-  it returns a proposal or escalation and never applies a classifier change.
+- The fresh repair child returns a proposal or escalation and never applies a
+  classifier change.
