@@ -14,6 +14,10 @@
 This review-only routing policy is an owner routing policy, not a vendor
 capability claim. It does not set generic wrapper defaults. It applies only to
 a cross-family review after the owner has authorized external dispatch.
+Run every provider route from the same authenticated login terminal and
+project worktree used for development. TRIAD inherits provider permissions and
+provider-owned project/trust decisions from that launch context; it does not
+install, inject, strengthen, weaken, or bypass a permission mode.
 
 ## Bounded formal routes
 
@@ -36,36 +40,35 @@ rules. Do not silently substitute a model, provider route, or effort.
 
 ## Approval behavior
 
-The exact managed wrapper rules use `decision = "prompt"`. For those prompts
-and the wrapper's sandbox escalation to reach Agent Review, the active Codex
-configuration must use `approvals_reviewer = "auto_review"` and keep the
-applicable approval categories interactive. `approval_policy = "on-request"`
-satisfies that requirement. With a granular policy, preserve all owner choices
-but require both `granular.rules = true` and
-`granular.sandbox_approval = true`. A false category is rejected before Agent
-Review sees the request. `approvals_reviewer = "user"` keeps the call usable but
-routes it to the person; `approval_policy = "never"` does not run Agent Review.
-
-Do not install a local `[auto_review].policy` automatically because it replaces
-the owner's reviewer instructions, and a managed `guardian_policy_config` has
-higher precedence. The explicit owner request, exact rule justification, and
-sanitized invocation are the authorization evidence. If Agent Review denies one
-exact call and the owner elects to override it, `/approve` applies only to that
-recorded denial; never generalize it into an unconditional allow or bypass.
+The explicit owner request, exact provider/data boundary, and sanitized argv
+are the authorization evidence. Native user/project settings decide whether a
+provider operation is allowed, denied, or interactive. A native permission
+denial leaves the required leg invalid. Keep prompt-controlled no-edit and
+no-execution behavior distinct from provider-enforced containment, and use
+immutable-directory digests plus canonical-worktree fingerprints to detect a
+violation.
 
 ## Google route and fallback
 
-AGY is the primary Google-family route. A configured Gemini Enterprise/Business,
-Vertex, or API-key route is eligible only after a pre-dispatch availability
-failure proves that agy cannot be started on its configured route. A content,
-extraction, schema, validation, timeout, capacity, or post-dispatch failure does
-not make agy unavailable and does not permit Gemini fallback. A running tool
-handle is pending, not unavailable or failed; wait for its terminal result.
-If neither Google route is available, the required Google leg is unavailable
-and the formal review round is invalid. Preserve an agy content or extraction
-failure as an invalid leg rather than substituting Gemini. A missing selector,
-request rejection, or exposed identity conflict also leaves the Google leg
-missing/invalid.
+AGY is the primary Google-family route. A configured Gemini
+Enterprise/Business, Vertex, or API-key route is eligible only when the AGY
+wrapper emits no final summary, exits with `EXIT_BINARY_MISSING`, and records
+the wrapper-owned pre-submission
+`PtyStartError(stage="exec", errno in the supported missing/unstartable set)`
+diagnostic. A content, extraction, schema, validation, timeout, capacity,
+permission, or other post-dispatch failure does not permit Gemini fallback. A
+running tool handle is pending; wait for its terminal result. Any final summary
+is post-dispatch and fallback-ineligible.
+
+Missing or invalid `TRIAD_AGY_BIN` and missing `agy` on `PATH` are surfaced as
+fallback-ineligible route-setup errors in `0.2.532`. The owner installs or
+configures AGY, or explicitly authorizes a separate Google route. A
+`permission-unavailable` required leg is invalid and post-dispatch, so it
+cannot activate Gemini in the same round. If neither authorized route is
+available, the required Google leg is unavailable and the formal round is
+invalid.
+A missing selector, request rejection, or exposed identity conflict also
+leaves the Google leg missing/invalid.
 
 For Google, authenticated `agy models` output proves that the stable selector is
 advertised before formal dispatch. The current formal argv uses the exact display label `Gemini 3.1 Pro (High)` and
@@ -87,15 +90,13 @@ runtime-exposed identity agrees with the requested Pro High route. Any
 alternative remains unselected until its fresh successful runtime probe
 confirms both conditions.
 
-A Gemini preflight/dispatch proves route availability only, not formal
-read-only containment. The checked-in distribution is not end-to-end
-enforcement-proven on supported tiers. ordinary/non-formal Gemini fallback
-remains available after proven pre-submission agy unavailability, but Gemini is
-ineligible as a formal fallback without separately recorded exact-route denial
-evidence that the configured route's read-only policy denies write, replace,
-shell, and MCP tools. Without that owner-recorded evidence, the required Google
-leg is unavailable and the formal review round is invalid. This policy does not
-create or run an automatic probe.
+A Gemini preflight/dispatch proves route availability only. For a formal
+round, separately record owner authorization for the exact Gemini route,
+provider, data boundary, and objective. Use the same immutable prepared
+directory, prompt-controlled no-edit/no-execution contract, digest and
+mutation invalidation, full batch matrix, and strict receipt admission. Native
+owner/project permissions govern the route; TRIAD does not add an enforcement
+probe or substitute one provider for another after dispatch.
 
 ## Conditional escalation and convergence
 

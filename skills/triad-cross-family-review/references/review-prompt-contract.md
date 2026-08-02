@@ -31,7 +31,8 @@ prompt. The leader supplies the values; provider skills supply transport only.
 - `source_tree_digest`, `change_evidence_digest`, `batch_id`, and
   `batch_manifest`: exact immutable metadata for `batched-full-coverage`
 - `batch_receipt_contract_path`: prepared-directory-relative path to the
-  runtime-owned exact receipt schema or concrete format example for
+  canonical strict `BatchReceipt` schema at
+  `change-evidence/BATCH_RECEIPT.schema.json` for
   `batched-full-coverage`
 
 Default perspective: independent correctness, completeness, compatibility,
@@ -105,11 +106,46 @@ For `batched-full-coverage`, render:
 ```text
 - Ground every finding at an exact prepared-directory-relative
   `path:positive-line` and return only one strict `BatchReceipt` JSON document
-  for this batch. Raw JSON or exactly one outer Markdown fence is valid; prose
-  wrappers are not.
-- Enumerate every assigned path in `affected_surfaces_inspected`, including for
-  `SAFE`. A `SAFE` receipt is admissible only when its digest-bound evidence
-  covers every assigned path, hunk, and impact edge.
+  for this provider/batch. Its fields are exactly `family`, `batch_id`,
+  `source_tree_digest`, `change_evidence_digest`, `verdict`, `path_evidence`,
+  `findings`, `affected_surfaces_inspected`, `unresolved_paths`, and
+  `open_questions`; follow the supplied `batch_receipt_contract_path`.
+- Persist and hash the exact original UTF-8 response bytes. Raw JSON or exactly
+  one outer Markdown fence is valid. After trimming outer ASCII whitespace,
+  the opening line is exactly three backticks or three backticks plus `json`,
+  and the final non-whitespace line is exactly three backticks. Validate only
+  the bytes between those complete outer lines. Triple backticks inside JSON
+  string values remain data. Prose wrappers and nested or multiple top-level
+  fence envelopes are invalid.
+- Return one `path_evidence` record for every assigned path in exact batch
+  order. The ordered `path_evidence.path` and
+  `affected_surfaces_inspected` lists must each equal this batch manifest's
+  exact ordered source-path assignment. Missing, extra, swapped, reordered,
+  duplicate, or out-of-batch paths invalidate the receipt; a global family
+  union cannot repair a bad batch.
+- A manifest path alone is not coverage. For every non-empty non-deleted path,
+  inspect the complete current source and return its digest, complete source range
+  `1..line_count`, and a validated `observation_line` plus
+  `source_observation` absent from reviewer-visible manifests. The observation
+  is a 1-160 character exact substring of its named line; when that line has
+  at least eight characters, the observation has at least eight characters,
+  and it contains at least one non-whitespace character whenever the source
+  does.
+- For a changed non-whitespace source with a non-whitespace line outside validated new-side hunk ranges,
+  `observation_line` names such an outside-hunk
+  line. A validator-proven zero-byte source has no line range or observation. A
+  validator-proven non-empty whitespace-only source keeps its complete source
+  range and uses no observation. A hunk-line observation is admissible only
+  when no outside-hunk line contains a non-whitespace character, including
+  when outside-hunk lines are whitespace-only or the canonical patch hunks cover every current line that can supply a valid non-whitespace observation.
+- `changed_hunks` exactly equals the canonical `PATCH_INDEX.tsv` IDs for its
+  path. A resolved affected-unchanged path's `verified_impact_edges` exactly
+  equals its expected closure IDs. An unresolved path may omit only expected
+  unverified edges, but its `unresolved` disposition and path still block
+  admission. Extra, duplicate, or forged IDs are invalid.
+- A `SAFE` receipt is admissible only when digest-bound evidence covers every
+  assigned path, hunk, and impact edge. Critical or Major findings, any
+  `NOT-SAFE` receipt, unresolved path, or open question blocks admission.
 ```
 
 ## Prompt envelope
@@ -184,3 +220,18 @@ Review depth contract
 - Record a missing fact as an open question when it prevents disposition; every
   formal open question blocks admission.
 ```
+
+For an operational batched round: Every required family reviews every batch.
+Separate fresh contexts may process deterministic batches, but each family
+finishes the exact complete batch set and retains only compact receipts between
+contexts. No batch samples or skips a source path. Repeated content is
+addressed by the same digest. Stable instructions precede batch-specific paths
+and digests so provider caches can reuse the prefix.
+
+The leader stores exact responses as `<family>/<batch-id>.json` and runs the
+absolute `toolkit_root / "bin" / "review_coverage.py"` `admit` command over the
+complete receipt tree. Only its successful digest-bound
+`coverage-admission.json` is machine-admissible. A newly discovered affected
+path expands the closure, invalidates the round, and requires a fresh complete
+all-family/all-batch rerun. A receipt does not claim provider-enforced proof of
+private read activity.

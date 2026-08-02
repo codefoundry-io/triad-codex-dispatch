@@ -101,6 +101,60 @@ def _heading_section(path: Path, heading: str) -> str:
     return text[match.start() : match.end() + (next_heading.start() if next_heading else len(remainder))]
 
 
+def test_formal_review_requires_full_family_batch_matrix_and_path_evidence() -> None:
+    contract = "\n".join(
+        _text(path)
+        for path in (
+            REVIEW_SKILL,
+            REVIEW_PROMPT_REFERENCE,
+            REVIEW_ROUTING_REFERENCE,
+            FRESH_CODEX_REVIEW_REFERENCE,
+        )
+    )
+    for literal in (
+        "source_tree_digest",
+        "change_evidence_digest",
+        "batch_receipt_contract_path",
+        "batch_id",
+        "path_evidence",
+        "source_observation",
+        "observation_line",
+        "1-160 character exact substring",
+        "at least eight characters",
+        "contains at least one non-whitespace character",
+        "outside validated new-side hunk ranges",
+        "outside-hunk lines are whitespace-only",
+        "patch hunks cover every current line that can supply a valid non-whitespace observation",
+        "complete source range",
+        "coverage-admission.json",
+        "Every required family reviews every batch",
+        "A manifest path alone is not coverage",
+    ):
+        assert literal in contract
+
+
+def test_provider_skill_examples_inherit_native_permissions() -> None:
+    combined = "\n".join(
+        [_text(path) for path in PROVIDER_SKILLS]
+        + [_text(REVIEW_ROUTING_REFERENCE)]
+    )
+    for forbidden in (
+        "--sandbox",
+        "--permission-mode",
+        "--approval-mode",
+        "--skip-trust",
+        "--dangerously-skip-permissions",
+        "triad-repair-analyzer",
+        "exact registered analyzer",
+        "read-only analyzer",
+    ):
+        assert forbidden not in combined
+    assert "sandbox escalation to reach Agent Review" not in combined
+    assert "read-only policy denies write" not in combined
+    for path in (*PROVIDER_SKILLS, REVIEW_ROUTING_REFERENCE):
+        assert "same authenticated login terminal" in _text(path)
+
+
 def test_02532_plan_binds_candidate_source_and_receipt_contract() -> None:
     plan = _text(NATIVE_FULL_COVERAGE_PLAN)
     design = _text(NATIVE_FULL_COVERAGE_DESIGN)
@@ -385,13 +439,22 @@ def test_task2_readme_exit_code_legends_match_reachable_classes() -> None:
 def test_fresh_codex_template_renders_formal_kind_and_approved_data_boundary() -> None:
     reference = _text(FRESH_CODEX_REVIEW_REFERENCE)
     prompt = _shared_review_prompt_envelope()
-    assert 'review_mode = "formal-gate"' in reference
+    assert 'review_mode = "batched-full-coverage"' in reference
     assert 'review_kind = "<formal-plan | pre-merge>"' in reference
     assert 'review_target = "/absolute/path/to/prepared-review-directory"' in reference
     assert 'review_objective = "<leader-controlled objective>"' in reference
     assert 'reviewer_perspective = "<leader-controlled fresh-Codex perspective>"' in reference
     assert 'test_source_boundary = "<exact project-or-owner boundary>"' in reference
     assert 'content_digest = "<leader-owned simple digest>"' in reference
+    for assignment in (
+        'source_tree_digest = "<validated source-tree digest>"',
+        'change_evidence_digest = "<validated change-evidence digest>"',
+        'batch_receipt_contract_path = "change-evidence/BATCH_RECEIPT.schema.json"',
+        'batch_id = "<exact batch ID>"',
+        'batch_manifest = "<prepared-directory-relative exact batch manifest>"',
+    ):
+        assert assignment in reference
+    assert "content_digest` is never the sole batched evidence binding" in reference
     assert "credentials, tokens, cookies, authentication files" in " ".join(reference.split())
     assert "provider logs, and unrelated paths" in " ".join(reference.split())
     assert "stop before assigning values or rendering" in " ".join(reference.split())
@@ -409,6 +472,7 @@ def test_fresh_codex_template_renders_formal_kind_and_approved_data_boundary() -
     assert "Selected result profile" in prompt
     assert "Exact test-source boundary: {test_source_boundary}" in prompt
     assert "Pre-review content digest: {content_digest}" in prompt
+    assert "{batched_metadata_block}" in prompt
     rendered = " ".join(prompt.replace("{review_kind}", "pre-merge").split())
     assert "Review kind: pre-merge" in rendered
     assert "- Target: {review_target}" in rendered
@@ -485,6 +549,7 @@ def test_shared_review_prompt_contract_defines_envelope_and_mode_specific_result
         "- `consult`: `answer`, `assumptions`, `caveats`",
         "- `advisory-review`: `summary`, `strengths`, `risks`, `recommendations`, `open_questions`",
         "- `formal-gate`: `verdict`, `findings`, `affected_surfaces_inspected`, `open_questions`",
+        "- `batched-full-coverage`: exactly one strict `BatchReceipt` JSON document containing",
     ):
         assert exact_profile in result_profiles
 
@@ -549,12 +614,8 @@ def test_shared_review_prompt_contract_defines_envelope_and_mode_specific_result
     assert "BatchReceipt" in output_constraints
 
     review_skill = " ".join(_text(REVIEW_SKILL).split())
-    assert (
-        "| Admission | Non-formal modes use their exact selected result profile; "
-        "`formal-gate` requires four semantic result elements, evidence-backed "
-        "findings, and a verdict |"
-        in review_skill
-    )
+    assert "unbatched `formal-gate` retains four semantic result elements" in review_skill
+    assert "operational `batched-full-coverage` requires the complete strict receipt matrix" in review_skill
 
     fresh_reference = _text(FRESH_CODEX_REVIEW_REFERENCE)
     assert 'review_message = f"""' not in fresh_reference
@@ -583,14 +644,16 @@ def test_every_review_leg_uses_the_shared_prompt_contract() -> None:
     assert "review-prompt-contract.md" in _text(FRESH_CODEX_REVIEW_REFERENCE)
 
 
-def test_fresh_codex_formal_template_uses_only_the_formal_profile() -> None:
+def test_fresh_codex_template_preserves_unbatched_and_selects_batched_profile() -> None:
     reference = _text(FRESH_CODEX_REVIEW_REFERENCE)
     prompt = _shared_review_prompt_envelope()
 
-    assert 'review_mode = "formal-gate"' in reference
+    assert 'review_mode = "batched-full-coverage"' in reference
     assert 'review_kind = "<formal-plan | pre-merge>"' in reference
     assert 'review_message = f"""' not in reference
-    assert 'selected_result_profile = """formal-gate' in reference
+    assert 'selected_result_profile = "batched-full-coverage: strict BatchReceipt JSON"' in reference
+    assert "unbatched `formal-gate` profile" in reference
+    assert "four semantic elements" in reference
     assert "review-prompt-contract.md" in reference
     assert "Selected result profile\n{selected_result_profile}" in prompt
 
@@ -609,7 +672,7 @@ def test_plugin_default_prompts_require_bounded_review_inputs() -> None:
         assert "independent opinion on this code" not in folded
 
 
-def test_task_1a_uses_one_prepared_review_directory_and_simple_digest() -> None:
+def test_formal_review_uses_one_prepared_directory_and_bound_evidence_digests() -> None:
     skill_raw = _text(REVIEW_SKILL)
     reference_raw = _text(FRESH_CODEX_REVIEW_REFERENCE)
     skill = " ".join(skill_raw.split())
@@ -682,6 +745,16 @@ def test_task_1a_uses_one_prepared_review_directory_and_simple_digest() -> None:
         assert obsolete not in skill
         assert obsolete not in reference
 
+    for literal in (
+        "source_tree_digest",
+        "change_evidence_digest",
+        "batch_receipt_contract_path",
+        "candidate",
+        "validate",
+    ):
+        assert literal in reference_contract
+    assert "simple `content_digest` is never the sole batched evidence binding" in reference
+
 
 def test_formal_review_physically_excludes_only_exact_test_roots_and_uses_prepared_paths() -> None:
     for path in (WORKSPACE_AGENTS,):
@@ -703,7 +776,7 @@ def test_formal_review_physically_excludes_only_exact_test_roots_and_uses_prepar
         assert "worktree-relative path" not in flat
 
 
-def test_task_1a_fresh_codex_uses_native_semantics_without_fence_or_json_gate() -> None:
+def test_fresh_codex_profiles_separate_semantic_compatibility_from_batched_receipts() -> None:
     reference = " ".join(_text(FRESH_CODEX_REVIEW_REFERENCE).split())
 
     for literal in (
@@ -717,11 +790,15 @@ def test_task_1a_fresh_codex_uses_native_semantics_without_fence_or_json_gate() 
         "open_questions",
         "JSON parsing is not required",
         "Markdown fences",
+        "strict `BatchReceipt`",
+        "exactly one outer Markdown fence",
+        "exact original UTF-8",
     ):
         assert literal in reference
 
     assert "unfenced JSON" not in reference
     assert "fences make" not in reference.casefold()
+    assert "unbatched four-element message cannot replace a batch receipt" in reference
 
 
 def test_agy_formal_prompt_contract_does_not_require_unfenced_json() -> None:
@@ -753,8 +830,10 @@ def test_task_2a_provider_guides_delegate_shared_formal_preparation() -> None:
         flat = " ".join(skill.split())
         assert shared_reference in flat
         assert "prepared shared review directory" in flat
-        assert '"--sandbox", "read-only"' in skill
         assert '"--cwd", "/absolute/path/to/prepared-review-directory"' in skill
+        for forbidden in ("--sandbox", "--permission-mode", "--approval-mode"):
+            assert forbidden not in skill
+        assert "same authenticated login terminal" in skill
         for stale in duplicated_protocol:
             assert stale not in flat, (path, stale)
 
@@ -790,22 +869,24 @@ def test_task_2b_gemini_guide_keeps_fallback_contract_without_shared_protocol() 
 
     assert "triad-cross-family-review" in flat
     assert "prepared shared review directory" in flat
-    assert '"--sandbox", "read-only"' in gemini
     assert '"--cwd", "/absolute/path/to/prepared-review-directory"' in gemini
+    for forbidden in ("--sandbox", "--approval-mode", "--skip-trust"):
+        assert forbidden not in gemini
 
     for phrase in (
         "Google-family fallback when agy is unavailable",
         "pre-dispatch availability failure",
         "configured Gemini Enterprise/Business, Vertex, or API-key",
-        "phase=pre-dispatch-settings",
-        "ineligible for Gemini fallback",
-            "confirms configured route availability and tier/model access only",
+        "fallback-ineligible",
+        "confirms configured route availability and tier/model access only",
         "last matching `[wrapper] gemini ...` summary",
         "terminal process exit",
         "Route only `unknown`, `extraction-error`, and `timeout`",
         "shared repair protocol",
     ):
         assert phrase in flat
+    assert "same authenticated login terminal" in flat
+    assert "Any final summary is post-dispatch and fallback-ineligible" in flat
 
     duplicated_protocol = (
         "Formal plan and pre-merge three-family gates exclude test source.",
@@ -838,8 +919,8 @@ def test_task_2b_routing_reference_keeps_routes_and_outcomes_without_git_protoco
         "authenticated `agy models` evidence",
         "Rejection or unavailability leaves the required leg missing",
         "Do not silently substitute",
-        'approvals_reviewer = "auto_review"',
-        'approval_policy = "on-request"',
+        "same authenticated login terminal",
+        "Native user/project settings decide",
         "AGY update",
         "`CONFLICTED`",
         "owner adjudication",
@@ -920,6 +1001,24 @@ def test_fresh_codex_native_result_admission_is_semantic_not_json() -> None:
 
     assert "unfenced JSON" not in reference
     assert "JSON object only" not in reference
+
+
+def test_batched_receipt_fence_custody_is_strict() -> None:
+    contract = "\n".join(
+        _text(path)
+        for path in (
+            REVIEW_SKILL,
+            REVIEW_PROMPT_REFERENCE,
+            FRESH_CODEX_REVIEW_REFERENCE,
+        )
+    )
+    flat = " ".join(contract.split())
+
+    assert "exact original UTF-8 response bytes" in flat
+    assert "exactly one outer Markdown fence" in flat
+    assert "Triple backticks inside JSON string values remain data" in flat
+    assert "nested or multiple top-level fence envelopes are invalid" in flat
+    assert "Validate only the bytes between those complete outer lines" in flat
 
 
 def test_fresh_codex_admission_docs_record_historical_r16_pause_and_later_resumption() -> None:
@@ -1027,8 +1126,8 @@ def test_agy_truncated_answer_is_terminal_without_repair_or_provider_switch() ->
     assert "invalid" in review
     assert "must not trigger Gemini fallback" in agy
     assert "bounded, compact" in combined
-    assert "generic `write_file`" in combined
-    assert "Do not omit `--sandbox read-only`" in combined
+    assert "complete-family retry rule" in combined
+    assert "--sandbox" not in combined
 
 
 def test_readmes_explain_truncated_answer_terminal_recovery() -> None:
@@ -1381,10 +1480,11 @@ def test_provider_skills_use_final_process_state_for_corrected_extraction_failur
     )
     assert "numeric exit status `4`" in agy_skill
     assert "`EXIT_BINARY_MISSING`" in agy_skill
-    assert "missing/invalid `TRIAD_AGY_BIN`" in agy_skill
-    assert "missing `agy`\non `PATH`" in agy_skill
+    assert "Missing or invalid `TRIAD_AGY_BIN`" in agy_skill
+    assert "missing `agy` on `PATH`" in agy_skill
+    assert "fallback-ineligible route-setup errors" in agy_skill
     assert "agy start failed before request submission: stage=exec errno=" in agy_skill
-    assert "Every other no-summary failure is fallback-ineligible" in agy_skill
+    assert "Any final summary proves post-dispatch" in agy_skill
 
 
 def test_repair_protocol_keeps_run_log_opaque_for_native_child() -> None:
@@ -1818,6 +1918,24 @@ def test_distribution_has_only_retained_non_permission_migration_guidance() -> N
     assert "shell_environment_policy" in shipped_text
 
 
+def test_provider_skills_retain_personal_routes_without_company_fleet_guidance() -> None:
+    shipped_text = "\n".join(
+        _text(path) for path in (*PROVIDER_SKILLS, REVIEW_SKILL)
+    )
+    for stale in (
+        "COMPANY-SETUP",
+        "Company / fleet",
+        "company/fleet",
+        "managed fleet",
+        "docs/enterprise/managed-configuration",
+        "org-managed cloud config bundle",
+        "organization-approved elevation mechanism",
+        "macOS MDM",
+    ):
+        assert stale not in shipped_text
+    assert "business, Vertex, or API-key" in _text(PROVIDER_SKILLS[2])
+
+
 def test_recommended_agent_template_uses_native_permissions_and_repair_contract() -> None:
     template = " ".join(
         _text(ROOT / "migration" / "AGENTS.recommended.md").split()
@@ -2142,23 +2260,30 @@ def test_google_fallback_requires_pre_dispatch_agy_unavailability() -> None:
 
     for skill in provider_skills:
         assert "pre-dispatch availability failure" in skill
-        assert "Availability failure is limited to" in skill
-        assert "missing or unstartable agy executable or configured route" in skill
-        assert "phase=pre-dispatch-settings" in skill
-        assert "phase alone does not prove route unavailability" in skill
-        assert "phase=dispatch-uncertain" in skill
-        assert "phase=post-dispatch-result" in skill
-        assert "phase=post-dispatch-cleanup" in skill
-        assert "ineligible for Gemini fallback" in skill
-        assert "Pydantic import or review-schema" in skill
+        assert "no-final-summary" in skill
+        assert "exit status `4`" in skill
+        assert "`EXIT_BINARY_MISSING`" in skill
+        assert "agy start failed before request submission: stage=exec errno=" in skill
+        assert "Any final summary" in skill
+        assert "fallback-ineligible" in skill
         assert "content, extraction, or schema failure" in skill
         assert "does not make agy unavailable" in skill
         assert "must not trigger Gemini fallback" in skill
+        assert "missing or invalid `triad_agy_bin`" in skill.casefold()
+        assert "missing `agy` on `path`" in skill.casefold()
+        for retired_phase in (
+            "phase=pre-dispatch-settings",
+            "phase=dispatch-uncertain",
+            "phase=post-dispatch-cleanup",
+        ):
+            assert retired_phase not in skill
 
     routing = " ".join(_text(REVIEW_ROUTING_REFERENCE).split())
-    assert "pre-dispatch availability failure proves that agy cannot be started" in routing
-    assert "content, extraction, schema, validation, timeout, capacity, or post-dispatch failure" in routing
-    assert "does not permit Gemini fallback" in routing
+    assert "emits no final summary" in routing
+    assert "exits with `EXIT_BINARY_MISSING`" in routing
+    assert "PtyStartError(stage=\"exec\", errno in the supported missing/unstartable set)" in routing
+    assert "Any final summary is post-dispatch and fallback-ineligible" in routing
+    assert "permission-unavailable` required leg is invalid" in routing
 
 
 def test_gemini_formal_fallback_requires_separate_exact_route_enforcement_proof() -> None:
@@ -2598,6 +2723,14 @@ def test_fresh_codex_example_has_complete_no_edit_worktree_contract() -> None:
 
     assert 'review_target = "/absolute/path/to/prepared-review-directory"' in reference
     assert 'content_digest = "<leader-owned simple digest>"' in reference
+    for assignment in (
+        'source_tree_digest = "<validated source-tree digest>"',
+        'change_evidence_digest = "<validated change-evidence digest>"',
+        'batch_receipt_contract_path = "change-evidence/BATCH_RECEIPT.schema.json"',
+        'batch_id = "<exact batch ID>"',
+        'batch_manifest = "<prepared-directory-relative exact batch manifest>"',
+    ):
+        assert assignment in reference
     assert "message=review_message" in reference
     assert 'model="gpt-5.6-terra"' in reference
     assert 'reasoning_effort="xhigh"' in reference
@@ -2767,13 +2900,13 @@ def test_r17_fresh_template_is_renderable_and_scope_mapped() -> None:
     namespace: dict[str, object] = {}
     exec(template, namespace)
 
-    assert 'review_mode = "formal-gate"' in template
+    assert 'review_mode = "batched-full-coverage"' in template
     assert 'review_kind = "<formal-plan | pre-merge>"' in template
     assert 'review_target = "/absolute/path/to/prepared-review-directory"' in template
     assert 'content_digest = "<leader-owned simple digest>"' in template
     assert "review_message" not in template
     assert namespace["shared_prompt_values"] == {
-        "review_mode": "formal-gate",
+        "review_mode": "batched-full-coverage",
         "review_kind": "<formal-plan | pre-merge>",
         "review_target": "/absolute/path/to/prepared-review-directory",
         "review_objective": "<leader-controlled objective>",
@@ -2787,6 +2920,11 @@ def test_r17_fresh_template_is_renderable_and_scope_mapped() -> None:
         ),
         "test_source_boundary": "<exact project-or-owner boundary>",
         "content_digest": "<leader-owned simple digest>",
+        "source_tree_digest": "<validated source-tree digest>",
+        "change_evidence_digest": "<validated change-evidence digest>",
+        "batch_receipt_contract_path": "change-evidence/BATCH_RECEIPT.schema.json",
+        "batch_id": "<exact batch ID>",
+        "batch_manifest": "<prepared-directory-relative exact batch manifest>",
     }
     for obsolete in ("merge-base", "full-commit-oid", "validate_approved_paths", "canonical_git_visible_fingerprint", "deletion"):
         assert obsolete not in template
@@ -2805,6 +2943,14 @@ def test_r17_template_scope_execution_is_conditional_and_deletion_safe() -> None
 
     assert 'review_target = "/absolute/path/to/prepared-review-directory"' in template
     assert "content_digest" in template
+    for name in (
+        "source_tree_digest",
+        "change_evidence_digest",
+        "batch_receipt_contract_path",
+        "batch_id",
+        "batch_manifest",
+    ):
+        assert name in template
     assert "shared_prompt_values" in template
     assert "review_message" not in template
     assert "digest mismatch invalidates the round" in fresh
@@ -2844,6 +2990,14 @@ def test_r17_fresh_helpers_execute_against_hermetic_filesystem(tmp_path: Path) -
     namespace: dict[str, object] = {}
     exec(template, namespace)
     assert "content_digest" in template
+    for name in (
+        "source_tree_digest",
+        "change_evidence_digest",
+        "batch_receipt_contract_path",
+        "batch_id",
+        "batch_manifest",
+    ):
+        assert name in namespace["shared_prompt_values"]
     assert namespace["shared_prompt_values"]["destination"] == "fresh native Codex child"
     assert "review_message" not in template
 

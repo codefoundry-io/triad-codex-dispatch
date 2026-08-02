@@ -15,16 +15,14 @@ does not make agy unavailable and must not trigger Gemini fallback. Handle that
 result through the agy result or repair path; for a formal review, the agy leg
 is invalid. If neither route is available, the required Google leg is
 unavailable and a formal review round is invalid.
-Availability failure is limited to a missing or unstartable agy executable or
-configured route before request submission. A prompt, packet-identity, Pydantic
-import or review-schema, validation, timeout, or capacity failure remains an agy
-failure.
-Fallback eligibility also uses the authoritative final summary phase when one
-is emitted. `phase=pre-dispatch-settings` is necessary, but phase alone does not
-prove route unavailability: the reported reason must explicitly prove a missing
-or unstartable agy executable or configured route. `phase=dispatch-uncertain`,
-`phase=post-dispatch-result`, and `phase=post-dispatch-cleanup` are ineligible
-for Gemini fallback.
+Fallback eligibility is limited to a no-final-summary numeric exit status `4`
+(`EXIT_BINARY_MISSING`) paired with the wrapper-owned pre-submission diagnostic
+`agy start failed before request submission: stage=exec errno=` for a supported
+missing or unstartable executable. Any final summary proves post-dispatch
+handling and is fallback-ineligible. Missing or invalid `TRIAD_AGY_BIN` and a
+missing `agy` on `PATH` are fallback-ineligible route-setup errors in `0.2.532`;
+surface them so the owner can install or configure AGY or explicitly authorize
+a separate Google route.
 Bootstrap reports a discovered `gemini` executable as a binary candidate only;
 it does not prove account tier, authentication, or model access. A successful
 preflight or dispatch in the owner's authenticated terminal confirms configured
@@ -49,8 +47,10 @@ paths remain excluded.
 For a review request, read and render the
 [shared review prompt contract](../triad-cross-family-review/references/review-prompt-contract.md).
 Select `consult` or `advisory-review` for a standalone request and
-`formal-gate` for a formal cross-family leg. Dispatch only after the objective,
-target, approved data, exclusions, and selected result profile are determined.
+`batched-full-coverage` for an operational formal cross-family leg with exact
+batch metadata. Reserve `formal-gate` for the unbatched compatibility route.
+Dispatch only after the objective, target, approved data, exclusions, and
+selected result profile are determined.
 For this skill, `provider` is Antigravity and `destination` is the installed
 Antigravity wrapper route in the owner's authenticated terminal unless the
 owner authorizes a narrower destination.
@@ -69,7 +69,6 @@ exact display label `Gemini 3.1 Pro (High)` and omits `--effort`:
 review_argv = [
     "/absolute/path/to/antigravity_wrapper.py",
     "--prompt-file", "/absolute/path/to/agy-review-prompt.txt",
-    "--sandbox", "read-only",
     "--cwd", "/absolute/path/to/prepared-review-directory",
     "--model", "Gemini 3.1 Pro (High)",
 ]
@@ -112,16 +111,17 @@ not a shell string.
 launcher_argv = [
     "/absolute/path/to/antigravity_wrapper.py",
     "--prompt-file", "/absolute/path/to/request.txt",
-    "--sandbox", "read-only",
     "--cwd", "/absolute/path/to/workspace",
 ]
 ```
 
-Use `--sandbox workspace-write` only for a code task in an isolated worktree.
-Discover an accepted Google model from the current `agy models` output in the
-owner's normal authenticated terminal; do not apply a version threshold or a
+Run the wrapper from the same authenticated login terminal used for
+development. TRIAD inherits AGY permissions from that launch context and does
+not select or override them. Discover an accepted Google model from current
+`agy models` output in that terminal; do not apply a version threshold or a
 baked model name. Antigravity's web tools are native to the provider route, so
-do not invent a wrapper `--search` flag. Credentials stay outside sandboxes.
+do not invent a wrapper `--search` flag. Credentials stay outside approved
+review data.
 
 ## Result handling
 An initial tool response with a running session or cell handle is pending, not unavailable,
@@ -136,8 +136,8 @@ authoritative. When the exit status is zero, stdout is the answer.
 For a nonzero exit, scan captured stderr in memory. Select the last matching `[wrapper] antigravity ...` summary.
 Use that final summary as the classification source. Select the last `run-log:` path
 without a shell pipeline, keep it as opaque data, and pass it only to the
-read-only analyzer for repair-routed classifications; the leader does not open
-the raw log.
+fresh native proposal-only child defined by the repair protocol; the leader
+does not open the raw log.
 If no matching final summary exists, do not invent one: preserve the exact exit
 status and stderr and classify the invocation as an early wrapper failure. It is
 eligible for Gemini fallback only when numeric exit status `4`
@@ -150,13 +150,19 @@ An early `ok` followed by a corrected `extraction-error` is a failure:
 route the final `extraction-error` to repair. Surface terminal, schema,
 configuration, and capacity outcomes with their reported reason. Route only
 `unknown`, `extraction-error`, and `timeout` to the repair protocol; preserve
-the run log for its age-floor cleanup. Treat `truncated-answer` (exit 65) as a deterministic terminal result: the answer is quarantined, it is not repair-routed, and a new invocation must ask for a bounded, compact result. Do not use a generic `write_file` workaround. Do not omit `--sandbox read-only` to recover a long answer.
+the run log for its age-floor cleanup. Treat `permission-unavailable` as an
+invalid required leg and a post-dispatch result that cannot activate Gemini
+fallback. Treat `truncated-answer` (exit 65) as a deterministic terminal
+result: the answer is quarantined, it is not repair-routed, and a new
+invocation must ask for a bounded, compact result. Use the documented compact
+complete-family retry rule for formal receipt recovery.
 
 ## Repair handoff
 
 Follow [the shared repair protocol](../../docs/references/repair-protocol.md).
-Set `cli` to `antigravity`. The protocol supplies the exact registered analyzer,
-proposal-file lifecycle, and owner-run apply command.
+Set `cli` to `antigravity`. The protocol supplies the fresh native
+proposal-only child, proposal-file lifecycle, and owner-controlled local apply
+command. No provider invocation occurs during apply.
 
 ## See also
 

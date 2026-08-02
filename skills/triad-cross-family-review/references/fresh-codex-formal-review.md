@@ -30,6 +30,16 @@ compare it after all required legs terminate. A changed digest invalidates the
 round. The leader chooses the digest implementation; this reference does not
 define an algorithm, encoding, fixed vector, or portable format.
 
+For an operational batched round, resolve `toolkit_root` once from the selected
+local checkout or installed skill package. Generate the strict receipt schema
+through the exact absolute `toolkit_root / "bin" / "review_coverage.py"`
+`schema` command, prepare evidence through the exact absolute
+`toolkit_root / "bin" / "review_evidence.py"` path, and run its `validate`
+subcommand before dispatch. The prepared schema path is
+`change-evidence/BATCH_RECEIPT.schema.json`. Keep `content_digest` for whole-
+directory custody; `source_tree_digest` and `change_evidence_digest` are the
+additional machine-admission bindings.
+
 The prepared directory is read-only review evidence. Keep credentials,
 authentication files, environment dumps, provider logs, and unrelated material
 outside it. Reviewer operations are limited to file reads and searches; a
@@ -40,14 +50,16 @@ invalidates the round.
 
 Read the
 [shared review prompt contract](review-prompt-contract.md)
-completely, select its `formal-gate` profile, and render one prompt from
-leader-controlled values:
+completely. The operational template selects `batched-full-coverage` after
+all exact batch metadata is available. The unbatched `formal-gate` profile
+remains a compatibility path with the unchanged four semantic elements.
+The batched path returns one strict `BatchReceipt` per provider/batch.
 
 The exact formal test-source boundary is required. If it is unavailable, stop
 before assigning values or rendering the prompt and ask the owner.
 
 ```python
-review_mode = "formal-gate"
+review_mode = "batched-full-coverage"
 review_kind = "<formal-plan | pre-merge>"
 review_target = "/absolute/path/to/prepared-review-directory"
 review_objective = "<leader-controlled objective>"
@@ -61,11 +73,12 @@ excluded_data = (
 )
 test_source_boundary = "<exact project-or-owner boundary>"
 content_digest = "<leader-owned simple digest>"
-selected_result_profile = """formal-gate
-- verdict
-- findings
-- affected_surfaces_inspected
-- open_questions"""
+source_tree_digest = "<validated source-tree digest>"
+change_evidence_digest = "<validated change-evidence digest>"
+batch_receipt_contract_path = "change-evidence/BATCH_RECEIPT.schema.json"
+batch_id = "<exact batch ID>"
+batch_manifest = "<prepared-directory-relative exact batch manifest>"
+selected_result_profile = "batched-full-coverage: strict BatchReceipt JSON"
 
 shared_prompt_values = {
     "review_mode": review_mode,
@@ -79,6 +92,11 @@ shared_prompt_values = {
     "excluded_data": excluded_data,
     "test_source_boundary": test_source_boundary,
     "content_digest": content_digest,
+    "source_tree_digest": source_tree_digest,
+    "change_evidence_digest": change_evidence_digest,
+    "batch_receipt_contract_path": batch_receipt_contract_path,
+    "batch_id": batch_id,
+    "batch_manifest": batch_manifest,
 }
 ```
 
@@ -93,9 +111,10 @@ The prompt carries the directory and task, not source bytes. The leader keeps
 the before-dispatch digest and records the after-leg digest separately. A
 digest mismatch invalidates the round and requires a fresh complete dispatch.
 
-For `batched-full-coverage`, render the shared prompt contract with the exact
-batch metadata and strict
-`BatchReceipt` JSON result profile. Use the same native spawn contract below.
+The five batched assignments above are required before rendering. The simple
+`content_digest` is never the sole batched evidence binding. Use the
+same native spawn contract below for every batch, and require Fresh Codex to
+finish the exact batch set assigned to the other families.
 
 ## Native spawn
 
@@ -125,8 +144,9 @@ the directory or executes candidate material.
 
 ## Result admission
 
-Native spawn returns a terminal agent message, not CLI output. Admit the four
-semantic elements directly: `verdict`, `findings`,
+For the unbatched `formal-gate` compatibility profile, native spawn returns a
+terminal agent message, not CLI output. Admit the four semantic elements
+directly: `verdict`, `findings`,
 `affected_surfaces_inspected`, and `open_questions`. Ordinary Markdown,
 labeled prose, or JSON are valid renderings; JSON parsing is not required.
 Markdown fences do not invalidate a result. Presentation style alone is never
@@ -144,3 +164,13 @@ mutation or prohibited execution, and the post-review digest equals the
 pre-review digest. The leader reproduces findings independently and combines
 the fresh result with the other two legs. Use unanimous admission rather than
 voting or averaging labels.
+
+For `batched-full-coverage`, persist the exact original UTF-8 terminal-message
+bytes under the same `<family>/<batch-id>.json` custody rule as external
+provider responses. Accept raw JSON or exactly one outer Markdown fence using
+the shared contract's strict grammar; inner triple backticks remain JSON data.
+Validate every strict receipt and admit the complete three-family tree only
+through the exact absolute `toolkit_root / "bin" / "review_coverage.py"`
+`admit` command. A successful `coverage-admission.json` with matching
+candidate/source/evidence bindings is the sole machine-admissible result. An
+unbatched four-element message cannot replace a batch receipt.

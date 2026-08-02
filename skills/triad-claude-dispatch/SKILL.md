@@ -27,8 +27,10 @@ paths remain excluded.
 For a review request, read and render the
 [shared review prompt contract](../triad-cross-family-review/references/review-prompt-contract.md).
 Select `consult` or `advisory-review` for a standalone request and
-`formal-gate` for a formal cross-family leg. Dispatch only after the objective,
-target, approved data, exclusions, and selected result profile are determined.
+`batched-full-coverage` for an operational formal cross-family leg with exact
+batch metadata. Reserve `formal-gate` for the unbatched compatibility route.
+Dispatch only after the objective, target, approved data, exclusions, and
+selected result profile are determined.
 For this skill, `provider` is Claude and `destination` is the installed Claude
 Code wrapper route in the owner's authenticated terminal unless the owner
 authorizes a narrower destination.
@@ -46,28 +48,27 @@ not a shell string.
 launcher_argv = [
     "/absolute/path/to/claude_wrapper.py",
     "--prompt-file", "/absolute/path/to/request.txt",
-    "--sandbox", "read-only",
     "--cwd", "/absolute/path/to/workspace",
 ]
 ```
 
-Use `--sandbox workspace-write` only for a code task in an isolated worktree.
-The wrapper requires `--cwd` for that mode. Provider authentication and any
-model selection happen in the owner's normal authenticated terminal; credentials
-are never moved into a sandbox.
+Run the wrapper from the same authenticated login terminal used for
+development. TRIAD inherits Claude permissions from that launch context and
+does not select or override them. Provider authentication and model selection
+remain in that terminal; credentials stay outside approved review data.
 
 ## Cross-family review invocation
 
 Formal three-family preparation is defined by the
 [triad-cross-family-review skill](../triad-cross-family-review/SKILL.md). Use
-its leader-prepared shared review directory as Claude's `--cwd` and keep the
-provider leg read-only.
+its leader-prepared shared review directory as Claude's `--cwd`. The no-edit
+and no-execution review contract is prompt-controlled and mutation invalidates
+the leg.
 
 ```python
 review_argv = [
     "/absolute/path/to/claude_wrapper.py",
     "--prompt-file", "/absolute/path/to/claude-review-prompt.txt",
-    "--sandbox", "read-only",
     "--cwd", "/absolute/path/to/prepared-review-directory",
     "--model", "opus",
     "--effort", "xhigh",
@@ -90,8 +91,8 @@ authoritative. When the exit status is zero, stdout is the answer.
 For a nonzero exit, scan captured stderr in memory. Select the last matching `[wrapper] claude ...` summary.
 Use that final summary as the classification source. Select the last `run-log:` path
 without a shell pipeline, keep it as opaque data, and pass it only to the
-read-only analyzer for repair-routed classifications; the leader does not open
-the raw log.
+fresh native proposal-only child defined by the repair protocol; the leader
+does not open the raw log.
 If no matching final summary exists, do not invent one: preserve the exact exit
 status and stderr and surface the invocation as an early wrapper failure. Without a `run-log:` path,
 report that failure directly instead of fabricating a repair handoff.
@@ -104,8 +105,9 @@ the run log for its age-floor cleanup.
 ## Repair handoff
 
 Follow [the shared repair protocol](../../docs/references/repair-protocol.md).
-Set `cli` to `claude`. The protocol supplies the exact registered analyzer,
-proposal-file lifecycle, and owner-run apply command.
+Set `cli` to `claude`. The protocol supplies the fresh native proposal-only
+child, proposal-file lifecycle, and owner-controlled local apply command. No
+provider invocation occurs during apply.
 
 ## See also
 
