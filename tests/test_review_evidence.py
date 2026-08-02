@@ -296,6 +296,55 @@ def test_candidate_diff_prefixes_ignore_user_git_config(tmp_path: Path) -> None:
     assert review_evidence.validate_review_evidence(fixture[0], fixture[0] / "change-evidence") == summary
 
 
+def test_candidate_fingerprint_and_validation_ignore_local_diff_config(
+    tmp_path: Path,
+) -> None:
+    fixture = _candidate_fixture(
+        tmp_path,
+        "src/a.py",
+        b"one\ntwo\nthree\nold\nfive\nsix\nseven\neight\n",
+        b"one\ntwo\nthree\nnew\nfive\nsix\nseven\neight\n",
+    )
+    repo = fixture[0].parents[1]
+    rename_old = repo / "rename-old.py"
+    rename_old.write_text("same=True\n")
+    _git(repo, "add", "rename-old.py")
+    _git(repo, "commit", "-q", "-m", "add rename source")
+    fixture = (*fixture[:5], _git(repo, "rev-parse", "HEAD").decode().strip())
+    rename_old.rename(repo / "rename-new.py")
+    _git(repo, "add", "-A", "rename-old.py", "rename-new.py")
+    (fixture[0] / "rename-new.py").write_text("same=True\n")
+    _rewrite_impact(fixture, [
+        ("rename-new.py", "changed", "-", "renamed", "rename-old.py"),
+        ("src/a.py", "changed", "-", "modified", "-"),
+        ("tests/test_contract.py", "required-test-source", "owner-approved-no-exclusion-test-boundary", "affected-unchanged", "-"),
+    ])
+    fixture[1].write_bytes(_canonical_diff(repo, fixture[5]))
+    for key, value in (
+        ("diff.context", "3"),
+        ("diff.algorithm", "myers"),
+        ("diff.indentHeuristic", "false"),
+        ("diff.renames", "true"),
+    ):
+        _git(repo, "config", key, value)
+
+    summary = _prepare(fixture)
+    fingerprint = summary.candidate_state.worktree_fingerprint
+
+    for key, value in (
+        ("diff.context", "0"),
+        ("diff.algorithm", "histogram"),
+        ("diff.indentHeuristic", "true"),
+        ("diff.renames", "copies"),
+    ):
+        _git(repo, "config", key, value)
+
+    assert review_evidence._canonical_worktree_fingerprint(repo) == fingerprint
+    assert review_evidence.validate_review_evidence(
+        fixture[0], fixture[0] / "change-evidence"
+    ) == summary
+
+
 def test_candidate_state_rejects_symbolic_unknown_or_nonancestor_base(tmp_path: Path) -> None:
     fixture = _candidate_fixture(tmp_path, "a.py", b"a=1\n", b"a=2\n")
     repo = fixture[0].parents[1]

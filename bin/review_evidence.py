@@ -317,12 +317,15 @@ def _canonical_worktree_fingerprint(repo_root: Path) -> str:
     staged = _git(
         repo_root,
         "diff", "--cached", "--binary", "--full-index", "--no-color",
-        "--no-ext-diff", "--no-textconv",
+        "--no-ext-diff", "--no-textconv", "--unified=3",
+        "--diff-algorithm=myers", "--no-indent-heuristic",
+        "--find-renames=50%",
     )
     unstaged = _git(
         repo_root,
         "diff", "--binary", "--full-index", "--no-color", "--no-ext-diff",
-        "--no-textconv",
+        "--no-textconv", "--unified=3", "--diff-algorithm=myers",
+        "--no-indent-heuristic", "--find-renames=50%",
     )
     untracked = _git(repo_root, "ls-files", "--others", "--exclude-standard", "-z")
     records = [
