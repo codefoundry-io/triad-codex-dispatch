@@ -4456,6 +4456,25 @@ def test_remove_uninstalls_managed_artifacts_and_shell_entry(tmp_path):
     assert classifier.is_file()
 
 
+def test_remove_only_preserves_owner_shell_bytes_and_mode(tmp_path: Path) -> None:
+    prefix = b"# owner prefix\n"
+    suffix = b"# owner suffix\n"
+    shell_rc = tmp_path / "shellrc"
+    shell_rc.write_bytes(prefix + FROZEN_LEGACY_SHELL_ENTRY + suffix)
+    shell_rc.chmod(0o600)
+
+    result, _env, _launcher_bin = _run_bootstrap(
+        tmp_path,
+        arg="--remove",
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "removed managed codex-triad shell entry" in result.stdout
+    assert shell_rc.read_bytes() == prefix + suffix
+    assert stat.S_IMODE(shell_rc.stat().st_mode) == 0o600
+
+
 def test_remove_leaves_unmanaged_launcher_and_profile_in_place(tmp_path):
     custom_bin = tmp_path / "custom-bin"
     custom_bin.mkdir()

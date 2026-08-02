@@ -1,5 +1,9 @@
 # Shared Review Prompt Contract Implementation Plan
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE:** Retained only as historical
+> evidence. Do not execute this plan. Use the
+> [current 0.2.532 native-permissions/full-coverage plan](2026-07-30-native-permissions-full-coverage-review.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:test-driven-development` and `superpowers:writing-skills`.
 > Steps use checkbox (`- [ ]`) syntax for tracking.

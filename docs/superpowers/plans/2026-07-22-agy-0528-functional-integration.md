@@ -1,5 +1,9 @@
 # AGY 0.2.528 Functional Integration Implementation Plan
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE:** Retained only as historical
+> evidence. Do not execute this plan. Use the
+> [current 0.2.532 native-permissions/full-coverage plan](2026-07-30-native-permissions-full-coverage-review.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Port only the upstream AGY truncated-answer failure gate into the current worktree-first branch and include it in the branch's single local commit.

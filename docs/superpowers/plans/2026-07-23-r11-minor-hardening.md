@@ -1,5 +1,9 @@
 # R11 Minor Hardening Implementation Plan
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE:** Retained only as historical
+> evidence. Do not execute this plan. Use the
+> [current 0.2.532 native-permissions/full-coverage plan](2026-07-30-native-permissions-full-coverage-review.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` and
 > `superpowers:test-driven-development`. Implementation is Lunar-only, review

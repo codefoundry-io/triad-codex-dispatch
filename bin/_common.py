@@ -4,8 +4,8 @@ Framework — vendor-JSON IO + 5-class classification + noise-tag extraction
 + pydantic schema validation (optional) with 1 schema-repair retry.
 
 Per-CLI vendor JSON modes (always on):
-- Codex: `codex exec --json -o <last_msg> --ephemeral -c approval_policy=never`
-  (config-alive 2026-05-30: no `--ignore-user-config`; approval pinned)
+- Codex: `codex exec --json -o <last_msg> --ephemeral`
+  (native user/project permissions remain in effect; no wrapper approval override)
   → stdout = JSONL events stream (vendor schema), stderr ≈ 39 B (vendor quiet).
 - Gemini: `gemini -p ... --output-format json`
   → stdout = single JSON object {response, stats, error}, stderr ≈ 189 B.
@@ -267,9 +267,9 @@ AUDIT_ARCHIVE_MAX_BYTES = AUDIT_ROTATE_BYTES * AUDIT_MAX_ARCHIVES
 # ─── Run-log policy (per-execution artifact, dispatch-SKILL input) ────────
 # Separate from audit.jsonl: one file per FAILED call (rc != 0) at
 # _logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json; successes create no file. The
-# dispatch skill keeps the path opaque and passes it only to the read-only
-# analyzer, isolating large vendor stdout and arbitrary characters from prompt
-# transport.
+# dispatch skill keeps the path opaque and passes it only to the fresh native
+# proposal-only child with prompt-controlled no-edit behavior, isolating large
+# vendor stdout and arbitrary characters from prompt transport.
 # 2-layer cleanup:
 #   Primary  = later normal-dispatch age-floor cleanup removes old files
 #   Failsafe = cap pruning removes eligible files oldest-first

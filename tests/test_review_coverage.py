@@ -25,7 +25,17 @@ FAMILIES = ("claude", "google", "codex")
 
 def _git(repo: Path, *args: str) -> bytes:
     return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True
+        [
+            "git",
+            "-c", "diff.noprefix=false",
+            "-c", "diff.mnemonicPrefix=false",
+            "-c", "diff.srcPrefix=a/",
+            "-c", "diff.dstPrefix=b/",
+            "-C", str(repo),
+            *args,
+        ],
+        check=True,
+        capture_output=True,
     ).stdout
 
 
@@ -121,6 +131,28 @@ def _make_evidence(
         base_commit=base,
         batch_byte_limit=batch_byte_limit,
     )
+
+
+def test_evidence_fixture_ignores_ambient_diff_prefix_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ambient = (
+        ("diff.noprefix", "true"),
+        ("diff.mnemonicPrefix", "true"),
+        ("diff.srcPrefix", "evil/"),
+        ("diff.dstPrefix", "hostile/"),
+    )
+    monkeypatch.setenv("GIT_CONFIG_COUNT", str(len(ambient)))
+    for index, (key, value) in enumerate(ambient):
+        monkeypatch.setenv(f"GIT_CONFIG_KEY_{index}", key)
+        monkeypatch.setenv(f"GIT_CONFIG_VALUE_{index}", value)
+
+    summary = _make_evidence(tmp_path)
+    review_root = tmp_path / "repo" / "_runs" / "reviews" / "round" / "prepared"
+    evidence_root = review_root / "change-evidence"
+    shard = next((evidence_root / "patches").rglob("*.patch"))
+    assert b"diff --git a/src/main.py b/src/main.py" in shard.read_bytes()
+    assert review_evidence.validate_review_evidence(review_root, evidence_root) == summary
 
 
 def _hunk_lines(evidence: review_evidence.EvidenceSummary, path: str) -> set[int]:

@@ -2,7 +2,6 @@ import hashlib
 import json
 import re
 import sys
-import tomllib
 from pathlib import Path
 
 
@@ -138,6 +137,71 @@ def test_public_security_guidance_names_actual_durable_boundaries() -> None:
         "This cleanup preserves owner-authored settings, rules, permission profiles, "
         "and credentials; unrelated files remain untouched."
     ) in english
+
+
+def test_r42_runtime_guidance_uses_native_repair_and_current_codex_invocation() -> None:
+    runtime = " ".join(_text(ROOT / "bin" / "_common.py").split())
+
+    assert "approval_policy=never" not in runtime
+    assert "read-only analyzer" not in runtime.casefold()
+    assert "fresh native proposal-only child" in runtime.casefold()
+
+
+def test_r42_recommended_template_requires_tier_and_agy_unavailability() -> None:
+    template = " ".join(
+        _text(ROOT / "migration" / "AGENTS.recommended.md").split()
+    ).casefold()
+
+    assert (
+        "only when both its configured tier is eligible (business, vertex, or "
+        "api-key gemini) and `agy` is proven "
+        "unavailable before submission"
+    ) in template
+
+
+def test_r42_r20_test_exclusion_is_historical_and_superseded() -> None:
+    handoffs = (
+        ROOT / "docs" / "status" / "2026-07-22-current-state.md",
+        ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md",
+    )
+    for handoff in handoffs:
+        r20 = " ".join(
+            _heading_section(handoff, "## R20 and 2026-07-24 current state").split()
+        )
+        assert "Historical R20 boundary (superseded for 0.2.532)" in r20
+        assert (
+            "Current 0.2.532 formal rounds use the exact no-exclusion boundary: "
+            "`tests/` is included"
+        ) in r20
+        assert "must physically exclude" not in r20
+
+
+def test_r42_old_plans_are_conspicuously_non_executable() -> None:
+    plans = (
+        ROOT / "docs" / "superpowers" / "plans" / "2026-07-23-r11-minor-hardening.md",
+        ROOT / "docs" / "superpowers" / "plans" / "2026-07-22-agy-0528-functional-integration.md",
+        ROOT / "docs" / "superpowers" / "plans" / "2026-07-25-shared-review-prompt-contract.md",
+    )
+    replacement = "2026-07-30-native-permissions-full-coverage-review.md"
+    for plan in plans:
+        banner = "\n".join(_text(plan).splitlines()[:12])
+        assert "HISTORICAL / SUPERSEDED / NON-EXECUTABLE" in banner
+        assert "Do not execute" in banner
+        assert replacement in banner
+
+
+def test_r42_fragment_cleanup_comment_matches_current_lifecycle() -> None:
+    bootstrap = _text(ROOT / "scripts" / "bootstrap.sh")
+    comment = " ".join(
+        bootstrap.split("remove_codex_config_fragment()", 1)[0]
+        .rsplit("# Remove the exact current or legacy managed configuration fragment.", 1)[1]
+        .replace("#", "")
+        .split()
+    )
+
+    assert "preserves any owner-authored remainder" in comment
+    assert "removes a fragment-only config directly" in comment
+    assert "repair lifecycle removal alone decides" not in comment
 
 
 def test_formal_review_requires_full_family_batch_matrix_and_path_evidence() -> None:
@@ -1989,6 +2053,9 @@ def test_public_docs_remain_personal_without_company_fleet_guidance() -> None:
         "managed fleet",
         "회사 / fleet",
         "회사/fleet",
+        "docs/enterprise/managed-configuration",
+        "ChatGPT Business/Enterprise",
+        "org-managed cloud config bundle",
         "organization-approved elevation mechanism",
         "macOS MDM",
     ):
@@ -2065,7 +2132,10 @@ def test_provider_skills_retain_personal_routes_without_company_fleet_guidance()
         "Company / fleet",
         "company/fleet",
         "managed fleet",
+        "회사 / fleet",
+        "회사/fleet",
         "docs/enterprise/managed-configuration",
+        "ChatGPT Business/Enterprise",
         "org-managed cloud config bundle",
         "organization-approved elevation mechanism",
         "macOS MDM",
@@ -2092,7 +2162,7 @@ def test_recommended_agent_template_uses_native_permissions_and_repair_contract(
         "Repair verification",
         "prompt.tmp",
         "codex --search",
-        "normal\ndispatch should still remove the run log",
+        "normal dispatch should still remove the run log",
         "scripts/bootstrap.sh --check",
         "triad-repair-analyzer",
         "read-only sandbox",

@@ -372,10 +372,13 @@ of locally retained status/diff evidence, with no inline patch or file body.
   `709 passed in 152.64s`; `bash -n scripts/bootstrap.sh`, `git diff --check`,
   and `git diff --cached --check` passed. The prior SDD Terra review including
   tests was `APPROVED` with no findings; a fresh post-correction SDD Terra review
-  and complete R22 formal gate remain pending. The formal shared review directory
-  must physically exclude the exact test-source root
-  `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/tests`;
-  local leader tests remain required.
+  and complete R22 formal gate remain pending. Historical R20 boundary
+  (superseded for 0.2.532): the formal shared review directory physically
+  excluded the exact test-source root
+  `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/tests`,
+  while local leader tests remained required. Current 0.2.532 formal rounds use
+  the exact no-exclusion boundary: `tests/` is included in the prepared review
+  directory.
 - On 2026-07-24 the owner authorized deployment of `0.2.529` only if the skill
   verification and all gates pass. No deployment has happened yet. This handoff
   does not claim that a commit, push, tag, release, or install occurred.

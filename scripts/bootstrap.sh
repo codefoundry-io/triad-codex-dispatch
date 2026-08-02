@@ -1037,9 +1037,9 @@ ensure_log_dir() {
 # [shell_environment_policy] block from $CODEX_HOME/config.toml. Any edited,
 # duplicate, incomplete, or otherwise unrecognized marker state is left
 # byte-for-byte untouched. Removal is literal replacement, never a marker-range
-# scan or newline-normalizing reserialization. Full bootstrap removal preserves
-# an empty remainder so repair lifecycle removal alone decides whether intact
-# registration provenance permits deleting the file.
+# scan or newline-normalizing reserialization. Fragment cleanup preserves any
+# owner-authored remainder byte-for-byte and removes a fragment-only config
+# directly; it does not defer deletion to the retired repair lifecycle.
 remove_codex_config_fragment() {
   if [ "$errors" -ne 0 ]; then
     return

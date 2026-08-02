@@ -19,7 +19,9 @@ directly:
 - `$triad-antigravity-dispatch` for the primary Google-family consult, including
   web-grounded research and live URL checks when a separate Google-family leg is
   useful.
-- `$triad-gemini-dispatch` only for business, Vertex, or API-key Gemini tiers.
+- `$triad-gemini-dispatch` only when both its configured tier is eligible
+  (Business, Vertex, or API-key Gemini) and `agy` is proven unavailable before
+  submission.
 - `$triad-cross-family-review` before risky merges.
 
 Select provider permissions and project trust in that authenticated developer

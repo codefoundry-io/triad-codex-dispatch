@@ -39,12 +39,8 @@ def test_removed_permission_options_are_rejected(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("TRIAD_CLAUDE_ENFORCE_SANDBOX", raising=False)
-    monkeypatch.setattr(
-        module,
-        "_wrapper_hardened",
-        lambda: False,
-        raising=False,
-    )
+    monkeypatch.delenv("TRIAD_WRAPPER_HARDENED", raising=False)
+    monkeypatch.delenv("TRIAD_WRAPPER_ALLOWED_ROOTS", raising=False)
     monkeypatch.setattr(module, "require_binary", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(
         module,
@@ -96,10 +92,11 @@ def test_native_wrapper_default_argv_has_no_permission_override(
     hardened,
     monkeypatch,
 ) -> None:
-    captured: dict[str, list[str]] = {}
+    captured: dict[str, object] = {}
 
     def capture(_cli, build_cmd, prompt, **_kwargs):
         captured["argv"] = build_cmd(prompt)
+        captured["hardened"] = _common._wrapper_hardened()
         return _common.RunResult(
             _common.EXIT_OK,
             "ok",
@@ -109,18 +106,18 @@ def test_native_wrapper_default_argv_has_no_permission_override(
         )
 
     monkeypatch.delenv("TRIAD_CLAUDE_ENFORCE_SANDBOX", raising=False)
-    monkeypatch.setattr(
-        module,
-        "_wrapper_hardened",
-        lambda: hardened,
-        raising=False,
-    )
+    monkeypatch.delenv("TRIAD_WRAPPER_ALLOWED_ROOTS", raising=False)
+    if hardened:
+        monkeypatch.setenv("TRIAD_WRAPPER_HARDENED", "1")
+    else:
+        monkeypatch.delenv("TRIAD_WRAPPER_HARDENED", raising=False)
     monkeypatch.setattr(module, "require_binary", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(module, "run_cli_with_retry", capture)
     monkeypatch.setattr(module, "persist_result_artifacts", lambda *_a, **_k: None)
     monkeypatch.setattr(sys, "argv", [module.__file__, "--prompt", "review"])
 
     assert module.main() == 0
+    assert captured["hardened"] is hardened
     assert forbidden.isdisjoint(captured["argv"])
 
 
@@ -200,8 +197,8 @@ def _run_wrapper(
         )
 
     monkeypatch.delenv("TRIAD_CLAUDE_ENFORCE_SANDBOX", raising=False)
-    if hasattr(wrapper, "_wrapper_hardened"):
-        monkeypatch.setattr(wrapper, "_wrapper_hardened", lambda: False)
+    monkeypatch.delenv("TRIAD_WRAPPER_HARDENED", raising=False)
+    monkeypatch.delenv("TRIAD_WRAPPER_ALLOWED_ROOTS", raising=False)
     monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: schema)
     monkeypatch.setattr(wrapper, "require_binary", fake_binary)
     monkeypatch.setattr(wrapper, "run_cli_with_retry", fake_driver)
