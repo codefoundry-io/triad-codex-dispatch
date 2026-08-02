@@ -2,6 +2,7 @@
 from __future__ import annotations
 import ast
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -35,6 +36,9 @@ CONFIG_FRAGMENT_INSERTED_SEPARATOR = (
 )
 SHELL_ENTRY_BEGIN = b"# >>> triad-codex-dispatch codex-triad >>>"
 SHELL_ENTRY_END = b"# <<< triad-codex-dispatch codex-triad <<<"
+FROZEN_SHELL_ENTRY_SHA256 = (
+    "018cb43c9954d0b39abac95ff38f3310c409259db93380729bb94ea1f97b2006"
+)
 CURRENT_CONFIG_FRAGMENT_TEXT = (
     b"[shell_environment_policy]\n"
     b'inherit = "all"\n'
@@ -1376,80 +1380,6 @@ def _managed_artifact_data_is_owned(data: bytes, kind: str) -> bool:
     return bool(lines) and lines[0] == _managed_artifact_marker(kind)
 
 
-def _managed_artifact_state(path: Path, kind: str) -> State | None:
-    require_safe_ancestors(path)
-    state = read_state(path)
-    if state is not None:
-        selected = "Codex runtime profile" if kind == "profile" else "Codex command rules"
-        try:
-            state.data.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise Refusal(f"could not read selected {selected}: {path}") from error
-        if not _managed_artifact_data_is_owned(state.data, kind):
-            label = "Codex profile" if kind == "profile" else "Codex rules file"
-            raise Refusal(f"refusing to overwrite unmanaged {label}: {path}")
-    return state
-
-
-def preflight_managed_artifact(path: Path, kind: str) -> str:
-    return "managed" if _managed_artifact_state(path, kind) is not None else "absent"
-
-
-def inspect_managed_artifact(path: Path, kind: str) -> str:
-    """Inspect a legacy artifact without claiming ownership or mutating it.
-
-    Unlike the selected-artifact preflight, a safe regular foreign file is a
-    valid observation rather than an overwrite refusal. Unsafe paths and read
-    failures remain fail-closed refusals.
-    """
-    require_safe_ancestors(path)
-    state = read_state(path)
-    if state is None:
-        return "absent"
-    return "managed" if _managed_artifact_data_is_owned(state.data, kind) else "unmanaged"
-
-
-def install_managed_artifact(path: Path, kind: str, payload: bytes) -> str:
-    if not _managed_artifact_data_is_owned(payload, kind):
-        raise Refusal(f"managed {kind} payload has an invalid first logical line")
-    before = _managed_artifact_state(path, kind)
-    if before is not None and before.data == payload:
-        return "unchanged"
-    mode = before.mode if before is not None else creation_mode()
-    temp: Staged | None = None
-    journal: list[Mutation] = []
-    failure: BaseException | None = None
-    try:
-        temp = stage(path, payload, mode)
-        regular_swap_env = {
-            "profile": "TRIAD_BOOTSTRAP_TEST_SWAP_PROFILE_TO_REGULAR_BEFORE_WRITE",
-            "rules": "TRIAD_BOOTSTRAP_TEST_SWAP_RULES_TO_REGULAR_BEFORE_WRITE",
-        }[kind]
-        regular_swap_source = os.environ.get(regular_swap_env)
-        if regular_swap_source:
-            replacement = Path(regular_swap_source)
-            if read_state(replacement) is None:
-                raise Refusal(f"missing regular replacement test input: {replacement}")
-            os.replace(replacement, path)
-        swap_env = {
-            "profile": "TRIAD_BOOTSTRAP_TEST_SWAP_PROFILE_TO_SYMLINK_BEFORE_WRITE",
-            "rules": "TRIAD_BOOTSTRAP_TEST_SWAP_RULES_TO_SYMLINK_BEFORE_WRITE",
-        }[kind]
-        swap_target = os.environ.get(swap_env)
-        if swap_target:
-            try:
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
-            os.symlink(swap_target, path)
-        publish_to(temp, path, before, journal)
-    except BaseException as error:
-        failure = error
-    cleanup_failures = cleanup_all([temp] if temp is not None else [])
-    finalize_transaction(failure, journal, cleanup_failures)
-    return "updated" if before is not None else "created"
-
-
 def current_config_fragment(newline: bytes) -> bytes:
     return (
         CONFIG_FRAGMENT_BEGIN
@@ -1477,125 +1407,6 @@ def _parsed_shared_config(state: State, path: Path) -> dict | None:
     except (UnicodeDecodeError, tomllib.TOMLDecodeError):
         return None
     return data if isinstance(data, dict) else None
-
-
-def _publish_config_backup(config: Path, before: State) -> Path:
-    number = 1
-    while True:
-        suffix = ".bak" if number == 1 else f".bak{number}"
-        backup = Path(os.fspath(config) + suffix)
-        require_safe_ancestors(backup)
-        if _path_is_absent(backup):
-            break
-        number += 1
-    _publish_single(backup, before.data, None, before.mode)
-    return backup
-
-
-def _contains_only_managed_registration(
-    existing: bytes, path: Path, data: dict
-) -> bool:
-    if set(data) != {"agents"}:
-        return False
-    agents = data.get("agents")
-    if not isinstance(agents, dict) or set(agents) != {NAME}:
-        return False
-    entry = agents.get(NAME)
-    if not isinstance(entry, dict):
-        return False
-    analyzer_raw = entry.get("config_file")
-    if not isinstance(analyzer_raw, str) or not Path(analyzer_raw).is_absolute():
-        return False
-    try:
-        before, after, managed, original_existed = split_registration(
-            existing.decode("utf-8"), path, Path(analyzer_raw)
-        )
-    except (UnicodeDecodeError, Refusal):
-        return False
-    return managed and not original_existed and not before and not after
-
-
-def merge_config_fragment(path: Path) -> str:
-    require_safe_ancestors(path)
-    before = read_state(path)
-    existing = before.data if before is not None else b""
-    if before is not None:
-        data = _parsed_shared_config(before, path)
-        if data is None:
-            return "malformed"
-    else:
-        data = {}
-
-    has_begin = CONFIG_FRAGMENT_BEGIN in existing
-    has_end = CONFIG_FRAGMENT_END in existing
-    if has_begin or has_end:
-        markers_once = (
-            existing.count(CONFIG_FRAGMENT_BEGIN) == 1
-            and existing.count(CONFIG_FRAGMENT_END) == 1
-        )
-        current_blocks = [current_config_fragment(nl) for nl in (b"\n", b"\r\n")]
-        legacy_blocks = [legacy_config_fragment(nl) for nl in (b"\n", b"\r\n")]
-        current_policy = tomllib.loads(CURRENT_CONFIG_FRAGMENT_TEXT.decode("utf-8"))[
-            "shell_environment_policy"
-        ]
-        exact_current = (
-            markers_once
-            and data.get("shell_environment_policy") == current_policy
-            and sum(existing.count(candidate) for candidate in current_blocks) == 1
-        )
-        if exact_current:
-            return "already-managed"
-        exact_legacy = (
-            markers_once
-            and data.get("shell_environment_policy") == {"inherit": "core"}
-            and sum(existing.count(candidate) for candidate in legacy_blocks) == 1
-        )
-        if not exact_legacy:
-            return "edited-managed"
-        old = next(candidate for candidate in legacy_blocks if existing.count(candidate) == 1)
-        newline = b"\r\n" if b"\r\n" in old else b"\n"
-        updated = existing.replace(old, current_config_fragment(newline), 1)
-        status = "migrated"
-    else:
-        if "shell_environment_policy" in data:
-            return "user-policy"
-        if existing.strip():
-            if existing.endswith(b"\r\n"):
-                updated = existing + current_config_fragment(b"\r\n")
-            elif existing.endswith(b"\n"):
-                updated = existing + current_config_fragment(b"\n")
-            else:
-                updated = (
-                    existing
-                    + CONFIG_FRAGMENT_INSERTED_SEPARATOR
-                    + current_config_fragment(b"\n")
-                )
-        else:
-            updated = current_config_fragment(b"\n")
-        status = "merged"
-
-    registration_only = (
-        before is not None
-        and _contains_only_managed_registration(existing, path, data)
-    )
-    backup = (
-        _publish_config_backup(path, before)
-        if before is not None and not registration_only
-        else None
-    )
-    _publish_single(
-        path,
-        updated,
-        before,
-        before.mode if before is not None else 0o600,
-    )
-    if backup is not None:
-        print(
-            f"[info] retained config backup: {backup}; keep it until Codex starts "
-            "normally, then delete it if rollback is no longer needed",
-            file=sys.stderr,
-        )
-    return status
 
 
 def remove_config_fragment(path: Path, *, preserve_empty: bool = False) -> str:
@@ -1687,19 +1498,12 @@ def _shell_entry_span(data: bytes, path: Path) -> tuple[int, int] | None:
     return begin_spans[0][0], end_spans[0][1]
 
 
-def _shell_entry_state(path: Path, action: str) -> tuple[State | None, tuple[int, int] | None]:
-    if action not in {"install", "remove"}:
-        raise Refusal(f"unknown shell-entry action: {action}")
+def _shell_entry_state(path: Path) -> tuple[State | None, tuple[int, int] | None]:
     require_safe_ancestors(path)
     before = read_state(path)
     if before is None:
         return None, None
     span = _shell_entry_span(before.data, path)
-    if span is None and action == "install" and b"codex-triad" in before.data:
-        raise Refusal(
-            f"refusing to modify unmanaged codex-triad shell entry in {path}; "
-            "remove it manually, then re-run --install"
-        )
     return before, span
 
 
@@ -1712,61 +1516,19 @@ def _shell_entry_base(
     return existing[: span[0]] + existing[span[1] :]
 
 
-def preflight_shell_entry(path: Path, action: str) -> str:
-    before, span = _shell_entry_state(path, action)
-    if before is None:
-        return "absent"
-    if action == "install":
-        base = _shell_entry_base(before, span)
-        if base and not base.endswith((b"\n", b"\r")):
-            raise Refusal(f"shell RC must end with a newline before install: {path}")
-    if span is not None:
-        return "managed"
-    return "unmanaged" if b"codex-triad" in before.data else "absent"
-
-
-def _shell_entry_block(profile: str) -> bytes:
-    first = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    rest = first + "._-"
-    if not profile or profile[0] not in first or any(char not in rest for char in profile):
-        raise Refusal(
-            "invalid shell-entry profile: must match "
-            "[A-Za-z0-9][A-Za-z0-9._-]*"
-        )
-    return (
-        SHELL_ENTRY_BEGIN
-        + b"\n"
-        + b"# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;\n"
-        + b"# removed by --remove. Legacy prompt-reviewed posture: wrapper root\n"
-        + b"# containment + hardened wrapper mode + enforced claude sandbox.\n"
-        + b"codex-triad() {\n"
-        + b'  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\\n'
-        + b"  TRIAD_WRAPPER_HARDENED=1 \\\n"
-        + b"  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \\\n"
-        + f'    command codex --profile {profile} --search "$@"\n'.encode("ascii")
-        + b"}\n"
-        + SHELL_ENTRY_END
-        + b"\n"
-    )
-
-
-def update_shell_entry(path: Path, action: str, profile: str | None) -> str:
-    """Transform and publish one shell RC against the exact captured state."""
-    before, span = _shell_entry_state(path, action)
+def update_shell_entry(path: Path) -> str:
+    """Remove the exact frozen managed shell block from one captured RC."""
+    before, span = _shell_entry_state(path)
     existing = before.data if before is not None else b""
-    if action == "remove" and span is None:
+    if span is None:
         if before is not None and b"codex-triad" in existing:
             return "unmanaged"
         return "absent"
+    managed = existing[span[0] : span[1]]
+    if hashlib.sha256(managed).hexdigest() != FROZEN_SHELL_ENTRY_SHA256:
+        return "unmanaged"
 
     transformed = _shell_entry_base(before, span)
-    if action == "install":
-        if profile is None:
-            raise Refusal("shell-entry install requires --profile")
-        transformed += _shell_entry_block(profile)
-        # Refuse to publish a block that would not occupy exact logical lines,
-        # such as an append after an owner file lacking its final newline.
-        _shell_entry_span(transformed, path)
 
     temp: Staged | None = None
     journal: list[Mutation] = []
@@ -1787,7 +1549,7 @@ def update_shell_entry(path: Path, action: str, profile: str | None) -> str:
         failure = error
     cleanup_failures = cleanup_all([temp] if temp is not None else [])
     finalize_transaction(failure, journal, cleanup_failures)
-    return "installed" if action == "install" else "removed"
+    return "removed"
 
 
 def cleanup(temp: Staged | None) -> None:
@@ -2024,25 +1786,17 @@ def parser() -> argparse.ArgumentParser:
     shell_entry.add_argument(
         "--action",
         required=True,
-        choices=("preflight-install", "preflight-remove", "install", "remove"),
+        choices=("remove",),
     )
     shell_entry.add_argument("--path", required=True)
-    shell_entry.add_argument("--profile")
     sub.add_parser("runtime-path")
     formal_ready = sub.add_parser("formal-schema-ready")
     formal_ready.add_argument("--requirements", required=True)
     classifier = sub.add_parser("classifier")
     classifier.add_argument("--action", required=True, choices=("preflight", "ensure"))
     classifier.add_argument("--path", required=True)
-    managed_artifact = sub.add_parser("managed-artifact")
-    managed_artifact.add_argument(
-        "--action", required=True, choices=("inspect", "preflight", "install")
-    )
-    managed_artifact.add_argument("--kind", required=True, choices=("profile", "rules"))
-    managed_artifact.add_argument("--path", required=True)
-    managed_artifact.add_argument("--payload-file")
     config_fragment = sub.add_parser("config-fragment")
-    config_fragment.add_argument("--action", required=True, choices=("merge", "remove"))
+    config_fragment.add_argument("--action", required=True, choices=("remove",))
     config_fragment.add_argument("--path", required=True)
     config_fragment.add_argument("--preserve-empty", action="store_true")
     return ap
@@ -2081,11 +1835,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         elif args.command == "shell-entry":
-            action = args.action.removeprefix("preflight-")
-            if args.action.startswith("preflight-"):
-                print(preflight_shell_entry(Path(args.path), action))
-            else:
-                print(update_shell_entry(Path(args.path), action, args.profile))
+            print(update_shell_entry(Path(args.path)))
             return 0
         elif args.command == "runtime-path":
             print(runtime_path())
@@ -2097,33 +1847,11 @@ def main(argv: list[str] | None = None) -> int:
             action = preflight_classifier if args.action == "preflight" else ensure_classifier
             print(action(Path(args.path)))
             return 0
-        elif args.command == "managed-artifact":
-            path = Path(args.path)
-            if args.action == "inspect":
-                print(inspect_managed_artifact(path, args.kind))
-                return 0
-            if args.action == "preflight":
-                print(preflight_managed_artifact(path, args.kind))
-                return 0
-            if not args.payload_file:
-                raise Refusal("managed-artifact install requires --payload-file")
-            payload_path = Path(args.payload_file)
-            if not payload_path.is_absolute():
-                raise Refusal(f"managed artifact payload path must be absolute: {payload_path}")
-            payload_state = read_state(payload_path)
-            if payload_state is None:
-                raise Refusal(f"missing managed artifact payload: {payload_path}")
-            print(install_managed_artifact(path, args.kind, payload_state.data))
-            return 0
         elif args.command == "config-fragment":
-            path = Path(args.path)
-            if args.action == "merge":
-                status = merge_config_fragment(path)
-            else:
-                status = remove_config_fragment(
-                    path,
-                    preserve_empty=args.preserve_empty,
-                )
+            status = remove_config_fragment(
+                Path(args.path),
+                preserve_empty=args.preserve_empty,
+            )
             print(status)
             return 0
         else:

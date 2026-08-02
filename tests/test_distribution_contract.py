@@ -362,12 +362,12 @@ def test_task2_active_handoffs_use_complete_shared_directory_input() -> None:
 
 
 def test_task2_hardened_comments_name_opted_in_legacy_shell_entry() -> None:
-    common = _text(ROOT / "bin" / "_common.py")
-    assert "opted-in legacy codex-triad shell entry" in common
+    common = " ".join(_text(ROOT / "bin" / "_common.py").split())
+    assert "Compatibility callers may explicitly set" in common
     assert "TRIAD_WRAPPER_HARDENED=1" in common
     assert "TRIAD_WRAPPER_ALLOWED_ROOTS" in common
-    assert "public codex-host product's bootstrap sets TRIAD_WRAPPER_HARDENED=1" not in common
-    assert "ordinary bootstrap sets TRIAD_WRAPPER_HARDENED=1" not in common
+    assert "Bootstrap does not activate these compatibility controls" in common
+    assert "opted-in legacy codex-triad shell entry" not in common
 
 
 def test_task2_readme_exit_code_legends_match_reachable_classes() -> None:
@@ -380,13 +380,6 @@ def test_task2_readme_exit_code_legends_match_reachable_classes() -> None:
         assert "schema-rejected" in exit_sixty_seven
         assert "shared-directory formal path" in exit_sixty_six
         assert not any(line.startswith("| `69`") for line in lines)
-
-
-def test_task2_config_backup_guidance_qualifies_registration_only_fresh_config() -> None:
-    guidance = " ".join(_text(ROOT / "migration" / "config-fragment.recommended.toml").split())
-    assert ".bak" in guidance and "backup first" in guidance
-    assert "except for a fresh config" in guidance
-    assert "only the managed" in guidance and "registration" in guidance
 
 
 def test_fresh_codex_template_renders_formal_kind_and_approved_data_boundary() -> None:
@@ -1786,35 +1779,27 @@ def test_readmes_use_the_runtime_antigravity_summary_token() -> None:
     assert "[wrapper] agy" not in readmes
 
 
-def test_company_fleet_guides_and_terms_are_removed_but_personal_templates_remain() -> None:
+def test_distribution_has_only_retained_non_permission_migration_guidance() -> None:
     migration = ROOT / "migration"
 
     assert not (migration / "COMPANY-SETUP.md").exists()
     assert not (migration / "COMPANY-SETUP.ko.md").exists()
+    assert (migration / "AGENTS.recommended.md").is_file()
     for template in (
         "requirements.recommended.toml",
         "triad-codex-dispatch.rules",
         "config-fragment.recommended.toml",
-        "AGENTS.recommended.md",
     ):
-        assert (migration / template).is_file()
+        assert not (migration / template).exists()
 
-    migration_templates = tuple(
-        sorted(path for path in migration.iterdir() if path.is_file())
-    )
-    shipped_text = "\n".join(
+    shipped_text = " ".join("\n".join(
         _text(path)
         for path in (
-            ROOT / "README.md",
-            ROOT / "README.ko.md",
-            ROOT / "SECURITY.md",
             ROOT / "scripts" / "bootstrap.sh",
             PROTOCOL,
-            *PROVIDER_SKILLS,
-            REVIEW_SKILL,
-            *migration_templates,
+            migration / "AGENTS.recommended.md",
         )
-    )
+    ).split())
     for stale in (
         "COMPANY-SETUP",
         "Company / fleet",
@@ -1829,19 +1814,21 @@ def test_company_fleet_guides_and_terms_are_removed_but_personal_templates_remai
         "macOS MDM",
     ):
         assert stale not in shipped_text
+    assert "inherits provider permissions without changing them" in shipped_text
+    assert "shell_environment_policy" in shipped_text
 
-    gemini_skill = _text(ROOT / "skills" / "triad-gemini-dispatch" / "SKILL.md")
-    assert "business, Vertex, or API-key" in gemini_skill
 
+def test_recommended_agent_template_uses_native_permissions_and_repair_contract() -> None:
+    template = " ".join(
+        _text(ROOT / "migration" / "AGENTS.recommended.md").split()
+    )
 
-def test_recommended_agent_template_uses_current_read_only_repair_contract() -> None:
-    template = _text(ROOT / "migration" / "AGENTS.recommended.md")
-
-    assert "triad-repair-analyzer" in template
-    assert "read-only sandbox" in template
-    assert "triad-apply-repair --cli <cli> --proposal-file <absolute-path>" in template
-    assert "age-floor cleanup" in template
+    assert "same authenticated login terminal" in template
+    assert "inherits provider permissions without changing them" in template
+    assert "proposal-only child" in template
     assert "printed absolute bootstrap command" in template
+    assert "--classifier-file" in template
+    assert "age-floor cleanup" in template
     assert "TRIAD_PLUGIN_DIR" not in template
     for stale in (
         "triad_repair",
@@ -1851,6 +1838,9 @@ def test_recommended_agent_template_uses_current_read_only_repair_contract() -> 
         "codex --search",
         "normal\ndispatch should still remove the run log",
         "scripts/bootstrap.sh --check",
+        "triad-repair-analyzer",
+        "read-only sandbox",
+        "triad-apply-repair",
     ):
         assert stale not in template
 
@@ -1900,27 +1890,6 @@ def test_active_shared_directory_headings() -> None:
     assert "### Worktree-first cross-family review" not in english
     assert "### Worktree-first cross-family review" not in korean
     assert "## Worktree-first review contract" not in current_state
-
-
-def test_absent_config_restoration_is_scoped_to_intact_managed_blocks() -> None:
-    english_required = (
-        "both provenance-marked managed registration and environment-policy "
-        "blocks remain intact"
-    )
-    english_paths = (
-        ROOT / "scripts" / "bootstrap.sh",
-        ROOT / "README.md",
-        CHANGELOG,
-    )
-    for path in english_paths:
-        assert english_required in " ".join(_text(path).split()).lower()
-
-    korean = " ".join(_text(ROOT / "README.ko.md").split())
-    assert (
-        "provenance-marked managed registration과 environment-policy block이 "
-        "둘 다 그대로 남아 있는 경우에만"
-    ) in korean
-    assert english_required not in korean.lower()
 
 
 def test_r13_invalid_round_is_recorded_in_all_three_handoffs() -> None:
@@ -2088,16 +2057,14 @@ def test_readmes_describe_agent_review_eligibility_truthfully() -> None:
 def test_bootstrap_usage_describes_ordinary_codex_agent_review_requirements() -> None:
     usage = " ".join(_text(ROOT / "scripts" / "bootstrap.sh").split())
 
-    assert "ordinary Codex session" in usage
-    assert "approvals_reviewer=auto_review" in usage
-    assert "granular.rules=true" in usage
-    assert "granular.sandbox_approval=true" in usage
-    assert "does not install or require a dedicated Codex profile" in usage
-    assert "configured rules path is absent" in usage
-    assert "owner-maintained rules" in usage
-    assert "repair-analyzer registration" in usage
-    assert "pre-install absent state" in usage
-    assert "did not exist before the install" in usage
+    assert "same authenticated login terminal" in usage
+    assert "inherits provider permissions" in usage
+    assert "does not install or inject a separate Codex profile" in usage
+    assert "exact legacy plugin-owned" in usage
+    assert "preserves owner-authored or edited artifacts" in usage
+    assert "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE" not in usage
+    assert "approvals_reviewer=auto_review" not in usage
+    assert "granular.rules" not in usage
 
 
 def test_legacy_approval_profile_plan_is_marked_superseded() -> None:

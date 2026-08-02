@@ -397,14 +397,12 @@ def _load_classifier_extension() -> dict:
 
 
 # ─── Product hardening mode (L8 twin→SoT port, owner adjudications 2026-07-05) ───
-# The lab (SoT callers, skill contracts) runs UNRESTRICTED by default; the
-# explicitly opted-in legacy codex-triad shell entry sets
-# TRIAD_WRAPPER_HARDENED=1 and pins TRIAD_WRAPPER_ALLOWED_ROOTS, which
-# activates: allowed-roots containment (required), the pydantic import gate,
-# and audit prompt redaction. Each control also has an individual env so it
-# can be engaged on its own (set TRIAD_WRAPPER_ALLOWED_ROOTS to enforce
-# containment; TRIAD_AUDIT_REDACT_PROMPTS=1 to redact) — per-product defaults,
-# one engine.
+# The lab (SoT callers, skill contracts) runs UNRESTRICTED by default.
+# Compatibility callers may explicitly set TRIAD_WRAPPER_HARDENED=1 and pin
+# TRIAD_WRAPPER_ALLOWED_ROOTS to activate allowed-roots containment, the
+# pydantic import gate, and audit prompt redaction. Each control also has an
+# individual env so it can be engaged on its own.
+# Bootstrap does not activate these compatibility controls.
 
 def _wrapper_hardened() -> bool:
     return os.environ.get("TRIAD_WRAPPER_HARDENED") == "1"
@@ -427,8 +425,8 @@ def runtime_allowed_roots() -> list[Path]:
     """Containment roots for --cwd / --prompt-file. Env unset → NO containment
     in the lab (callers own isolation per the SKILL contracts); under
     TRIAD_WRAPPER_HARDENED=1 the env is REQUIRED (refuse rather than guess —
-    the explicitly opted-in legacy codex-triad shell entry pins it; a hardened
-    run without pinned roots must not silently fall back to cwd)."""
+    an explicit compatibility caller must pin it; a hardened run without
+    pinned roots must not silently fall back to cwd)."""
     raw = os.environ.get("TRIAD_WRAPPER_ALLOWED_ROOTS", "")
     if not raw:
         if _wrapper_hardened():

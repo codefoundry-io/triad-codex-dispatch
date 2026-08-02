@@ -6,9 +6,10 @@ Codex-led triad dispatch toolkit.
 ```md
 # Triad Codex Dispatch Usage
 
-Run Codex from the repository root. Installed plugin skills load from the plugin
-cache in a new Codex thread. Do not add a repo-local `.agents/skills/` mirror for
-this toolkit while the plugin is installed, or Codex will show duplicate triad
+Run TRIAD from the same authenticated login terminal and repository worktree
+used for development. Installed plugin skills load from the plugin cache in a
+new Codex thread. Do not add a repo-local `.agents/skills/` mirror for this
+toolkit while the plugin is installed, or Codex will show duplicate triad
 skills.
 
 Use the installed triad dispatch skills instead of invoking wrapper scripts
@@ -21,17 +22,21 @@ directly:
 - `$triad-gemini-dispatch` only for business, Vertex, or API-key Gemini tiers.
 - `$triad-cross-family-review` before risky merges.
 
-Do not use `danger-full-access`, `bypassPermissions`, or yolo-style permission
-modes for this toolkit. Repair uses the exact registered
-`triad-repair-analyzer` Custom Agent, which pins a read-only sandbox. The agent
-reads an untrusted absolute run-log path and the local classifier framework as
-needed, then returns a proposal or escalation. It makes no provider or network
-calls and performs no edits.
+Select provider permissions and project trust in that authenticated developer
+environment before dispatch. TRIAD inherits provider permissions without
+changing them and does not install a separate Codex profile, rule, permission
+mode, or pre-spawn `shell_environment_policy`. Trusted Python and `PATH` values
+are prerequisites. After trusted launcher and interpreter startup, wrapper
+descendants remain scrubbed of loader and interpreter injection variables.
 
-The owner applies a validated proposal from a normal authenticated terminal with
-`triad-apply-repair --cli <cli> --proposal-file <absolute-path>`. Run logs remain
-available as untrusted evidence until the wrapper's age-floor cleanup; do not
-manually remove them after analysis.
+Repair analysis uses a fresh native proposal-only child with prompt-controlled
+no-edit behavior. The child reads an untrusted absolute run-log path and the
+local classifier framework as needed, then returns a proposal or escalation.
+The owner applies a validated proposal locally from the authenticated terminal
+with the printed absolute bootstrap command for `bin/apply_patch.py`, including
+the pinned absolute `--classifier-file`. Run logs remain available as untrusted
+evidence until the wrapper's age-floor cleanup; do not manually remove them
+after analysis.
 
 The plugin-add step prints a safely quoted absolute bootstrap command from its
 returned `installedPath`. Run that printed absolute bootstrap command exactly
