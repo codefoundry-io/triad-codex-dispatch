@@ -1877,8 +1877,8 @@ def _historical_shell_entry_is_managed(data: bytes) -> bool:
         b"# containment + hardened wrapper mode + enforced claude sandbox.",
         b"codex-triad() {",
         b'  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\',
-        b"  TRIAD_WRAPPER_" + b"HARDENED=1 \\",
-        b"  TRIAD_CLAUDE_" + b"ENFORCE_SANDBOX=1 \\",
+        b"  TRIAD_WRAPPER_HARDENED=1 \\",
+        b"  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \\",
     ] or content[9:] != [b"}", SHELL_ENTRY_END]:
         return False
     match = re.fullmatch(

@@ -133,7 +133,14 @@ def test_provider_wrapper_sources_contain_no_retired_permission_controls() -> No
         "--setting-sources",
     ):
         assert retired_control not in claude_source
-    for retired_control in ("--approval-mode", "APPROVAL_CHOICES", "SANDBOX_CHOICES"):
+    for retired_control in (
+        "--approval-mode",
+        "--sandbox",
+        "--policy",
+        "--skip-trust",
+        "APPROVAL_CHOICES",
+        "SANDBOX_CHOICES",
+    ):
         assert retired_control not in gemini_source
 
 

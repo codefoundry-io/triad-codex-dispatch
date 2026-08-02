@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -16,6 +15,7 @@ if str(BIN) not in sys.path:
     sys.path.insert(0, str(BIN))
 
 import review_evidence
+import review_coverage
 
 
 def _git(repo: Path, *args: str) -> bytes:
@@ -585,6 +585,47 @@ def test_prepare_handles_deletion_and_rename(tmp_path: Path) -> None:
     assert next(shard for shard in renamed_summary.patch_shards if shard.path == "after.py").hunk_ordinal is None
 
 
+def test_prepare_rejects_deleted_path_with_current_prepared_source(tmp_path: Path) -> None:
+    fixture = _candidate_fixture(tmp_path, "old.py", b"old=True\n", b"new=True\n")
+    repo = fixture[0].parents[1]
+    (repo / "old.py").unlink()
+    fixture[1].write_bytes(_canonical_diff(repo, fixture[5]))
+    _rewrite_impact(fixture, [
+        ("old.py", "changed", "-", "deleted", "old.py"),
+        (
+            "tests/test_contract.py",
+            "required-test-source",
+            "owner-approved-no-exclusion-test-boundary",
+            "affected-unchanged",
+            "-",
+        ),
+    ])
+
+    with pytest.raises(
+        review_evidence.EvidenceError, match="deleted path has current source"
+    ):
+        _prepare(fixture)
+
+
+def test_prepare_rejects_deleted_row_without_deletion_diff(tmp_path: Path) -> None:
+    fixture = _candidate_fixture(tmp_path, "old.py", b"old=True\n", b"new=True\n")
+    _rewrite_impact(fixture, [
+        ("old.py", "changed", "-", "deleted", "old.py"),
+        (
+            "tests/test_contract.py",
+            "required-test-source",
+            "owner-approved-no-exclusion-test-boundary",
+            "affected-unchanged",
+            "-",
+        ),
+    ])
+
+    with pytest.raises(
+        review_evidence.EvidenceError, match="deleted row lacks deletion diff"
+    ):
+        _prepare(fixture)
+
+
 def test_evidence_directory_must_be_canonical_child(tmp_path: Path) -> None:
     fixture = _candidate_fixture(tmp_path, "a.py", b"a=1\n", b"a=2\n")
     for output in (tmp_path / "external", fixture[0] / "alternate"):
@@ -650,12 +691,32 @@ def test_prepare_rejects_non_utf8_current_source(tmp_path: Path) -> None:
 
 
 def test_batch_manifest_has_exact_header_and_ordered_rows(tmp_path: Path) -> None:
-    fixture = _candidate_fixture(tmp_path, "z.py", b"z=1\n", b"z=2\n")
+    old = b"z=1\n" + b"".join(
+        f"stable_{index}=True\n".encode() for index in range(2, 12)
+    ) + b"tail=1\n"
+    new = old.replace(b"z=1\n", b"z=2\n").replace(b"tail=1\n", b"tail=2\n")
+    fixture = _candidate_fixture(tmp_path, "z.py", old, new)
     summary = _prepare(fixture)
-    batch = fixture[0] / "change-evidence" / "batches" / summary.batch_ids[0]
-    lines = batch.with_suffix(".tsv").read_text().splitlines()
-    assert lines[0] == "path\treason\tchange_kind\tcontent_sha256\tbyte_count\tline_count\tpatch_ids\timpact_edge_ids"
-    assert [line.split("\t")[0] for line in lines[1:]] == ["tests/test_contract.py", "z.py"]
+    batches = fixture[0] / "change-evidence" / "batches"
+    observed_paths: list[str] = []
+    closure_batches = {row.path: row.batch_id for row in summary.affected_paths}
+    for batch_id in summary.batch_ids:
+        lines = (batches / f"{batch_id}.tsv").read_text().splitlines()
+        assert lines[0] == "path\treason\tchange_kind\tcontent_sha256\tbyte_count\tline_count\tpatch_ids\timpact_edge_ids"
+        for line in lines[1:]:
+            fields = line.split("\t")
+            assert len(fields) == 8
+            observed_paths.append(fields[0])
+            assert closure_batches[fields[0]] == batch_id
+            if fields[0] == "z.py":
+                assert fields[6] == (
+                    "patch-000001-hunk-0001,patch-000001-hunk-0002"
+                )
+                assert fields[7] == "-"
+            else:
+                assert fields[6] == "-"
+                assert fields[7].startswith("edge-")
+    assert observed_paths == ["tests/test_contract.py", "z.py"]
 
 
 def test_oversized_source_receives_complete_single_path_batch(tmp_path: Path) -> None:
@@ -679,11 +740,22 @@ def test_validate_and_admit_reject_symlinked_prepared_closure_source(tmp_path: P
     fixture = _candidate_fixture(tmp_path, "a.py", b"a=1\n", b"a=2\n")
     _prepare(fixture)
     referent = tmp_path / "same.py"
-    referent.write_text("a=2\n")
+    referent_bytes = b"a=2\n"
+    referent.write_bytes(referent_bytes)
     (fixture[0] / "a.py").unlink()
     (fixture[0] / "a.py").symlink_to(referent)
     with pytest.raises(review_evidence.EvidenceError, match="prepared source differs from candidate"):
         review_evidence.validate_review_evidence(fixture[0], fixture[0] / "change-evidence")
+    admission = fixture[0].parent / "coverage-admission.json"
+    assert review_coverage.main([
+        "admit",
+        "--review-root", str(fixture[0]),
+        "--evidence-dir", str(fixture[0] / "change-evidence"),
+        "--receipts-root", str(fixture[0].parent / "receipts"),
+        "--output", str(admission),
+    ]) != 0
+    assert not admission.exists()
+    assert referent.read_bytes() == referent_bytes
 
 
 def test_validate_rejects_missing_named_header(tmp_path: Path) -> None:

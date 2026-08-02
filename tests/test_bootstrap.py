@@ -77,14 +77,12 @@ def _fake_bin(
 def _make_repo_root(
     tmp_path: Path,
     executable_wrappers=True,
-    real_agents=False,
+    real_skills=False,
 ) -> Path:
     repo_root = tmp_path / "repo"
     bin_dir = repo_root / "bin"
-    agents_dir = repo_root / "agents"
     skills_dir = repo_root / "skills"
     bin_dir.mkdir(parents=True)
-    agents_dir.mkdir()
     mode = stat.S_IRUSR | stat.S_IWUSR
     if executable_wrappers:
         mode |= stat.S_IXUSR
@@ -97,16 +95,8 @@ def _make_repo_root(
     )
     shutil.copy2(BOOTSTRAP_REPAIR, bin_dir / "bootstrap_repair.py")
     shutil.copy2(ROOT / "requirements.txt", repo_root / "requirements.txt")
-    if real_agents:
-        for path in (ROOT / "agents").glob("*.toml"):
-            shutil.copy2(path, agents_dir / path.name)
+    if real_skills:
         shutil.copytree(ROOT / "skills", skills_dir)
-    else:
-        for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-            (agents_dir / f"{name}.toml").write_text(
-                f'name = "{name}"\ndescription = "{name}"\n',
-                encoding="utf-8",
-            )
     return repo_root
 
 
@@ -148,7 +138,7 @@ def _run_bootstrap(
     timeout=10,
 ):
     if repo_root is None:
-        repo_root = _make_repo_root(tmp_path, real_agents=True)
+        repo_root = _make_repo_root(tmp_path, real_skills=True)
     fake_bin = _fake_bin(
         tmp_path, *fake_names, "python3",
         python_script=python_script,
@@ -197,11 +187,6 @@ REPAIR_ANALYZER_MARKER = "# triad-codex-dispatch managed repair analyzer"
 FROZEN_REPAIR_ANALYZER = (
     FIXTURES / "triad-repair-analyzer.ccc8ff09510b.toml"
 ).read_bytes()
-MANAGED_LEGACY_REPAIR_AGENT = (
-    b"# Codex named subagent for Claude wrapper repair agent\n"
-    b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
-    b'name = "claude-wrapper-repair"\n'
-)
 FROZEN_LEGACY_APPLY_LAUNCHER = (
     b"#!/usr/bin/python3 -E\n"
     b"# triad-codex-dispatch managed repair apply launcher\n"
@@ -341,6 +326,20 @@ def _load_bootstrap_repair_module():
     return module
 
 
+def _load_apply_patch_module():
+    spec = importlib.util.spec_from_file_location("apply_patch_test", APPLY_PATCH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    bin_path = str(APPLY_PATCH.parent)
+    sys.path.insert(0, bin_path)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(bin_path)
+    return module
+
+
 def _seed_frozen_legacy_repair_state(
     helper,
     tmp_path: Path,
@@ -419,51 +418,6 @@ def _install_target_fingerprint(paths: tuple[Path, ...]):
     return {path: _path_state_fingerprint(path) for path in paths}
 
 
-def _would_be_install_targets(
-    tmp_path: Path,
-    repo_root: Path,
-    codex_home: Path,
-    classifier: Path,
-    shell_rc: Path,
-    *extra_paths: Path,
-) -> tuple[Path, ...]:
-    launcher_dir = tmp_path / "launchers"
-    return (
-        launcher_dir,
-        *(launcher_dir / name for name in (
-            "claude_wrapper.py",
-            "gemini_wrapper.py",
-            "antigravity_wrapper.py",
-            "triad-apply-repair",
-        )),
-        repo_root / "bin",
-        repo_root / "bin" / "_logs",
-        codex_home,
-        codex_home / "config.toml",
-        codex_home / "agents",
-        codex_home / "agents" / f"{REPAIR_ANALYZER}.toml",
-        *(codex_home / "agents" / name for name in (
-            "claude-wrapper-repair.toml",
-            "gemini-wrapper-repair.toml",
-            "agy-wrapper-repair.toml",
-        )),
-        codex_home / "rules",
-        codex_home / "rules" / "triad-codex-dispatch.rules",
-        codex_home / "triad-codex-dispatch.config.toml",
-        classifier.parent,
-        classifier,
-        shell_rc,
-        *extra_paths,
-    )
-
-
-def _seed_managed_legacy_repair_agent(codex_home: Path) -> Path:
-    legacy_agent = codex_home / "agents" / "claude-wrapper-repair.toml"
-    legacy_agent.parent.mkdir(parents=True, exist_ok=True)
-    legacy_agent.write_bytes(MANAGED_LEGACY_REPAIR_AGENT)
-    return legacy_agent
-
-
 def test_native_install_does_not_create_codex_permission_state(
     tmp_path: Path,
 ) -> None:
@@ -503,8 +457,6 @@ def test_native_install_emits_no_permission_environment_controls(
 def test_permission_environment_control_producers_are_removed() -> None:
     text = BOOTSTRAP_REPAIR.read_text(encoding="utf-8")
 
-    assert "TRIAD_CLAUDE_ENFORCE_SANDBOX" not in text
-    assert "TRIAD_WRAPPER_HARDENED" not in text
     assert "def _shell_entry_block(" not in text
 
 
@@ -648,6 +600,51 @@ def test_apply_patch_requires_explicit_absolute_classifier_file(tmp_path: Path) 
     assert not (fresh_config / "triad-codex-dispatch" / "classifier-patches.json").exists()
 
 
+def test_apply_patch_reports_classifier_ancestor_inspection_error_before_proposal_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_apply_patch_module()
+    proposal = tmp_path / "proposal.json"
+    proposal_bytes = b'{"classification":"server-capacity"}\n'
+    proposal.write_bytes(proposal_bytes)
+    classifier = tmp_path / "protected" / "classifier.json"
+    classifier.parent.mkdir()
+    classifier_bytes = b'{"owner":true}\n'
+    classifier.write_bytes(classifier_bytes)
+    real_lstat = module.os.lstat
+
+    def refusing_lstat(path):
+        if Path(path) == classifier.parent:
+            raise PermissionError("inspection denied")
+        return real_lstat(path)
+
+    def forbidden_proposal_read(*_args, **_kwargs):
+        pytest.fail("proposal must not be read before classifier validation")
+
+    monkeypatch.setattr(module.os, "lstat", refusing_lstat)
+    monkeypatch.setattr(module, "open", forbidden_proposal_read, raising=False)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            str(APPLY_PATCH),
+            "--cli",
+            "claude",
+            "--classifier-file",
+            str(classifier),
+            "--proposal-file",
+            str(proposal),
+        ],
+    )
+
+    assert module.main() == module.EXIT_INVALID
+    assert "could not inspect classifier path" in capsys.readouterr().err
+    assert proposal.read_bytes() == proposal_bytes
+    assert classifier.read_bytes() == classifier_bytes
+
+
 def test_apply_patch_rejects_parent_traversal_before_proposal_read(
     tmp_path: Path,
 ) -> None:
@@ -711,7 +708,7 @@ def test_install_removes_only_exact_legacy_repair_agent_artifacts(
     tmp_path: Path,
     launcher_bytes: bytes,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     helper = _load_bootstrap_repair_module()
     codex_home = tmp_path / "home" / ".codex"
     args, analyzer, config, seeded_launcher = _seed_frozen_legacy_repair_state(
@@ -921,7 +918,7 @@ def test_bootstrap_repair_preserves_foreign_swap_between_check_and_remove(
 def test_provider_launchers_and_owner_apply_share_custom_classifier_in_a_fresh_environment(
     tmp_path: Path,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     shutil.copy2(APPLY_PATCH, repo_root / "bin" / "apply_patch.py")
     shutil.copy2(ROOT / "bin" / "_common.py", repo_root / "bin" / "_common.py")
     (repo_root / "bin" / "apply_patch.py").chmod(0o755)
@@ -1916,7 +1913,7 @@ def test_plain_install_refuses_unsafe_legacy_profile_without_mutation(
     tmp_path: Path, unsafe_kind: str,
 ) -> None:
     helper = _load_bootstrap_repair_module()
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     launcher_dir = tmp_path / "launchers"
     launcher_dir.mkdir()
     codex_home = tmp_path / "codex-home"
@@ -1960,7 +1957,7 @@ def test_plain_install_refuses_unsafe_legacy_profile_without_mutation(
 def test_plain_install_refuses_unsafe_legacy_shell_without_mutation(
     tmp_path: Path, unsafe_kind: str,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     launcher_dir = tmp_path / "launchers"
     launcher_dir.mkdir()
     codex_home = tmp_path / "codex-home"
@@ -2022,7 +2019,6 @@ def test_install_cleanup_preserves_foreign_repair_analyzer_registration(
         arg="--install",
         env_overrides={
             "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
         },
     )
 
@@ -2049,7 +2045,6 @@ def test_install_preserves_invalid_registration_config_without_publishing_analyz
         arg="--install",
         env_overrides={
             "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
         },
     )
 
@@ -2128,7 +2123,6 @@ def test_install_refuses_unsafe_config_without_following_or_publishing_analyzer(
             arg="--install",
             env_overrides={
                 "CODEX_HOME": str(codex_home),
-                "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
             },
             timeout=2,
         )
@@ -2155,7 +2149,6 @@ def test_registration_round_trip_preserves_unrelated_config_bytes(tmp_path: Path
         arg="--install",
         env_overrides={
             "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
         },
     )
     assert installed.returncode == 0, installed.stderr + installed.stdout
@@ -2165,7 +2158,6 @@ def test_registration_round_trip_preserves_unrelated_config_bytes(tmp_path: Path
         arg="--remove",
         env_overrides={
             "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
         },
     )
     assert removed.returncode == 0, removed.stderr + removed.stdout
@@ -2255,7 +2247,7 @@ def test_install_cleanup_handles_foreign_legacy_repair_analyzer_target(
 def test_install_cleanup_refuses_nonregular_legacy_repair_analyzer_target(
     tmp_path: Path,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -2293,7 +2285,7 @@ def test_install_cleanup_refuses_nonregular_legacy_repair_analyzer_target(
 def test_install_cleanup_refuses_unsafe_legacy_repair_launcher_before_wrapper_publication(
     tmp_path: Path, kind: str
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -2348,7 +2340,7 @@ def test_install_cleanup_refuses_unsafe_legacy_repair_launcher_before_wrapper_pu
 def test_install_cleanup_refuses_symlinked_legacy_analyzer_parent_before_wrapper_publication(
     tmp_path: Path,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -2369,8 +2361,6 @@ def test_install_cleanup_refuses_symlinked_legacy_analyzer_parent_before_wrapper
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
         timeout=15,
@@ -2392,7 +2382,6 @@ def test_remove_refuses_unsafe_repair_target_before_any_mutation(tmp_path: Path)
     installed, env, launcher_bin = _run_bootstrap(
         tmp_path,
         arg="--install",
-        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
     )
     assert installed.returncode == 0, installed.stderr + installed.stdout
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
@@ -2440,7 +2429,6 @@ def test_remove_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
     installed, env, launcher_bin = _run_bootstrap(
         tmp_path,
         arg="--install",
-        env_overrides={"TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1"},
     )
     assert installed.returncode == 0, installed.stderr + installed.stdout
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
@@ -2622,7 +2610,7 @@ def test_remove_preserves_foreign_repair_analyzer_and_apply_launcher(
 def test_install_rejects_unsafe_legacy_profile_or_rules_target_before_commands(
     tmp_path: Path, unsafe_target: str, dangling: bool
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home = tmp_path / "codex-home"
     codex_home.mkdir()
     external = tmp_path / "external-target"
@@ -2669,7 +2657,7 @@ def test_install_rejects_unsafe_legacy_profile_or_rules_target_before_commands(
 def test_install_rejects_dangling_classifier_before_first_persistent_mutation(
     tmp_path: Path,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home = tmp_path / "codex-home"
     codex_home.mkdir()
     config = codex_home / "config.toml"
@@ -2690,8 +2678,6 @@ def test_install_rejects_dangling_classifier_before_first_persistent_mutation(
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -2721,8 +2707,6 @@ def test_late_classifier_failure_is_fatal_and_preserves_existing_bytes(
         arg="--install",
         env_overrides={
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
             "TRIAD_BOOTSTRAP_TEST_FAIL_CLASSIFIER_ENSURE": "1",
         },
     )
@@ -2744,8 +2728,6 @@ def test_late_classifier_race_is_fatal_without_following_dangling_symlink(
         arg="--install",
         env_overrides={
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
             "TRIAD_BOOTSTRAP_TEST_SWAP_CLASSIFIER_TO_SYMLINK_BEFORE_ENSURE": str(
                 external
             ),
@@ -2766,7 +2748,6 @@ def test_install_never_executes_provider_binaries(tmp_path: Path) -> None:
     result, _env, launchers = _run_bootstrap(
         tmp_path,
         env_overrides={
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "0",
             "TRIAD_PROVIDER_MARKER": str(marker),
         },
         fake_scripts={
@@ -2792,7 +2773,7 @@ def test_check_supports_workspace_contained_install_targets(tmp_path):
     # Running the same layout FROM the containing directory is a trusted-
     # executable rewrite chain and must hard-fail — see the
     # test_install_fails_when_*_inside_workspace battery below.
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     workspace_codex = repo_root / ".triad-codex-home"
     workspace_config = repo_root / ".triad-config"
     workspace_bin = repo_root / ".triad-bin"
@@ -2945,7 +2926,7 @@ def _assert_preflight_artifacts_unchanged(
 def test_invalid_profile_name_is_rejected_before_artifact_mutation(
     tmp_path: Path, profile_name: str
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -2957,7 +2938,6 @@ def test_invalid_profile_name_is_rejected_before_artifact_mutation(
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
             "TRIAD_CODEX_PROFILE_NAME": profile_name,
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -2984,7 +2964,7 @@ def test_resolved_python_path_with_whitespace_is_rejected_before_artifact_mutati
     whitespace_runtime = runtime_dir / "python3"
     _copy_test_python_executable(whitespace_runtime)
 
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -2995,7 +2975,6 @@ def test_resolved_python_path_with_whitespace_is_rejected_before_artifact_mutati
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -3026,7 +3005,7 @@ def test_oversized_python_shebang_is_rejected_before_artifact_mutation(
     _copy_test_python_executable(long_runtime)
     assert len(b"#!" + os.fsencode(long_runtime.resolve()) + b" -E\n") == 257
 
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -3037,7 +3016,6 @@ def test_oversized_python_shebang_is_rejected_before_artifact_mutation(
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -3072,7 +3050,7 @@ def test_check_stops_before_install_when_python_version_fails(tmp_path):
 def test_install_requires_pydantic_2_before_persistent_mutation(
     tmp_path: Path, surface: str
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     fake_site = _fake_pydantic_site(tmp_path, surface)
     shell_rc = tmp_path / "shellrc"
 
@@ -3082,7 +3060,6 @@ def test_install_requires_pydantic_2_before_persistent_mutation(
         arg="--install",
         env_overrides={
             "PYTHONPATH": str(fake_site),
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -3123,7 +3100,7 @@ def test_check_installs_executable_launcher_scripts(tmp_path):
 def test_generated_provider_launchers_force_audit_prompt_redaction_in_clean_environment(
     tmp_path: Path,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     wrapper_source = '''\
 import os
 print(os.environ.get("TRIAD_AUDIT_REDACT_PROMPTS", "<missing>"))
@@ -3257,7 +3234,7 @@ def test_check_rejects_relative_codex_home_override(tmp_path):
 
 
 def test_install_preserves_unmanaged_codex_runtime_profile(tmp_path: Path) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -3510,7 +3487,7 @@ def test_fifo_targets_are_rejected_without_blocking(
 def test_any_foreign_command_target_stops_install_before_all_other_artifacts(
     tmp_path: Path, name: str, foreign_kind: str
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -3535,7 +3512,6 @@ def test_any_foreign_command_target_stops_install_before_all_other_artifacts(
             "CODEX_HOME": str(codex_home),
             "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -3594,7 +3570,7 @@ def test_optional_gemini_launcher_remains_pinned_and_fails_closed_when_pin_is_mi
 
 
 def test_install_preserves_unmanaged_codex_command_rules(tmp_path: Path) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -3626,7 +3602,7 @@ def test_install_preserves_unmanaged_codex_command_rules(tmp_path: Path) -> None
 def test_install_preserves_non_utf8_unmanaged_codex_target(
     tmp_path: Path, kind: str
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -3659,7 +3635,7 @@ def test_install_preserves_non_utf8_unmanaged_codex_target(
 
 
 def test_check_rejects_invalid_codex_rules_name(tmp_path):
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
     )
@@ -3669,9 +3645,7 @@ def test_check_rejects_invalid_codex_rules_name(tmp_path):
         env_overrides={
             "CODEX_HOME": str(codex_home),
             "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES": "1",
             "TRIAD_CODEX_RULES_NAME": "../default.rules",
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
             "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
         },
     )
@@ -3848,7 +3822,7 @@ def test_install_fails_when_repo_root_inside_workspace(tmp_path):
     # directory itself lives outside.
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    repo_root = _make_repo_root(workspace, real_agents=True)
+    repo_root = _make_repo_root(workspace, real_skills=True)
 
     result, _env, launcher_bin = _run_bootstrap(
         tmp_path,
@@ -4406,7 +4380,7 @@ def test_shell_entry_transaction_preserves_foreign_replacement_after_capture(
 ) -> None:
     shell_rc = tmp_path / "shellrc"
     shell_rc.write_bytes(b"# owner prefix\n" + FROZEN_LEGACY_SHELL_ENTRY)
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     foreign = b"# foreign shell RC replacement\nowner bytes stay exact\n"
     replacement = tmp_path / "foreign-shellrc"
     replacement.write_bytes(foreign)
@@ -4430,7 +4404,7 @@ def test_shell_entry_transaction_preserves_foreign_replacement_after_capture(
 def test_install_legacy_quarantine_preserves_foreign_replacement_after_capture(
     tmp_path: Path,
 ) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
     codex_home = tmp_path / "codex-home"
     target = codex_home / "agents" / "claude-wrapper-repair.toml"
     target.parent.mkdir(parents=True)
@@ -4495,11 +4469,8 @@ def test_bootstrap_rejects_malformed_shell_markers_without_changing_bytes(
     shell_rc.write_bytes(original)
 
     overrides = {
-        "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
         "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
     }
-    if mode == "--install":
-        overrides["TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE"] = "1"
 
     result, env, launcher_bin = _run_bootstrap(
         tmp_path,

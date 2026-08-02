@@ -154,6 +154,9 @@ R12 cannot be promoted by repairing only its missing Google leg.
 
 ## R13 formal-review reconciliation
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE.** Do not execute this section or
+> treat its non-test review boundary as current authority.
+
 Review `20260723-r11-minor-hardening-r13` used prompt SHA-256
 `a2396c1afb614a61bbbc29a5e75612f76bd452c3f7679c5f8312b9de530db177`
 and equal pre/post fingerprint
@@ -258,6 +261,9 @@ provider fallback change is authorized. Accepted corrections change reviewed
 bytes, so R14 is closed and a fresh complete round is required.
 
 ## R15 formal-review reconciliation
+
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE.** Do not execute this section or
+> treat its non-test review boundary as current authority.
 
 Review `20260723-r11-minor-hardening-r15` used a 159,396-byte non-test prompt
 with SHA-256

@@ -528,7 +528,8 @@ def test_task2_active_handoffs_use_complete_shared_directory_input() -> None:
     assert "Test source stays out of reviewer scope" not in current_active
     assert "Formal plan/pre-merge legs do not receive test source" not in resume_active
     assert "Reviewers must not receive, open, or review test source" not in resume_active
-    assert "Provider read-only policy remains intact" in routing_active
+    assert "retired wrapper sandbox/profile state is historical" in routing_active
+    assert "prompt-controlled no-edit/no-execution obligation" in routing_active
     assert "pre-0.2.532 history" in routing_active
     assert "0.2.532 inherits provider permissions" in routing_active
     assert "generates no Codex permission state" in routing_active
@@ -2173,8 +2174,8 @@ def test_20260722_routing_design_is_marked_superseded() -> None:
     head = "\n".join(design.splitlines()[:8])
     assert "Superseded" in head
     assert "historical" in head.lower()
-    assert "reviewer-routing.md" in head
-    assert "2026-07-23-r11-minor-hardening-design.md" in head
+    assert "2026-07-30-native-permissions-full-coverage-review.md" in head
+    assert "2026-07-30-native-permissions-full-coverage-review-design.md" in head
 
 
 def test_worktree_first_design_is_marked_historical() -> None:
@@ -3252,9 +3253,8 @@ def test_current_security_and_runtime_wording_matches_prompt_rules() -> None:
     assert "superseded by the approved design spec" not in plan.lower()
     assert "historical" in plan.lower()
     assert "superseded" in plan.lower()
-    assert "skills/triad-cross-family-review/SKILL.md" in plan
-    assert "2026-07-23-r11-minor-hardening-design.md" in plan
-    assert "Active shared-directory formal-review correction" in plan
+    assert "2026-07-30-native-permissions-full-coverage-review.md" in plan
+    assert "2026-07-30-native-permissions-full-coverage-review-design.md" in plan
 
 
 def test_korean_runtime_guidance_keeps_review_and_log_meaning() -> None:
@@ -3443,8 +3443,8 @@ def test_task4_old_routing_plan_is_explicitly_superseded() -> None:
 
     assert plan.startswith("# Formal Review Routing Policy Implementation Plan\n\n")
     assert plan.splitlines()[2].startswith("> **Superseded")
-    assert "2026-07-22-formal-review-routing-verification.md" in plan
-    assert "2026-07-23-r11-minor-hardening-design.md" in plan
+    assert "2026-07-30-native-permissions-full-coverage-review.md" in plan
+    assert "2026-07-30-native-permissions-full-coverage-review-design.md" in plan
 
 
 def test_task4_handoffs_separate_catalog_outbound_and_runtime_identity() -> None:
@@ -3760,3 +3760,53 @@ def test_r43_release_candidate_corrections_are_distribution_self_contained() -> 
         assert "do not execute" in banner
         assert "2026-07-30-native-permissions-full-coverage-review.md" in banner
         assert "2026-07-30-native-permissions-full-coverage-review-design.md" in banner
+
+
+def test_r44_active_handoffs_and_historical_authority_are_unambiguous() -> None:
+    current = _text(
+        ROOT / "docs" / "status" / "2026-07-22-current-state.md"
+    )
+    resume_raw = _text(
+        ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md"
+    )
+    resume = resume_raw.split("Then paste:\n\n```text\n", 1)[1].split("\n```", 1)[0]
+    routing = _heading_section(
+        ROOT / "docs" / "status" / "2026-07-22-formal-review-routing-verification.md",
+        "## Behavioral contract",
+    )
+
+    assert resume.startswith(
+        "Resume the 0.2.532 native full-coverage release-candidate slice"
+    )
+    assert "Agent-review distribution" not in resume
+    assert "on-request/auto_review" not in resume
+    assert "wrapper rules resolve" not in resume
+    for active in (current, resume, routing):
+        flat = " ".join(active.split()).casefold()
+        assert (
+            "0.2.532 all-tests/no-exclusion boundary includes all repository test source"
+            in flat
+        )
+        assert "prompt-controlled no-edit/no-execution obligation" in flat
+        assert "retired wrapper sandbox" in flat
+
+    current_plan = "2026-07-30-native-permissions-full-coverage-review.md"
+    current_design = "2026-07-30-native-permissions-full-coverage-review-design.md"
+    historical_authority = (
+        ROOT / "docs" / "superpowers" / "plans" / "2026-07-22-formal-review-routing-policy.md",
+        ROOT / "docs" / "superpowers" / "plans" / "2026-07-22-worktree-first-auto-review.md",
+        ROOT / "docs" / "superpowers" / "specs" / "2026-07-22-formal-review-routing-policy-design.md",
+    )
+    for path in historical_authority:
+        banner = _text(path)[:1200]
+        assert current_plan in banner
+        assert current_design in banner
+
+    r11 = ROOT / "docs" / "superpowers" / "specs" / "2026-07-23-r11-minor-hardening-design.md"
+    for heading in (
+        "## R13 formal-review reconciliation",
+        "## R15 formal-review reconciliation",
+    ):
+        section = " ".join(_heading_section(r11, heading).split()).casefold()
+        assert "historical / superseded / non-executable" in section
+        assert "do not execute" in section

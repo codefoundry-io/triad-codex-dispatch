@@ -1,9 +1,9 @@
 # Worktree-First Review and Auto-Review Distribution Implementation Plan
 
 > **Status:** Historical and superseded; this is a 0.2.529 implementation record.
-> Current authority is `skills/triad-cross-family-review/SKILL.md` plus
-> `../specs/2026-07-23-r11-minor-hardening-design.md`, section `Active shared-directory formal-review correction`. Do not use this plan as current
-> authority or follow its old profile instructions.
+> Use the current [0.2.532 plan](2026-07-30-native-permissions-full-coverage-review.md)
+> and [0.2.532 design](../specs/2026-07-30-native-permissions-full-coverage-review-design.md).
+> Do not use this plan as current authority or follow its old profile instructions.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:test-driven-development` and `superpowers:writing-skills`.

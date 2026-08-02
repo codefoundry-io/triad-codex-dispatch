@@ -7,7 +7,7 @@ Start the new Codex session with saved project root exactly:
 Then paste:
 
 ```text
-Resume the worktree-first Agent-review distribution slice for triad-codex-dispatch.
+Resume the 0.2.532 native full-coverage release-candidate slice for triad-codex-dispatch.
 
 Development root:
 /Users/chaniri/codex_workspace
@@ -40,7 +40,7 @@ owner confirms local verification and fresh SDD review.
 
 Any formal plan/pre-merge review uses one leader-prepared shared review directory
 containing current approved production source, configuration, and documentation.
-For the 0.2.532 candidate, the exact no-exclusion boundary includes all
+The 0.2.532 all-tests/no-exclusion boundary includes all
 repository test source. Every leg receives the same
 directory and task. No prompt inlines a diff or file body. Record one simple
 content digest before dispatch and compare it after every required leg terminates;
@@ -49,9 +49,12 @@ Normal SDD implementation review includes relevant test source. Before a formal 
 failure as production defect, test-case defect, or intentional specification
 change and resolve or approve it.
 
-Provider legs use only their approved read-only inspection route and must not run
-candidate code, tests, builds, hooks, or generated scripts. Local test execution
-and result verification remain leader operations.
+The retired wrapper sandbox/profile state is historical. Each provider leg still
+receives a prompt-controlled no-edit/no-execution obligation and must not run
+candidate code, tests, builds, hooks, or generated scripts; that obligation is
+provider- or OS-enforced only when the selected route actually supplies such
+enforcement. Local test execution and result verification remain leader
+operations.
 
 The full diff is navigation evidence bound to the complete affected-source
 closure and exact current source bytes. Every required family reviews every
@@ -182,9 +185,9 @@ The historical packet-era R14 archive does not cover these bytes. The later work
 round is evidence but not PASS because accepted findings changed the reviewed
 bytes.
 
-Finish source and test verification first. Confirm that ordinary codex resolves
-on-request/auto_review and that refreshed exact wrapper rules resolve to prompt,
-not allow. Verify fresh-session skill exposure and the requested three-provider
+Finish source and test verification first. Do not use retired permission-profile,
+wrapper-rule, or shell-entry state as acceptance evidence for the 0.2.532
+candidate. Verify fresh-session skill exposure and any requested three-provider
 spike only after the applicable install/provider authorization is established.
 Do not continue Argus until triad review is working. After the successful TRIAD
 proof, report it and resume the recorded Argus checkpoint directly without

@@ -1,9 +1,9 @@
 # Formal Review Routing Policy Design
 
 > **Superseded (historical):** This dated design is retained for review history
-> only. Use the current [formal reviewer routing reference](../../../skills/triad-cross-family-review/references/reviewer-routing.md)
-> and the [2026-07-23 R11 Minor Hardening design](2026-07-23-r11-minor-hardening-design.md)
-> for active routing decisions.
+> only. Use the current [0.2.532 plan](../plans/2026-07-30-native-permissions-full-coverage-review.md)
+> and [0.2.532 design](2026-07-30-native-permissions-full-coverage-review-design.md)
+> for active routing decisions; the R11 design is historical evidence only.
 
 Date: 2026-07-22
 

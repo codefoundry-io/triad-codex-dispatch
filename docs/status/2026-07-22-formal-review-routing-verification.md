@@ -16,7 +16,7 @@ therefore is not a passing formal verdict.
 | --- | --- |
 | Source | One leader-prepared shared review directory containing current approved production source, configuration, and documentation |
 | Navigation | Every leg receives the same directory and task; no prompt inlines a diff or file body; record one simple content digest before dispatch and compare it after every required leg terminates |
-| Impact | Pre-0.2.532 test-source exclusions are history. 0.2.532 formal plan/pre-merge rounds include all repository test source; normal SDD implementation review includes relevant test source |
+| Impact | Pre-0.2.532 test-source exclusions are history. The 0.2.532 all-tests/no-exclusion boundary includes all repository test source; normal SDD implementation review includes relevant test source |
 | Mutation check | One simple content digest is recorded before dispatch and compared after every required leg terminates; a mismatch invalidates the round |
 | Review input | The leader-prepared shared review directory and common task are the complete review input; no prompt inlines a diff or file body |
 | Routes | Terra/xhigh, Opus/xhigh, authenticated `agy models` catalog selector `gemini-3.1-pro-high`; outbound model argument `Gemini 3.1 Pro (High)` with no `--effort` |
@@ -25,8 +25,10 @@ therefore is not a passing formal verdict.
 | AGY truncation | Exact own-line bytes/lines marker is terminal, quarantined, and non-repairable |
 | Workflow boundary | Commit/push/install/merge/release/publication remain separately authorized |
 
-Provider read-only policy remains intact only as pre-0.2.532 history. 0.2.532
-inherits provider permissions and generates no Codex permission state. The leader prepares one shared review
+The retired wrapper sandbox/profile state is historical. Each provider leg still
+receives a prompt-controlled no-edit/no-execution obligation; it is provider- or
+OS-enforced only when the selected route actually supplies such enforcement.
+0.2.532 inherits provider permissions and generates no Codex permission state. The leader prepares one shared review
 directory and records one simple content digest before dispatch, then compares it
 after every required leg terminates; a mismatch invalidates the round. Every leg
 receives that same directory and task, with no inline diff or file body. The exact

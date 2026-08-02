@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -56,3 +57,5 @@ def test_bootstrap_install_has_no_admin_permission_copy_path() -> None:
     assert "TRIAD_CODEX_REQUIREMENTS_PATH" in remove_only
     assert "os.remove" not in remove_only
     assert "unlink" not in remove_only
+    admin_guard = remove_only.split("# A root/admin", 1)[1]
+    assert re.search(r"(?m)^\s*rm(?:\s|$)", admin_guard) is None

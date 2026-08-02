@@ -50,6 +50,10 @@ def _validated_classifier_path(raw: str) -> Path:
             info = os.lstat(current)
         except FileNotFoundError:
             break
+        except OSError as error:
+            raise ValueError(
+                f"could not inspect classifier path: {current}: {error}"
+            ) from error
         if stat.S_ISLNK(info.st_mode):
             raise ValueError(f"classifier path must not contain symlinks: {current}")
         if index < len(path.parts) - 1 and not stat.S_ISDIR(info.st_mode):

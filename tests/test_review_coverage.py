@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -522,9 +521,22 @@ def test_manifest_only_observation_is_rejected(evidence_fixture) -> None:
 
 @pytest.mark.parametrize("case", ["line", "absent", "long", "short", "whitespace"])
 def test_source_observation_bounds_are_exact(tmp_path: Path, case: str) -> None:
-    evidence = _make_evidence(tmp_path)
+    evidence = (
+        _make_evidence(
+            tmp_path,
+            changed_old=b"alpha original\nbeta stable\ngamma stable\n",
+            changed_new=b"alpha changed\nbeta stable\n   \n",
+        )
+        if case == "whitespace"
+        else _make_evidence(tmp_path)
+    )
     documents = _receipt_documents(evidence, "claude")
-    item = documents[evidence.batch_ids[0]]["path_evidence"][0]
+    item = next(
+        item
+        for document in documents.values()
+        for item in document["path_evidence"]
+        if item["path"] == "src/main.py"
+    )
     if case == "line":
         item["observation_line"] = evidence.affected_paths[0].line_count + 1
     elif case == "absent":
@@ -822,19 +834,25 @@ def test_each_receipt_requires_exact_assigned_path_set(tmp_path: Path, mode: str
 
 @pytest.mark.parametrize("mode", ["missing", "extra", "swapped", "reordered", "duplicate"])
 def test_each_receipt_requires_exact_assigned_inspected_surfaces(tmp_path: Path, mode: str) -> None:
-    evidence = _make_evidence(tmp_path, batch_byte_limit=1)
+    evidence = (
+        _make_evidence(tmp_path)
+        if mode == "reordered"
+        else _make_evidence(tmp_path, batch_byte_limit=1)
+    )
     documents = _receipt_documents(evidence, "claude")
-    first, second = evidence.batch_ids[:2]
+    first = evidence.batch_ids[0]
+    second = evidence.batch_ids[1] if mode != "reordered" else None
     if mode == "missing":
         documents[first]["affected_surfaces_inspected"] = []
     elif mode == "extra":
         documents[first]["affected_surfaces_inspected"].append("outside.py")
     elif mode == "swapped":
+        assert second is not None
         documents[first]["affected_surfaces_inspected"], documents[second]["affected_surfaces_inspected"] = (
             documents[second]["affected_surfaces_inspected"], documents[first]["affected_surfaces_inspected"]
         )
     elif mode == "reordered":
-        documents[first]["affected_surfaces_inspected"] += documents[second]["affected_surfaces_inspected"]
+        assert len(documents[first]["affected_surfaces_inspected"]) >= 2
         documents[first]["affected_surfaces_inspected"].reverse()
     else:
         documents[first]["affected_surfaces_inspected"] *= 2

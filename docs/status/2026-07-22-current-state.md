@@ -40,12 +40,15 @@ ask the owner.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
 body. Record one simple content digest before dispatch and compare it after every
-required leg terminates; a mismatch invalidates the round. The 0.2.532 formal
-plan/pre-merge boundary includes all repository test source. Normal SDD implementation review includes relevant test
+required leg terminates; a mismatch invalidates the round. The 0.2.532
+all-tests/no-exclusion boundary includes all repository test source. Normal SDD implementation review includes relevant test
 source. Before a formal gate, classify every test failure as production defect,
 test-case defect, or intentional specification change and resolve or approve it.
-Provider legs use only their approved read-only inspection route and must not run
-candidate code, tests, builds, hooks, or generated scripts.
+The retired wrapper sandbox/profile state is historical. Each provider leg still
+receives a prompt-controlled no-edit/no-execution obligation and must not run
+candidate code, tests, builds, hooks, or generated scripts; that obligation is
+provider- or OS-enforced only when the selected route actually supplies such
+enforcement.
 
 The full diff is navigation evidence bound to the complete affected-source
 closure and exact current source bytes. Every required family reviews every
