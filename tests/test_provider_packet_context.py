@@ -23,6 +23,123 @@ CONTEXT_KEYS = frozenset(
 WRAPPERS = (claude_wrapper, gemini_wrapper)
 
 
+@pytest.mark.parametrize(
+    ("module", "removed_argv"),
+    [
+        (claude_wrapper, ["--sandbox", "read-only"]),
+        (claude_wrapper, ["--permission-mode", "default"]),
+        (gemini_wrapper, ["--sandbox", "read-only"]),
+        (gemini_wrapper, ["--approval-mode", "default"]),
+        (gemini_wrapper, ["--skip-trust"]),
+    ],
+)
+def test_removed_permission_options_are_rejected(
+    module,
+    removed_argv,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("TRIAD_CLAUDE_ENFORCE_SANDBOX", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_wrapper_hardened",
+        lambda: False,
+        raising=False,
+    )
+    monkeypatch.setattr(module, "require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        module,
+        "run_cli_with_retry",
+        lambda *_a, **_k: _common.RunResult(
+            _common.EXIT_OK,
+            "ok",
+            "",
+            0.0,
+            final_answer="ok",
+        ),
+    )
+    monkeypatch.setattr(module, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [module.__file__, "--prompt", "review", *removed_argv],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main()
+    assert exc_info.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("module", "forbidden", "hardened"),
+    [
+        (
+            claude_wrapper,
+            {
+                "--sandbox",
+                "--permission-mode",
+                "--tools",
+                "--strict-mcp-config",
+                "--setting-sources",
+            },
+            False,
+        ),
+        (
+            gemini_wrapper,
+            {"--sandbox", "--approval-mode", "--policy", "--skip-trust"},
+            True,
+        ),
+    ],
+)
+def test_native_wrapper_default_argv_has_no_permission_override(
+    module,
+    forbidden,
+    hardened,
+    monkeypatch,
+) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def capture(_cli, build_cmd, prompt, **_kwargs):
+        captured["argv"] = build_cmd(prompt)
+        return _common.RunResult(
+            _common.EXIT_OK,
+            "ok",
+            "",
+            0.0,
+            final_answer="ok",
+        )
+
+    monkeypatch.delenv("TRIAD_CLAUDE_ENFORCE_SANDBOX", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_wrapper_hardened",
+        lambda: hardened,
+        raising=False,
+    )
+    monkeypatch.setattr(module, "require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(module, "run_cli_with_retry", capture)
+    monkeypatch.setattr(module, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(sys, "argv", [module.__file__, "--prompt", "review"])
+
+    assert module.main() == 0
+    assert forbidden.isdisjoint(captured["argv"])
+
+
+def test_provider_wrapper_sources_contain_no_retired_permission_controls() -> None:
+    claude_source = Path(claude_wrapper.__file__).read_text(encoding="utf-8")
+    gemini_source = Path(gemini_wrapper.__file__).read_text(encoding="utf-8")
+
+    for retired_control in (
+        "--permission-mode",
+        "--sandbox",
+        "--tools",
+        "--strict-mcp-config",
+        "--setting-sources",
+    ):
+        assert retired_control not in claude_source
+    for retired_control in ("--approval-mode", "APPROVAL_CHOICES", "SANDBOX_CHOICES"):
+        assert retired_control not in gemini_source
+
+
 class _ContextSchema:
     required_validation_context = CONTEXT_KEYS
 

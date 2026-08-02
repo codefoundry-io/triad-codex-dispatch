@@ -1,41 +1,23 @@
 #!/usr/bin/env python3
-"""Single-shot Gemini CLI subprocess wrapper.
+"""Single-shot Gemini CLI transport wrapper.
 
-Always runs in vendor JSON mode:
-  gemini -p ... --output-format json --approval-mode ...
+Forwards a prompt to Gemini's JSON output mode along with only native model,
+working-directory, timeout, schema, packet-validation, repair, and debug
+controls. Provider-owned permission and workspace-trust settings are left to
+the native CLI.
 
-Stdout = Gemini's final response text (or, with --pydantic, the validated
-JSON object). Stderr = wrapper log + Gemini's two-line warning noise
-(Ripgrep / 256-color).
-
-Audit log: _logs/gemini/audit.jsonl (gitignored).
-
-Options:
-  --model <name>
-        Pin a specific model (free-form). Default = CLI Auto router.
-        Use sparingly — model names rot; verify with `/model manage`.
-  --pydantic module.path:ClassName
-        Inject a JSON schema block into the prompt and validate the answer
-        with `cls.model_validate_json()`. On validation fail, retry once
-        with a clarifying suffix; second failure → exit 66.
-  --sealed-packet-root /absolute/<review-id>/packet
-  --expected-packet-sha256 <64-lowercase-hex>
-        Paired trusted validation context for schemas that require packet
-        identity. Invalid or incomplete context fails before provider startup.
-  --repair-mode
-        Compatibility: one provider attempt with automatic retries disabled.
-        The current read-only analyzer never invokes provider wrappers.
+Stdout is Gemini's final response text (or, with ``--pydantic``, the validated
+JSON object). Stderr is wrapper logging and Gemini's warning noise. Audit
+results are written to ``_logs/gemini/audit.jsonl`` (gitignored).
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-from pathlib import Path
 
 from _common import (
     build_validation_context,
-    _wrapper_hardened,
     validate_wrapper_cwd,
     load_prompt_text,
     EXIT_ARG_ERROR,
@@ -45,19 +27,6 @@ from _common import (
     require_binary,
     run_cli_with_retry,
 )
-
-
-APPROVAL_CHOICES = ("default", "auto_edit")
-SANDBOX_CHOICES = ("read-only", "workspace-write")
-
-# Per-call READ-ONLY via the Gemini CLI Policy Engine (--policy) instead of the
-# crashy `--approval-mode plan` (plan mode OOMs the Node/V8 heap on heavy files
-# — gemini-cli issues #11321 / #18331 / #26588). The policy denies mutation +
-# shell tools for THIS call only, so the same leg still does code work under
-# `--sandbox workspace-write` (per-call, mirrors codex/agy). The exact policy
-# tool identifiers are per the Policy Engine docs but NOT e2e-verified here
-# (individual-tier gemini auth is deprecated) — see the policy file header.
-_READONLY_POLICY = Path(__file__).resolve().parent / "policies" / "gemini-readonly.toml"
 
 
 def main() -> int:
@@ -70,27 +39,8 @@ def main() -> int:
         help="Read the user prompt from a UTF-8 file (>=50K-char prompts: pass "
              "a file, not inline argv — L12; containment applies under "
              "TRIAD_WRAPPER_ALLOWED_ROOTS)")
-    p.add_argument(
-        "--approval-mode",
-        default="default",
-        choices=APPROVAL_CHOICES,
-        help="Approval mode (default: default — read auto, write/shell prompt)",
-    )
     p.add_argument("--cwd", default=None, help="Process working directory")
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
-    p.add_argument(
-        "--skip-trust",
-        action="store_true",
-        help="Skip workspace trust dialog",
-    )
-    p.add_argument(
-        "--sandbox",
-        choices=SANDBOX_CHOICES,
-        default=None,
-        help="read-only -> attach a per-call Policy Engine deny (write_file/replace/"
-             "run_shell_command) INSTEAD of the crashy plan mode; workspace-write -> "
-             "write-enabled (code-agent). Default: unset (no policy attached).",
-    )
     p.add_argument(
         "--model",
         default=None,
@@ -133,19 +83,6 @@ def main() -> int:
         log("empty prompt")
         return EXIT_ARG_ERROR
 
-    if args.sandbox == "read-only" and args.approval_mode == "auto_edit":
-        log(f"--sandbox read-only conflicts with --approval-mode {args.approval_mode} "
-            "(a write-auto-approving mode). Use --approval-mode default with read-only.")
-        return EXIT_ARG_ERROR
-    if args.sandbox == "read-only" and not _READONLY_POLICY.is_file():
-        log(f"read-only policy file missing: {_READONLY_POLICY}")
-        return EXIT_ARG_ERROR
-
-    if args.sandbox is None and _wrapper_hardened():
-        # Hardened installs default the Google legs to read-only: a raw call
-        # on a public install must not be write-capable by omission.
-        args.sandbox = "read-only"
-
     pydantic_cls = None
     if args.pydantic:
         try:
@@ -170,15 +107,10 @@ def main() -> int:
         cmd = [
             gemini_bin,   # resolved/pinned path (finding #3) — never a bare name
             "-p", effective_prompt,
-            "--approval-mode", args.approval_mode,
             "--output-format", "json",
         ]
         if args.model:
             cmd += ["-m", args.model]
-        if args.skip_trust:
-            cmd.append("--skip-trust")
-        if args.sandbox == "read-only":
-            cmd += ["--policy", str(_READONLY_POLICY)]
         return cmd
 
     result = run_cli_with_retry(

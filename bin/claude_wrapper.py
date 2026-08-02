@@ -1,55 +1,20 @@
 #!/usr/bin/env python3
-"""Single-shot Claude CLI subprocess wrapper.
+"""Single-shot Claude CLI transport wrapper.
 
-Always runs in vendor JSON mode:
-  claude -p "<prompt>" --output-format json
+Forwards a prompt to Claude's JSON output mode along with only native model,
+effort, fallback-model, working-directory, timeout, schema, packet-validation,
+repair, and debug controls. Provider-owned permission and trust settings are
+left to the native CLI.
 
-Stdout = the final answer text from envelope `.result` field (or, with
-`--pydantic`, the validated JSON object). Stderr = wrapper log + Claude's
-brief progress noise (pre-bootstrap settings/plugin lines).
-
-Audit log: _logs/claude/audit.jsonl (gitignored).
-
-ISOLATION CONTRACT (caller responsibility — wrapper is transport-only):
-  Claude worker 의 본 본질 = leader (claude main session) 와 분리된 별
-  instance, objective 시각 의무 (CLAUDE.md / project context / leader
-  frame 부담 X). 본 isolation 은 caller 가 sibling dir setup 으로 보장:
-
-    1. 사용자 가 sibling dir (e.g. `~/triad-claude-worker/`) 안 1회 cd
-    2. `claude` 1회 실행 → OAuth 로그인 (subscription path 정합)
-    3. caller (triad-claude-dispatch SKILL) 가 wrapper 호출 시
-       `--cwd <sibling-dir>` 명시
-
-  본 dir 안 `CLAUDE.md` 부재 = leader frame 차단 자동. wrapper 안 추가
-  isolation flag (--mcp-config / --strict-mcp-config / --setting-sources
-  / --no-session-persistence / --exclude-dynamic-system-prompt-sections)
-  박지 X — sibling dir 의 본 settings 가 의무.
-
-Options:
-  --effort {low,medium,high,xhigh,max}
-        Override `--effort` (claude 의 본 reasoning level).
-        Default = vendor default. Read-only deep work → high.
-  --fallback-model <name>
-        Auto-fallback when default model overloaded.
-  --permission-mode {default,acceptEdits,auto,bypassPermissions,dontAsk,plan}
-        Permission mode override. `bypassPermissions` 박지 X (Triad safety).
-  --pydantic module.path:ClassName
-        Inject a JSON schema block into the prompt and validate the answer
-        with `cls.model_validate_json()`. On validation fail, retry once
-        with a clarifying suffix; second failure → exit 66.
-  --sealed-packet-root /absolute/<review-id>/packet
-  --expected-packet-sha256 <64-lowercase-hex>
-        Paired trusted validation context for schemas that require packet
-        identity. Invalid or incomplete context fails before provider startup.
-  --repair-mode
-        Compatibility: one provider attempt with automatic retries disabled.
-        The current read-only analyzer never invokes provider wrappers.
+Stdout is the final answer text from envelope `.result` (or, with
+``--pydantic``, the validated JSON object). Stderr is wrapper logging and
+Claude's progress noise. Audit results are written to
+``_logs/claude/audit.jsonl`` (gitignored).
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 
 from _common import (
@@ -66,15 +31,6 @@ from _common import (
 
 
 EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
-PERMISSION_CHOICES = (
-    "default",
-    "acceptEdits",
-    "auto",
-    "bypassPermissions",
-    "dontAsk",
-    "plan",
-)
-PERMISSION_FORBIDDEN = ("bypassPermissions",)
 
 
 def main() -> int:
@@ -113,26 +69,6 @@ def main() -> int:
         help="Auto-fallback model name when default overloaded",
     )
     p.add_argument(
-        "--sandbox",
-        choices=("read-only", "workspace-write"),
-        default=None,
-        help="Wrapper-ENFORCED worker posture (L13 mode-switch, owner adjudication "
-             "#3 2026-07-05). read-only -> --tools Read,Glob,Grep (a real "
-             "restriction — --allowedTools only PRE-APPROVES) + --strict-mcp-config "
-             "+ --setting-sources user + dontAsk; workspace-write -> acceptEdits + "
-             "REQUIRES --cwd (rm/rmdir/sed are auto-approved in acceptEdits — "
-             "blast radius must be an isolated dir) + --strict-mcp-config. "
-             "Mutually exclusive with --permission-mode. Lab default = omitted "
-             "(transport-only; the CALLER owns isolation per the SKILL contract); "
-             "TRIAD_CLAUDE_ENFORCE_SANDBOX=1 (public codex-host bootstrap) makes "
-             "--sandbox REQUIRED.")
-    p.add_argument(
-        "--permission-mode",
-        default=None,
-        choices=PERMISSION_CHOICES,
-        help="Permission mode override",
-    )
-    p.add_argument(
         "--pydantic",
         default=None,
         help="pydantic class spec (module.path:ClassName) for schema enforcement",
@@ -165,25 +101,8 @@ def main() -> int:
         log(f"--cwd validation failed: {e}")
         return EXIT_ARG_ERROR
 
-    if args.sandbox and args.permission_mode:
-        log("--sandbox and --permission-mode are mutually exclusive "
-            "(--sandbox synthesizes the permission posture)")
-        return EXIT_ARG_ERROR
-    if os.environ.get("TRIAD_CLAUDE_ENFORCE_SANDBOX") == "1" and not args.sandbox:
-        log("TRIAD_CLAUDE_ENFORCE_SANDBOX=1: --sandbox read-only|workspace-write "
-            "is required (raw transport-only dispatch is disabled on this install)")
-        return EXIT_ARG_ERROR
-    if args.sandbox == "workspace-write" and not args.cwd:
-        log("--sandbox workspace-write requires --cwd (acceptEdits auto-approves "
-            "rm/rmdir/sed — the blast radius must be an isolated directory)")
-        return EXIT_ARG_ERROR
-
     if not args.prompt.strip():
         log("empty prompt")
-        return EXIT_ARG_ERROR
-
-    if args.permission_mode in PERMISSION_FORBIDDEN:
-        log(f"--permission-mode {args.permission_mode} forbidden by Triad safety")
         return EXIT_ARG_ERROR
 
     pydantic_cls = None
@@ -218,20 +137,6 @@ def main() -> int:
             cmd += ["--effort", args.effort]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
-        if args.permission_mode:
-            cmd += ["--permission-mode", args.permission_mode]
-        if args.sandbox == "read-only":
-            # --tools RESTRICTS (vs --allowedTools which only pre-approves);
-            # strict-mcp-config blocks settings-inherited MCP servers;
-            # --setting-sources user drops project hooks/CLAUDE.md (a
-            # dispatched-into repo must not execute hooks on a read leg).
-            cmd += ["--tools", "Read,Glob,Grep",
-                    "--strict-mcp-config",
-                    "--setting-sources", "user",
-                    "--permission-mode", "dontAsk"]
-        elif args.sandbox == "workspace-write":
-            cmd += ["--strict-mcp-config",
-                    "--permission-mode", "acceptEdits"]
         return cmd
 
     result = run_cli_with_retry(
