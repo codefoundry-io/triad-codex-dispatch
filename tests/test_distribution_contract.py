@@ -1540,7 +1540,7 @@ def test_formal_review_uses_owner_routing_baseline_and_bounded_escalation(
     assert "_AGY_MODEL_ALIASES.get" not in antigravity_wrapper
     assert 'route_args += ["--model", model]' in antigravity_wrapper
     assert 'route_args += ["--effort", effort]' in antigravity_wrapper
-    assert "cmd += _build_route_args(agy_sandbox, model, effort)" in antigravity_wrapper
+    assert "cmd += _build_route_args(model, effort)" in antigravity_wrapper
     assert 'route_args = _build_route_args(' in antigravity_wrapper
 
     assert "`unexposed` once" in flat

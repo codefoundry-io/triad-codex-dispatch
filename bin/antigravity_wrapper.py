@@ -7,9 +7,8 @@ per-call completion sentinel, and classifies via _common pure helpers in a
 dedicated extract-then-classify driver (the generic run_cli_with_retry
 classifies before extracting, which can't host agy's rc=0 auth-banner case).
 
-Isolation is a per-call global-settings deny transaction (--sandbox
-read-only|workspace-write -> _agy_settings.agy_settings_guard mutates
-permissions.deny then restores; agy --sandbox adds the terminal OS-ring).
+Permission behavior is inherited from native AGY configuration. A headless
+permission denial is surfaced as a terminal wrapper result without retry.
 Audit log: _logs/antigravity/audit.jsonl (gitignored).
 """
 from __future__ import annotations
@@ -19,7 +18,6 @@ import errno
 import os
 import re
 import secrets
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -27,7 +25,6 @@ from typing import Optional
 
 import json
 
-import _agy_settings
 import _common
 import _pty
 from _common import load_pydantic_class, inject_schema_to_prompt, validate_response
@@ -104,11 +101,9 @@ def _seal_pydantic_prompt(unsealed_prompt: str, sentinel: str) -> str:
     )
 
 
-def _build_route_args(agy_sandbox, model, effort):
+def _build_route_args(model: str | None, effort: str | None) -> list[str]:
     """Build the provider route flags shared by preflight and dispatch."""
     route_args = []
-    if agy_sandbox:
-        route_args.append("--sandbox")
     if model:
         route_args += ["--model", model]
     if effort:
@@ -116,8 +111,7 @@ def _build_route_args(agy_sandbox, model, effort):
     return route_args
 
 
-def _build_cmd(prompt, sentinel, agy_sandbox, model, timeout, *, effort=None,
-               pydantic=False, skip_permissions=False):
+def _build_cmd(prompt, sentinel, model, timeout, *, effort=None, pydantic=False):
     if pydantic:
         sealed = _seal_pydantic_prompt(prompt, sentinel)
     else:
@@ -128,9 +122,7 @@ def _build_cmd(prompt, sentinel, agy_sandbox, model, timeout, *, effort=None,
         )
     print_to = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = ["agy", "-p", sealed, "--print-timeout", f"{print_to}s"]
-    cmd += _build_route_args(agy_sandbox, model, effort)
-    if skip_permissions:
-        cmd = _add_skip_permissions(cmd)
+    cmd += _build_route_args(model, effort)
     return cmd
 
 
@@ -247,63 +239,8 @@ def _has_truncated_answer_marker(answer) -> bool:
     return bool(_TRUNCATED_ANSWER_RE.search(answer or ""))
 
 
-def _add_skip_permissions(cmd):
-    """Insert --dangerously-skip-permissions right after argv[0] (the
-    empirically-verified working position `agy --dangerously-skip-permissions
-    -p ...`). Idempotent. This is the ONLY internal caller of the danger flag
-    — user argv can never supply it (argparse in main() has no such option)."""
-    if "--dangerously-skip-permissions" in cmd:
-        return list(cmd)
-    return list(cmd[:1]) + ["--dangerously-skip-permissions"] + list(cmd[1:])
-
-
-# Version at/after which agy's headless (-p) mode soft-denies tools that need a
-# confirmation — the allow-list is no longer consulted in print mode, so a
-# read-only dispatch cannot run its own read tools. Floor, not a pin: the gate
-# below fires for this version and up. When agy restores headless allow-list
-# support in some future release, narrow this to a range (the daily-check tracks
-# the version bump but NOT the allow-list-restored behavior, so this narrowing is
-# a MANUAL trigger — merge-review F3). The flag auto-approves permission prompts,
-# but explicit injected deny rules still take precedence and argv retains
-# `--sandbox`. Narrow the floor after a future vendor fix to avoid enabling
-# broader prompt auto-approval when it is no longer needed.
-_HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
-
-
-def _parse_agy_version(text):
-    """Extract the first dotted numeric version tuple from `agy --version`
-    output (e.g. '1.1.3' -> (1, 1, 3)); None if unparseable."""
-    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text or "")
-    return tuple(int(g) for g in m.groups()) if m else None
-
-
-def _agy_needs_skip_permissions(agy_bin) -> bool:
-    """True when the installed agy version soft-denies headless tools and the
-    operator has NOT opted out (AGY_NO_HEADLESS_AUTOAPPROVE=1). Deterministic
-    (version compare, ~instant) — no per-dispatch probe. Version-adaptive: the
-    wrapper follows agy instead of pinning a version, so updates keep flowing.
-    An unparseable/failed `--version` is treated as NOT needing the flag
-    (fail-safe toward not enabling broad permission auto-approval)."""
-    if os.environ.get("AGY_NO_HEADLESS_AUTOAPPROVE") == "1":
-        return False
-    try:
-        proc = subprocess.run([agy_bin, "--version"], capture_output=True,
-                              text=True, timeout=15,
-                              env=_common.scrubbed_child_env())
-    except (OSError, subprocess.SubprocessError):
-        return False
-    # Fail-safe (merge-review F4/Q4): a NON-ZERO `--version` exit is an
-    # unreliable read — even if its stdout happens to carry a semver, do not
-    # trust it to enable the isolation-voiding flag. Only a clean rc=0 counts.
-    if proc.returncode != 0:
-        return False
-    ver = _parse_agy_version(proc.stdout)
-    return ver is not None and ver >= _HEADLESS_SOFTDENY_FLOOR
-
-
 def _run_agy_with_retry(cmd, unsealed_prompt, timeout, *, expected_sentinel,
-                        cwd=None, sandbox=False, model=None,
-                        repair_mode=False, pydantic_cls=None,
+                        cwd=None, repair_mode=False, pydantic_cls=None,
                         validation_context=None,
                         attempt_state=None) -> AgyResult:
     """Dedicated driver (design §6): pty-run -> scrub -> extract -> classify
@@ -351,8 +288,6 @@ def _run_agy_with_retry(cmd, unsealed_prompt, timeout, *, expected_sentinel,
     max_retries = 0 if repair_mode else SERVER_CAP_RETRIES
     server_attempt = 0       # server-capacity retry budget (independent)
     state = attempt_state or AgyAttemptState(final_argv=list(cmd))
-    skip_retried = False     # one-shot headless soft-deny -> skip-permissions retry
-
     def finish(
         final_answer,
         classification,
@@ -478,25 +413,15 @@ def _run_agy_with_retry(cmd, unsealed_prompt, timeout, *, expected_sentinel,
             return finish(None, "extraction-error", _common.EXIT_CLI_FAIL,
                           result.rc, scrubbed_output=scrubbed,
                           extraction_error="empty-answer-body")
-        # agy 1.1.3+ headless soft-deny adaptation (owner-authorized 2026-07-18).
-        # When agy auto-denied a tool because print mode cannot prompt, the ONLY
-        # way the (read-only-intent) dispatch can run its tools is to
-        # auto-approve permissions. Retry ONCE with --dangerously-skip-permissions.
-        # SELF-ADAPTING + TARGETED: keyed on the exact vendor signature, so it
-        # NEVER fires on a version where the allow-list works (<=1.1.2, any future
-        # fix) — the wrapper follows agy's behavior instead of pinning a version.
-        # Opt-out: AGY_NO_HEADLESS_AUTOAPPROVE=1 (strict deployments; agy then
-        # stays unusable headless but no auto-approve).
-        # `--dangerously-skip-permissions` auto-approves permission prompts, but
-        # the injected deny rules remain higher precedence and `--sandbox`
-        # remains in argv. The one-shot retry therefore preserves the configured
-        # read-only deny boundary while bypassing only the headless prompt.
-        if (answer is None and not skip_retried
-                and _is_headless_softdeny(scrubbed)
-                and os.environ.get("AGY_NO_HEADLESS_AUTOAPPROVE") != "1"):
-            cmd = _add_skip_permissions(cmd)
-            skip_retried = True
-            continue
+        if _is_headless_softdeny(scrubbed):
+            return finish(
+                None,
+                "permission-unavailable",
+                _common.EXIT_TERMINAL,
+                result.rc,
+                scrubbed_output=scrubbed,
+                extraction_error="native headless permission unavailable",
+            )
         cls, code = _classify_no_answer(scrubbed, result.killed, result.rc)
         if cls == "server-capacity" and server_attempt < max_retries:
             _server_cap_backoff(server_attempt)
@@ -525,10 +450,6 @@ def main() -> int:
         help="Read the user prompt from a UTF-8 file (L12; containment applies "
              "under TRIAD_WRAPPER_ALLOWED_ROOTS)")
     p.add_argument("--cwd", default=None)
-    p.add_argument("--sandbox", choices=["read-only", "workspace-write"],
-                   default=None,
-                   help="read-only|workspace-write — per-call deny transaction "
-                        "(global settings mutate+restore). Omit = permissive baseline.")
     p.add_argument("--model", default=None)
     p.add_argument("--effort", choices=["low", "medium", "high"], default=None)
     p.add_argument("--timeout", type=int, default=600)
@@ -537,7 +458,7 @@ def main() -> int:
     p.add_argument(
         "--preflight-only",
         action="store_true",
-        help="validate exact route arguments without settings mutation or provider inference",
+        help="validate exact route arguments without provider inference",
     )
     p.add_argument("--pydantic", default=None,
                    help="pydantic class spec (module:Class) — prompt-instructed "
@@ -561,17 +482,12 @@ def main() -> int:
         _common.log(f"--cwd validation failed: {e}")
         return _common.EXIT_ARG_ERROR
 
-    if args.sandbox is None and _common._wrapper_hardened():
-        # Hardened installs default the Google legs to read-only (raw calls on
-        # a public install must not be write-capable by omission).
-        args.sandbox = "read-only"
-
     if not args.prompt.strip():
         _common.log("empty prompt")
         return _common.EXIT_ARG_ERROR
 
     # agy owns its dedicated driver, so perform the same best-effort normal
-    # dispatch cleanup here before preflight, settings, or provider work.
+    # dispatch cleanup here before preflight or provider work.
     if not args.repair_mode:
         _common.prune_stale_run_logs("antigravity")
 
@@ -593,27 +509,8 @@ def main() -> int:
         _common.log(f"sealed validation context failed: {e}")
         return _common.EXIT_ARG_ERROR
 
-    sandbox_mode = args.sandbox
-    if sandbox_mode == "workspace-write":
-        if not args.cwd:
-            _common.log("--sandbox workspace-write requires --cwd (isolated worktree)")
-            return _common.EXIT_ARG_ERROR
-        if not os.path.isabs(args.cwd) or not os.path.isdir(args.cwd):
-            _common.log("--sandbox workspace-write --cwd must be an absolute existing directory (isolated worktree)")
-            return _common.EXIT_ARG_ERROR
-
-    try:
-        settings_lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
-    except ValueError:
-        _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
-        return _common.EXIT_ARG_ERROR
-
     if args.preflight_only:
-        route_args = _build_route_args(
-            sandbox_mode is not None,
-            args.model,
-            args.effort,
-        )
+        route_args = _build_route_args(args.model, args.effort)
         receipt = {
             "provider_started": False,
             "dispatch_phase": "preflight",
@@ -624,18 +521,13 @@ def main() -> int:
             "expected_packet_sha256": validation_context.get(
                 "expected_packet_sha256"
             ),
-            "sandbox": sandbox_mode,
             "route_args": route_args,
             "timeout": args.timeout,
-            "skip_permissions": None,
         }
         sys.stdout.write(json.dumps(receipt, ensure_ascii=False) + "\n")
         return _common.EXIT_OK
 
     agy_bin = _common.require_binary("agy")
-    deny_rules = _agy_settings.build_deny_rules(sandbox_mode) if sandbox_mode else []
-    agy_sandbox = sandbox_mode is not None  # both modes pass agy --sandbox (terminal ring)
-    skip_permissions = _agy_needs_skip_permissions(agy_bin)
 
     sentinel = _make_sentinel()
     eff_prompt = _compose_effective_prompt(
@@ -643,14 +535,14 @@ def main() -> int:
         pydantic_cls,
         validation_context,
     )
-    # agy 1.1.3+ headless soft-deny adaptation (owner-authorized 2026-07-18):
-    # version-gated auto-approve so a read-only-INTENT dispatch can actually run
-    # its own read tools (the vendor stopped consulting the allow-list in print
-    # mode). Explicit injected denies remain higher precedence, and `_build_cmd`
-    # retains `--sandbox` for both the initial call and any targeted retry.
-    cmd = _build_cmd(eff_prompt, sentinel, agy_sandbox, args.model, args.timeout,
-                     effort=args.effort, pydantic=pydantic_cls is not None,
-                     skip_permissions=skip_permissions)
+    cmd = _build_cmd(
+        eff_prompt,
+        sentinel,
+        args.model,
+        args.timeout,
+        effort=args.effort,
+        pydantic=pydantic_cls is not None,
+    )
     # argv[0] = resolved/pinned agy path (finding #3). _build_cmd stays pure ("agy"
     # literal) so its unit test is unaffected; the pin is substituted here at the
     # run site so a PATH shadow cannot win when the pty execs argv[0].
@@ -658,23 +550,20 @@ def main() -> int:
     attempt_state = AgyAttemptState(final_argv=list(cmd))
 
     start = time.monotonic()
-    r: Optional[AgyResult] = None
-    dispatch_phase = "pre-dispatch-settings"
+    dispatch_phase = "post-dispatch-result"
     try:
-        with _agy_settings.agy_settings_guard(
-            deny_rules,
-            lock_timeout=settings_lock_timeout,
-        ):
-            dispatch_phase = "dispatch-uncertain"
-            r = _run_agy_with_retry(cmd, eff_prompt, args.timeout,
-                                    expected_sentinel=sentinel, cwd=args.cwd,
-                                    sandbox=agy_sandbox, model=args.model,
-                                    repair_mode=args.repair_mode,
-                                    pydantic_cls=pydantic_cls,
-                                    validation_context=validation_context or None,
-                                    attempt_state=attempt_state)
-            dispatch_phase = r.dispatch_phase
-        r.dispatch_phase = "post-dispatch-cleanup"
+        r = _run_agy_with_retry(
+            cmd,
+            eff_prompt,
+            args.timeout,
+            expected_sentinel=sentinel,
+            cwd=args.cwd,
+            repair_mode=args.repair_mode,
+            pydantic_cls=pydantic_cls,
+            validation_context=validation_context or None,
+            attempt_state=attempt_state,
+        )
+        dispatch_phase = r.dispatch_phase
     except (
         _pty.PtyStartError,
         TimeoutError,
@@ -693,47 +582,21 @@ def main() -> int:
                 f"stage={e.stage} errno={e.errno}"
             )
             return _common.EXIT_BINARY_MISSING
-        # Settings-transaction failure (lock timeout / corrupt settings.json /
-        # transient fs error), or any start-handshake failure without genuine
-        # first-attempt exec-route evidence, stays on the existing uncertain
-        # `config-conflict` path
-        # (EXIT_TERMINAL, user escalate), never a traceback. If the vendor run
-        # ALREADY completed and only the transaction release failed, suppress
-        # the completed answer (the deny lease did not close cleanly) but keep
-        # the transcript for the run-log.
-        prior = r
-        extraction_error = f"agy settings/config conflict: {e}"
+        # Driver/config failures without genuine first-attempt exec-route
+        # evidence retain their exact attempted argv and schema state on the
+        # terminal config-conflict path rather than escaping as tracebacks.
+        extraction_error = f"agy driver/config conflict: {e}"
         _common.log(extraction_error)
-        if prior is not None:
-            extraction_error = (
-                f"{e}; completed vendor result suppressed because the agy "
-                f"settings transaction did not release cleanly"
-            )
-            if prior.extraction_error:
-                # P4 round-3: never DISCARD the prior result's diagnostic —
-                # for a transcript-recovered vendor-error answer this carries
-                # the only run-log copy of the quarantined answer.
-                extraction_error += f" | prior: {prior.extraction_error}"
         r = AgyResult(
             None,
             "config-conflict",
             _common.EXIT_TERMINAL,
-            prior.vendor_exit_code if prior is not None else -1,
-            final_argv=list(
-                prior.final_argv if prior is not None else attempt_state.final_argv
-            ),
-            schema_repair_attempt=(
-                prior.schema_repair_attempt
-                if prior is not None
-                else attempt_state.schema_repair_attempt
-            ),
-            validation_error=(
-                prior.validation_error
-                if prior is not None
-                else attempt_state.validation_error
-            ),
+            -1,
+            final_argv=list(attempt_state.final_argv),
+            schema_repair_attempt=attempt_state.schema_repair_attempt,
+            validation_error=attempt_state.validation_error,
             dispatch_phase=dispatch_phase,
-            scrubbed_output=prior.scrubbed_output if prior is not None else "",
+            scrubbed_output="",
             extraction_error=extraction_error,
             validated=None,
         )

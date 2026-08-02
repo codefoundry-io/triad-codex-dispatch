@@ -83,6 +83,7 @@ def map_classification_to_exit(cls: str) -> int:
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # agy: rc!=0 but a non-empty answer — surface, NOT repair
         "truncated-answer": EXIT_TERMINAL,  # agy: rc=0 own-line truncation marker — surface, NOT repair
+        "permission-unavailable": EXIT_TERMINAL,  # agy: native headless denial — surface, NOT repair
         "unknown": EXIT_CLI_FAIL,
     }.get(cls, EXIT_CLI_FAIL)
 
@@ -293,7 +294,7 @@ class RunResult:
     validation_error: Optional[str] = None
     # Vendor raw exit code retained as evidence for unobserved classifications.
     vendor_exit_code: int = -1
-    # Antigravity settings/provider custody boundary. Other wrappers leave it unset.
+    # Antigravity provider/result custody boundary. Other wrappers leave it unset.
     dispatch_phase: Optional[str] = None
 
 
@@ -2491,10 +2492,11 @@ def _prune_audit_archives(log_dir: Path) -> None:
 #
 #   CLASSIFICATION_TOKENS = the classify() result enum (keys of the
 #     map_classification_to_exit dict — the single source of truth).
-#     EXCEPTION (deliberate, P4 2026-07-11): `vendor-error` and
-#     `truncated-answer` are in the exit map but NOT here — they are emitted
-#     directly by the agy driver for conditions a classifier patch cannot
-#     express, so they must never be proposable repair targets.
+#     EXCEPTION (deliberate, P4 2026-07-11 and native permissions 2026-08-03):
+#     `vendor-error`, `truncated-answer`, and `permission-unavailable` are in
+#     the exit map but NOT here — they are emitted directly by the agy driver
+#     for conditions a classifier patch cannot express, so they must never be
+#     proposable repair targets.
 #   PATTERN_LIST_NAMES    = the built-in pattern-list constant names an
 #     extension may extend (a proposal's pattern_list must be one of these).
 
@@ -2621,7 +2623,7 @@ _VENDOR_EXIT_CODE_MAX = 125
 # JSON validation — EXIT_SCHEMA_FAIL, not in classify()); task-blocked (codex
 # --task STATUS parse — extract_implementer_status→exit 69); fanout-spawn-error
 # (wrapper fan-out condition via FANOUT_SPAWN_PATTERNS substring); config-conflict
-# (wrapper/config condition via CONFIG_CONFLICT_PATTERNS + agy settings txn).
+# (wrapper/config condition via CONFIG_CONFLICT_PATTERNS).
 # Verified against classify() + the wrapper exit-code semantics (2026-07-06).
 # This applies ONLY to the vendor_exit_map path — the PATTERN path already
 # enforces classification == PATTERN_LIST_CLASS[pattern_list].

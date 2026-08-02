@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
 import errno
 import hashlib
 import json
@@ -143,10 +142,6 @@ def test_first_pty_route_start_failure_is_pre_submission_without_repair_handoff(
     monkeypatch.setattr(wrapper._common, "_wrapper_hardened", lambda: False)
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/tmp/agy")
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
-    monkeypatch.setattr(
-        wrapper._agy_settings, "agy_settings_guard", lambda *_a, **_k: nullcontext()
-    )
     monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
     monkeypatch.setattr(wrapper._pty, "run_via_pty", fail_start)
     monkeypatch.setattr(
@@ -164,61 +159,69 @@ def test_first_pty_route_start_failure_is_pre_submission_without_repair_handoff(
     assert f"errno={error_number}" in stderr
 
 
-def test_formal_autoapprove_keeps_sandbox_and_readonly_deny_guard(
+def test_native_headless_permission_denial_is_terminal_without_retry(
     monkeypatch,
 ) -> None:
-    guarded: dict[str, object] = {}
+    calls: list[list[str]] = []
+    sentinel = "AGY_DONE_" + "8" * 32
 
-    @contextmanager
-    def capture_guard(deny_rules, *, lock_timeout):
-        guarded["deny_rules"] = list(deny_rules)
-        guarded["lock_timeout"] = lock_timeout
-        yield
-
-    def capture_driver(cmd, *_args, **_kwargs):
-        guarded["argv"] = list(cmd)
-        return wrapper.AgyResult(
-            final_answer="review complete",
-            classification="ok",
-            exit_code=wrapper._common.EXIT_OK,
-            vendor_exit_code=0,
-            final_argv=list(cmd),
-            schema_repair_attempt=0,
-            validation_error=None,
-            dispatch_phase="post-dispatch-result",
+    def deny_once(cmd, **_kwargs):
+        calls.append(list(cmd))
+        return wrapper._pty.PtyResult(
+            b'jetski: no output produced -- a tool required the "command" '
+            b"permission that headless mode cannot prompt for, so it was auto-denied.\n",
+            0,
+            False,
         )
 
-    monkeypatch.setattr(wrapper._common, "_wrapper_hardened", lambda: False)
     monkeypatch.setattr(
-        wrapper._common, "require_binary", lambda _name: "/usr/bin/agy"
-    )
-    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: True)
-    monkeypatch.setattr(wrapper, "_make_sentinel", lambda: "AGY_DONE_" + "1" * 32)
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", capture_guard)
-    monkeypatch.setattr(wrapper, "_run_agy_with_retry", capture_driver)
-    monkeypatch.setattr(
-        wrapper._common, "persist_result_artifacts", lambda *_args, **_kwargs: None
+        wrapper._common,
+        "snapshot_agy_transcripts",
+        lambda *args, **kwargs: {},
     )
     monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "antigravity_wrapper.py",
-            "--prompt",
-            "review",
-            "--sandbox",
-            "read-only",
-        ],
+        wrapper._common,
+        "extract_agy_answer_from_transcript",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(wrapper._pty, "run_via_pty", deny_once)
+    result = wrapper._run_agy_with_retry(
+        ["agy", "-p", "review"],
+        "review",
+        30,
+        expected_sentinel=sentinel,
     )
 
-    assert wrapper.main() == wrapper._common.EXIT_OK
-    argv = guarded["argv"]
-    assert argv[0:2] == ["/usr/bin/agy", "--dangerously-skip-permissions"]
-    assert "--sandbox" in argv
-    assert guarded["deny_rules"] == wrapper._agy_settings.build_deny_rules("read-only")
-    assert "write_file(*)" in guarded["deny_rules"]
-    assert "command(*)" in guarded["deny_rules"]
+    assert len(calls) == 1
+    assert "--dangerously-skip-permissions" not in calls[0]
+    assert "--sandbox" not in calls[0]
+    assert result.classification == "permission-unavailable"
+    assert result.exit_code == wrapper._common.EXIT_TERMINAL
+    assert "permission-unavailable" not in wrapper._common.CLASSIFICATION_TOKENS
+    assert "permission-unavailable" not in wrapper._common.REPAIR_CLASSIFICATION_TOKENS
+
+
+def test_route_builder_contains_only_selector_and_effort() -> None:
+    assert wrapper._build_route_args("Gemini 3.1 Pro (High)", None) == [
+        "--model",
+        "Gemini 3.1 Pro (High)",
+    ]
+
+
+def test_antigravity_wrapper_source_contains_no_retired_settings_control() -> None:
+    wrapper_source = Path(wrapper.__file__).read_text(encoding="utf-8")
+    common_source = Path(wrapper._common.__file__).read_text(encoding="utf-8")
+
+    for retired in (
+        "AGY_SETTINGS_LOCK_TIMEOUT",
+        "_agy_settings",
+        "--sandbox",
+        "agy_sandbox",
+        "skip_permissions",
+        "without settings mutation",
+    ):
+        assert retired not in wrapper_source
+    assert "agy settings txn" not in common_source
 
 
 @pytest.mark.parametrize(
@@ -254,10 +257,6 @@ def test_nonroute_first_start_error_remains_ineligible_config_conflict(
     monkeypatch.setattr(wrapper._common, "_wrapper_hardened", lambda: False)
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/tmp/agy")
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
-    monkeypatch.setattr(
-        wrapper._agy_settings, "agy_settings_guard", lambda *_a, **_k: nullcontext()
-    )
     monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
     monkeypatch.setattr(wrapper._pty, "run_via_pty", fail_start)
     monkeypatch.setattr(
@@ -270,7 +269,7 @@ def test_nonroute_first_start_error_remains_ineligible_config_conflict(
     assert wrapper.main() == wrapper._common.EXIT_TERMINAL
     result = persisted["result"]
     assert result.classification == "config-conflict"
-    assert result.dispatch_phase == "dispatch-uncertain"
+    assert result.dispatch_phase == "post-dispatch-result"
     assert result.exit_code != wrapper._common.EXIT_BINARY_MISSING
     assert f"stage={stage}" in result.extraction_error
     assert f"errno={error_number}" in result.extraction_error
@@ -352,10 +351,6 @@ def test_retry_pty_start_failure_remains_post_dispatch_and_ineligible(
     monkeypatch.setattr(wrapper._common, "_wrapper_hardened", lambda: False)
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/tmp/agy")
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
-    monkeypatch.setattr(
-        wrapper._agy_settings, "agy_settings_guard", lambda *_a, **_k: nullcontext()
-    )
     monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
     monkeypatch.setattr(
         wrapper._common,
@@ -388,7 +383,7 @@ def test_retry_pty_start_failure_remains_post_dispatch_and_ineligible(
     assert pty_calls == 2
     result = persisted["result"]
     assert result.classification == "config-conflict"
-    assert result.dispatch_phase == "dispatch-uncertain"
+    assert result.dispatch_phase == "post-dispatch-result"
     assert result.exit_code != wrapper._common.EXIT_BINARY_MISSING
     assert "stage=exec" in result.extraction_error
     assert f"errno={errno.ENOENT}" in result.extraction_error
@@ -459,7 +454,6 @@ def test_agy_pydantic_initial_prompt_uses_body_semantics_and_one_sealer(
     cmd = wrapper._build_cmd(
         unsealed,
         sentinel,
-        True,
         "gemini-3.1-pro-high",
         1200,
         pydantic=True,
@@ -479,7 +473,6 @@ def test_agy_pydantic_initial_prompt_uses_body_semantics_and_one_sealer(
     plain_cmd = wrapper._build_cmd(
         "plain response",
         sentinel,
-        False,
         None,
         1200,
         pydantic=False,
@@ -497,11 +490,9 @@ def test_schema_repair_retains_trusted_packet_footer() -> None:
     cmd = wrapper._build_cmd(
         prompt,
         sentinel,
-        True,
         "Gemini 3.1 Pro (High)",
         1200,
         pydantic=True,
-        skip_permissions=True,
     )
 
     repaired = wrapper._repair_cmd(
@@ -521,7 +512,6 @@ def test_build_cmd_passes_model_and_optional_effort_unchanged() -> None:
     cmd = wrapper._build_cmd(
         "review",
         "AGY_DONE_" + "d" * 32,
-        True,
         "Gemini 3.1 Pro (High)",
         1200,
     )
@@ -532,7 +522,6 @@ def test_build_cmd_passes_model_and_optional_effort_unchanged() -> None:
     future_cmd = wrapper._build_cmd(
         "review",
         "AGY_DONE_" + "e" * 32,
-        True,
         "gemini-3.1-pro",
         1200,
         effort="high",
@@ -548,11 +537,9 @@ def test_agy_schema_retry_rebuilds_unsealed_prompt_and_reseals_once() -> None:
     cmd = wrapper._build_cmd(
         unsealed,
         sentinel,
-        True,
         "gemini-3.1-pro-high",
         1200,
         pydantic=True,
-        skip_permissions=True,
     )
 
     repaired = wrapper._repair_cmd(
@@ -742,20 +729,12 @@ def test_preflight_proves_packet_identity_without_starting_provider(
     monkeypatch.setenv("TRIAD_REQUIRE_PINNED_VENDOR", "1")
     monkeypatch.setenv("AGY_PREFLIGHT_SENTINEL", str(sentinel))
     monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("provider/settings path must not start")
-        ),
-    )
-    monkeypatch.setattr(
         sys,
         "argv",
         [
             "antigravity_wrapper.py",
             "--prompt", "review",
             "--model", "Gemini 3.1 Pro (High)",
-            "--sandbox", "read-only",
             "--pydantic", "ledger:Review",
             "--sealed-packet-root", str(packet),
             "--expected-packet-sha256", digest,
@@ -770,12 +749,21 @@ def test_preflight_proves_packet_identity_without_starting_provider(
     assert receipt["model"] == "Gemini 3.1 Pro (High)"
     assert receipt["effort"] is None
     assert receipt["route_args"] == [
-        "--sandbox",
         "--model",
         "Gemini 3.1 Pro (High)",
     ]
+    assert set(receipt) == {
+        "provider_started",
+        "dispatch_phase",
+        "model",
+        "effort",
+        "pydantic",
+        "sealed_packet_root",
+        "expected_packet_sha256",
+        "route_args",
+        "timeout",
+    }
     assert "effective_model" not in receipt
-    assert receipt["skip_permissions"] is None
     assert receipt["sealed_packet_root"] == str(packet.resolve())
     assert receipt["expected_packet_sha256"] == digest
     assert not sentinel.exists()
@@ -786,7 +774,7 @@ def test_preflight_echoes_requested_model_and_effort_without_provider_work(
 ) -> None:
     packet = tmp_path / "packet"
     packet.mkdir()
-    calls = {"provider": 0, "settings": 0, "prompt_cmd": 0, "route": []}
+    calls = {"provider": 0, "prompt_cmd": 0, "route": []}
 
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
@@ -800,11 +788,6 @@ def test_preflight_echoes_requested_model_and_effort_without_provider_work(
         lambda _name: calls.__setitem__("provider", calls["provider"] + 1),
     )
     monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_args, **_kwargs: calls.__setitem__("settings", calls["settings"] + 1),
-    )
-    monkeypatch.setattr(
         wrapper,
         "_build_cmd",
         lambda *_args, **_kwargs: calls.__setitem__(
@@ -812,8 +795,8 @@ def test_preflight_echoes_requested_model_and_effort_without_provider_work(
         ),
     )
 
-    def capture_route(agy_sandbox, model, effort):
-        calls["route"] = [agy_sandbox, model, effort]
+    def capture_route(model, effort):
+        calls["route"] = [model, effort]
         return ["--model", model, "--effort", effort]
 
     monkeypatch.setattr(wrapper, "_build_route_args", capture_route)
@@ -846,12 +829,22 @@ def test_preflight_echoes_requested_model_and_effort_without_provider_work(
         "--effort",
         "high",
     ]
+    assert set(receipt) == {
+        "provider_started",
+        "dispatch_phase",
+        "model",
+        "effort",
+        "pydantic",
+        "sealed_packet_root",
+        "expected_packet_sha256",
+        "route_args",
+        "timeout",
+    }
     assert "effective_model" not in receipt
     assert calls == {
         "provider": 0,
-        "settings": 0,
         "prompt_cmd": 0,
-        "route": [False, "gemini-3.1-pro", "high"],
+        "route": ["gemini-3.1-pro", "high"],
     }
 
 
@@ -894,7 +887,7 @@ def test_preflight_receipt_uses_parsed_values_when_model_looks_like_effort_flag(
         ],
     )
 
-    assert wrapper._build_route_args(False, "--effort", "high") == [
+    assert wrapper._build_route_args("--effort", "high") == [
         "--model",
         "--effort",
         "--effort",
@@ -904,12 +897,23 @@ def test_preflight_receipt_uses_parsed_values_when_model_looks_like_effort_flag(
     receipt = json.loads(capsys.readouterr().out)
     assert receipt["model"] == "--effort"
     assert receipt["effort"] == "high"
+    assert set(receipt) == {
+        "provider_started",
+        "dispatch_phase",
+        "model",
+        "effort",
+        "pydantic",
+        "sealed_packet_root",
+        "expected_packet_sha256",
+        "route_args",
+        "timeout",
+    }
 
 
-def test_invalid_effort_is_rejected_before_provider_settings_or_filesystem_work(
+def test_invalid_effort_is_rejected_before_provider_or_filesystem_work(
     monkeypatch,
 ) -> None:
-    calls = {"prompt": 0, "provider": 0, "settings": 0, "filesystem": 0}
+    calls = {"prompt": 0, "provider": 0, "filesystem": 0}
 
     monkeypatch.setattr(
         wrapper._common,
@@ -920,11 +924,6 @@ def test_invalid_effort_is_rejected_before_provider_settings_or_filesystem_work(
         wrapper._common,
         "require_binary",
         lambda _name: calls.__setitem__("provider", calls["provider"] + 1),
-    )
-    monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_args, **_kwargs: calls.__setitem__("settings", calls["settings"] + 1),
     )
     monkeypatch.setattr(
         wrapper,
@@ -945,7 +944,7 @@ def test_invalid_effort_is_rejected_before_provider_settings_or_filesystem_work(
         wrapper.main()
 
     assert exc_info.value.code == 2
-    assert calls == {"prompt": 0, "provider": 0, "settings": 0, "filesystem": 0}
+    assert calls == {"prompt": 0, "provider": 0, "filesystem": 0}
 
 
 def test_main_forwards_effort_to_final_agy_argv(monkeypatch, capsys) -> None:
@@ -967,14 +966,7 @@ def test_main_forwards_effort_to_final_agy_argv(monkeypatch, capsys) -> None:
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(wrapper._common, "build_validation_context", lambda *_a, **_k: {})
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/usr/bin/agy")
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
     monkeypatch.setattr(wrapper, "_run_agy_with_retry", fake_driver)
-    monkeypatch.setattr(wrapper._agy_settings, "build_deny_rules", lambda _mode: [])
-    monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_args, **_kwargs: nullcontext(),
-    )
     monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None)
     monkeypatch.setattr(
         sys,
@@ -984,7 +976,6 @@ def test_main_forwards_effort_to_final_agy_argv(monkeypatch, capsys) -> None:
             "--prompt", "review",
             "--model", "gemini-3.1-pro",
             "--effort", "high",
-            "--sandbox", "read-only",
         ],
     )
 
@@ -1036,15 +1027,11 @@ def test_unlisted_packet_entry_stops_before_agy_provider_boundary(
     schema = wrapper._common.load_pydantic_class(
         "triad_formal_review_schema:FormalReview"
     )
-    calls = {"binary": 0, "settings": 0, "pty": 0}
+    calls = {"binary": 0, "pty": 0}
 
     def binary_access(_name: str) -> str:
         calls["binary"] += 1
         return "/usr/bin/agy"
-
-    def settings_access(*_args, **_kwargs):
-        calls["settings"] += 1
-        raise AssertionError("settings must not be accessed")
 
     def pty_access(*_args, **_kwargs):
         calls["pty"] += 1
@@ -1053,8 +1040,6 @@ def test_unlisted_packet_entry_stops_before_agy_provider_boundary(
     monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: schema)
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(wrapper._common, "require_binary", binary_access)
-    monkeypatch.setattr(wrapper._agy_settings, "build_deny_rules", settings_access)
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", settings_access)
     monkeypatch.setattr(wrapper._pty, "run_via_pty", pty_access)
     monkeypatch.setattr(
         sys,
@@ -1063,8 +1048,6 @@ def test_unlisted_packet_entry_stops_before_agy_provider_boundary(
             "antigravity_wrapper.py",
             "--prompt",
             "review",
-            "--sandbox",
-            "read-only",
             "--pydantic",
             "triad_formal_review_schema:FormalReview",
             "--sealed-packet-root",
@@ -1075,7 +1058,7 @@ def test_unlisted_packet_entry_stops_before_agy_provider_boundary(
     )
 
     assert wrapper.main() == wrapper._common.EXIT_ARG_ERROR
-    assert calls == {"binary": 0, "settings": 0, "pty": 0}
+    assert calls == {"binary": 0, "pty": 0}
     assert "packet tree" in capsys.readouterr().err
 
 
@@ -1102,7 +1085,7 @@ def test_unlisted_packet_entry_stops_before_agy_provider_boundary(
         pytest.param(None, id="malformed"),
     ],
 )
-def test_sealed_context_requires_exact_schema_contract_before_binary_or_settings(
+def test_sealed_context_requires_exact_schema_contract_before_binary(
     required_context, tmp_path: Path, monkeypatch
 ) -> None:
     packet = tmp_path / "packet"
@@ -1120,21 +1103,12 @@ def test_sealed_context_requires_exact_schema_contract_before_binary_or_settings
         ),
     )
     monkeypatch.setattr(
-        wrapper._agy_settings,
-        "build_deny_rules",
-        lambda _mode: (_ for _ in ()).throw(
-            AssertionError("settings access must not start")
-        ),
-    )
-    monkeypatch.setattr(
         sys,
         "argv",
         [
             "antigravity_wrapper.py",
             "--prompt",
             "review",
-            "--sandbox",
-            "read-only",
             "--pydantic",
             "ledger:Review",
             "--sealed-packet-root",
@@ -1152,7 +1126,7 @@ def test_sealed_context_requires_exact_schema_contract_before_binary_or_settings
     "preflight_only", [True, False], ids=["preflight", "dispatch"]
 )
 @pytest.mark.parametrize("root_kind", ["wrong-leaf", "ancestor-alias"])
-def test_noncanonical_packet_root_stops_before_binary_settings_or_pty(
+def test_noncanonical_packet_root_stops_before_binary_or_pty(
     root_kind: str,
     preflight_only: bool,
     tmp_path: Path,
@@ -1169,20 +1143,11 @@ def test_noncanonical_packet_root_stops_before_binary_settings_or_pty(
         alias.symlink_to(real_review, target_is_directory=True)
         target = alias / "packet"
 
-    calls = {"binary": 0, "settings": 0, "pty": 0}
+    calls = {"binary": 0, "pty": 0}
 
     def fake_binary(_name: str) -> str:
         calls["binary"] += 1
         return "/usr/bin/agy"
-
-    def fake_deny_rules(_mode):
-        calls["settings"] += 1
-        return []
-
-    @contextmanager
-    def fake_settings_guard(*_args, **_kwargs):
-        calls["settings"] += 1
-        yield
 
     def fake_pty(*_args, **_kwargs):
         calls["pty"] += 1
@@ -1197,7 +1162,6 @@ def test_noncanonical_packet_root_stops_before_binary_settings_or_pty(
         lambda prompt, _cls, *, body_semantics_only=False: prompt,
     )
     monkeypatch.setattr(wrapper, "validate_response", lambda *_a, **_k: (True, {}))
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
     monkeypatch.setattr(wrapper._common, "require_binary", fake_binary)
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
@@ -1211,16 +1175,12 @@ def test_noncanonical_packet_root_stops_before_binary_settings_or_pty(
         "persist_result_artifacts",
         lambda *_a, **_k: None,
     )
-    monkeypatch.setattr(wrapper._agy_settings, "build_deny_rules", fake_deny_rules)
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", fake_settings_guard)
     monkeypatch.setattr(wrapper._pty, "run_via_pty", fake_pty)
 
     argv = [
         "antigravity_wrapper.py",
         "--prompt",
         "review",
-        "--sandbox",
-        "read-only",
         "--pydantic",
         "ledger:Review",
         "--sealed-packet-root",
@@ -1233,7 +1193,7 @@ def test_noncanonical_packet_root_stops_before_binary_settings_or_pty(
     monkeypatch.setattr(sys, "argv", argv)
 
     assert wrapper.main() == wrapper._common.EXIT_ARG_ERROR
-    assert calls == {"binary": 0, "settings": 0, "pty": 0}
+    assert calls == {"binary": 0, "pty": 0}
 
 
 def test_sealed_schema_failure_persists_one_provider_response_without_retry(
@@ -1286,7 +1246,6 @@ def test_sealed_schema_failure_persists_one_provider_response_without_retry(
         lambda *_args, **_kwargs: next(validations),
     )
     monkeypatch.setattr(wrapper, "_make_sentinel", lambda: sentinel)
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/usr/bin/agy")
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
@@ -1296,11 +1255,6 @@ def test_sealed_schema_failure_persists_one_provider_response_without_retry(
         lambda *_args, **_kwargs: next(answers),
     )
     monkeypatch.setattr(wrapper._pty, "run_via_pty", fake_pty)
-    monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_args, **_kwargs: nullcontext(),
-    )
     monkeypatch.setattr(wrapper, "_run_agy_with_retry", capture_driver)
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", capture_persistence
@@ -1314,8 +1268,6 @@ def test_sealed_schema_failure_persists_one_provider_response_without_retry(
             "review",
             "--model",
             "Gemini 3.1 Pro (High)",
-            "--sandbox",
-            "read-only",
             "--repair-mode",
             "--pydantic",
             "ledger:Review",
@@ -1334,7 +1286,7 @@ def test_sealed_schema_failure_persists_one_provider_response_without_retry(
     assert agy_result.schema_repair_attempt == 0
     assert agy_result.validation_error == "packet digest mismatch"
     assert agy_result.validated is None
-    assert agy_result.dispatch_phase == "post-dispatch-cleanup"
+    assert agy_result.dispatch_phase == "post-dispatch-result"
 
     run_result = persisted["result"]
     assert persisted["vendor_cmd"] == pty_calls[0]
@@ -1342,7 +1294,7 @@ def test_sealed_schema_failure_persists_one_provider_response_without_retry(
     assert run_result.schema_repair_attempt == 0
     assert run_result.validation_error == "packet digest mismatch"
     assert run_result.validated is None
-    assert run_result.dispatch_phase == "post-dispatch-cleanup"
+    assert run_result.dispatch_phase == "post-dispatch-result"
     assert capsys.readouterr().out == '{"packet": "wrong"}\n'
 
 
@@ -1384,7 +1336,6 @@ def test_schema_retry_transport_error_persists_attempt_state(
         lambda *_args, **_kwargs: (False, "packet digest mismatch"),
     )
     monkeypatch.setattr(wrapper, "_make_sentinel", lambda: sentinel)
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/usr/bin/agy")
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(wrapper._common, "snapshot_agy_transcripts", lambda: {})
@@ -1394,11 +1345,6 @@ def test_schema_retry_transport_error_persists_attempt_state(
         lambda *_args, **_kwargs: '{"packet": "wrong"}',
     )
     monkeypatch.setattr(wrapper._pty, "run_via_pty", fake_pty)
-    monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_args, **_kwargs: nullcontext(),
-    )
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", capture_persistence
     )
@@ -1427,164 +1373,7 @@ def test_schema_retry_transport_error_persists_attempt_state(
     assert run_result.mode == "schema_repair"
     assert run_result.schema_repair_attempt == 1
     assert run_result.validation_error == "packet digest mismatch"
-    assert run_result.dispatch_phase == "dispatch-uncertain"
-
-
-@pytest.mark.parametrize(
-    ("guard_case", "expected_phase", "expected_exit", "expected_driver_calls"),
-    [
-        ("entry", "pre-dispatch-settings", wrapper._common.EXIT_TERMINAL, 0),
-        ("body", "dispatch-uncertain", wrapper._common.EXIT_TERMINAL, 1),
-        ("normal", "post-dispatch-cleanup", wrapper._common.EXIT_OK, 1),
-        ("exit", "post-dispatch-result", wrapper._common.EXIT_TERMINAL, 1),
-    ],
-)
-def test_settings_guard_phase_is_preserved_in_custody_and_summary(
-    guard_case,
-    expected_phase,
-    expected_exit,
-    expected_driver_calls,
-    monkeypatch,
-    capsys,
-) -> None:
-    driver_calls = 0
-    persisted: dict[str, object] = {}
-
-    @contextmanager
-    def fake_guard(*_args, **_kwargs):
-        if guard_case == "entry":
-            raise TimeoutError("guard entry failed")
-        try:
-            yield
-        finally:
-            if guard_case == "exit":
-                raise OSError("guard exit failed")
-
-    def fake_driver(*_args, **_kwargs):
-        nonlocal driver_calls
-        driver_calls += 1
-        if guard_case == "body":
-            raise OSError("provider state unknown")
-        return wrapper.AgyResult(
-            final_answer='{"decision": "PASS"}',
-            classification="ok",
-            exit_code=wrapper._common.EXIT_OK,
-            vendor_exit_code=0,
-            final_argv=["/usr/bin/agy", "-p", "sealed"],
-            schema_repair_attempt=0,
-            validation_error=None,
-            dispatch_phase="post-dispatch-result",
-            validated={"decision": "PASS"},
-        )
-
-    def capture_persistence(
-        cli, wrapper_cmd, vendor_cmd, prompt, result, *, debug
-    ):
-        persisted.update(
-            cli=cli,
-            wrapper_cmd=list(wrapper_cmd),
-            vendor_cmd=list(vendor_cmd),
-            prompt=prompt,
-            result=result,
-            debug=debug,
-        )
-        return None
-
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/usr/bin/agy")
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
-    monkeypatch.setattr(wrapper, "_make_sentinel", lambda: "AGY_DONE_" + "7" * 32)
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", fake_guard)
-    monkeypatch.setattr(wrapper, "_run_agy_with_retry", fake_driver)
-    monkeypatch.setattr(wrapper._common, "persist_result_artifacts", capture_persistence)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "antigravity_wrapper.py",
-            "--prompt",
-            "review",
-            "--sandbox",
-            "read-only",
-        ],
-    )
-
-    assert wrapper.main() == expected_exit
-    assert driver_calls == expected_driver_calls
-    result = persisted["result"]
-    assert result.dispatch_phase == expected_phase
-    if guard_case != "normal":
-        assert result.classification == "config-conflict"
-    if guard_case in {"entry", "body"}:
-        assert result.vendor_exit_code == -1
-    captured = capsys.readouterr()
-    assert f"phase={expected_phase}" in captured.err
-    if guard_case == "exit":
-        assert result.validated is None
-        assert captured.out == ""
-
-
-def test_settings_restore_failure_suppresses_validated_provider_answer(
-    monkeypatch,
-    capsys,
-) -> None:
-    persisted: dict[str, object] = {}
-
-    @contextmanager
-    def restore_failure(*_args, **_kwargs):
-        try:
-            yield
-        finally:
-            raise OSError("settings restore failed")
-
-    def validated_driver(*_args, **_kwargs):
-        return wrapper.AgyResult(
-            final_answer='{"decision": "PASS"}',
-            classification="ok",
-            exit_code=wrapper._common.EXIT_OK,
-            vendor_exit_code=0,
-            final_argv=["/usr/bin/agy", "-p", "sealed"],
-            schema_repair_attempt=0,
-            validation_error=None,
-            dispatch_phase="post-dispatch-result",
-            validated={"decision": "PASS"},
-        )
-
-    def capture_persistence(
-        cli, wrapper_cmd, vendor_cmd, prompt, result, *, debug
-    ):
-        persisted["result"] = result
-        return None
-
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/usr/bin/agy")
-    monkeypatch.setattr(wrapper, "_agy_needs_skip_permissions", lambda _path: False)
-    monkeypatch.setattr(wrapper, "_make_sentinel", lambda: "AGY_DONE_" + "8" * 32)
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", restore_failure)
-    monkeypatch.setattr(wrapper, "_run_agy_with_retry", validated_driver)
-    monkeypatch.setattr(
-        wrapper._common, "persist_result_artifacts", capture_persistence
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "antigravity_wrapper.py",
-            "--prompt",
-            "review",
-            "--sandbox",
-            "read-only",
-        ],
-    )
-
-    assert wrapper.main() == wrapper._common.EXIT_TERMINAL
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    result = persisted["result"]
-    assert result.classification == "config-conflict"
-    assert result.dispatch_phase == "post-dispatch-result"
-    assert result.final_answer == ""
-    assert result.validated is None
-    assert "settings restore failed" in result.extraction_error
-    assert "completed vendor result suppressed" in result.extraction_error
+    assert run_result.dispatch_phase == "post-dispatch-result"
 
 
 def test_audit_and_run_log_preserve_phase_and_exact_validated_object(
@@ -1601,7 +1390,7 @@ def test_audit_and_run_log_preserve_phase_and_exact_validated_object(
         elapsed_s=1.25,
         classification="schema-fail",
         validated=validated,
-        dispatch_phase="post-dispatch-cleanup",
+        dispatch_phase="post-dispatch-result",
     )
     monkeypatch.setattr(wrapper._common, "_LOG_DIR", tmp_path)
     monkeypatch.setattr(wrapper._common, "_audit_redact_enabled", lambda: False)
@@ -1618,7 +1407,7 @@ def test_audit_and_run_log_preserve_phase_and_exact_validated_object(
     assert run_log is not None
     run_record = json.loads(run_log.read_text(encoding="utf-8"))
 
-    assert audit_record["dispatch_phase"] == "post-dispatch-cleanup"
+    assert audit_record["dispatch_phase"] == "post-dispatch-result"
     assert audit_record["validated"] == validated
-    assert run_record["dispatch_phase"] == "post-dispatch-cleanup"
+    assert run_record["dispatch_phase"] == "post-dispatch-result"
     assert run_record["validated"] == validated
