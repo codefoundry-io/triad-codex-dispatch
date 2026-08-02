@@ -40,6 +40,8 @@ def _validated_classifier_path(raw: str) -> Path:
     path = Path(raw).expanduser()
     if not path.is_absolute():
         raise ValueError(f"classifier file must be absolute: {path}")
+    if ".." in path.parts:
+        raise ValueError(f"classifier path must not contain parent traversal: {path}")
 
     current = Path(path.anchor)
     for index, part in enumerate(path.parts[1:], start=1):

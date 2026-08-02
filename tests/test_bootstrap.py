@@ -475,6 +475,39 @@ def test_apply_patch_requires_explicit_absolute_classifier_file(tmp_path: Path) 
     assert not (fresh_config / "triad-codex-dispatch" / "classifier-patches.json").exists()
 
 
+def test_apply_patch_rejects_parent_traversal_before_proposal_read(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked = tmp_path / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    classifier = tmp_path / "missing" / ".." / "linked" / "classifier.json"
+    missing_proposal = tmp_path / "proposal-does-not-exist.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(APPLY_PATCH),
+            "--cli",
+            "claude",
+            "--classifier-file",
+            str(classifier),
+            "--proposal-file",
+            str(missing_proposal),
+        ],
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 3
+    assert "classifier path must not contain parent traversal" in result.stderr
+    assert "cannot read proposal" not in result.stderr
+    assert not (outside / "classifier.json").exists()
+    assert not (tmp_path / "missing").exists()
+
+
 def test_bootstrap_prints_owner_apply_argv_with_pinned_classifier(
     tmp_path: Path,
 ) -> None:

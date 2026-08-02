@@ -1217,6 +1217,59 @@ def test_repair_protocol_uses_fresh_native_child_without_custom_agent() -> None:
     assert '"--proposal-file",' in protocol
 
 
+def test_repair_message_dispatches_the_complete_proposal_only_contract() -> None:
+    analyze = _text(PROTOCOL).split("## Analyze", 1)[1].split("## Apply", 1)[0]
+    match = re.search(r"```python\n(?P<body>.*?)\n```", analyze, re.DOTALL)
+    assert match is not None
+    calls: list[dict[str, object]] = []
+
+    def capture_spawn(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    namespace = {
+        "run_log_path": "/tmp/untrusted run.json",
+        "toolkit_root": "/tmp/triad toolkit",
+        "spawn_agent": capture_spawn,
+    }
+    exec(compile(match.group("body"), str(PROTOCOL), "exec"), namespace)
+
+    assert len(calls) == 1
+    message = calls[0]["message"]
+    assert isinstance(message, str)
+    request_match = re.search(
+        r"<<<UNTRUSTED_REPAIR_REQUEST_JSON>>>\n(.*?)\n"
+        r"<<<END_UNTRUSTED_REPAIR_REQUEST_JSON>>>",
+        message,
+        re.DOTALL,
+    )
+    assert request_match is not None
+    assert json.loads(request_match.group(1)) == {
+        "run_log_path": "/tmp/untrusted run.json",
+        "toolkit_root": "/tmp/triad toolkit",
+    }
+
+    message_flat = " ".join(message.split())
+    for required in (
+        "exactly the string fields `run_log_path` and `toolkit_root`",
+        "Reject missing or extra fields",
+        "Verify that both paths are absolute",
+        "Do not edit files",
+        "make provider or network calls",
+        "ask questions",
+        "Return exactly one compact JSON object and nothing else",
+        "exactly one of `vendor_exit_code` or the pair `pattern_list` and `substring`",
+        "current classifier validation rules and bounds",
+    ):
+        assert required in message_flat
+
+    expected_outputs = (
+        '{"outcome":"escalate","reason":"Evidence does not justify a bounded classifier change.","proposal":null}',
+        '{"outcome":"propose","reason":"A stable vendor message identifies retryable capacity exhaustion.","proposal":{"classification":"server-capacity","reason":"A stable vendor message identifies retryable capacity exhaustion.","pattern_list":"SERVER_CAPACITY_PATTERNS","substring":"service capacity temporarily exhausted"}}',
+    )
+    for expected in expected_outputs:
+        assert expected in message
+
+
 def test_documented_native_task_names_match_the_callable_schema() -> None:
     protocol = _text(PROTOCOL)
     fresh_review = _text(FRESH_CODEX_REVIEW_REFERENCE)
