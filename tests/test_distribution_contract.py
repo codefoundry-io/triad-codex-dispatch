@@ -3810,3 +3810,31 @@ def test_r44_active_handoffs_and_historical_authority_are_unambiguous() -> None:
         section = " ".join(_heading_section(r11, heading).split()).casefold()
         assert "historical / superseded / non-executable" in section
         assert "do not execute" in section
+
+
+def test_r44_routing_ledger_separates_current_contract_from_legacy_evidence() -> None:
+    path = (
+        ROOT
+        / "docs"
+        / "status"
+        / "2026-07-22-formal-review-routing-verification.md"
+    )
+    raw = _text(path)
+    title = raw.splitlines()[0]
+    scope = _heading_section(path, "## Scope")
+    deterministic = _heading_section(path, "## Deterministic evidence")
+    external = _heading_section(path, "## External-state result")
+
+    assert title == "# Native full-coverage review verification ledger"
+    assert "Agent-review" not in title + scope
+    assert raw.count("Updated: 2026-07-24") == 1
+    for section in (deterministic, external):
+        flat = " ".join(section.split())
+        assert "PRE-0.2.532 HISTORICAL / NON-ACCEPTANCE EVIDENCE" in flat
+        assert "not 0.2.532 acceptance evidence" in flat
+
+    assert "Native exec-policy evaluator" in deterministic
+    assert "all three managed launchers returned `prompt`" in " ".join(
+        deterministic.split()
+    )
+    assert "plugin cache, managed launchers/rules" in external

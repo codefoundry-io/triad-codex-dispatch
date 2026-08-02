@@ -1,14 +1,15 @@
-# Worktree-first review and Agent-review verification ledger
+# Native full-coverage review verification ledger
 
 Updated: 2026-07-24
 
 ## Scope
 
-This ledger covers the worktree-first review contract, provider skill examples,
-distributed ordinary-Codex bootstrap, public documentation, root workspace
-policy, and the accepted AGY truncation failure gate. It does not extend the
-historical packet-era R14 archive. The first live worktree round below was `NOT-SAFE` and
-therefore is not a passing formal verdict.
+This ledger's current authority is the 0.2.532 native full-coverage Behavioral
+contract below. The Deterministic evidence and External-state result sections
+retain pre-0.2.532 facts for provenance only; they are not current candidate
+acceptance evidence. The ledger does not extend the historical packet-era R14
+archive. The first live worktree round below was `NOT-SAFE` and therefore is not
+a passing formal verdict.
 
 ## Behavioral contract
 
@@ -38,6 +39,11 @@ every test failure as production defect, test-case defect, or intentional
 specification change and resolve or approve it.
 
 ## Deterministic evidence
+
+> **PRE-0.2.532 HISTORICAL / NON-ACCEPTANCE EVIDENCE.** The generated
+> wrapper-rule evaluator, managed launcher/rule state, installed cache/skill
+> exposure, and dated test results below are retained for provenance only. They
+> are not 0.2.532 acceptance evidence.
 
 | Check | Result |
 | --- | --- |
@@ -87,6 +93,11 @@ Darwin. Product bootstrap behavior is unchanged; the final combined suite
 passes.
 
 ## External-state result
+
+> **PRE-0.2.532 HISTORICAL / NON-ACCEPTANCE EVIDENCE.** The plugin cache,
+> managed launchers/rules, loader-environment guard, installed skill exposure,
+> and provider-round results below are historical.
+> This material is not 0.2.532 acceptance evidence.
 
 The plugin cache, managed launchers/rules, and loader-environment guard were
 refreshed locally without a dedicated profile or shell alias. A fresh ephemeral
