@@ -1518,7 +1518,7 @@ def test_managed_remove_preserves_marker_first_edited_legacy_policy(
             ),
         ),
         (
-            "broad-root-file-enumeration",
+            "broad-root-fallback-file-shape",
             FROZEN_LEGACY_PROFILE.replace(
                 b'"/opt/triad-codex-dispatch/bin" = "read"',
                 b'"/opt/triad-codex-dispatch/bin/_common.py" = "read"',
@@ -1569,7 +1569,7 @@ def test_managed_remove_preserves_marker_first_edited_legacy_policy(
         "parent-traversal",
         "noncanonical-double-separator",
         "noncanonical-double-root",
-        "broad-root-file-enumeration",
+        "broad-root-fallback-file-shape",
         "slot-collision",
         "unknown-vendor-basename",
         "unknown-python-basename",
@@ -1586,6 +1586,93 @@ def test_managed_remove_preserves_unidentifiable_legacy_profile_slots(
     assert not helper.managed_removal_data_is_owned(edited, "profile")
     assert helper.remove_managed_artifact(target, "profile") == "unmanaged"
     assert target.read_bytes() == edited
+
+
+def _legacy_profile_with_directory_slot(slot: str, directory: Path) -> bytes:
+    encoded = str(directory).encode("utf-8")
+    if slot == "bin":
+        return (
+            FROZEN_LEGACY_PROFILE.replace(
+                b'"/opt/triad-codex-dispatch/bin" = "read"',
+                b'"' + encoded + b'" = "read"',
+                1,
+            )
+            .replace(
+                b'"/opt/triad-codex-dispatch/bin/_logs" = "write"',
+                b'"' + str(directory / "_logs").encode("utf-8") + b'" = "write"',
+                1,
+            )
+            .replace(
+                b'"/opt/triad-codex-dispatch/bin/_debug" = "write"',
+                b'"' + str(directory / "_debug").encode("utf-8") + b'" = "write"',
+                1,
+            )
+        )
+    if slot == "launcher":
+        return FROZEN_LEGACY_PROFILE.replace(
+            b'"/Users/example/.local/bin" = "read"',
+            b'"' + encoded + b'" = "read"',
+            1,
+        )
+    if slot == "classifier":
+        return FROZEN_LEGACY_PROFILE.replace(
+            b'"/Users/example/.config/triad-codex-dispatch" = "write"',
+            b'"' + encoded + b'" = "write"',
+            1,
+        )
+    raise AssertionError(f"unexpected profile directory slot: {slot}")
+
+
+@pytest.mark.parametrize("slot", ("bin", "launcher", "classifier"))
+@pytest.mark.parametrize(
+    ("root_kind", "broad_directory"),
+    (
+        ("root", Path("/").resolve()),
+        ("system", Path("/usr/local/bin").resolve()),
+        ("package", Path("/opt/homebrew/bin").resolve()),
+        ("home", Path.home().resolve()),
+    ),
+    ids=("root", "system", "package", "home"),
+)
+def test_managed_remove_preserves_broad_legacy_profile_directory_slots(
+    tmp_path: Path, slot: str, root_kind: str, broad_directory: Path
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    edited = _legacy_profile_with_directory_slot(slot, broad_directory)
+    target = tmp_path / f"profile-{slot}-{root_kind}"
+    target.write_bytes(edited)
+
+    assert not helper.managed_removal_data_is_owned(edited, "profile")
+    assert helper.remove_managed_artifact(target, "profile") == "unmanaged"
+    assert target.read_bytes() == edited
+
+
+def test_legacy_profile_allows_python_and_vendor_files_below_broad_directories() -> None:
+    helper = _load_bootstrap_repair_module()
+
+    assert helper.managed_removal_data_is_owned(FROZEN_LEGACY_PROFILE, "profile")
+
+
+@pytest.mark.parametrize("mode", ("--install", "--remove"))
+@pytest.mark.parametrize("slot", ("launcher", "classifier"))
+def test_bootstrap_preserves_broad_legacy_profile_directory_slots(
+    tmp_path: Path, mode: str, slot: str
+) -> None:
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    profile = codex_home / "triad-codex-dispatch.config.toml"
+    edited = _legacy_profile_with_directory_slot(slot, Path("/"))
+    profile.write_bytes(edited)
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        arg=mode,
+        env_overrides={"CODEX_HOME": str(codex_home)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "leaving unmanaged Codex profile" in result.stdout
+    assert profile.read_bytes() == edited
 
 
 def test_managed_remove_accepts_different_valid_legacy_profile_slots(

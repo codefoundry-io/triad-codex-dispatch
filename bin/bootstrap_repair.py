@@ -52,6 +52,34 @@ LEGACY_CONFIG_FRAGMENT_TEXT = (
 LEGACY_AGENT_HEADER_A = "# Codex named subagent"
 LEGACY_AGENT_HEADER_B = "wrapper repair agent"
 LEGACY_AGENT_SCOPE = "Installed by bootstrap to the Codex personal agent-discovery scope"
+_LEGACY_PROFILE_BROAD_DIRECTORY_ROOTS = frozenset(
+    [
+        Path(value).resolve()
+        for value in (
+            "/",
+            "/usr",
+            "/usr/local",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/usr/sbin",
+            "/bin",
+            "/sbin",
+            "/opt",
+            "/opt/homebrew",
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/lib",
+            "/lib64",
+            "/etc",
+            "/var",
+            "/tmp",
+            "/root",
+        )
+    ]
+    + [Path.home().resolve()]
+)
+
 
 class Refusal(RuntimeError):
     pass
@@ -1454,6 +1482,7 @@ def _legacy_profile_data_is_owned(data: bytes) -> bool:
     if len(paths) != len(set(paths)):
         return False
     bin_directory = Path(paths[0])
+    launcher_directory = Path(paths[1])
     if bin_directory.name != "bin":
         return False
     python_name = Path(paths[2]).name
@@ -1474,6 +1503,15 @@ def _legacy_profile_data_is_owned(data: bytes) -> bool:
     classifier_directory, log_directory, debug_directory = map(
         Path, paths[len(read_paths) :]
     )
+    if any(
+        directory.resolve() in _LEGACY_PROFILE_BROAD_DIRECTORY_ROOTS
+        for directory in (
+            bin_directory,
+            launcher_directory,
+            classifier_directory,
+        )
+    ):
+        return False
     if log_directory != bin_directory / "_logs":
         return False
     if debug_directory != bin_directory / "_debug":
