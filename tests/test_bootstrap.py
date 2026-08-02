@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 import importlib.util
 import shlex
 import pytest
@@ -31,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 BOOTSTRAP_REPAIR = ROOT / "bin" / "bootstrap_repair.py"
 APPLY_PATCH = ROOT / "bin" / "apply_patch.py"
+FIXTURES = ROOT / "tests" / "fixtures"
 
 
 def _copy_test_python_executable(target: Path) -> None:
@@ -192,6 +194,9 @@ def _run_bootstrap(
 
 REPAIR_ANALYZER = "triad-repair-analyzer"
 REPAIR_ANALYZER_MARKER = "# triad-codex-dispatch managed repair analyzer"
+FROZEN_REPAIR_ANALYZER = (
+    FIXTURES / "triad-repair-analyzer.ccc8ff09510b.toml"
+).read_bytes()
 MANAGED_LEGACY_REPAIR_AGENT = (
     b"# Codex named subagent for Claude wrapper repair agent\n"
     b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
@@ -345,10 +350,7 @@ def _seed_frozen_legacy_repair_state(
 ) -> tuple[list[str], Path, Path, Path]:
     analyzer = tmp_path / "agents" / f"{REPAIR_ANALYZER}.toml"
     analyzer.parent.mkdir(parents=True, exist_ok=True)
-    analyzer.write_text(
-        f'{helper.ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n',
-        encoding="utf-8",
-    )
+    analyzer.write_bytes(FROZEN_REPAIR_ANALYZER)
     config = tmp_path / "config.toml"
     prefix = 'owner = "preserved"\n\n' if existing_config else ""
     config.write_text(
@@ -384,6 +386,12 @@ def _owner_apply_argv(stdout: str) -> tuple[list[str], list[str]]:
     assert outer[:2] == ["/bin/zsh", "-lic"]
     assert len(outer) == 3
     return outer, shlex.split(outer[2])
+
+
+def _legacy_shell_entry_for_profile(profile: str) -> bytes:
+    return FROZEN_LEGACY_SHELL_ENTRY.replace(
+        b"--profile triad-codex-dispatch", f"--profile {profile}".encode("ascii")
+    )
 
 
 def _path_state_fingerprint(path: Path):
@@ -559,6 +567,14 @@ def test_bootstrap_repair_help_exposes_remove_only_repair_lifecycle() -> None:
     assert "commands-remove" in choices
 
 
+def test_frozen_repair_analyzer_fixture_matches_production_digest() -> None:
+    helper = _load_bootstrap_repair_module()
+
+    assert hashlib.sha256(FROZEN_REPAIR_ANALYZER).hexdigest() == (
+        helper.FROZEN_REPAIR_ANALYZER_SHA256
+    )
+
+
 def test_apply_patch_requires_explicit_absolute_classifier_file(tmp_path: Path) -> None:
     proposal = tmp_path / "proposal.json"
     proposal.write_text(
@@ -599,6 +615,7 @@ def test_apply_patch_requires_explicit_absolute_classifier_file(tmp_path: Path) 
 
     missing = invoke()
     relative = invoke("--classifier-file", "relative.json")
+    tilde = invoke("--classifier-file", "~/classifier.json")
 
     real_parent = tmp_path / "real-parent"
     real_parent.mkdir()
@@ -612,11 +629,12 @@ def test_apply_patch_requires_explicit_absolute_classifier_file(tmp_path: Path) 
     symlinked_leaf.symlink_to(leaf_target)
     leaf = invoke("--classifier-file", str(symlinked_leaf))
 
-    for refused in (missing, relative, ancestor, leaf):
+    for refused in (missing, relative, tilde, ancestor, leaf):
         assert refused.returncode != 0
     assert leaf_target.read_text(encoding="utf-8") == '{"owner": true}\n'
     assert not (real_parent / "classifier.json").exists()
     assert not (tmp_path / "relative.json").exists()
+    assert not (fresh_home / "classifier.json").exists()
 
     classifier = tmp_path / "custom" / "classifier.json"
     classifier.parent.mkdir()
@@ -735,6 +753,7 @@ def test_bootstrap_routes_classifier_artifacts_and_config_mutations_through_help
     assert "rules_path.write_text" not in text
     assert "Path(str(config_path) + \".bak\").write_bytes" not in text
     assert "os.replace(tmp_name, config_path)" not in text
+    assert "runtime_command_is_managed()" not in text
     assert "config_path.unlink()" not in text
 
 
@@ -758,6 +777,53 @@ def test_bootstrap_repair_refuses_exact_analyzer_marker_inside_multiline_string(
     assert not helper.analyzer_is_managed(helper.read_state(analyzer))
     assert helper.main(args) == 0
     assert analyzer.read_text(encoding="utf-8") == foreign
+
+
+def test_bootstrap_repair_preserves_and_reports_owner_edited_frozen_analyzer(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, _config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
+    owner_edited = analyzer.read_bytes() + b"# owner edit\n"
+    analyzer.write_bytes(owner_edited)
+
+    assert not helper.analyzer_is_managed(helper.read_state(analyzer))
+    assert helper.main(args) == 0
+    assert analyzer.read_bytes() == owner_edited
+    assert not launcher.exists()
+    assert "preserving unmanaged repair analyzer" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "launcher_bytes",
+    (
+        FROZEN_LEGACY_APPLY_LAUNCHER.replace(
+            b"/managed/apply_patch.py", b"/managed/owner.py"
+        ),
+        FROZEN_PINNED_APPLY_LAUNCHER.replace(
+            b'"/managed/classifier.json"',
+            b'"/managed/classifier.json" + ".owner"',
+        ),
+    ),
+)
+def test_bootstrap_repair_preserves_and_reports_owner_edited_legacy_launcher(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    launcher_bytes: bytes,
+) -> None:
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, _config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path, launcher_bytes=launcher_bytes
+    )
+
+    assert not helper.launcher_is_managed(helper.read_state(launcher))
+    assert helper.main(args) == 0
+    assert launcher.read_bytes() == launcher_bytes
+    assert not analyzer.exists()
+    assert "preserving unmanaged repair apply launcher" in capsys.readouterr().err
 
 
 def test_bootstrap_repair_refuses_exact_launcher_marker_inside_python_multiline_string(
@@ -1770,6 +1836,43 @@ def test_plain_install_removes_exact_managed_legacy_shell_entry(
     assert str(shell_rc) in result.stdout
     assert "removed managed codex-triad shell entry" in result.stdout
     assert shell_rc.read_bytes() == b""
+
+
+@pytest.mark.parametrize("profile", ("custom", "Custom_1.2-a"))
+def test_plain_install_removes_exact_historical_shell_entry_with_valid_profile(
+    tmp_path: Path,
+    profile: str,
+) -> None:
+    shell_rc = tmp_path / "shellrc"
+    shell_rc.write_bytes(_legacy_shell_entry_for_profile(profile))
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "removed managed codex-triad shell entry" in result.stdout
+    assert shell_rc.read_bytes() == b""
+
+
+def test_plain_install_preserves_edited_historical_shell_entry_with_custom_profile(
+    tmp_path: Path,
+) -> None:
+    shell_rc = tmp_path / "shellrc"
+    edited = _legacy_shell_entry_for_profile("custom-profile").replace(
+        b"TRIAD_WRAPPER_HARDENED=1", b"TRIAD_WRAPPER_HARDENED=0"
+    )
+    shell_rc.write_bytes(edited)
+
+    result, _env, _launchers = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "leaving unmanaged codex-triad entry" in result.stdout
+    assert shell_rc.read_bytes() == edited
 
 
 def test_plain_install_preserves_and_reports_safe_unmanaged_legacy_artifacts(

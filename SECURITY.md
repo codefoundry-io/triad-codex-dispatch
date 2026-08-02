@@ -61,6 +61,10 @@ apply launcher and no ambient-default recomputation. The deterministic apply
 path validates the proposal before mutation; invalid input leaves classifier
 state unchanged.
 
+That coarse proposal validation is not semantic proof. Fine-grained substring
+specificity and residual misclassification remain analyzer and owner
+responsibility.
+
 Wrapper-launcher command groups continue to publish all-or-nothing through the
 existing staged transaction. That publication contract is separate from
 retired repair-agent cleanup, so failure does not expose a partial launcher

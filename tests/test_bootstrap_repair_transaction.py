@@ -889,9 +889,12 @@ def _seed_frozen_legacy_repair_state(helper, tmp_path: Path):
     config = tmp_path / "config.toml"
     analyzer = tmp_path / "agents" / f"{helper.NAME}.toml"
     analyzer.parent.mkdir()
-    analyzer.write_text(
-        f'{helper.ANALYZER_MARKER}\nname = "{helper.NAME}"\nversion = 1\n',
-        encoding="utf-8",
+    analyzer.write_bytes(
+        (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "triad-repair-analyzer.ccc8ff09510b.toml"
+        ).read_bytes()
     )
     launcher = tmp_path / "triad-apply-repair"
     launcher.write_bytes(

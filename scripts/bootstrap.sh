@@ -175,22 +175,6 @@ launcher_is_managed() {
     --kind launcher --name "$wrapper" --path "$launcher" >/dev/null
 }
 
-runtime_command_is_managed() {
-  runtime_command="$1"
-  if [ -L "$runtime_command" ]; then
-    return 1
-  fi
-  if [ ! -e "$runtime_command" ]; then
-    return 0
-  fi
-  if [ ! -f "$runtime_command" ]; then
-    return 1
-  fi
-  runtime_name="${runtime_command##*/}"
-  python3 "$REPO_ROOT/bin/bootstrap_repair.py" command-owned \
-    --kind runtime --name "$runtime_name" --path "$runtime_command" >/dev/null
-}
-
 COMMAND_MANIFEST=""
 
 begin_command_group() {

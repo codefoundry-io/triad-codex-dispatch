@@ -6,7 +6,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_AGENTS = ROOT.parent.parent / "AGENTS.md"
 BIN = ROOT / "bin"
 if str(BIN) not in sys.path:
     sys.path.insert(0, str(BIN))
@@ -884,14 +883,6 @@ def test_formal_review_uses_one_prepared_directory_and_bound_evidence_digests() 
 
 
 def test_formal_review_physically_excludes_only_exact_test_roots_and_uses_prepared_paths() -> None:
-    for path in (WORKSPACE_AGENTS,):
-        flat = " ".join(_text(path).split()).casefold()
-        assert "one leader-prepared shared review directory" in flat
-        assert "current relevant approved production source, configuration, and documentation" in flat
-        assert "only the exact test-source roots" in flat
-        assert "physically absent" in flat
-        assert "if exact roots are unavailable, stop and return an open question; never infer roots" in flat
-
     for path in (REVIEW_SKILL, FRESH_CODEX_REVIEW_REFERENCE):
         flat = " ".join(_text(path).split()).casefold()
         assert "one leader-prepared shared review directory" in flat
@@ -2607,10 +2598,7 @@ def test_public_distribution_describes_worktree_first_review_boundaries() -> Non
 
 
 def test_task_3a_active_guidance_uses_minimal_shared_directory_contract() -> None:
-    root_policy = _text(Path("/Users/chaniri/codex_workspace/AGENTS.md"))
-    root_policy = root_policy.split("## Selective triad dispatch", 1)[1].split(
-        "## Project initialization defaults", 1
-    )[0]
+    review_contract = _text(REVIEW_SKILL)
     readme = _text(ROOT / "README.md")
     readme = readme.split("### Shared-directory cross-family review", 1)[1].split(
         "Normal code-write dispatch should run", 1
@@ -2625,7 +2613,7 @@ def test_task_3a_active_guidance_uses_minimal_shared_directory_contract() -> Non
             "Normal SDD implementation review includes relevant test source",
             "classify every test failure as production defect, test-case defect, or intentional specification change",
     )
-    for text in (root_policy, readme):
+    for text in (review_contract, readme):
         flat = " ".join(text.split())
         for phrase in common:
             assert phrase in flat
@@ -2638,8 +2626,8 @@ def test_task_3a_active_guidance_uses_minimal_shared_directory_contract() -> Non
             "source archive",
         ):
             assert stale not in flat
-    assert "exact test-source exclusions" in " ".join(root_policy.split())
-    assert "stop and ask the owner" in " ".join(root_policy.split())
+    assert "exact test-source exclusions" in " ".join(review_contract.split())
+    assert "stop and ask the owner" in " ".join(review_contract.split())
     assert "all repository test source" in " ".join(readme.split())
 
 
@@ -3743,3 +3731,32 @@ def test_r21_accepted_documentation_corrections_have_one_ledger_entry() -> None:
 
     for handoff in handoffs:
         assert _text(handoff).count(heading) == 1
+
+
+def test_r43_release_candidate_corrections_are_distribution_self_contained() -> None:
+    korean = _text(ROOT / "README.ko.md")
+    security = " ".join(_text(SECURITY).split()).casefold()
+    resume = " ".join(
+        _text(ROOT / "docs" / "status" / "2026-07-22-resume-prompt.md").split()
+    )
+
+    assert korean.count("deterministic owner apply입니다.") == 1
+    assert korean.count("Permission 선택은 provider/user/project에 남") == 1
+    assert "resume the recorded Argus checkpoint directly" in resume
+    assert "ask the owner before resuming it" not in resume
+    assert "fine-grained substring specificity" in security
+    assert "residual misclassification" in security
+    assert "analyzer and owner responsibility" in security
+    assert "coarse proposal validation is not semantic proof" in security
+
+    historical = (
+        ROOT / "docs" / "superpowers" / "plans" / "2026-07-21-triad-r4-bounded-repair.md",
+        ROOT / "docs" / "superpowers" / "specs" / "2026-07-21-triad-r4-bounded-repair-design.md",
+        ROOT / "docs" / "superpowers" / "specs" / "2026-07-22-agy-0528-functional-integration-design.md",
+    )
+    for path in historical:
+        banner = " ".join(_text(path)[:1000].split()).casefold()
+        assert "historical / superseded / non-executable" in banner
+        assert "do not execute" in banner
+        assert "2026-07-30-native-permissions-full-coverage-review.md" in banner
+        assert "2026-07-30-native-permissions-full-coverage-review-design.md" in banner

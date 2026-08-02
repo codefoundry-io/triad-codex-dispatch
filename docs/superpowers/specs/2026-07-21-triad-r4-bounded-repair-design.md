@@ -1,5 +1,9 @@
 # Triad R4 Bounded Repair Design
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE.** Do not execute this design. Use
+> the current [0.2.532 plan](../plans/2026-07-30-native-permissions-full-coverage-review.md)
+> and [0.2.532 design](2026-07-30-native-permissions-full-coverage-review-design.md).
+
 ## Goal
 
 Close the deterministic defects confirmed after the invalid R3 review without

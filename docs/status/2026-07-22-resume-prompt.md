@@ -186,8 +186,9 @@ Finish source and test verification first. Confirm that ordinary codex resolves
 on-request/auto_review and that refreshed exact wrapper rules resolve to prompt,
 not allow. Verify fresh-session skill exposure and the requested three-provider
 spike only after the applicable install/provider authorization is established.
-Do not continue Argus until triad review is working, then report and ask the owner
-before resuming it.
+Do not continue Argus until triad review is working. After the successful TRIAD
+proof, report it and resume the recorded Argus checkpoint directly without
+asking the owner again.
 ```
 
 ## Current route and latest invalid round

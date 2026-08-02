@@ -786,29 +786,35 @@ def test_missing_path_evidence_is_rejected(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("mode", ["concentrated", "swapped", "extra", "reordered", "duplicate"])
 def test_each_receipt_requires_exact_assigned_path_set(tmp_path: Path, mode: str) -> None:
-    evidence = _make_evidence(tmp_path, batch_byte_limit=1)
+    evidence = (
+        _make_evidence(tmp_path)
+        if mode == "reordered"
+        else _make_evidence(tmp_path, batch_byte_limit=1)
+    )
     documents = _receipt_documents(evidence, "claude")
     review_coverage.validate_family_receipts(
         evidence, "claude", _write_documents(tmp_path, "claude", deepcopy(documents))
     )
-    first, second = evidence.batch_ids[:2]
+    first = evidence.batch_ids[0]
+    second = evidence.batch_ids[1] if mode != "reordered" else None
     if mode == "concentrated":
+        assert second is not None
         documents[first]["path_evidence"] += documents[second]["path_evidence"]
         documents[second]["path_evidence"] = []
     elif mode == "swapped":
+        assert second is not None
         documents[first]["path_evidence"], documents[second]["path_evidence"] = (
             documents[second]["path_evidence"], documents[first]["path_evidence"]
         )
     elif mode == "extra":
+        assert second is not None
         documents[first]["path_evidence"].append(deepcopy(documents[second]["path_evidence"][0]))
     elif mode == "reordered":
-        # Concentrate two valid rows solely to exercise ordered equality.
-        documents[first]["path_evidence"] += documents[second]["path_evidence"]
+        assert len(documents[first]["path_evidence"]) >= 2
         documents[first]["path_evidence"].reverse()
     else:
         documents[first]["path_evidence"].append(deepcopy(documents[first]["path_evidence"][0]))
-    diagnostic = "absent from closure" if mode == "extra" and False else "assigned path set mismatch"
-    with pytest.raises(review_coverage.CoverageError, match=diagnostic):
+    with pytest.raises(review_coverage.CoverageError, match="assigned path set mismatch"):
         review_coverage.validate_family_receipts(
             evidence, "claude", _write_documents(tmp_path, "claude", documents)
         )

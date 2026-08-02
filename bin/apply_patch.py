@@ -37,7 +37,7 @@ EXIT_INVALID = 3
 
 
 def _validated_classifier_path(raw: str) -> Path:
-    path = Path(raw).expanduser()
+    path = Path(raw)
     if not path.is_absolute():
         raise ValueError(f"classifier file must be absolute: {path}")
     if ".." in path.parts:

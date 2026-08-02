@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import stat
 import sys
@@ -16,6 +17,9 @@ from pathlib import Path
 
 NAME = "triad-repair-analyzer"
 ANALYZER_MARKER = "# triad-codex-dispatch managed repair analyzer"
+FROZEN_REPAIR_ANALYZER_SHA256 = (
+    "549d49b7ca1d50fe4bed5a86bb4775a11b56036c646e7fa91b29383aae7d3a0e"
+)
 REG_BEGIN = "# >>> triad-codex-dispatch managed repair analyzer registration >>>"
 REG_END = "# <<< triad-codex-dispatch managed repair analyzer registration <<<"
 LAUNCHER = "triad-apply-repair"
@@ -134,6 +138,8 @@ class RepairRemovePlan:
     config_before: State | None
     analyzer_before: State | None
     launcher_before: State | None
+    analyzer_unmanaged: bool
+    launcher_unmanaged: bool
     base: str
     managed_registration: bool
     original_config_existed: bool
@@ -230,14 +236,7 @@ def same(state: State) -> bool:
 
 
 def analyzer_data_is_managed(data: bytes) -> bool:
-    header = f"{ANALYZER_MARKER}\n".encode("utf-8")
-    if not data.startswith(header):
-        return False
-    try:
-        parsed = tomllib.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
-        return False
-    return isinstance(parsed, dict) and parsed.get("name") == NAME
+    return hashlib.sha256(data).hexdigest() == FROZEN_REPAIR_ANALYZER_SHA256
 
 
 def analyzer_is_managed(state: State | None) -> bool:
@@ -251,27 +250,58 @@ def launcher_is_managed(state: State | None) -> bool:
         lines = state.data.decode("utf-8").splitlines()
     except UnicodeDecodeError:
         return False
-    legacy = (
-        len(lines) == 5
-        and lines[0].startswith("#!")
-        and lines[0].endswith(" -E")
-        and lines[1] == LAUNCHER_MARKER
-        and lines[2:4] == ["import os", "import sys"]
-        and lines[4].startswith("os.execv(")
-        and lines[4].endswith(" + sys.argv[1:])")
+    if len(lines) not in {5, 7} or lines[1] != LAUNCHER_MARKER:
+        return False
+    shebang_python = _shebang_python(lines[0], isolated=True)
+    if shebang_python is None:
+        return False
+    try:
+        tree = ast.parse("\n".join(lines[2:]) + "\n")
+    except SyntaxError:
+        return False
+    if (
+        len(tree.body) != len(lines) - 2
+        or not _exact_import(tree.body[0], "os")
+        or not _exact_import(tree.body[1], "sys")
+    ):
+        return False
+    body = tree.body[2:]
+    if len(lines) == 5:
+        executed = _exec_call(body[0], "execv", env_arg=False)
+        if executed is None:
+            return False
+        python, argv = executed
+        return (
+            python == shebang_python
+            and len(argv) == 2
+            and argv[0] == python
+            and os.path.isabs(argv[1])
+            and Path(argv[1]).name == "apply_patch.py"
+        )
+    env_assign = body[0]
+    if not (
+        isinstance(env_assign, ast.Assign)
+        and len(env_assign.targets) == 1
+        and isinstance(env_assign.targets[0], ast.Name)
+        and env_assign.targets[0].id == "env"
+        and _matches_expression(env_assign.value, "os.environ.copy()")
+    ):
+        return False
+    classifier = _string_assignment(
+        body[1], owner="env", key="TRIAD_CLASSIFIER_EXTENSION"
     )
-    pinned = (
-        len(lines) == 7
-        and lines[0].startswith("#!")
-        and lines[0].endswith(" -E")
-        and lines[1] == LAUNCHER_MARKER
-        and lines[2:4] == ["import os", "import sys"]
-        and lines[4] == "env = os.environ.copy()"
-        and lines[5].startswith('env["TRIAD_CLASSIFIER_EXTENSION"] = ')
-        and lines[6].startswith("os.execve(")
-        and lines[6].endswith(" + sys.argv[1:], env)")
+    executed = _exec_call(body[2], "execve", env_arg=True)
+    if classifier is None or not os.path.isabs(classifier) or executed is None:
+        return False
+    python, argv = executed
+    return (
+        python == shebang_python
+        and len(argv) == 3
+        and argv[0] == python
+        and argv[1] == "-E"
+        and os.path.isabs(argv[2])
+        and Path(argv[2]).name == "apply_patch.py"
     )
-    return legacy or pinned
 
 
 def parse_text(state: State | None, path: Path) -> str:
@@ -1833,6 +1863,31 @@ def _shell_entry_base(
     return existing[: span[0]] + existing[span[1] :]
 
 
+def _historical_shell_entry_is_managed(data: bytes) -> bool:
+    if hashlib.sha256(data).hexdigest() == FROZEN_SHELL_ENTRY_SHA256:
+        return True
+    lines = data.splitlines(keepends=True)
+    if len(lines) != 11 or any(not line.endswith(b"\n") for line in lines):
+        return False
+    content = [line[:-1] for line in lines]
+    if content[:8] != [
+        SHELL_ENTRY_BEGIN,
+        b"# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;",
+        b"# removed by --remove. Legacy prompt-reviewed posture: wrapper root",
+        b"# containment + hardened wrapper mode + enforced claude sandbox.",
+        b"codex-triad() {",
+        b'  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\',
+        b"  TRIAD_WRAPPER_" + b"HARDENED=1 \\",
+        b"  TRIAD_CLAUDE_" + b"ENFORCE_SANDBOX=1 \\",
+    ] or content[9:] != [b"}", SHELL_ENTRY_END]:
+        return False
+    match = re.fullmatch(
+        rb'    command codex --profile ([A-Za-z0-9][A-Za-z0-9._-]*) --search "\$@"',
+        content[8],
+    )
+    return match is not None
+
+
 def update_shell_entry(path: Path) -> str:
     """Remove the exact frozen managed shell block from one captured RC."""
     before, span = _shell_entry_state(path)
@@ -1842,7 +1897,7 @@ def update_shell_entry(path: Path) -> str:
             return "unmanaged"
         return "absent"
     managed = existing[span[0] : span[1]]
-    if hashlib.sha256(managed).hexdigest() != FROZEN_SHELL_ENTRY_SHA256:
+    if not _historical_shell_entry_is_managed(managed):
         return "unmanaged"
 
     transformed = _shell_entry_base(before, span)
@@ -2014,11 +2069,17 @@ def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
     agents = parsed_config(base, config).get("agents", {})
     if not isinstance(agents, dict):
         raise Refusal(f"could not parse {config}")
+    analyzer_unmanaged = analyzer_before is not None and not analyzer_is_managed(
+        analyzer_before
+    )
+    launcher_unmanaged = launcher_before is not None and not launcher_is_managed(
+        launcher_before
+    )
     if not managed_registration and NAME in agents:
         analyzer_before = None
-    elif analyzer_before is not None and not analyzer_is_managed(analyzer_before):
+    elif analyzer_unmanaged:
         analyzer_before = None
-    if launcher_before is not None and not launcher_is_managed(launcher_before):
+    if launcher_unmanaged:
         launcher_before = None
     return RepairRemovePlan(
         config=config,
@@ -2027,6 +2088,8 @@ def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
         config_before=config_before,
         analyzer_before=analyzer_before,
         launcher_before=launcher_before,
+        analyzer_unmanaged=analyzer_unmanaged,
+        launcher_unmanaged=launcher_unmanaged,
         base=base,
         managed_registration=managed_registration,
         original_config_existed=original_config_existed,
@@ -2040,6 +2103,16 @@ def preflight_remove(args: argparse.Namespace) -> None:
 
 def remove(args: argparse.Namespace) -> None:
     plan = prepare_remove(args)
+    if plan.analyzer_unmanaged:
+        print(
+            f"[warning] preserving unmanaged repair analyzer: {plan.analyzer}",
+            file=sys.stderr,
+        )
+    if plan.launcher_unmanaged:
+        print(
+            f"[warning] preserving unmanaged repair apply launcher: {plan.launcher}",
+            file=sys.stderr,
+        )
     journal: list[Mutation] = []
     temps: list[Staged] = []
     failure: BaseException | None = None
