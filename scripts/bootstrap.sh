@@ -484,7 +484,7 @@ PY
     done <<EOF
 $workspace_guard_output
 EOF
-    fail "invariant: policy-matched launchers and everything they exec must live outside all sandbox-writable roots; run bootstrap from a directory that does not contain the install targets, or point the TRIAD_BOOTSTRAP_* / CODEX_HOME overrides outside this workspace"
+    fail "invariant: the constructed-launcher trust boundary requires launchers and everything they exec to live outside all sandbox-writable roots; run bootstrap from a directory that does not contain the install targets, or point the TRIAD_BOOTSTRAP_* / CODEX_HOME overrides outside this workspace"
   fi
 }
 
@@ -567,8 +567,8 @@ PY
 
 # check_local_writable_agent_residual — SEC-2 preflight (read-only,
 # NON-fatal — only ever calls warn, never fail; mutates nothing). Co-located
-# with check_legacy_sandbox_config / check_duplicate_selectors, canonicalized
-# CODEX_HOME, using the shared read_plugin_selectors tomllib reader.
+# with the duplicate-selector preflight, canonicalized CODEX_HOME, using the
+# shared read_plugin_selectors tomllib reader.
 #
 # Confused-deputy write-capable discovery path: an ENABLED
 # `triad-codex-dispatch@*-local` selector makes codex discover every agent
@@ -626,10 +626,10 @@ EOF
 }
 
 # check_duplicate_selectors — DIST-1 preflight (read-only, NON-fatal — only
-# ever calls warn, never fail; mutates nothing). Co-located with
-# check_legacy_sandbox_config / check_local_writable_agent_residual,
-# canonicalized CODEX_HOME, using the shared read_plugin_selectors tomllib
-# reader. Counts ENABLED `triad-codex-dispatch@*` plugin selectors in
+# ever calls warn, never fail; mutates nothing). Co-located with the local
+# write-capable-agent residual check, canonicalized CODEX_HOME, using the
+# shared read_plugin_selectors tomllib reader. Counts ENABLED
+# `triad-codex-dispatch@*` plugin selectors in
 # config.toml; more than one enabled at once is a distribution hygiene
 # problem (a leftover local-dev registration alongside the real marketplace
 # one, or any other accidental duplicate) — warns naming every duplicate plus
@@ -706,7 +706,7 @@ EOF
 # Idempotent (a second --install finds nothing left to quarantine). Never
 # halts --install: a quarantine-dir-create or transaction failure just warns and
 # continues to the next name. Called AFTER the errors!=0 -> exit 1 preflight
-# gate and check_legacy_sandbox_config, BEFORE install_launchers.
+# gate and retained read-only preflights, BEFORE install_launchers.
 migrate_legacy_repair_agents() {
   for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
     agent_file="$CODEX_HOME/agents/$name.toml"
