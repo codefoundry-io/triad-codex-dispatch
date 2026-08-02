@@ -20,9 +20,9 @@ Fallback eligibility is limited to a no-final-summary numeric exit status `4`
 `agy start failed before request submission: stage=exec errno=` for a supported
 missing or unstartable executable. Any final summary proves post-dispatch
 handling and is fallback-ineligible. Missing or invalid `TRIAD_AGY_BIN` and a
-missing `agy` on `PATH` are fallback-ineligible route-setup errors in `0.2.532`;
-surface them so the owner can install or configure AGY or explicitly authorize
-a separate Google route.
+missing `agy` on `PATH` are fallback-ineligible route-setup errors under the
+current wrapper contract; surface them so the owner can install or configure
+AGY or explicitly authorize a separate Google route.
 Bootstrap reports a discovered `gemini` executable as a binary candidate only;
 it does not prove account tier, authentication, or model access. A successful
 preflight or dispatch in the owner's authenticated terminal confirms configured
@@ -90,9 +90,15 @@ runtime-exposed identity agrees with the requested Pro High route. Any
 alternative remains unselected until its fresh successful runtime probe
 confirms both conditions.
 
-For formal review, return the semantic fields required by the shared contract:
-`verdict`, `findings`, `affected_surfaces_inspected`, and `open_questions`.
-Markdown fences do not invalidate this non-Pydantic review route.
+For unbatched `formal-gate` compatibility only, return the semantic fields
+required by the shared contract: `verdict`, `findings`,
+`affected_surfaces_inspected`, and `open_questions`.
+Markdown fences do not invalidate this non-Pydantic compatibility route.
+
+For operational formal review, return one strict `BatchReceipt` per
+provider/batch under exact custody: persist and hash the exact original UTF-8
+response bytes at `<family>/<batch-id>.json`, then validate and admit them under
+the shared batched contract.
 
 Archive actual provider request acceptance for the exact outbound display label
 and archive provider identity when exposed. If identity telemetry is absent,
@@ -141,11 +147,13 @@ does not open the raw log.
 If no matching final summary exists, do not invent one: preserve the exact exit
 status and stderr and classify the invocation as an early wrapper failure. It is
 eligible for Gemini fallback only when numeric exit status `4`
-(`EXIT_BINARY_MISSING`) is paired with a
-wrapper-owned diagnostic proving missing/invalid `TRIAD_AGY_BIN`, missing `agy`
-on `PATH`, or `agy start failed before request submission: stage=exec errno=`.
-Every other no-summary failure is fallback-ineligible. Without a `run-log:` path, surface
-the early failure directly instead of fabricating a repair handoff.
+(`EXIT_BINARY_MISSING`) is paired with the wrapper-owned pre-submission
+diagnostic `agy start failed before request submission: stage=exec errno=` for
+a supported missing or unstartable executable. Every other no-summary failure
+is fallback-ineligible. Missing or invalid `TRIAD_AGY_BIN` and missing `agy` on
+`PATH` remain fallback-ineligible route-setup errors under the current wrapper
+contract. Without a `run-log:` path, surface the early failure directly instead
+of fabricating a repair handoff.
 An early `ok` followed by a corrected `extraction-error` is a failure:
 route the final `extraction-error` to repair. Surface terminal, schema,
 configuration, and capacity outcomes with their reported reason. Route only

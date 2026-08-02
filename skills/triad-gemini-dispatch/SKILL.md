@@ -23,8 +23,8 @@ Fallback eligibility requires a no-final-summary result, numeric exit status `4`
 `agy start failed before request submission: stage=exec errno=` for a supported
 missing or unstartable executable. Any final summary is post-dispatch and
 fallback-ineligible. Missing or invalid `TRIAD_AGY_BIN` and a missing `agy` on
-`PATH` are fallback-ineligible route-setup errors in `0.2.532`, not Gemini
-dispatch triggers.
+`PATH` are fallback-ineligible route-setup errors under the current wrapper
+contract, not Gemini dispatch triggers.
 
 Bootstrap can report only a `gemini` binary candidate. A Gemini preflight/dispatch
 in the owner's authenticated terminal confirms configured route availability

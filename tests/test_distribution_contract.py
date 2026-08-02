@@ -1487,6 +1487,55 @@ def test_provider_skills_use_final_process_state_for_corrected_extraction_failur
     assert "Any final summary proves post-dispatch" in agy_skill
 
 
+def test_agy_result_handling_limits_fallback_to_owned_exec_diagnostic() -> None:
+    result_handling = " ".join(
+        _heading_section(AGY_SKILL, "## Result handling").split()
+    )
+    eligibility = result_handling.split(
+        "It is eligible for Gemini fallback only when", 1
+    )[1].split("Every other no-summary failure", 1)[0]
+
+    assert "numeric exit status `4` (`EXIT_BINARY_MISSING`)" in eligibility
+    assert (
+        "agy start failed before request submission: stage=exec errno="
+        in eligibility
+    )
+    assert "TRIAD_AGY_BIN" not in eligibility
+    assert "missing `agy` on `PATH`" not in eligibility
+    assert (
+        "Missing or invalid `TRIAD_AGY_BIN` and missing `agy` on `PATH` remain "
+        "fallback-ineligible route-setup errors under the current wrapper contract"
+        in result_handling
+    )
+
+
+def test_agy_formal_output_distinguishes_operational_receipts_from_compatibility() -> None:
+    invocation = " ".join(
+        _heading_section(AGY_SKILL, "## Cross-family review invocation").split()
+    )
+
+    assert "For unbatched `formal-gate` compatibility only" in invocation
+    for field in (
+        "`verdict`",
+        "`findings`",
+        "`affected_surfaces_inspected`",
+        "`open_questions`",
+    ):
+        assert field in invocation
+    assert (
+        "For operational formal review, return one strict `BatchReceipt`" in invocation
+    )
+    assert "exact original UTF-8 response bytes" in invocation
+    assert "`<family>/<batch-id>.json`" in invocation
+
+
+def test_google_fallback_skills_use_timeless_wrapper_contract_wording() -> None:
+    for path in (AGY_SKILL, PROVIDER_SKILLS[2], REVIEW_ROUTING_REFERENCE):
+        text = " ".join(_text(path).split())
+        assert "in `0.2.532`" not in text
+        assert "under the current wrapper contract" in text
+
+
 def test_repair_protocol_keeps_run_log_opaque_for_native_child() -> None:
     protocol = _text(PROTOCOL)
 

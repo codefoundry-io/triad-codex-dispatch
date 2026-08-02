@@ -61,8 +61,9 @@ running tool handle is pending; wait for its terminal result. Any final summary
 is post-dispatch and fallback-ineligible.
 
 Missing or invalid `TRIAD_AGY_BIN` and missing `agy` on `PATH` are surfaced as
-fallback-ineligible route-setup errors in `0.2.532`. The owner installs or
-configures AGY, or explicitly authorizes a separate Google route. A
+fallback-ineligible route-setup errors under the current wrapper contract. The
+owner installs or configures AGY, or explicitly authorizes a separate Google
+route. A
 `permission-unavailable` required leg is invalid and post-dispatch, so it
 cannot activate Gemini in the same round. If neither authorized route is
 available, the required Google leg is unavailable and the formal round is
