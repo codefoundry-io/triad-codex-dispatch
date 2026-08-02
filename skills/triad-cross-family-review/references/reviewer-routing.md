@@ -110,11 +110,74 @@ contradiction is `CONFLICTED` and requires owner adjudication. A reviewer that
 modifies or executes candidate code invalidates that leg; a changed shared
 directory invalidates the round and requires a fresh complete review.
 
+Classify each verified claim before editing:
+
+- `REPRODUCED`: direct source contradiction or deterministic evidence inside
+  the approved design; the smallest bounded correction may proceed.
+- `REACHABLE_UNPROVEN`: the mechanism is reachable but the claimed failure is
+  not reproduced; gather evidence before code.
+- `OUT_OF_SCOPE_OR_SPECULATIVE`: the approved design or deployment boundary
+  excludes the claim; record it for the owner without implementation.
+- `DESIGN_CHANGE`: the claim requires a new capability, abstraction, protocol,
+  policy, or deployment assumption; stop for owner approval.
+
+A failed reproduction remains `REACHABLE_UNPROVEN` unless direct evidence
+establishes another class. Reviewer severity decides whether a claim blocks;
+leader triage decides whether code is authorized. Triage never converts a
+blocking result into a pass.
+When explicit reviewed bytes prove that the claimed trigger is absent or
+excluded by the approved boundary, classify it `OUT_OF_SCOPE_OR_SPECULATIVE`;
+otherwise retain `REACHABLE_UNPROVEN`. A refuted disposition is not a fifth
+triage label.
+
+After each complete valid three-family round, record one round state:
+
+- `CLEAN`: every required result is `SAFE` and no unresolved claim remains.
+- `CONVERGING`: the round adds a reproduced defect or independently confirms
+  one.
+- `OSCILLATING`: a resolved claim returns without material new evidence.
+- `OWNER_DECISION`: the remaining evidence gap or blocking residual requires
+  owner adjudication.
+
+Apply the states in this order: `CLEAN`; `OWNER_DECISION` when any remaining
+item requires the owner; `OSCILLATING` when no material new evidence remains;
+otherwise `CONVERGING` when reproduced evidence remains.
+Use these four labels only for the complete round; each claim retains its own
+triage and disposition label in the residual ledger.
+`CONFLICTED` is an item state for surviving incompatible claims. Route that
+item to the owner before continuing it; other verified items remain governed by
+their own triage. A round state records progress and never admits a result,
+releases a blocking verdict, or authorizes release.
+
+Keep the leader's residual ledger outside the immutable prepared directory and
+provider-response custody tree. When the standard run layout is present, use
+`_runs/reviews/<id>/residuals.md`. Identify a claim by its
+prepared-directory-relative path and trigger, and record its family, round,
+severity, triage, reproduction evidence, disposition, and direct conflict.
+Use this ledger rather than adding another receipt field, database, or service.
+
+Before implementing a `REPRODUCED` claim, stop for owner approval when the fix
+adds a runtime guard, fallback, retry, lock, validation layer, production
+dependency/configuration/public protocol, changes production paths outside the
+claim's impact closure, or exceeds 30 added-plus-removed non-generated
+production lines. The leader counts the logical-fix diff deterministically.
+Mechanically required callers/imports and files already listed in the approved
+implementation map remain inside the approved correction boundary.
+
+A malformed or truncated required result permits exactly one compact
+re-dispatch of that complete family across every batch, using the same evidence,
+route, objective, boundaries, and result profile in fresh contexts. Retain the
+original response bytes for custody, but do not combine old and replacement
+receipts for admission. A second malformed or truncated result leaves the
+required family invalid and the round invalid. Provider substitution and a
+two-family formal pass remain unavailable.
+
 ## Failure handling
 
 | Failure | Response |
 |---|---|
 | Reviewer asks for a packet | Point it to the shared review directory and scope |
 | Provider unavailable before submission | Preserve evidence and apply the Google fallback rules |
-| Required agy leg returns `truncated-answer` | Invalidate the leg and request a compact rerun; post-dispatch truncation does not permit Gemini fallback |
+| Required family result is malformed or truncated | Re-dispatch that complete family across every batch once with the same evidence and a compact-format reminder; a second failure invalidates the family and round |
+| Required agy leg returns `truncated-answer` | Apply the complete-family rule above; post-dispatch truncation does not permit Gemini fallback |
 | Commit, push, install, merge, or release is needed | Stop for separate owner authorization |

@@ -132,9 +132,12 @@ TRIAD retains:
 These controls validate data and result custody. They do not choose the
 developer's permission mode.
 
-The canonical-worktree fingerprint is an operational leader record, not a
-skill API or reviewer command. It SHA-256 hashes length-prefixed, tagged byte
-records in this order: current `HEAD`; full
+The canonical-worktree fingerprint remains a leader-only operation and is
+never a reviewer command. The evidence preparation and admission modules may
+invoke the same bounded read-only capture routine so the submitted diff is
+bound to the actual candidate state; this does not expose Git execution to
+provider legs or restore a general worktree API. The fingerprint SHA-256 hashes
+length-prefixed, tagged byte records in this order: current `HEAD`; full
 `GIT_OPTIONAL_LOCKS=0 git status --porcelain=v1 -z --untracked-files=all`;
 full staged and unstaged
 `git diff --binary --full-index --no-ext-diff`; then the NUL-sorted output of
@@ -160,6 +163,9 @@ The leader prepares one immutable review root:
 review-root/
 ├── <current approved production source, configuration, and documentation>
 └── change-evidence/
+    ├── CANDIDATE_STATE.json
+    ├── REQUIRED_SOURCE_BOUNDARY.json
+    ├── BATCH_RECEIPT.schema.json
     ├── CHANGESET.md
     ├── IMPACT_CLOSURE.tsv
     ├── PATCH_INDEX.tsv
@@ -173,7 +179,93 @@ review-root/
 The canonical non-symlink evidence directory is exactly
 `review-root/change-evidence`. Preparation, validation, and admission reject
 an external path, an alternate in-root path, or any symlinked component rather
-than excluding evidence from the immutable shared root.
+than excluding evidence from the immutable shared root. Preparation also
+requires that exact output leaf to be absent and rejects any pre-existing
+empty or non-empty directory, symlink, or non-directory with `evidence
+directory exists`. A failed partial preparation is never reused: the leader
+discards the entire leaf before retry. Validation and admission require the
+successfully prepared existing directory.
+
+The tracked repository `.gitignore` is an unchanged prerequisite input. Before
+creating the implementation branch, the leader runs `git check-ignore
+--no-index` over one exact `_runs/reviews/...` probe root and its candidate
+diff, closure TSV, receipt schema, required-source-boundary JSON, admission
+JSON, prepared root, and `prepared/change-evidence` leaf. All eight probes must
+resolve through the tracked `_runs/` rule. Failure stops implementation and
+requires a newly reviewed File Map change; success does not authorize or
+require an ignore-rule edit.
+
+`CANDIDATE_STATE.json` binds the evidence to one repository state. It is one
+compact sorted-key JSON object containing the exact full base commit, current
+`HEAD` commit, canonical-worktree fingerprint, and canonical full-diff
+SHA-256. Preparation accepts only a lowercase, repository-width full
+hexadecimal commit object ID that resolves as a commit and is an ancestor of
+current `HEAD`, resolves the enclosing canonical Git worktree from
+`review_root`, and requires the
+review root plus all leader inputs and outputs to be ignored by that worktree.
+It rejects every nonignored untracked entry so an added candidate path cannot
+fall outside the canonical diff silently.
+
+The canonical full diff is captured with `GIT_OPTIONAL_LOCKS=0`, a fixed C
+locale, `core.quotepath=true`, `diff.noprefix=false`,
+`diff.mnemonicPrefix=false`, exact `a/` and `b/` source/destination prefixes,
+disabled color, external diff, and text conversion, full binary indexes, fixed
+three-line context, the Myers algorithm with the indent heuristic disabled,
+and explicit 50-percent rename detection, from the exact base commit to the
+current tracked worktree state. These command-local settings override
+prefix-affecting user Git configuration. The caller-supplied diff must be byte-identical
+to that capture. Preparation rechecks the candidate fingerprint after writing
+the evidence leaf. Validation and final admission resolve the same enclosing
+worktree, recompute the candidate state and canonical diff, and reject any
+field, digest, byte, or fingerprint mismatch. The candidate-state artifact is
+included in the change-evidence digest and `MANIFEST.sha256`.
+
+Candidate-state equality does not by itself prove that a copied prepared
+source file equals its canonical-worktree counterpart. Preparation,
+validation, and admission therefore open every non-deleted closure path in
+both roots without following symlinks and require exact bytes, SHA-256, byte
+count, and `splitlines()` line count. Deleted closure paths are absent in both
+roots. This binds changed bytes outside visible hunks and all
+affected-unchanged sources to the reviewed candidate. A stale or miscopied
+prepared source invalidates the round before dispatch or admission. Every
+regular file below the review root outside `change-evidence` must be exactly
+one non-deleted closure path; an extra prepared regular file fails before
+output. Consequently all exposed production, configuration, documentation,
+build, and test context is candidate-bound rather than merely digest-stable.
+
+`BATCH_RECEIPT.schema.json` contains the exact canonical compact sorted-key
+JSON Schema emitted from the implementation's strict `BatchReceipt` model,
+plus one LF. The leader generates it before evidence preparation; preparation
+copies the exact ignored input bytes and binds the artifact into the
+change-evidence digest and manifest. Every batch prompt receives its prepared
+path as `batch_receipt_contract_path`. Admission regenerates the model schema
+and requires byte equality, so neither documentation prose nor a stale schema
+can substitute for the operational receipt contract. The schema CLI and final
+admission CLI publish only to canonical absolute Git-ignored output paths with
+no symlink leaf or ancestor. They validate custody before generation or
+evidence parsing. Schema preserves every existing target/referent on refusal
+and uses atomic replacement only after validation. Admission treats an
+existing leaf as owned only when it is exact canonical JSON for the strict
+prior admitted artifact. It removes only that verified prior leaf before
+current validation, preserves and rejects every foreign or symlinked target,
+leaves the canonical path absent on a later failure, and atomically publishes
+a fresh artifact only after admission.
+
+`REQUIRED_SOURCE_BOUNDARY.json` is the exact canonical compact sorted-key
+object `{"paths":[...],"roots":[...]}` plus LF. For this release its exact
+root is `tests/`, supplied by the approved no-exclusion project boundary. The
+leader builds its UTF-8-byte-sorted path list from the current candidate's raw
+NUL cached and worktree-deleted Git inventories: current paths are
+`git ls-files -z --cached -- <roots...>` minus
+`git ls-files -z --deleted -- <roots...>`. The leader records both inventory
+digests. Preparation, validation, and admission independently recompute the
+same deletion-aware current inventory, require every current tracked regular
+path once in both the prepared root and closure, and bind the copied contract
+into the manifest and change-evidence digest. Current unchanged tests use
+reserved reason `required-test-source` with
+`reached_from=owner-approved-no-exclusion-test-boundary`; changed tests retain
+their canonical changed row and staged or unstaged deleted tests remain diff
+evidence only.
 
 `CHANGESET.md` contains named machine-readable headers followed by a compact
 human summary:
@@ -262,6 +354,11 @@ required provenance fields, not a composite `(path, change_kind)` key.
 For decoded UTF-8 current source, `line_count` is exactly
 `len(text.splitlines())`. This gives zero for a zero-byte file and counts the
 last logical line consistently whether or not the file ends in a newline.
+Before computing it, preparation and validation reject U+000B, U+000C,
+U+001C, U+001D, U+001E, U+0085, U+2028, and U+2029 with stable
+`unsupported source line separator`. The accepted source model therefore has
+the same line boundaries as unified diffs and provider line references without
+adding a second line codec.
 
 Reasons use a small stable vocabulary:
 
@@ -276,14 +373,25 @@ Reasons use a small stable vocabulary:
 - `build-consumer`;
 - `runtime-entrypoint`;
 - `lifecycle`;
-- `error-path`; or
-- `owner-approved-project-edge`.
+- `error-path`;
+- `owner-approved-project-edge`; or
+- `required-test-source` (reserved for the owner-approved no-exclusion test
+  boundary defined above).
 
 The vocabulary records why a path is present. It does not attempt to implement
 a universal static analyzer.
 
-Each batch manifest lists the affected source paths, their complete canonical
-`patch_id` set where applicable, content digests, byte counts, and line counts.
+Each `batches/<batch-id>.tsv` manifest has the exact ordered header
+`path\treason\tchange_kind\tcontent_sha256\tbyte_count\tline_count\tpatch_ids\timpact_edge_ids`.
+It contains exactly one row per source path assigned to that batch, with no
+duplicates, sorted by UTF-8 path bytes. `patch_ids` and `impact_edge_ids` are
+comma-separated canonical ID lists in sorted order, use `-` for an empty list,
+and canonical IDs never contain commas. Every row's assignment equals the same
+path's `batch_id` in `IMPACT_CLOSURE.tsv`.
+
+The manifest therefore lists the affected source paths, their complete
+canonical `patch_id` set where applicable, content digests, byte counts, line
+counts, and impact-edge IDs.
 An oversized source receives one single-path batch and remains a complete file;
 there is no source-shard or symbol-boundary protocol. Provider file-read ranges
 may bound individual tool outputs, but all ranges remain required. Batching
@@ -293,29 +401,66 @@ never samples lines or omits low-risk files.
 
 The leader performs these bounded preparation actions:
 
-1. Capture the canonical status and diff once.
-2. Add every changed file and hunk as a seed.
-3. Trace the seed through affected unchanged production code using the
+1. Resolve the exact base commit, capture the canonical candidate state and
+   full diff once, and prove the supplied diff is byte-identical.
+2. Generate the canonical strict `BatchReceipt` schema and bind its exact
+   bytes into the evidence directory.
+3. Add every changed file and hunk as a seed.
+4. Trace the seed through affected unchanged production code using the
    project's instructions, language-aware read-only tools, source search,
    build metadata, schemas, registrations, and runtime configuration.
-4. Record each reached path and edge in `IMPACT_CLOSURE.tsv`.
-5. Expand uncertain dynamic edges conservatively to the containing module or
+5. Record each reached path and edge in `IMPACT_CLOSURE.tsv`, then prove every
+   non-deleted prepared closure byte equals the canonical-worktree path.
+6. Expand uncertain dynamic edges conservatively to the containing module or
    production root.
-6. Stop with an open question when reflection, generated registration,
+7. Stop with an open question when reflection, generated registration,
    runtime discovery, or a missing project boundary prevents a defensible
    closure.
-7. Partition the complete closure deterministically by size and semantic
+8. Partition the complete closure deterministically by size and semantic
    boundaries.
-8. Record the source-tree and change-evidence digests before dispatch.
+9. Record the source-tree and change-evidence digests before dispatch.
 
-`prepare_review_evidence` and `validate_review_evidence` fail when a parsed
-diff target lacks a `reason=changed` closure row or when a changed closure row
-lacks a diff section. They also reject NUL, LF, CR, and TAB in `path` and
-`reached_from` before TSV emission. Git-quoted diff fields are decoded only far
-enough to detect and reject those controls; no reversible generic field codec
-is introduced. Spaces, quotes, backticks, and literal `$()` remain inert data
-and execute nothing. This intentional `0.2.532` input limit never silently
-omits a path or admits partial coverage.
+`prepare_review_evidence` and `validate_review_evidence` fail when candidate
+state cannot be reproduced, the supplied diff is a subset or other mismatch,
+a parsed diff target lacks a `reason=changed` closure row, or a changed closure
+row lacks a diff section. They also reject NUL, LF, CR, and TAB in `path`,
+`reached_from`, and every `previous_path` other than `-` before TSV emission.
+Both old- and new-side Git-quoted diff fields are decoded only far enough to
+detect and reject those controls; no reversible generic field codec is
+introduced. Spaces, quotes, backticks, and literal `$()` remain inert data and
+execute nothing. The hostile-path test matrix includes renamed old-side paths
+containing each of NUL, LF, CR, and TAB and requires the stable rejection
+before any TSV output. This intentional `0.2.532` input limit fails with the
+stable `non-UTF-8 source` diagnostic for any non-deleted current source and
+with stable `unsupported source line separator` for the explicitly unsupported
+decoded separators above; it never silently omits a path or admits partial
+coverage.
+
+A non-regular or symlinked prepared closure source fails during the prepared-
+source comparison with `prepared source differs from candidate`, before
+candidate-state recomputation. During validation and admission, the earlier
+source-tree digest walk maps a symlink at a declared closure path to that same
+diagnostic without following the referent. There is no competing `regular
+file` diagnostic for this case. An unlisted prepared regular source fails with
+the distinct stable `prepared file lacks closure row` diagnostic.
+
+Validation uses one stable precedence for overlapping mutations: first verify
+the persisted evidence and source digests against the prepared bytes, then
+compare every prepared closure byte with the canonical candidate worktree,
+then recompute and compare the complete candidate state. Tests for those three
+diagnostics mutate, respectively, a prepared closure source, a stale prepared
+copy before manifest completion, and a tracked non-closure candidate file.
+This ordering makes `source digest mismatch`, `prepared source differs from
+candidate`, and `candidate state mismatch` independently reachable without
+weakening any later check.
+
+The operational evidence CLI invokes these same preparation and validation
+interfaces by absolute script and input paths, independent of cwd. Successful
+`prepare` and subsequent `validate` calls emit the same deterministic compact
+JSON summary only after the artifact validates. Argument, canonical-path, or
+`EvidenceError` failures emit no success JSON or completed manifest and
+terminate with the documented stable diagnostic contract. Any partial output
+leaf is invalid and discarded before retry.
 
 The implementation supplies deterministic inventory, manifest, digest, and
 batching utilities. It does not claim language-independent impact discovery.
@@ -326,6 +471,12 @@ tracing.
 
 Every family receives the same review root, objective, complete batch list, and
 evidence digests.
+
+The shared prompt also retains its simple `content_digest` for whole
+review-directory custody and pre/post mutation comparison. The batched route
+adds `source_tree_digest`, `change_evidence_digest`, batch metadata, and the
+strict receipt contract; the simple digest never substitutes for those
+machine-admitted evidence bindings.
 
 | Required family | Batch 1 | Batch 2 | Batch 3 | All later batches |
 |---|---:|---:|---:|---:|
@@ -380,31 +531,56 @@ changed hunk or recorded impact edge relevant to that path, and the reviewer's
 disposition.
 `source_observation` is a 1-160 character exact substring of the UTF-8 logical
 line named by `observation_line`; when that line has at least eight characters,
-the observation has at least eight. It is never written into
+the observation has at least eight, and it contains at least one
+non-whitespace character whenever the source contains any non-whitespace
+character. It is never written into
 reviewer-visible manifests. A non-empty whitespace-only source retains its
 full line range but uses empty observation text only when validation proves it
 has no non-whitespace character. A zero-byte current source uses
 `observation_line=None`, empty observation text, and
 `line_start=line_end=None`. Deleted paths retain patch evidence but require no
-current-source observation or line range.
+current-source observation or line range: they encode
+`source_observation=""`, `observation_line=None`, `line_start=None`,
+`line_end=None`, and empty `symbols`.
+
+For each receipt, the ordered `path_evidence.path` tuple and the ordered
+`affected_surfaces_inspected` tuple each equal exactly the source-path tuple
+assigned by that receipt's `batch_id`. Missing, extra, out-of-batch, reordered,
+or duplicated paths invalidate the receipt. Canonical patch artifacts are
+evidence for their assigned source path, not additional inspected-surface
+entries. Consequently one batch cannot carry another batch's evidence while
+an empty receipt satisfies the required file matrix.
 
 For a changed current source containing at least one non-whitespace character
-and at least one current line outside all validated new-side hunk ranges,
-`observation_line` must name one of those outside-hunk lines. The
+and at least one current line with a non-whitespace character outside all
+validated new-side hunk ranges, `observation_line` must name one of those
+non-whitespace outside-hunk lines. The
 validator-proven whitespace-only exception takes precedence and keeps
-`observation_line=None`. If the canonical patch hunks cover every current line,
-the patch artifact already contains the complete current source and a
-patch-derivable observation is allowed. This exception is explicit evidence
-that the whole source was present in the patch, not a claim that patch-only
-inspection generally proves full-file review. A receipt built only by echoing
-manifest and index fields is otherwise uncovered.
+`observation_line=None`. If no line outside the canonical patch hunk ranges
+contains a non-whitespace character, including when outside lines are
+whitespace-only but non-empty, the patch artifacts contain every current line
+that can supply a valid non-whitespace observation and a patch-derivable
+observation is allowed because no valid outside-hunk substring exists. This
+exception is explicit evidence for the only observable source content that
+can satisfy the observation contract, not a claim that patch-only inspection
+generally proves full-file review. A receipt built only by echoing manifest
+and index fields is otherwise uncovered.
+
+The `batched-full-coverage` prompt repeats these exact observation length,
+non-whitespace, outside-hunk, zero-byte, whitespace-only, and patch-derived
+exception rules. The JSON Schema's structural bounds alone are not sufficient
+provider instructions; prompt generation and receipt validation must share the
+same semantic contract.
 
 `PathEvidence` retains per-path `changed_hunks` and
 `verified_impact_edges`; there is no redundant top-level
 `verified_impact_edges` promise. Each receipt's `changed_hunks` set must
-exactly equal the canonical `patch_id` set for its path. Each receipt's
-`verified_impact_edges` set must exactly equal the expected `impact_edge_id`
-set. Omitted, extra, duplicated, and forged IDs are invalid.
+exactly equal the canonical `patch_id` set for its path. A resolved
+affected-unchanged receipt's `verified_impact_edges` set must exactly equal the
+expected `impact_edge_id` set. An unresolved affected-unchanged receipt may
+contain any subset of expected IDs; the absent verification is represented by
+its unresolved disposition and matching `unresolved_paths` entry, both of
+which block admission. Extra, duplicated, and forged IDs are always invalid.
 Changed rows must have an empty `verified_impact_edges`; affected-unchanged
 rows must have an empty `changed_hunks`. Deleted and renamed rows follow their
 canonical patch-ID sets rather than admitting arbitrary IDs.
@@ -428,9 +604,17 @@ family/batch-specific result path and passes those paths to
 either raw JSON or exactly one outer Markdown fence whose optional info string
 is `json`. For envelope detection it trims only outer ASCII whitespace; the
 opening line is exactly three backticks or three backticks plus `json`, the
-closing line is exactly three backticks, and the inner payload contains no
-fence token. Only the extracted inner bytes are passed to strict JSON
-validation. Leading or trailing prose, nested or multiple fences, a missing
+final non-whitespace line is exactly three backticks, and only the bytes
+between those complete outer lines are extracted. Triple backticks inside the
+inner JSON bytes are allowed because they may be ordinary string content; the
+parser does not scan for them as fence tokens. Before strict Pydantic
+validation, the extracted inner bytes receive one validation-only
+standard-library JSON pass whose `object_pairs_hook` rejects a duplicate member
+name at every object depth. The decoded value is discarded; the same original
+inner bytes are then passed to strict Pydantic JSON validation so JSON tuple
+fields retain strict JSON-mode semantics. Leading or trailing prose, nested or
+multiple top-level fence
+envelopes, a missing
 field, or a family/batch mismatch is invalid. This deterministic outer-fence
 step preserves the repository's observed AGY fence tolerance without adding
 wrapper repair or changing response custody. Fresh Codex terminal text follows
@@ -441,7 +625,27 @@ The operational admission command consumes the validated evidence directory
 and an exact receipt tree of `<family>/<batch-id>.json`, rejects missing and
 extra receipt files, and atomically emits the sole machine-admissible
 `coverage-admission.json`. A prose summary or manually assembled family result
-cannot replace this command.
+cannot replace this command. Its output path is absolute, Git-ignored,
+non-symlinked, and outside the immutable prepared review root; violating that
+custody boundary fails before validation or writing. The artifact uses one
+recursive strict wire schema: the exact four CandidateState fields; each exact
+FamilyCoverage field (`family`, receipt digests, covered paths, consolidated
+findings, unresolved paths, open questions, inspected surfaces, and verdict);
+and the exact CoverageAdmission fields (format version, candidate state,
+source-tree digest, change-evidence digest, admission boolean, and family
+coverages). Every wire model forbids extra fields and uses strict validation.
+The sole serializer dumps that validated wire value with UTF-8, non-ASCII
+preservation, non-finite-number rejection, sorted keys, compact separators,
+and exactly one final LF. An existing leaf is owned only after duplicate-key
+rejection, strict recursive wire parsing, `admitted=true`, and byte-identical
+reserialization through that sole serializer; pretty, reordered, missing,
+extra, duplicate-member, or otherwise noncanonical regular files are foreign
+and preserved. The artifact contains the revalidated format version, complete
+CandidateState, source-tree digest, change-evidence digest, admission boolean,
+and family coverages. The command exits nonzero and leaves
+no artifact for a non-admitted result. Release gating requires the artifact's
+bindings to match the immediately revalidated evidence and all three family
+coverages to be `SAFE` with no unresolved path or question.
 Receipt schema enforcement is offline. Original response bytes are the custody
 and receipt-digest source; only the deterministic optional outer-fence removal
 precedes strict JSON parsing. Wrappers do not add an in-band Pydantic repair
@@ -465,15 +669,28 @@ A formal result is admissible only when:
   validated source observation absent from reviewer-visible manifests, except
   that a validator-proven non-empty whitespace-only source keeps its full
   range with no observation and a zero-byte current source has neither;
-- every covered path has the expected content digest;
+- every covered path's receipt `content_sha256` exactly equals its closure
+  `content_sha256`; a deleted row's expected value is the SHA-256 of empty
+  bytes;
 - every recorded impact edge is either verified or produces an unresolved
   question;
 - no family reports a missing batch or unresolved path;
 - the three families used the same source-tree and change-evidence digests;
+- the prepared receipt contract exactly equals the current canonical strict
+  `BatchReceipt` model schema and is included in the evidence digest;
+- validation at admission reproduces the exact base commit, `HEAD`, canonical
+  diff, and candidate-state fingerprint recorded by preparation;
+- every non-deleted prepared closure source still exactly equals the same
+  canonical candidate-worktree path;
 - the review-root digest and canonical-worktree fingerprint remain unchanged;
 - the leader independently reproduces material caller, consumer, schema,
   configuration, and build relationships; and
 - the existing finding, severity, evidence, and verdict contract passes.
+
+The release consumes only the successful machine-emitted
+`coverage-admission.json` carrying those exact candidate and evidence
+bindings. Receipt prose or a manually reconstructed summary cannot satisfy
+this condition.
 
 `SAFE` is impossible when findings include Critical or Major, any receipt is
 `NOT-SAFE`, or any unresolved path or open question exists. For current source,
@@ -499,6 +716,72 @@ start a fresh complete round over the corrected identical evidence.
 
 `SAFE` is unavailable for sampled, partial, unresolved, digest-mismatched, or
 family-partitioned coverage.
+
+## Round convergence, triage, and correction scope
+
+The leader classifies claims only after non-mutating verification against the
+canonical worktree:
+
+- `REPRODUCED`: direct source contradiction or deterministic evidence inside
+  the approved design;
+- `REACHABLE_UNPROVEN`: a reachable mechanism whose claimed failure has not
+  been reproduced;
+- `OUT_OF_SCOPE_OR_SPECULATIVE`: excluded by the approved design or deployment
+  boundary; and
+- `DESIGN_CHANGE`: a new capability, generalized abstraction, protocol,
+  policy, or deployment assumption.
+
+A failed reproduction remains `REACHABLE_UNPROVEN` unless direct evidence
+establishes another class. Reviewer severity controls blocking; leader triage
+controls whether code is authorized. Triage never converts a blocking result
+into `SAFE`.
+When explicit reviewed bytes prove that the claimed trigger is absent or
+excluded by the approved boundary, the claim is
+`OUT_OF_SCOPE_OR_SPECULATIVE`; otherwise a failed reproduction remains
+`REACHABLE_UNPROVEN`. A refuted disposition is not a fifth triage class.
+
+After a complete valid three-family round, the leader records exactly one
+round state:
+
+- `CLEAN`: every required result is `SAFE` and no unresolved claim remains;
+- `CONVERGING`: the round adds or independently confirms a reproduced defect;
+- `OSCILLATING`: a resolved claim returns without material new evidence; or
+- `OWNER_DECISION`: the remaining evidence gap or blocking residual needs
+  owner adjudication.
+
+Apply the states in this order: `CLEAN`; `OWNER_DECISION` when any remaining
+item requires the owner; `OSCILLATING` when no material new evidence remains;
+otherwise `CONVERGING` when reproduced evidence remains.
+`CONFLICTED` is an item state for surviving incompatible claims rather than a
+competing round label. Round and item states are leader records only. They do
+not admit coverage, release a blocking verdict, or authorize implementation,
+merge, or release. A refutation or owner decision never rewrites an old receipt
+as `SAFE`. A fresh complete round may follow corrected candidate bytes or
+material new digest-bound evidence.
+
+The residual ledger is leader-owned and stays outside the immutable
+`review-root` and provider-response custody tree. The default location is
+`_runs/reviews/<id>/residuals.md`. Its stable claim identifier is the pair of
+review-relative finding path and trigger. Each entry records the originating
+family and round, severity, leader triage, reproduction evidence, disposition,
+and direct conflict. The ledger adds no receipt field, database, service, or
+machine-admission input.
+
+Even for a `REPRODUCED` claim, the leader stops for owner approval when the
+proposed correction:
+
+- adds a runtime guard, fallback, retry, lock, or validation layer;
+- adds a production dependency, configuration, environment, or public-protocol
+  surface;
+- changes production paths outside the claim's impact closure except
+  mechanically required caller or import updates; or
+- exceeds 30 added-plus-removed non-generated production lines for one logical
+  fix.
+
+The leader measures the logical-fix production diff deterministically rather
+than asking a reviewer to count it. Files already present in the approved File
+Map remain inside the approved correction boundary. These conditions request
+owner review; they are not automatic rejection rules.
 
 ## Token and context policy
 
@@ -539,7 +822,23 @@ rules, read-only Custom Agents, or migration fragments that make TRIAD a
 permission controller. Upgrade cleanup removes only exact plugin-owned
 artifacts whose marker and expected content identify them. It preserves
 owner-authored settings, rules, permission profiles, credentials, and unrelated
-files.
+files. The same exact cleanup runs on install and remove through the retained
+remove-only repair routes; no inspection/preflight policy surface is added.
+Exact 0.2.531 managed profile and shell-entry bytes are removed, foreign or
+edited legacy artifacts are preserved and reported, and unsafe non-regular or
+linked targets are refused without following or mutation. Legacy cleanup tests
+use frozen prior-version fixtures rather than retained production generators.
+Provider launchers keep the install-resolved classifier path. The retired
+apply launcher is replaced by a bootstrap-printed, shlex-safe owner argv that
+invokes `bin/apply_patch.py` with required explicit
+`--classifier-file <same-absolute-path>` through the trusted login-shell
+Python boundary. The owner apply path never recomputes a classifier default
+from a fresh shell, and public guidance no longer claims an installed apply
+launcher.
+The shipped plugin prompt selects `batched-full-coverage` for the operational
+pre-merge gate and reserves `formal-gate` for the unbatched compatibility
+formal-plan route; the prompt cannot describe the compatibility profile as the
+0.2.532 coverage-admissible gate.
 
 The security guide describes the remaining authorization, data, executable,
 digest, mutation, and result-custody boundaries without claiming provider or OS
@@ -550,6 +849,15 @@ sandbox enforcement.
 Removing the wrapper `--sandbox` interface is an intentional breaking change.
 The release notes map old invocations to native-mode invocations and explain
 that permission selection now belongs to the provider's user/project settings.
+
+Narrowing ordinary Gemini fallback is also an intentional breaking change.
+A missing or invalid `TRIAD_AGY_BIN` and a missing `agy` on `PATH` remain
+early route-setup failures but no longer authorize fallback. They are surfaced
+directly so the owner can install/configure AGY or explicitly authorize a
+separate Google route. Only the no-final-summary `EXIT_BINARY_MISSING` plus
+wrapper-owned pre-submission `PtyStartError(stage="exec", errno in the
+supported missing/unstartable set)` proof remains fallback-eligible. The
+release notes and migration guidance name this removed ordinary-path behavior.
 
 Legacy sealed-packet arguments remain available only to their existing explicit
 compatibility callers. They do not become an active worktree-review
@@ -573,6 +881,7 @@ The round stops or becomes invalid on:
 - unavailable required family;
 - missing batch receipt;
 - affected-path or impact-edge coverage gaps;
+- candidate base, diff, fingerprint, or untracked-state mismatch;
 - source or evidence digest mismatch;
 - review-root or canonical-worktree mutation;
 - provider route or result-profile mismatch; or
@@ -616,11 +925,40 @@ Implementation follows test-driven development.
 
 ### Evidence RED/GREEN tests
 
+- GREEN prerequisite: the tracked `.gitignore` and eight exact nonexistent-path
+  `git check-ignore --no-index` probes prove all planned review artifacts are
+  ignored before implementation begins.
+- RED/GREEN: real subprocess calls to the absolute evidence CLI prove both
+  `prepare` and `validate`, cwd independence, deterministic success JSON and
+  exit behavior, canonical evidence-child enforcement, and failure before a
+  successful artifact exists.
 - RED: a visual-only group summary permits divergent group-count
   interpretation.
+- RED: a caller-supplied diff that omits one real changed source from the
+  canonical base-to-worktree diff is rejected before evidence completion.
+- GREEN: hostile user `diff.noprefix`, mnemonic-prefix, source-prefix, and
+  destination-prefix configuration cannot change canonical `a/` and `b/`
+  diff headers or patch IDs.
+- RED: a symbolic/unknown base, nonignored untracked entry, nonignored review
+  root, or post-prepare candidate mutation invalidates preparation or
+  admission.
+- RED: a changed prepared source with a stale outside-hunk byte and an
+  affected-unchanged prepared source copied from stale bytes are both rejected
+  against the canonical candidate worktree.
+- RED/GREEN: the receipt schema CLI emits one canonical model-derived
+  contract; a symlinked, malformed, noncanonical, stale, or substituted
+  contract fails preparation or admission, while the accepted bytes are
+  digest- and manifest-bound.
 - GREEN: named fields are required and validated.
 - GREEN: 1,200 synthetic patch shards and a roughly ten-megabyte diff produce
   deterministic indexes, batches, and manifests.
+- GREEN: every batch manifest has the exact normative header, one UTF-8
+  path-byte-sorted row per assigned source, sorted comma-separated canonical
+  ID lists or `-`, and no duplicate or cross-batch path.
+- RED: invalid UTF-8 in a changed or affected-unchanged current source fails
+  with `non-UTF-8 source` before a completed manifest exists.
+- RED: every unsupported non-LF source line separator fails with
+  `unsupported source line separator` before a completed manifest exists.
 - GREEN: paths containing spaces, quotes, backticks, and literal `$()` remain
   data and execute nothing; newline and tab pathnames fail closed.
 - GREEN: every changed and affected path appears once in the closure and in
@@ -640,13 +978,20 @@ Implementation follows test-driven development.
   validation.
 - RED: an external, alternate, or symlinked evidence directory is rejected by
   preparation, validation, and admission.
-- RED: omitted, extra, duplicated, and forged changed-hunk and impact-edge IDs
-  are rejected.
+- RED: omitted changed-hunk IDs and omitted resolved impact-edge IDs are
+  rejected; extra, duplicated, and forged IDs are rejected for every
+  disposition.
+- GREEN: an unresolved affected path may omit only its expected unverified
+  edge, but its unresolved disposition and path still make admission false.
 - GREEN: an echoed path without a valid source observation, exact full-file range,
   and hunk/edge evidence is rejected as uncovered.
+- RED: an all-whitespace observation from a source containing non-whitespace
+  content is rejected; only a validator-proven whitespace-only source uses the
+  empty/content-free exception.
 - RED: a partial-file changed path whose observation is derived from a visible
-  hunk is rejected; when validated hunks cover every current line, the
-  patch-derived observation exception is admitted.
+  hunk is rejected when a non-whitespace outside-hunk line exists; when every
+  outside-hunk line is empty or whitespace-only, the patch-derived observation
+  exception is admitted.
 - GREEN: a validator-proven zero-byte current source uses no line range or
   observation, while a non-empty whitespace-only source still carries its
   complete line range and remains exempt from the outside-hunk observation.
@@ -656,14 +1001,30 @@ Implementation follows test-driven development.
   receipt-local path-mapped findings or unresolved paths are rejected; a
   finding that maps only to another batch is also rejected.
 - GREEN: raw and single-outer-fenced JSON receipts share strict schema
-  validation while prose-wrapped and multiple-fence responses remain invalid;
-  receipt digests always use the original bytes.
+  validation, triple backticks inside JSON string values remain data, and
+  prose-wrapped or multiple-top-level-fence responses remain invalid; receipt
+  digests always use the original bytes.
+- RED: conflicting duplicate JSON members at the receipt top level or inside
+  path evidence or findings are rejected before Pydantic admission without
+  replacing the original-byte custody digest.
 - GREEN: a missing path, missing batch, digest mismatch, or newly discovered
   affected path invalidates the round.
+- RED: otherwise complete receipt matrices with a `NOT-SAFE` verdict,
+  Critical/Major finding, or open question do not admit and emit no gate
+  artifact.
+- RED: a forged or stale per-path receipt digest, including a non-empty digest
+  for a deleted row, is rejected against the validated closure digest.
 - GREEN: an oversized source receives one complete single-path batch.
 - RED: malformed, out-of-closure, out-of-range, and digest-mismatched finding
   locations are rejected.
 - GREEN: the receipt-tree CLI is the only path that emits an admitted result.
+- GREEN: admission output reparses through the exact recursive wire schema and
+  reserializes byte-for-byte as compact sorted-key UTF-8 plus one LF; valid but
+  noncanonical, nested-extra, missing, and duplicate-member existing files are
+  preserved as foreign.
+- GREEN: the emitted admission artifact carries the exact revalidated
+  CandidateState plus source/change digests; tampering any binding or omitting
+  any `path_evidence` entry fails closed.
 - GREEN: cheap native transport spikes prove Claude, Google, and fresh Codex
   can return the same exact source observation without candidate execution or
   mutation; provider-specific read mechanics do not change the common task.
@@ -703,6 +1064,16 @@ A reviewer finding never authorizes the second category. This classification,
 plus the non-goals below, is the overimplementation breaker for both rounds and
 for every task review between them.
 
+Intermediate GREEN gates respect file ownership and sequencing. Permission
+controller retirement and skill-contract tasks run focused tests over only the
+production files they own. Tests whose assertions span README, SECURITY,
+CHANGELOG, or current status documents are rewritten only in the public
+documentation task after those bytes change, followed by the complete
+distribution suite. The unchanged formal-routing verification ledger remains
+included as historical review input because shared-directory and R14
+preservation tests read it; no earlier task edits public/status bytes merely to
+force a premature full-suite pass.
+
 ## Release boundary
 
 The intended package version is `0.2.532`.
@@ -712,6 +1083,24 @@ fresh-session success claim occurs only after its corresponding verification
 gate passes. A native AGY permission denial keeps the three-family formal gate
 incomplete; the release does not silently fall back to the old dangerous
 bypass.
+
+Local workspace autonomy and implementation/install approval do not authorize
+external publication. Before push or PR creation, the leader requires explicit
+owner authorization for the exact repository and branch and read-only verifies
+the `origin` URL, GitHub repository identity, and current branch. Merge, tag,
+and release publication require their own explicit authorization after checks
+pass. A missing authorization stops with a verified local candidate rather
+than mutating remote state.
+
+The release-candidate commit freezes every tracked byte before the complete
+local suite, hostile proof, pre-merge batched full-coverage review, machine
+admission, and install proof. Those post-commit facts are recorded below ignored
+`_runs/releases/0.2.532/`, including the generated PR body, rather than being
+appended to tracked release notes or current-state documents. Any tracked edit
+after the freeze creates a new candidate commit and requires the complete
+verification and three-family admission again. Merge/tag/release URLs remain
+external handoff evidence unless a later documentation-only change receives
+its own review.
 
 ## Non-goals
 

@@ -12,12 +12,12 @@ Every leg receives the same directory and task. No prompt inlines a diff or file
 body.
 
 Formal plan and pre-merge review excludes test source only when the project
-instructions or the owner supply exact test-source exclusions. If those
-exclusions are unavailable, stop and ask the owner; never infer them. Only the
-exact test-source roots supplied by project instructions or the owner are
-physically absent from the shared directory. If exact roots are unavailable,
-stop and return an open question; never infer roots. Normal
-SDD implementation review includes relevant test source. Before a formal gate,
+instructions or the owner supply exact test-source exclusions. Only the exact
+test-source roots supplied by project instructions or the owner are physically
+absent from the shared directory. If exact roots are unavailable, stop and
+return an open question; stop and ask the owner before dispatch, and never
+infer roots. Normal SDD implementation review includes relevant test source;
+here SDD means software-development delivery. Before a formal gate,
 classify every test failure as production defect, test-case defect, or
 intentional specification change and resolve or approve it.
 
@@ -30,7 +30,9 @@ intentional specification change and resolve or approve it.
 | Scope | Approved production source, configuration, and documentation; exact exclusions are supplied by the project or owner |
 | Containment | Read-only inspection; no candidate code, test, build, hook, or script execution |
 | Consistency | One simple content digest recorded before dispatch and compared after all legs terminate |
+| Depth | Every leg checks the complete assigned scope and returns the selected evidence profile; zero findings is valid only with complete evidence |
 | Admission | Non-formal modes use their exact selected result profile; `formal-gate` requires four semantic result elements, evidence-backed findings, and a verdict |
+| Convergence | The leader verifies and classifies claims; round labels never override admission |
 
 ## Authorization and preparation
 
@@ -45,12 +47,11 @@ paths are excluded.
 
 The leader freezes that directory before dispatch. It must contain the current
 approved production source, configuration, and documentation relevant to the
-decision—not a diff pasted into a prompt. Only the exact test-source roots
-supplied by project instructions or the owner are physically absent. If exact
-roots are unavailable, stop and return an open question; never infer roots. The leader states the review kind, objective,
-reviewer perspective, and any exact test-source exclusions supplied by project
-instructions or the owner. If the boundary cannot be established, stop and ask
-the owner.
+decision—not a diff pasted into a prompt. Test-source handling follows the
+formal boundary rule above: only the exact test-source roots supplied by
+project instructions or the owner are physically absent. If the boundary cannot
+be established, stop and ask the owner. The leader states the review kind,
+objective, reviewer perspective, and exact supplied boundary.
 
 Record one simple content digest before dispatch for that directory. After
 every required leg reaches a terminal result, record the digest again and
@@ -91,11 +92,12 @@ contract as the other legs.
 Read the
 [shared review prompt contract](references/review-prompt-contract.md)
 completely before rendering any leg. Select `consult` for a bounded answer,
-`advisory-review` for findings and recommendations, and `formal-gate` only for
-a formal decision. A formal round gives every leg the same mode, target,
-objective, perspective assignment, approved-data boundary, test-source
-boundary, digest, inspection contract, and result profile; only provider and
-destination values differ.
+`advisory-review` for findings and recommendations, `formal-gate` for an
+unbatched formal decision, and `batched-full-coverage` only with its exact
+immutable batch metadata. A formal round gives every leg the same target,
+objective, approved-data boundary, test-source boundary, digest, substantive
+inspection contract, and result profile. Each leg may vary only its assigned
+perspective and authorized provider/destination route.
 
 Every prompt names the same prepared directory and task. It instructs the leg
 to use only file reads and searches (and non-mutating inspection where the
@@ -120,12 +122,23 @@ For `consult` and `advisory-review`, admit the exact result profile from the
 shared prompt contract and keep the outcome advisory. Those modes never produce
 a formal gate pass.
 
-For `formal-gate`, apply the admission contract below.
-Fresh Codex returns a normal terminal agent message. Admit its four semantic
-elements directly: `verdict`, `findings`, `affected_surfaces_inspected`, and
-`open_questions`. The result may be ordinary Markdown, labeled prose, or JSON;
-JSON parsing is not required. Markdown fences do not invalidate a result. A
-missing or ambiguous semantic element is invalid.
+For `formal-gate`, Fresh Codex returns a normal terminal agent message. Admit
+the four semantic elements directly: `verdict`, `findings`,
+`affected_surfaces_inspected`, and `open_questions`. The result may be ordinary
+Markdown, labeled prose, or JSON; JSON parsing is not required. Markdown fences
+do not invalidate a result. This rendering tolerance applies to every family. A
+missing or ambiguous semantic element is invalid. The surfaces element is an
+explicit list of the paths the leg actually inspected. This compatibility
+profile does not establish complete assigned-path coverage and cannot replace
+`batched-full-coverage`.
+
+When exact immutable batch metadata and deterministic receipt validation are
+available, select the separately named `batched-full-coverage` profile. Each
+family then returns one strict `BatchReceipt` JSON document per batch and
+completes the same full batch set. Raw JSON or exactly one outer Markdown fence
+is valid; prose wrappers are not. Fresh Codex uses the shared batched prompt
+contract with the same native spawn route. An unbatched semantic result cannot
+replace a required batch receipt.
 
 For every leg, a material finding includes severity, a prepared-directory-relative path
 and positive line number when applicable, triggering condition, evidence, and a
@@ -136,10 +149,16 @@ not silently repaired.
 ## Consolidation and invalidation
 
 The leader verifies each finding against the same prepared directory and
-reproduces it with non-mutating evidence. A gate passes only when all three
-required legs are valid and `SAFE`, with no unresolved blocking finding or
-question. Do not vote or average labels. A surviving contradiction is
-`CONFLICTED` and requires owner adjudication.
+reproduces it with non-mutating evidence. A `CONFLICTED` item requires owner
+adjudication. Apply the triage, round-state, residual-ledger, and
+bounded-correction contract in
+[reviewer routing](references/reviewer-routing.md) before editing.
+
+A gate passes only when all three required legs are valid and `SAFE`, with no
+unresolved blocking finding or question. Do not vote or average labels. A
+refutation or owner decision is recorded but never rewrites an old result as
+`SAFE`. A new complete round may start after corrected candidate bytes or
+material new digest-bound evidence changes the review basis.
 
 Any unavailable required leg, mutation, route mismatch, digest mismatch, or
 semantically incomplete result makes the formal round invalid. Fix accepted
