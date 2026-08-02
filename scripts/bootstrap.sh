@@ -18,11 +18,11 @@ usage() {
 Usage: scripts/bootstrap.sh --install
        scripts/bootstrap.sh --remove
 
---install checks local prerequisites for triad-codex-dispatch and installs
-local launcher scripts, the read-only triad-repair-analyzer Custom Agent, and
-the triad-apply-repair executable. Applying a validated proposal remains an
-explicit owner action through the installed launcher (see the shared repair
-protocol in docs/references/repair-protocol.md).
+--install checks local prerequisites for triad-codex-dispatch, removes exact
+managed repair-analyzer and apply-launcher artifacts from older installs, and
+installs the provider launcher group. Applying a validated proposal remains an
+explicit owner action through the bootstrap-printed login-shell Python argv
+(see docs/references/repair-protocol.md).
 It also quarantines any legacy personal-scope
 repair-agent TOMLs (bootstrap-authored provenance only — a same-name file
 without that provenance is left in place) left by an older install into a
@@ -383,16 +383,36 @@ run_repair_lifecycle() {
   python3 "$REPO_ROOT/bin/bootstrap_repair.py" "$action" \
     --config "$CODEX_HOME/config.toml" \
     --analyzer "$CODEX_HOME/agents/$REPAIR_ANALYZER_NAME.toml" \
-    --launcher "$LAUNCHER_DIR/$APPLY_REPAIR_LAUNCHER" \
-    --source "$REPO_ROOT/agents/$REPAIR_ANALYZER_NAME.toml" \
-    --apply-patch "$REPO_ROOT/bin/apply_patch.py" \
-    --classifier "$CLASSIFIER_PATH"
+    --launcher "$LAUNCHER_DIR/$APPLY_REPAIR_LAUNCHER"
   if [ "$?" -eq 0 ]; then
     ok "repair artifacts $action completed"
     return 0
   fi
   fail "repair artifact $action failed"
   return 1
+}
+
+print_owner_apply_argv() {
+  python3 - "$REPO_ROOT" "$CLASSIFIER_PATH" <<'PY'
+from pathlib import Path
+import shlex
+import sys
+
+toolkit_root = Path(sys.argv[1])
+classifier_path = sys.argv[2]
+inner = [
+    "python3",
+    str(toolkit_root / "bin" / "apply_patch.py"),
+    "--cli",
+    "<cli>",
+    "--classifier-file",
+    classifier_path,
+    "--proposal-file",
+    "<absolute-proposal-path>",
+]
+owner_argv = ["/bin/zsh", "-lic", shlex.join(inner)]
+print("owner apply argv: " + shlex.join(owner_argv))
+PY
 }
 
 remove_owned_artifact() {
@@ -2141,11 +2161,11 @@ if want_codex_profile \
   && [ "$CODEX_PROFILE_APPROVAL_POLICY" = "never" ]; then
   warn "approval_policy=never disables Agent Review; managed prompt rules and wrapper sandbox escalations will fail closed in this legacy profile"
 fi
-# Repair targets share config and launcher state with the remaining bootstrap
-# steps. Reject unsafe/unmanaged repair inputs before the first persistent
-# mutation; the later transactional install revalidates them against races.
-if ! run_repair_lifecycle preflight-install; then
-  printf '[error] repair artifact preflight failed; skipping installation steps\n' >&2
+# Exact legacy repair targets share config and launcher state with the remaining
+# bootstrap steps. Reject unsafe removal targets before the first persistent
+# mutation; the later transactional cleanup revalidates them against races.
+if ! run_repair_lifecycle preflight-remove; then
+  printf '[error] legacy repair cleanup preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
 # All three public commands are independent persistent targets. Validate the
@@ -2182,6 +2202,10 @@ if ! preflight_classifier; then
   printf '[error] classifier preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
+if ! run_repair_lifecycle remove; then
+  printf '[error] legacy repair artifact cleanup failed; skipping installation steps\n' >&2
+  exit 1
+fi
 migrate_legacy_repair_agents
 ensure_log_dir
 if ! ensure_classifier; then
@@ -2189,10 +2213,6 @@ if ! ensure_classifier; then
   exit 1
 fi
 install_codex_runtime_profile
-if ! run_repair_lifecycle install; then
-  printf '[error] repair artifact installation failed; provider commands were not published\n' >&2
-  exit 1
-fi
 check_legacy_sandbox_config
 check_local_writable_agent_residual
 check_duplicate_selectors
@@ -2238,7 +2258,8 @@ if [ "$errors" -eq 0 ]; then
   warn "launcher Python is installer-selected: credential-compatible user-site mode requires a trusted HOME because sitecustomize/usercustomize can run before launcher scrubbing; alternatively select a trusted isolated Python only if it preserves provider login."
   printf 'ordinary Codex session: exact wrapper rules use decision=prompt.\n'
   printf 'Agent Review requires approvals_reviewer=auto_review with approval_policy=on-request, or granular.rules=true and granular.sandbox_approval=true.\n'
-  printf 'next step: start a fresh Codex session so the new agent_type %s loads.\n' "$REPAIR_ANALYZER_NAME"
+  print_owner_apply_argv
+  printf 'next step: start a fresh Codex session so the updated native repair protocol loads.\n'
   ok "bootstrap install passed"
   exit 0
 fi

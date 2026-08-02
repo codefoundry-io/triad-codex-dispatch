@@ -281,7 +281,7 @@ def _run_agy_with_retry(cmd, unsealed_prompt, timeout, *, expected_sentinel,
 
     `repair_mode` is a compatibility flag for an explicit single-attempt
     diagnostic invocation: it disables the server-capacity retry. The current
-    read-only analyzer never invokes provider wrappers. `cwd` is a normal kwarg
+    fresh native proposal-only child has no provider-wrapper invocation. `cwd` is a normal kwarg
     (defaults None), with no instance state. The scrubbed transcript is carried
     on every return path so the failure run-log retains the literal evidence.
     """
@@ -606,7 +606,7 @@ def main() -> int:
     # Convention (matches the generic run_cli_with_retry): RunResult.stdout =
     # the RAW vendor transcript (here the scrubbed pty output), final_answer =
     # the extracted answer (or ""). emit_run_log writes result.stdout, so the
-    # failure run-log carries the literal transcript for the read-only analyzer
+    # failure run-log carries the literal transcript for the fresh native child
     # instead of an empty string on unknown/oauth-env/extraction-error.
     rr = _common.RunResult(
         exit_code=r.exit_code,

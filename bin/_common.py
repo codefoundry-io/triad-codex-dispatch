@@ -209,8 +209,8 @@ OAUTH_ENV_PATTERNS: tuple[str, ...] = (
 
 # ─── Vendor exit code maps (EMPIRICAL ONLY) ───────────────────────────────
 # ONLY empirically observed exit codes are entered. An unobserved code =>
-# "unknown" => repair-routed classification; the read-only analyzer may propose
-# a validated entry for the owner to apply deterministically.
+# "unknown" => repair-routed classification; a fresh native proposal-only child
+# may propose a validated entry for the owner to apply deterministically.
 # Tier 1 docs (Gemini PR #13728: 41/42/52/53/130, Codex mintlify: 2/3/4/130)
 # never triggered in this environment, so NOT entered — add after observing.
 
@@ -1825,7 +1825,7 @@ def run_cli_with_retry(
     # Next-run IPC cleanup (owner contract: a subsequent run clears prior
     # residue). The legacy `repair_mode` compatibility flag skips cleanup and
     # retries for an explicit single-attempt diagnostic invocation. The current
-    # read-only analyzer never invokes a provider wrapper.
+    # fresh native proposal-only child has no provider-wrapper invocation.
     if not repair_mode:
         prune_stale_run_logs(cli)
 
@@ -2483,10 +2483,10 @@ def _prune_audit_archives(log_dir: Path) -> None:
         os.close(log_dir_fd)
 
 
-# ─── Deterministic classifier-patch applier (repair read-only redesign) ────
-# The repair analyzer is READ-ONLY: it returns a structured patch
-# PROPOSAL and has ZERO write authority. This function is the SINGLE trusted
-# write path to the classifier extension JSON — validate against the enum +
+# ─── Deterministic classifier-patch applier (native proposal redesign) ─────
+# The fresh native child returns only a structured proposal. This function is
+# the single owner-controlled local apply path to the classifier extension JSON:
+# validate against the enum +
 # pattern-name SoT + literal bounds, then flock + atomic-write. No LLM in the
 # write path; safe-by-construction against classifier-poisoning.
 #
@@ -2636,9 +2636,16 @@ assert (
 ), "VENDOR_EXIT_PROPOSAL_CLASSES must be a subset of REPAIR_CLASSIFICATION_TOKENS"
 
 
-def apply_classifier_patch(cli: str, proposal: dict) -> str:
-    """Validate + atomically merge a repair-analyzer proposal into the classifier
-    extension JSON. The SINGLE trusted write path (zero LLM here).
+def apply_classifier_patch(
+    cli: str,
+    proposal: dict,
+    extension_path: Path | None = None,
+) -> str:
+    """Validate + atomically merge a repair proposal into the classifier JSON.
+
+    ``extension_path`` is the owner CLI's already validated absolute target.
+    Existing direct compatibility callers may omit it and retain the ambient
+    extension-path fallback.
 
     proposal = {
         "classification": <one of REPAIR_CLASSIFICATION_TOKENS>,  # required (NOT ok/unknown)
@@ -2810,7 +2817,7 @@ def apply_classifier_patch(cli: str, proposal: dict) -> str:
             f"({len(reason)})"
         )
 
-    ext_path = _classifier_extension_path()
+    ext_path = extension_path if extension_path is not None else _classifier_extension_path()
     ext_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = ext_path.parent / (ext_path.name + ".lock")
 
@@ -2934,8 +2941,8 @@ def emit_run_log(
     """Write per-execution run-log on failure only.
 
     Run-logs live at `_logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json`. The
-    dispatch skill passes the opaque path to the read-only analyzer without
-    inline embedding (escape-safe and parallel-safe).
+    dispatch skill passes the opaque path to the fresh native proposal-only
+    child without inline embedding (escape-safe and parallel-safe).
 
     On success (`exit_code == EXIT_OK`), returns None and writes nothing because
     no repair handoff is needed.

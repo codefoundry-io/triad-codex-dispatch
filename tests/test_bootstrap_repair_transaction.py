@@ -885,35 +885,44 @@ def test_commit_cleanup_continues_after_keyboard_interrupt(
     assert not list(tmp_path.glob(".*.triad-claim-*"))
 
 
-def _repair_args(helper, tmp_path: Path, *, existing_config: bool = False):
-    source = tmp_path / "source.toml"
-    source.write_text(
+def _seed_frozen_legacy_repair_state(helper, tmp_path: Path):
+    config = tmp_path / "config.toml"
+    analyzer = tmp_path / "agents" / f"{helper.NAME}.toml"
+    analyzer.parent.mkdir()
+    analyzer.write_text(
         f'{helper.ANALYZER_MARKER}\nname = "{helper.NAME}"\nversion = 1\n',
         encoding="utf-8",
     )
-    apply_patch = tmp_path / "apply_patch.py"
-    apply_patch.write_text("# apply\n", encoding="utf-8")
-    config = tmp_path / "config.toml"
-    if existing_config:
-        config.write_text('owner = "preserve"\n', encoding="utf-8")
-    analyzer = tmp_path / "agents" / f"{helper.NAME}.toml"
     launcher = tmp_path / "triad-apply-repair"
+    launcher.write_bytes(
+        b"#!/usr/bin/python3 -E\n"
+        + helper.LAUNCHER_MARKER.encode("utf-8")
+        + b"\nimport os\nimport sys\n"
+        + b"os.execv('/usr/bin/python3', ['/usr/bin/python3', "
+        + b"'/managed/apply_patch.py'] + sys.argv[1:])\n"
+    )
+    config.write_text(
+        'owner = "preserve"\n\n'
+        + f"{helper.REG_BEGIN}\n"
+        + "# original config existed = true\n"
+        + f"[agents.{helper.NAME}]\n"
+        + f"description = {json.dumps(helper.REG_DESCRIPTION)}\n"
+        + f"config_file = {json.dumps(str(analyzer))}\n"
+        + f"{helper.REG_END}\n",
+        encoding="utf-8",
+    )
     args = helper.parser().parse_args(
         [
-            "install",
-            "--source",
-            str(source),
+            "remove",
             "--config",
             str(config),
             "--analyzer",
             str(analyzer),
             "--launcher",
             str(launcher),
-            "--apply-patch",
-            str(apply_patch),
         ]
     )
-    return args, source, config, analyzer, launcher
+    return args, config, analyzer, launcher
 
 
 def _inject_cleanup_failure_after_real_cleanup(helper, monkeypatch):
@@ -927,57 +936,14 @@ def _inject_cleanup_failure_after_real_cleanup(helper, monkeypatch):
     monkeypatch.setattr(helper, "cleanup_all", cleanup_then_report_failure)
 
 
-def test_repair_install_rolls_back_when_staged_cleanup_fails_after_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    args, source, config, analyzer, launcher = _repair_args(helper, tmp_path)
-    helper.install(args)
-    before = {path: path.read_bytes() for path in (config, analyzer, launcher)}
-    source.write_text(
-        f'{helper.ANALYZER_MARKER}\nname = "{helper.NAME}"\nversion = 2\n',
-        encoding="utf-8",
-    )
-    commit_calls = 0
-    original_commit_all = helper.commit_all
-
-    def record_commit(journal):
-        nonlocal commit_calls
-        commit_calls += 1
-        return original_commit_all(journal)
-
-    _inject_cleanup_failure_after_real_cleanup(helper, monkeypatch)
-    monkeypatch.setattr(helper, "commit_all", record_commit)
-
-    with pytest.raises(OSError, match="post-publication staged cleanup failure"):
-        helper.install(args)
-
-    assert commit_calls == 0
-    assert {path: path.read_bytes() for path in (config, analyzer, launcher)} == before
-    assert not list(tmp_path.rglob(".*.tmp"))
-    assert not list(tmp_path.rglob(".*.triad-claim-*"))
-
-
 def test_repair_remove_rolls_back_when_staged_cleanup_fails_after_publication(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     helper = _load_bootstrap_repair_module()
-    args, _source, config, analyzer, launcher = _repair_args(
-        helper, tmp_path, existing_config=True
+    args, config, analyzer, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
     )
-    helper.install(args)
     before = {path: path.read_bytes() for path in (config, analyzer, launcher)}
-    remove_args = helper.parser().parse_args(
-        [
-            "remove",
-            "--config",
-            str(config),
-            "--analyzer",
-            str(analyzer),
-            "--launcher",
-            str(launcher),
-        ]
-    )
     commit_calls = 0
     original_commit_all = helper.commit_all
 
@@ -990,7 +956,7 @@ def test_repair_remove_rolls_back_when_staged_cleanup_fails_after_publication(
     monkeypatch.setattr(helper, "commit_all", record_commit)
 
     with pytest.raises(OSError, match="post-publication staged cleanup failure"):
-        helper.remove(remove_args)
+        helper.remove(args)
 
     assert commit_calls == 0
     assert {path: path.read_bytes() for path in (config, analyzer, launcher)} == before

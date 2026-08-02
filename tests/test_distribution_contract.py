@@ -1198,19 +1198,23 @@ def test_missing_pydantic_diagnostic_uses_the_running_python_and_argv_quoting(
         raise AssertionError("missing Pydantic must fail with an owner command")
 
 
-def test_repair_protocol_uses_the_exact_installed_agent_and_apply_contract() -> None:
+def test_repair_protocol_uses_fresh_native_child_without_custom_agent() -> None:
     protocol = _text(PROTOCOL)
 
-    assert 'agent_type="triad-repair-analyzer"' in protocol
     assert 'fork_turns="none"' in protocol
-    assert "task_name" in protocol
-    assert "no model, effort, or sandbox override" in protocol
-    assert "triad-apply-repair" in protocol
-    assert '"--cli", cli' in protocol
-    assert '"--proposal-file", proposal_path' in protocol
-    assert "shlex.join" in protocol
-    assert "scripts/apply-repair.sh" not in protocol
-    assert "codex exec" not in protocol
+    assert "model=" in protocol
+    assert "reasoning_effort=" in protocol
+    assert "agent_type=" not in protocol
+    assert "triad-repair-analyzer" not in protocol
+    assert not REPAIR_AGENT.exists()
+    assert "/bin/zsh" in protocol
+    assert '"-lic"' in protocol
+    assert "python3" in protocol
+    assert "bin\" / \"apply_patch.py" in protocol
+    assert "--classifier-file" in protocol
+    assert 'owner_argv = [' in protocol
+    assert '"--cli",' in protocol
+    assert '"--proposal-file",' in protocol
 
 
 def test_documented_native_task_names_match_the_callable_schema() -> None:
@@ -1237,12 +1241,9 @@ def test_documented_native_task_names_match_the_callable_schema() -> None:
 def test_repair_handoff_uses_one_json_input_envelope_and_valid_output_examples(
 ) -> None:
     protocol = _text(PROTOCOL)
-    analyzer_toml = _text(REPAIR_AGENT)
-
-    for text in (protocol, analyzer_toml):
-        assert "run_log_path" in text
-        assert "toolkit_root" in text
-        assert "propose|escalate" not in text
+    assert "run_log_path" in protocol
+    assert "toolkit_root" in protocol
+    assert "propose|escalate" not in protocol
 
     assert '"run_log_path": run_log_path' in protocol
     assert '"toolkit_root": toolkit_root' in protocol
@@ -1250,7 +1251,6 @@ def test_repair_handoff_uses_one_json_input_envelope_and_valid_output_examples(
     assert "<<<UNTRUSTED_REPAIR_REQUEST_JSON>>>" in protocol
     assert "<<<END_UNTRUSTED_REPAIR_REQUEST_JSON>>>" in protocol
     assert "spawn_agent(" in protocol
-    assert 'agent_type="triad-repair-analyzer"' in protocol
     assert 'fork_turns="none"' in protocol
     assert "message=repair_message" in protocol
     assert "Dynamic paths appear only as values" in protocol
@@ -1260,39 +1260,31 @@ def test_repair_handoff_uses_one_json_input_envelope_and_valid_output_examples(
         for block in re.findall(r"```json\n(.*?)\n```", protocol, re.DOTALL)
         if '"outcome"' in block
     ]
-    analyzer_config = tomllib.loads(analyzer_toml)
-    analyzer_examples = [
-        json.loads(line)
-        for line in analyzer_config["developer_instructions"].splitlines()
-        if line.startswith('{"outcome"')
-    ]
+    assert len(protocol_examples) == 2
+    escalate = next(
+        example for example in protocol_examples if example["outcome"] == "escalate"
+    )
+    propose = next(
+        example for example in protocol_examples if example["outcome"] == "propose"
+    )
+    assert escalate["proposal"] is None
+    assert set(escalate) == {"outcome", "reason", "proposal"}
 
-    for examples in (protocol_examples, analyzer_examples):
-        assert len(examples) == 2
-        escalate = next(
-            example for example in examples if example["outcome"] == "escalate"
-        )
-        propose = next(
-            example for example in examples if example["outcome"] == "propose"
-        )
-        assert escalate["proposal"] is None
-        assert set(escalate) == {"outcome", "reason", "proposal"}
-
-        proposal = propose["proposal"]
-        assert isinstance(proposal, dict)
-        assert set(proposal) == {
-            "classification",
-            "reason",
-            "pattern_list",
-            "substring",
-        }
-        assert (
-            proposal["classification"]
-            == _common.PATTERN_LIST_CLASS[proposal["pattern_list"]]
-        )
-        assert len(proposal["substring"]) >= _common._MIN_SUBSTRING_LEN
-        assert len(proposal["substring"]) <= _common._MAX_SUBSTRING_LEN
-        assert proposal["reason"].strip()
+    proposal = propose["proposal"]
+    assert isinstance(proposal, dict)
+    assert set(proposal) == {
+        "classification",
+        "reason",
+        "pattern_list",
+        "substring",
+    }
+    assert (
+        proposal["classification"]
+        == _common.PATTERN_LIST_CLASS[proposal["pattern_list"]]
+    )
+    assert len(proposal["substring"]) >= _common._MIN_SUBSTRING_LEN
+    assert len(proposal["substring"]) <= _common._MAX_SUBSTRING_LEN
+    assert proposal["reason"].strip()
 
 
 def test_provider_skills_share_the_repair_protocol_without_legacy_repair_shell() -> None:
@@ -1338,10 +1330,6 @@ def test_provider_skills_use_final_process_state_for_corrected_extraction_failur
         assert "early `ok` followed by a corrected `extraction-error`" in skill
         assert "route the final `extraction-error` to repair" in skill
 
-    protocol = _text(PROTOCOL)
-    assert "Do not open the run log in the leader" in protocol
-    assert "pass its absolute path only to" in protocol
-
     agy_skill = _text(
         ROOT / "skills" / "triad-antigravity-dispatch" / "SKILL.md"
     )
@@ -1351,6 +1339,15 @@ def test_provider_skills_use_final_process_state_for_corrected_extraction_failur
     assert "missing `agy`\non `PATH`" in agy_skill
     assert "agy start failed before request submission: stage=exec errno=" in agy_skill
     assert "Every other no-summary failure is fallback-ineligible" in agy_skill
+
+
+def test_repair_protocol_keeps_run_log_opaque_for_native_child() -> None:
+    protocol = _text(PROTOCOL)
+
+    assert "Do not open the run log in the leader" in protocol
+    assert "pass its absolute path only to" in protocol
+    assert "fresh native proposal child" in protocol
+    assert "triad-repair-analyzer" not in protocol
 
 
 def test_provider_invocation_examples_are_explicit_argv_arrays() -> None:
@@ -3035,7 +3032,7 @@ def test_distribution_text_has_no_stale_numbered_repair_workflow_claims() -> Non
     assert "bootstrap 은 binary 존재만 확인" in korean
 
 
-def test_runtime_comments_describe_the_current_read_only_analyzer_flow() -> None:
+def test_runtime_comments_describe_native_proposal_only_repair_flow() -> None:
     runtime = "\n".join(
         _text(path)
         for path in (
@@ -3060,8 +3057,12 @@ def test_runtime_comments_describe_the_current_read_only_analyzer_flow() -> None
         "Hard rule",
     ):
         assert stale not in runtime
-    assert "read-only analyzer" in runtime.lower()
+    assert "read-only analyzer" not in runtime.lower()
+    assert "zero write authority" not in runtime.lower()
+    assert "fresh native" in runtime.lower()
+    assert "proposal-only" in runtime.lower()
     assert "owner" in runtime.lower()
+    assert "no provider" in runtime.lower()
     assert "age-floor" in runtime.lower()
 
 

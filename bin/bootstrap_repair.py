@@ -95,21 +95,6 @@ class CommandArtifact:
 
 
 @dataclass(frozen=True)
-class RepairInstallPlan:
-    source_state: State
-    apply_state: State
-    runtime_state: State
-    config: Path
-    analyzer: Path
-    launcher: Path
-    config_before: State | None
-    analyzer_before: State | None
-    launcher_before: State | None
-    config_data: bytes
-    launcher_data: bytes
-
-
-@dataclass(frozen=True)
 class RepairRemovePlan:
     config: Path
     analyzer: Path
@@ -348,28 +333,6 @@ def split_registration(
     if reserved:
         raise Refusal(f"malformed managed repair analyzer registration in {path}")
     return text, "", False, False
-
-
-def registration(state: State | None, config: Path, analyzer: Path) -> tuple[bytes, bool]:
-    original = parse_text(state, config)
-    parsed_config(original, config)
-    before, after, had, original_existed = split_registration(
-        original, config, analyzer
-    )
-    if not had:
-        original_existed = state is not None
-    base = before + after
-    agents = parsed_config(base, config).get("agents", {})
-    if not isinstance(agents, dict) or NAME in agents:
-        raise Refusal(f"refusing to overwrite unmanaged repair analyzer registration in {config}")
-    block = registration_block(analyzer, original_existed)
-    if had:
-        result_text = before + ("\n" if original_existed else "") + block + after
-    else:
-        result_text = before + ("\n" if original_existed else "") + block
-    result = result_text.encode("utf-8")
-    parsed_config(result.decode("utf-8"), config)
-    return result, had
 
 
 def _state_from_fd(path: Path, fd: int) -> State:
@@ -1270,14 +1233,6 @@ def command_artifacts_from_manifest(path: Path, *, require_data: bool) -> list[C
     return artifacts
 
 
-def default_classifier_path() -> Path:
-    override = os.environ.get("TRIAD_CLASSIFIER_EXTENSION")
-    if override:
-        return Path(override).expanduser()
-    base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    return base / "triad-codex-dispatch" / "classifier-patches.json"
-
-
 def portable_python_shebang(python: Path) -> bytes:
     runtime = os.fspath(python)
     if any(char.isspace() for char in runtime):
@@ -1835,26 +1790,6 @@ def update_shell_entry(path: Path, action: str, profile: str | None) -> str:
     return "installed" if action == "install" else "removed"
 
 
-def launcher_text(
-    python: Path,
-    apply_patch: Path,
-    classifier: Path | None = None,
-) -> bytes:
-    shebang = portable_python_shebang(python)
-    classifier = classifier or default_classifier_path()
-    if not classifier.is_absolute():
-        raise Refusal(f"classifier path must be absolute: {classifier}")
-    runtime = json.dumps(str(python), ensure_ascii=False)
-    target = json.dumps(str(apply_patch), ensure_ascii=False)
-    classifier_literal = json.dumps(str(classifier), ensure_ascii=False)
-    return shebang + (
-        f"{LAUNCHER_MARKER}\nimport os\nimport sys\n"
-        "env = os.environ.copy()\n"
-        f'env["TRIAD_CLASSIFIER_EXTENSION"] = {classifier_literal}\n'
-        f"os.execve({runtime}, [{runtime}, \"-E\", {target}] + sys.argv[1:], env)\n"
-    ).encode("utf-8")
-
-
 def cleanup(temp: Staged | None) -> None:
     if temp is not None:
         _delete_expected(temp.state)
@@ -1966,114 +1901,6 @@ def finalize_transaction(
         )
 
 
-def prepare_install(args: argparse.Namespace) -> RepairInstallPlan:
-    if not args.source or not args.apply_patch:
-        raise Refusal("install requires --source and --apply-patch")
-    source, config, analyzer, apply = map(
-        Path, (args.source, args.config, args.analyzer, args.apply_patch)
-    )
-    launcher, runtime = Path(args.launcher), Path(args.python).resolve()
-    classifier = Path(args.classifier).expanduser()
-    for managed_path in (source, config, analyzer, apply, launcher, runtime):
-        require_safe_ancestors(managed_path)
-    if not classifier.is_absolute():
-        raise Refusal(f"classifier path must be absolute: {classifier}")
-    portable_python_shebang(runtime)
-    source_state, apply_state, runtime_state = (
-        read_state(source),
-        read_state(apply),
-        read_state(runtime),
-    )
-    if source_state is None or not analyzer_data_is_managed(source_state.data):
-        raise Refusal(f"missing managed repair analyzer source: {source}")
-    try:
-        tomllib.loads(source_state.data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-        raise Refusal(f"invalid repair analyzer source: {source}") from error
-    if apply_state is None or runtime_state is None:
-        raise Refusal("missing repair applier or resolved Python runtime")
-    try:
-        config_before = read_state(config)
-    except Refusal as error:
-        raise Refusal(f"refusing unsafe repair config: {config}") from error
-    try:
-        analyzer_before = read_state(analyzer)
-    except Refusal as error:
-        raise Refusal(f"refusing unsafe repair analyzer: {analyzer}") from error
-    try:
-        launcher_before = read_state(launcher)
-    except Refusal as error:
-        raise Refusal(f"refusing unsafe repair apply launcher: {launcher}") from error
-    if analyzer_before is not None and not analyzer_is_managed(analyzer_before):
-        raise Refusal(f"refusing to overwrite unmanaged repair analyzer: {analyzer}")
-    if launcher_before is not None and not launcher_is_managed(launcher_before):
-        raise Refusal(f"refusing to overwrite unmanaged repair apply launcher: {launcher}")
-    config_data, _had = registration(config_before, config, analyzer)
-    return RepairInstallPlan(
-        source_state=source_state,
-        apply_state=apply_state,
-        runtime_state=runtime_state,
-        config=config,
-        analyzer=analyzer,
-        launcher=launcher,
-        config_before=config_before,
-        analyzer_before=analyzer_before,
-        launcher_before=launcher_before,
-        config_data=config_data,
-        launcher_data=launcher_text(runtime, apply, classifier),
-    )
-
-
-def preflight_install(args: argparse.Namespace) -> None:
-    """Validate every repair-install input and target without writing anything."""
-    prepare_install(args)
-
-
-def install(args: argparse.Namespace) -> None:
-    plan = prepare_install(args)
-    temps: list[Staged] = []
-    journal: list[Mutation] = []
-    failure: BaseException | None = None
-    try:
-        temps.append(
-            stage(
-                plan.analyzer,
-                plan.source_state.data,
-                plan.analyzer_before.mode if plan.analyzer_before else 0o600,
-            )
-        )
-        temps.append(
-            stage(
-                plan.config,
-                plan.config_data,
-                plan.config_before.mode if plan.config_before else 0o600,
-            )
-        )
-        temps.append(
-            stage(
-                plan.launcher,
-                plan.launcher_data,
-                plan.launcher_before.mode if plan.launcher_before else 0o755,
-            )
-        )
-        if not same(plan.source_state):
-            raise Refusal(
-                f"repair analyzer source changed before publication: {plan.source_state.path}"
-            )
-        publish_to(temps[0], plan.analyzer, plan.analyzer_before, journal)
-        if os.environ.get("TRIAD_BOOTSTRAP_TEST_FAIL_REPAIR_REGISTRATION_PUBLISH") == "1":
-            raise OSError("injected registration publication failure")
-        publish_to(temps[1], plan.config, plan.config_before, journal)
-        if not same(plan.apply_state) or not same(plan.runtime_state):
-            raise Refusal("repair launcher input changed before publication")
-        publish_to(temps[2], plan.launcher, plan.launcher_before, journal)
-    except BaseException as error:
-        failure = error
-    finally:
-        cleanup_failures = cleanup_all(temps)
-    finalize_transaction(failure, journal, cleanup_failures)
-
-
 def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
     config, analyzer, launcher = Path(args.config), Path(args.analyzer), Path(args.launcher)
     for managed_path in (config, analyzer, launcher):
@@ -2163,15 +1990,11 @@ def remove(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
-    for command in ("install", "remove", "preflight-install", "preflight-remove"):
+    for command in ("remove", "preflight-remove"):
         child = sub.add_parser(command)
         child.add_argument("--config", required=True)
         child.add_argument("--analyzer", required=True)
         child.add_argument("--launcher", required=True)
-        child.add_argument("--source")
-        child.add_argument("--python", default=str(Path(sys.executable).resolve()))
-        child.add_argument("--apply-patch")
-        child.add_argument("--classifier", default=str(default_classifier_path()))
     for command in ("commands-install", "commands-remove"):
         child = sub.add_parser(command)
         child.add_argument("--manifest", required=True)
@@ -2228,12 +2051,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        if args.command == "install":
-            install(args)
-        elif args.command == "remove":
+        if args.command == "remove":
             remove(args)
-        elif args.command == "preflight-install":
-            preflight_install(args)
         elif args.command == "preflight-remove":
             preflight_remove(args)
         elif args.command == "commands-install":

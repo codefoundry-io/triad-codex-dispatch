@@ -56,7 +56,8 @@ def main() -> int:
     p.add_argument(
         "--repair-mode",
         action="store_true",
-        help="Compatibility: one provider attempt with automatic retries disabled",
+        help="Compatibility diagnostic: one provider attempt with retries disabled; "
+             "the fresh native proposal-only repair child does not invoke providers",
     )
     p.add_argument(
         "--debug",

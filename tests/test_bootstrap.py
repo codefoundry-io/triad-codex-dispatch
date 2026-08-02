@@ -30,6 +30,7 @@ def _fs_case_insensitive(probe: Path) -> bool:
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 BOOTSTRAP_REPAIR = ROOT / "bin" / "bootstrap_repair.py"
+APPLY_PATCH = ROOT / "bin" / "apply_patch.py"
 
 
 def _copy_test_python_executable(target: Path) -> None:
@@ -105,10 +106,6 @@ def _make_repo_root(
             shutil.copy2(path, agents_dir / path.name)
         shutil.copytree(ROOT / "skills", skills_dir)
     else:
-        shutil.copy2(
-            ROOT / "agents" / f"{REPAIR_ANALYZER}.toml",
-            agents_dir / f"{REPAIR_ANALYZER}.toml",
-        )
         for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
             (agents_dir / f"{name}.toml").write_text(
                 f'name = "{name}"\ndescription = "{name}"\n',
@@ -206,6 +203,24 @@ MANAGED_LEGACY_REPAIR_AGENT = (
     b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
     b'name = "claude-wrapper-repair"\n'
 )
+FROZEN_LEGACY_APPLY_LAUNCHER = (
+    b"#!/usr/bin/python3 -E\n"
+    b"# triad-codex-dispatch managed repair apply launcher\n"
+    b"import os\n"
+    b"import sys\n"
+    b"os.execv('/usr/bin/python3', ['/usr/bin/python3', "
+    b"'/managed/apply_patch.py'] + sys.argv[1:])\n"
+)
+FROZEN_PINNED_APPLY_LAUNCHER = (
+    b"#!/usr/bin/python3 -E\n"
+    b"# triad-codex-dispatch managed repair apply launcher\n"
+    b"import os\n"
+    b"import sys\n"
+    b"env = os.environ.copy()\n"
+    b'env["TRIAD_CLASSIFIER_EXTENSION"] = "/managed/classifier.json"\n'
+    b"os.execve('/usr/bin/python3', ['/usr/bin/python3', '-E', "
+    b"'/managed/apply_patch.py'] + sys.argv[1:], env)\n"
+)
 
 
 def _load_bootstrap_repair_module():
@@ -215,6 +230,56 @@ def _load_bootstrap_repair_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _seed_frozen_legacy_repair_state(
+    helper,
+    tmp_path: Path,
+    *,
+    launcher_bytes: bytes = FROZEN_PINNED_APPLY_LAUNCHER,
+    existing_config: bool = False,
+) -> tuple[list[str], Path, Path, Path]:
+    analyzer = tmp_path / "agents" / f"{REPAIR_ANALYZER}.toml"
+    analyzer.parent.mkdir(parents=True, exist_ok=True)
+    analyzer.write_text(
+        f'{helper.ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n',
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.toml"
+    prefix = 'owner = "preserved"\n\n' if existing_config else ""
+    config.write_text(
+        prefix
+        + f"{helper.REG_BEGIN}\n"
+        + f"# original config existed = {'true' if existing_config else 'false'}\n"
+        + f"[agents.{REPAIR_ANALYZER}]\n"
+        + f"description = {json.dumps(helper.REG_DESCRIPTION)}\n"
+        + f"config_file = {json.dumps(str(analyzer), ensure_ascii=False)}\n"
+        + f"{helper.REG_END}\n",
+        encoding="utf-8",
+    )
+    launcher = tmp_path / "triad-apply-repair"
+    launcher.write_bytes(launcher_bytes)
+    launcher.chmod(0o755)
+    args = [
+        "remove",
+        "--config",
+        str(config),
+        "--analyzer",
+        str(analyzer),
+        "--launcher",
+        str(launcher),
+    ]
+    return args, analyzer, config, launcher
+
+
+def _owner_apply_argv(stdout: str) -> tuple[list[str], list[str]]:
+    line = next(
+        line for line in stdout.splitlines() if line.startswith("owner apply argv: ")
+    )
+    outer = shlex.split(line.removeprefix("owner apply argv: "))
+    assert outer[:2] == ["/bin/zsh", "-lic"]
+    assert len(outer) == 3
+    return outer, shlex.split(outer[2])
 
 
 def _path_state_fingerprint(path: Path):
@@ -323,17 +388,154 @@ def test_bootstrap_usage_documents_paired_legacy_shell_entry_flags() -> None:
     assert clause in help_text
 
 
-def test_bootstrap_repair_help_exposes_explicit_install_and_remove() -> None:
-    result = subprocess.run(
-        [sys.executable, str(BOOTSTRAP_REPAIR), "--help"],
-        text=True,
-        capture_output=True,
-        timeout=5,
+def test_bootstrap_repair_help_exposes_remove_only_repair_lifecycle() -> None:
+    helper = _load_bootstrap_repair_module()
+    choices = next(
+        action.choices
+        for action in helper.parser()._actions
+        if isinstance(action, helper.argparse._SubParsersAction)
     )
 
-    assert result.returncode == 0, result.stderr
-    assert "install" in result.stdout
-    assert "remove" in result.stdout
+    assert "install" not in choices
+    assert "preflight-install" not in choices
+    assert "remove" in choices
+    assert "preflight-remove" in choices
+    assert "commands-install" in choices
+    assert "commands-remove" in choices
+
+
+def test_apply_patch_requires_explicit_absolute_classifier_file(tmp_path: Path) -> None:
+    proposal = tmp_path / "proposal.json"
+    proposal.write_text(
+        json.dumps(
+            {
+                "classification": "server-capacity",
+                "reason": "Stable capacity signal.",
+                "pattern_list": "SERVER_CAPACITY_PATTERNS",
+                "substring": "service capacity temporarily exhausted",
+            }
+        ),
+        encoding="utf-8",
+    )
+    fresh_home = tmp_path / "fresh-home"
+    fresh_config = tmp_path / "fresh-config"
+    env = {
+        **os.environ,
+        "HOME": str(fresh_home),
+        "XDG_CONFIG_HOME": str(fresh_config),
+    }
+
+    def invoke(*extra: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(APPLY_PATCH),
+                "--cli",
+                "claude",
+                *extra,
+                "--proposal-file",
+                str(proposal),
+            ],
+            text=True,
+            capture_output=True,
+            env=env,
+            timeout=5,
+        )
+
+    missing = invoke()
+    relative = invoke("--classifier-file", "relative.json")
+
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    symlinked_parent = tmp_path / "linked-parent"
+    symlinked_parent.symlink_to(real_parent, target_is_directory=True)
+    ancestor = invoke("--classifier-file", str(symlinked_parent / "classifier.json"))
+
+    leaf_target = tmp_path / "leaf-target.json"
+    leaf_target.write_text('{"owner": true}\n', encoding="utf-8")
+    symlinked_leaf = tmp_path / "classifier-link.json"
+    symlinked_leaf.symlink_to(leaf_target)
+    leaf = invoke("--classifier-file", str(symlinked_leaf))
+
+    for refused in (missing, relative, ancestor, leaf):
+        assert refused.returncode != 0
+    assert leaf_target.read_text(encoding="utf-8") == '{"owner": true}\n'
+    assert not (real_parent / "classifier.json").exists()
+    assert not (tmp_path / "relative.json").exists()
+
+    classifier = tmp_path / "custom" / "classifier.json"
+    classifier.parent.mkdir()
+    applied = invoke("--classifier-file", str(classifier))
+
+    assert applied.returncode == 0, applied.stderr
+    data = json.loads(classifier.read_text(encoding="utf-8"))
+    assert data["claude"]["patterns"]["SERVER_CAPACITY_PATTERNS"] == [
+        "service capacity temporarily exhausted"
+    ]
+    assert not (fresh_config / "triad-codex-dispatch" / "classifier-patches.json").exists()
+
+
+def test_bootstrap_prints_owner_apply_argv_with_pinned_classifier(
+    tmp_path: Path,
+) -> None:
+    classifier = tmp_path / "config with spaces" / "classifier '$() `'.json"
+    result, env, launcher_dir = _run_bootstrap(
+        tmp_path,
+        env_overrides={"TRIAD_CLASSIFIER_EXTENSION": str(classifier)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    _outer, owner = _owner_apply_argv(result.stdout)
+    assert owner[:2] == [
+        "python3",
+        str(Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]) / "bin" / "apply_patch.py"),
+    ]
+    classifier_index = owner.index("--classifier-file")
+    assert owner[classifier_index + 1] == str(classifier)
+    for wrapper in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        launcher = (launcher_dir / wrapper).read_text(encoding="utf-8")
+        assert json.dumps(str(classifier), ensure_ascii=False) in launcher
+
+
+@pytest.mark.parametrize(
+    "launcher_bytes",
+    (FROZEN_LEGACY_APPLY_LAUNCHER, FROZEN_PINNED_APPLY_LAUNCHER),
+)
+def test_install_removes_only_exact_legacy_repair_agent_artifacts(
+    tmp_path: Path,
+    launcher_bytes: bytes,
+) -> None:
+    repo_root = _make_repo_root(tmp_path, real_agents=True)
+    helper = _load_bootstrap_repair_module()
+    codex_home = tmp_path / "home" / ".codex"
+    args, analyzer, config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper,
+        codex_home,
+        launcher_bytes=launcher_bytes,
+    )
+    launcher = tmp_path / "launchers" / "triad-apply-repair"
+    launcher.parent.mkdir()
+    seeded_launcher.replace(launcher)
+    args[args.index(str(seeded_launcher))] = str(launcher)
+    foreign = analyzer.parent / "foreign.toml"
+    foreign.write_text('name = "foreign"\n', encoding="utf-8")
+
+    result, _env, _launcher_dir = _run_bootstrap(
+        tmp_path,
+        repo_root=repo_root,
+        env_overrides={"CODEX_HOME": str(codex_home)},
+        arg="--install",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    config_text = config.read_text(encoding="utf-8") if config.exists() else ""
+    _before, _after, had_registration, _original_existed = helper.split_registration(
+        config_text, config, analyzer
+    )
+    assert not had_registration
+    assert not analyzer.exists()
+    assert not launcher.exists()
+    assert foreign.read_text(encoding="utf-8") == 'name = "foreign"\n'
 
 
 def test_bootstrap_routes_classifier_artifacts_and_config_mutations_through_helper() -> None:
@@ -349,37 +551,15 @@ def test_bootstrap_routes_classifier_artifacts_and_config_mutations_through_help
     assert "config_path.unlink()" not in text
 
 
-def test_bootstrap_repair_refuses_embedded_provenance_marker(tmp_path: Path) -> None:
-    helper = _load_bootstrap_repair_module()
-    source = tmp_path / "source.toml"
-    source.write_text(
-        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n', encoding="utf-8"
-    )
-    analyzer = tmp_path / "agents" / f"{REPAIR_ANALYZER}.toml"
-    analyzer.parent.mkdir()
-    foreign = f'description = "{REPAIR_ANALYZER_MARKER}"\n'
-    analyzer.write_text(foreign, encoding="utf-8")
-    config = tmp_path / "config.toml"
-    apply_patch = tmp_path / "apply_patch.py"
-    apply_patch.write_text("# apply\n", encoding="utf-8")
-
-    status = helper.main(
-        [
-            "install", "--source", str(source), "--config", str(config),
-            "--analyzer", str(analyzer), "--launcher", str(tmp_path / "triad-apply-repair"),
-            "--apply-patch", str(apply_patch),
-        ]
-    )
-
-    assert status == 3
-    assert analyzer.read_text(encoding="utf-8") == foreign
 
 
 def test_bootstrap_repair_refuses_exact_analyzer_marker_inside_multiline_string(
     tmp_path: Path,
 ) -> None:
-    helper, args, analyzer, _config, _launcher = _repair_install_args(tmp_path)
-    analyzer.parent.mkdir()
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, _config, _launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     foreign = (
         'name = "foreign-analyzer"\n'
         'description = """\n'
@@ -388,25 +568,33 @@ def test_bootstrap_repair_refuses_exact_analyzer_marker_inside_multiline_string(
     )
     analyzer.write_text(foreign, encoding="utf-8")
 
-    assert helper.main(args) == 3
+    assert not helper.analyzer_is_managed(helper.read_state(analyzer))
+    assert helper.main(args) == 0
     assert analyzer.read_text(encoding="utf-8") == foreign
 
 
 def test_bootstrap_repair_refuses_exact_launcher_marker_inside_python_multiline_string(
     tmp_path: Path,
 ) -> None:
-    helper, args, _analyzer, _config, launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, _analyzer, _config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     foreign = f'payload = """\n{helper.LAUNCHER_MARKER}\nstill foreign\n"""\n'
     launcher.write_text(foreign, encoding="utf-8")
 
-    assert helper.main(args) == 3
+    assert not helper.launcher_is_managed(helper.read_state(launcher))
+    assert helper.main(args) == 0
     assert launcher.read_text(encoding="utf-8") == foreign
 
 
 def test_bootstrap_repair_preserves_exact_registration_block_inside_multiline_string(
     tmp_path: Path,
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, _launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     foreign = (
         'description = """\n'
         + helper.registration_block(analyzer, True)
@@ -415,21 +603,16 @@ def test_bootstrap_repair_preserves_exact_registration_block_inside_multiline_st
     config.write_bytes(foreign)
 
     assert helper.main(args) == 0
-    expected_block = helper.registration_block(analyzer, True).encode("utf-8")
-    assert config.read_bytes() == foreign + b"\n" + expected_block
-    assert helper.main(args) == 0
-    assert config.read_bytes() == foreign + b"\n" + expected_block
-    assert helper.main(
-        ["remove", "--config", str(config), "--analyzer", str(analyzer),
-         "--launcher", str(launcher)]
-    ) == 0
     assert config.read_bytes() == foreign
 
 
 def test_bootstrap_repair_refuses_noncanonical_marker_wrapped_registration(
     tmp_path: Path,
 ) -> None:
-    helper, args, _analyzer, config, _launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, _analyzer, config, _launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     foreign = (
         f"{helper.REG_BEGIN}\n"
         f"[agents.{REPAIR_ANALYZER}]\n"
@@ -443,50 +626,8 @@ def test_bootstrap_repair_refuses_noncanonical_marker_wrapped_registration(
     assert config.read_bytes() == foreign
 
 
-def test_bootstrap_repair_revalidates_target_before_replacement(tmp_path: Path) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / "target"
-    target.write_text("before\n", encoding="utf-8")
-    before = helper.read_state(target)
-    temp = helper.stage(target, b"after\n", 0o600)
-    target.write_text("race\n", encoding="utf-8")
-
-    with pytest.raises(helper.Refusal):
-        helper.publish_to(temp, target, before, [])
-
-    assert target.read_text(encoding="utf-8") == "race\n"
-    temp.unlink()
 
 
-def test_bootstrap_repair_preserves_foreign_swap_between_check_and_publish(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / "target"
-    target.write_bytes(b"managed-before\n")
-    before = helper.read_state(target)
-    assert before is not None
-    temp = helper.stage(target, b"managed-after\n", 0o600)
-    foreign = b"foreign-between-check-and-publish\n"
-    original_same = helper.same
-    injected = False
-
-    def swap_after_successful_check(state):
-        nonlocal injected
-        matched = original_same(state)
-        if state.path == target and matched and not injected:
-            injected = True
-            target.write_bytes(foreign)
-        return matched
-
-    monkeypatch.setattr(helper, "same", swap_after_successful_check)
-    with pytest.raises(helper.Refusal):
-        helper.publish_to(temp, target, before, [])
-
-    assert injected
-    assert target.read_bytes() == foreign
-    helper.cleanup(temp)
-    assert not list(tmp_path.glob(".*.triad-claim-*"))
 
 
 def test_bootstrap_repair_preserves_foreign_swap_between_check_and_remove(
@@ -518,83 +659,28 @@ def test_bootstrap_repair_preserves_foreign_swap_between_check_and_remove(
     assert not list(tmp_path.glob(".*.triad-claim-*"))
 
 
-def test_bootstrap_repair_never_clobbers_foreign_create_during_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / "target"
-    temp = helper.stage(target, b"managed-after\n", 0o600)
-    foreign = b"foreign-created-before-link\n"
-    original_link = helper.os.link
-    injected = False
-
-    def create_foreign_before_link(source, destination):
-        nonlocal injected
-        if destination == target and not injected:
-            injected = True
-            target.write_bytes(foreign)
-        return original_link(source, destination)
-
-    monkeypatch.setattr(helper.os, "link", create_foreign_before_link)
-    with pytest.raises(helper.Refusal, match="without overwriting"):
-        helper.publish_to(temp, target, None, [])
-
-    assert injected
-    assert target.read_bytes() == foreign
-    helper.cleanup(temp)
 
 
-def test_bootstrap_repair_non_bmp_config_path_is_valid_toml(tmp_path: Path) -> None:
-    helper = _load_bootstrap_repair_module()
-    source = tmp_path / "source.toml"
-    source.write_text(
-        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n', encoding="utf-8"
-    )
-    codex_home = tmp_path / "codex-😀"
-    analyzer = codex_home / "agents" / f"{REPAIR_ANALYZER}.toml"
-    apply_patch = tmp_path / "apply_patch.py"
-    apply_patch.write_text("# apply\n", encoding="utf-8")
-    config = codex_home / "config.toml"
-
-    status = helper.main(
-        [
-            "install", "--source", str(source), "--config", str(config),
-            "--analyzer", str(analyzer), "--launcher", str(tmp_path / "triad-apply-repair"),
-            "--apply-patch", str(apply_patch),
-        ]
-    )
-
-    assert status == 0
-    assert tomllib.loads(config.read_text(encoding="utf-8"))["agents"][REPAIR_ANALYZER]["config_file"] == str(analyzer)
 
 
-def test_bootstrap_repair_apply_launcher_pins_classifier_path(tmp_path: Path) -> None:
-    helper, args, _analyzer, _config, launcher = _repair_install_args(tmp_path)
-    classifier = tmp_path / "config with spaces" / "classifier '$() `'.json"
-    args.extend(["--classifier", str(classifier)])
-
-    assert helper.main(args) == 0
-
-    text = launcher.read_text(encoding="utf-8")
-    assert "TRIAD_CLASSIFIER_EXTENSION" in text
-    assert json.dumps(str(classifier), ensure_ascii=False) in text
-    assert "os.execve(" in text
 
 
-def test_installed_launchers_keep_custom_classifier_in_a_fresh_environment(
+def test_provider_launchers_and_owner_apply_share_custom_classifier_in_a_fresh_environment(
     tmp_path: Path,
 ) -> None:
     repo_root = _make_repo_root(tmp_path, real_agents=True)
+    shutil.copy2(APPLY_PATCH, repo_root / "bin" / "apply_patch.py")
+    shutil.copy2(ROOT / "bin" / "_common.py", repo_root / "bin" / "_common.py")
+    (repo_root / "bin" / "apply_patch.py").chmod(0o755)
     classifier = tmp_path / "config with spaces" / "classifier '$() `'.json"
     probe = (
         "#!/usr/bin/env python3\n"
         "import os\n"
         "print(os.environ['TRIAD_CLASSIFIER_EXTENSION'])\n"
     )
-    for name in ("gemini_wrapper.py", "apply_patch.py"):
-        path = repo_root / "bin" / name
-        path.write_text(probe, encoding="utf-8")
-        path.chmod(0o755)
+    provider_path = repo_root / "bin" / "gemini_wrapper.py"
+    provider_path.write_text(probe, encoding="utf-8")
+    provider_path.chmod(0o755)
     result, env, launcher_dir = _run_bootstrap(
         tmp_path,
         repo_root=repo_root,
@@ -614,8 +700,23 @@ def test_installed_launchers_keep_custom_classifier_in_a_fresh_environment(
         capture_output=True,
         check=False,
     )
+    _outer, owner = _owner_apply_argv(result.stdout)
+    proposal = tmp_path / "proposal.json"
+    proposal.write_text(
+        json.dumps(
+            {
+                "classification": "server-capacity",
+                "reason": "Stable capacity signal.",
+                "pattern_list": "SERVER_CAPACITY_PATTERNS",
+                "substring": "service capacity temporarily exhausted",
+            }
+        ),
+        encoding="utf-8",
+    )
+    owner[owner.index("<cli>")] = "claude"
+    owner[owner.index("<absolute-proposal-path>")] = str(proposal)
     apply = subprocess.run(
-        [str(launcher_dir / "triad-apply-repair")],
+        ["/bin/zsh", "-lic", shlex.join(owner)],
         env=fresh_env,
         text=True,
         capture_output=True,
@@ -625,29 +726,29 @@ def test_installed_launchers_keep_custom_classifier_in_a_fresh_environment(
     assert provider.returncode == 0, provider.stderr
     assert apply.returncode == 0, apply.stderr
     assert provider.stdout.strip() == str(classifier)
-    assert apply.stdout.strip() == str(classifier)
+    assert apply.stdout.strip() == "applied"
+    assert json.loads(classifier.read_text(encoding="utf-8"))["claude"]
+    assert not (
+        Path(fresh_env["XDG_CONFIG_HOME"])
+        / "triad-codex-dispatch"
+        / "classifier-patches.json"
+    ).exists()
 
 
 def test_bootstrap_repair_rejects_whitespace_python_shebang() -> None:
     helper = _load_bootstrap_repair_module()
 
     with pytest.raises(helper.Refusal, match="shebang cannot encode"):
-        helper.launcher_text(Path("/tmp/python runtime/bin/python3"), Path("/tmp/apply.py"))
+        helper.portable_python_shebang(Path("/tmp/python runtime/bin/python3"))
 
 
-def test_bootstrap_repair_reports_explicit_refusal_and_success_statuses(tmp_path: Path) -> None:
+def test_bootstrap_repair_reports_remove_only_success_status(tmp_path: Path) -> None:
     helper = _load_bootstrap_repair_module()
-    missing = helper.main(
-        ["install", "--source", str(tmp_path / "missing"), "--config", str(tmp_path / "config"),
-         "--analyzer", str(tmp_path / "analyzer"), "--launcher", str(tmp_path / "launcher"),
-         "--apply-patch", str(tmp_path / "apply")]
-    )
     removed = helper.main(
         ["remove", "--config", str(tmp_path / "config"), "--analyzer", str(tmp_path / "analyzer"),
          "--launcher", str(tmp_path / "launcher")]
     )
 
-    assert missing == 3
     assert removed == 0
 
 
@@ -662,7 +763,7 @@ def test_bootstrap_repair_keeps_foreign_registration_but_removes_managed_launche
     )
     config.write_text(foreign, encoding="utf-8")
     launcher = tmp_path / "triad-apply-repair"
-    launcher.write_bytes(helper.launcher_text(Path(sys.executable), tmp_path / "apply.py"))
+    launcher.write_bytes(FROZEN_LEGACY_APPLY_LAUNCHER)
 
     status = helper.main(
         ["remove", "--config", str(config), "--analyzer", str(tmp_path / "analyzer"),
@@ -704,22 +805,10 @@ def test_bootstrap_repair_restores_pair_when_launcher_removal_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     helper = _load_bootstrap_repair_module()
-    source = tmp_path / "source.toml"
-    source.write_text(
-        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n', encoding="utf-8"
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper,
+        tmp_path,
     )
-    apply_patch = tmp_path / "apply_patch.py"
-    apply_patch.write_text("# apply\n", encoding="utf-8")
-    analyzer, config, launcher = (
-        tmp_path / "agents" / f"{REPAIR_ANALYZER}.toml",
-        tmp_path / "config.toml",
-        tmp_path / "triad-apply-repair",
-    )
-    assert helper.main(
-        ["install", "--source", str(source), "--config", str(config),
-         "--analyzer", str(analyzer), "--launcher", str(launcher),
-         "--apply-patch", str(apply_patch)]
-    ) == 0
     original_remove = helper.remove_state
 
     def fail_launcher(state, journal):
@@ -728,102 +817,24 @@ def test_bootstrap_repair_restores_pair_when_launcher_removal_fails(
         original_remove(state, journal)
 
     monkeypatch.setattr(helper, "remove_state", fail_launcher)
-    assert helper.main(
-        ["remove", "--config", str(config), "--analyzer", str(analyzer),
-         "--launcher", str(launcher)]
-    ) == 3
+    assert helper.main(args) == 3
     assert analyzer.exists()
     assert REPAIR_ANALYZER in tomllib.loads(config.read_text(encoding="utf-8"))["agents"]
 
 
-def _repair_install_args(tmp_path: Path) -> tuple[object, list[str], Path, Path, Path]:
-    helper = _load_bootstrap_repair_module()
-    source = tmp_path / "source.toml"
-    source.write_text(
-        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n', encoding="utf-8"
-    )
-    apply_patch = tmp_path / "apply_patch.py"
-    apply_patch.write_text("# apply\n", encoding="utf-8")
-    analyzer = tmp_path / "agents" / f"{REPAIR_ANALYZER}.toml"
-    config = tmp_path / "config.toml"
-    launcher = tmp_path / "triad-apply-repair"
-    return helper, [
-        "install", "--source", str(source), "--config", str(config),
-        "--analyzer", str(analyzer), "--launcher", str(launcher),
-        "--apply-patch", str(apply_patch),
-    ], analyzer, config, launcher
 
 
-def test_bootstrap_repair_preflight_install_is_read_only(tmp_path: Path) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    source = tmp_path / "source.toml"
-    apply_patch = tmp_path / "apply_patch.py"
-    before = {path: path.read_bytes() for path in (source, apply_patch)}
-    args[0] = "preflight-install"
-
-    assert helper.main(args) == 0
-
-    assert {path: path.read_bytes() for path in (source, apply_patch)} == before
-    assert not analyzer.parent.exists()
-    assert not config.exists()
-    assert not launcher.exists()
-    assert sorted(path.name for path in tmp_path.iterdir()) == [
-        "apply_patch.py",
-        "source.toml",
-    ]
 
 
-def test_bootstrap_repair_rolls_back_replace_when_parent_fsync_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    original_fsync = helper.fsync_parent
-    failed = False
-
-    def fail_config(path):
-        nonlocal failed
-        if path == config and not failed:
-            failed = True
-            raise OSError("injected config parent fsync failure")
-        original_fsync(path)
-
-    monkeypatch.setattr(helper, "fsync_parent", fail_config)
-    assert helper.main(args) == 3
-    assert not analyzer.exists()
-    assert not config.exists()
-    assert not launcher.exists()
-
-
-def test_bootstrap_repair_rollback_preserves_foreign_replace_after_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    original_fsync = helper.fsync_parent
-    failed = False
-    foreign = b"foreign replacement\n"
-
-    def replace_config_then_fail(path):
-        nonlocal failed
-        if path == config and not failed:
-            failed = True
-            replacement = tmp_path / "foreign-config"
-            replacement.write_bytes(foreign)
-            os.replace(replacement, config)
-            raise OSError("injected config parent fsync failure after foreign replace")
-        original_fsync(path)
-
-    monkeypatch.setattr(helper, "fsync_parent", replace_config_then_fail)
-    assert helper.main(args) == 3
-    assert config.read_bytes() == foreign
-    assert not analyzer.exists()
-    assert not launcher.exists()
 
 
 def test_bootstrap_repair_rolls_back_unlink_when_parent_fsync_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    assert helper.main(args) == 0
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     before = config.read_bytes()
     original_fsync = helper.fsync_parent
     failed = False
@@ -836,8 +847,7 @@ def test_bootstrap_repair_rolls_back_unlink_when_parent_fsync_fails(
         original_fsync(path)
 
     monkeypatch.setattr(helper, "fsync_parent", fail_config)
-    assert helper.main(["remove", "--config", str(config), "--analyzer", str(analyzer),
-                        "--launcher", str(launcher)]) == 3
+    assert helper.main(args) == 3
     assert config.read_bytes() == before
     assert analyzer.exists()
     assert launcher.exists()
@@ -846,8 +856,10 @@ def test_bootstrap_repair_rolls_back_unlink_when_parent_fsync_fails(
 def test_bootstrap_repair_rollback_preserves_foreign_create_after_unlink(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    assert helper.main(args) == 0
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     original_fsync = helper.fsync_parent
     failed = False
     foreign = b"foreign config created after unlink\n"
@@ -861,10 +873,7 @@ def test_bootstrap_repair_rollback_preserves_foreign_create_after_unlink(
         original_fsync(path)
 
     monkeypatch.setattr(helper, "fsync_parent", create_config_then_fail)
-    assert helper.main(
-        ["remove", "--config", str(config), "--analyzer", str(analyzer),
-         "--launcher", str(launcher)]
-    ) == 3
+    assert helper.main(args) == 3
     assert config.read_bytes() == foreign
     assert analyzer.exists()
     assert launcher.exists()
@@ -897,8 +906,10 @@ def test_bootstrap_repair_remove_revalidates_absence_after_successful_parent_fsy
 def test_bootstrap_repair_restores_registration_when_analyzer_removal_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    assert helper.main(args) == 0
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     config_before = config.read_bytes()
     analyzer_before = analyzer.read_bytes()
     launcher_before = launcher.read_bytes()
@@ -910,135 +921,18 @@ def test_bootstrap_repair_restores_registration_when_analyzer_removal_fails(
         return original_remove(state, journal)
 
     monkeypatch.setattr(helper, "remove_state", fail_analyzer_removal)
-    assert helper.main(
-        ["remove", "--config", str(config), "--analyzer", str(analyzer),
-         "--launcher", str(launcher)]
-    ) == 3
+    assert helper.main(args) == 3
     assert config.read_bytes() == config_before
     assert analyzer.read_bytes() == analyzer_before
     assert launcher.read_bytes() == launcher_before
 
 
-@pytest.mark.parametrize("swapped", ("apply", "runtime"))
-def test_bootstrap_repair_rejects_apply_or_runtime_identity_swap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, swapped: str
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    apply_patch = Path(args[args.index("--apply-patch") + 1])
-    runtime = tmp_path / "runtime"
-    runtime.write_text("runtime\n", encoding="utf-8")
-    args.extend(["--python", str(runtime)])
-    watched = apply_patch if swapped == "apply" else runtime
-    original_stage = helper.stage
-    calls = 0
-
-    def swap_after_first_stage(*stage_args):
-        nonlocal calls
-        calls += 1
-        result = original_stage(*stage_args)
-        if calls == 1:
-            watched.write_text("swapped\n", encoding="utf-8")
-        return result
-
-    monkeypatch.setattr(helper, "stage", swap_after_first_stage)
-    assert helper.main(args) == 3
-    assert not analyzer.exists()
-    assert not config.exists()
-    assert not launcher.exists()
-    assert not list(tmp_path.rglob(".*.tmp"))
 
 
-def test_bootstrap_repair_cleans_staged_files_when_later_stage_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    original_stage = helper.stage
-    calls = 0
-
-    def fail_second_stage(*stage_args):
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise OSError("injected later stage failure")
-        return original_stage(*stage_args)
-
-    monkeypatch.setattr(helper, "stage", fail_second_stage)
-    assert helper.main(args) == 3
-    assert not list(tmp_path.rglob(".*.tmp"))
-    assert not analyzer.exists() and not config.exists() and not launcher.exists()
 
 
-def test_bootstrap_repair_outer_cleanup_retries_one_shot_unlink_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    parsed_args = helper.parser().parse_args(args)
-    original_stage = helper.stage
-    original_unlink = helper.os.unlink
-    stage_calls = 0
-    unlink_calls = 0
-
-    def fail_second_stage(*stage_args):
-        nonlocal stage_calls
-        stage_calls += 1
-        if stage_calls == 2:
-            raise OSError("outer primary stage failure")
-        return original_stage(*stage_args)
-
-    def fail_unlink_once(path):
-        nonlocal unlink_calls
-        unlink_calls += 1
-        if unlink_calls == 1:
-            raise OSError("one-shot outer cleanup unlink failure")
-        original_unlink(path)
-
-    with monkeypatch.context() as patcher:
-        patcher.setattr(helper, "stage", fail_second_stage)
-        patcher.setattr(helper.os, "unlink", fail_unlink_once)
-        with pytest.raises(OSError, match="outer primary stage failure") as captured:
-            helper.install(parsed_args)
-
-    assert not isinstance(captured.value, helper.TransactionFailure)
-    assert unlink_calls == 2
-    assert not list(tmp_path.rglob(".*.tmp"))
-    assert not analyzer.exists() and not config.exists() and not launcher.exists()
 
 
-def test_bootstrap_repair_outer_cleanup_reports_persistent_unlink_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    parsed_args = helper.parser().parse_args(args)
-    original_stage = helper.stage
-    original_unlink = helper.os.unlink
-    stage_calls = 0
-    unlink_calls = 0
-
-    def fail_second_stage(*stage_args):
-        nonlocal stage_calls
-        stage_calls += 1
-        if stage_calls == 2:
-            raise OSError("outer primary stage failure")
-        return original_stage(*stage_args)
-
-    def always_fail_unlink(_path):
-        nonlocal unlink_calls
-        unlink_calls += 1
-        raise OSError("persistent outer cleanup unlink failure")
-
-    with monkeypatch.context() as patcher:
-        patcher.setattr(helper, "stage", fail_second_stage)
-        patcher.setattr(helper.os, "unlink", always_fail_unlink)
-        with pytest.raises(helper.TransactionFailure) as captured:
-            helper.install(parsed_args)
-
-    assert "outer primary stage failure" in str(captured.value)
-    assert "persistent outer cleanup unlink failure" in str(captured.value)
-    assert unlink_calls == 2
-    leaked = list(tmp_path.rglob(".*.tmp"))
-    assert len(leaked) == 1
-    original_unlink(leaked[0])
-    assert not analyzer.exists() and not config.exists() and not launcher.exists()
 
 
 def test_bootstrap_repair_stage_fsync_failure_does_not_mask_error_or_leak(
@@ -1116,112 +1010,45 @@ def test_bootstrap_repair_stage_reports_write_and_internal_cleanup_failures(
     original_unlink(leaked[0])
 
 
-def test_bootstrap_repair_cleans_temps_after_publish_or_readback_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    original_link = helper.os.link
-
-    def fail_config_publish(temp, target):
-        if target == config:
-            raise OSError("injected no-clobber publish failure")
-        original_link(temp, target)
-
-    monkeypatch.setattr(helper.os, "link", fail_config_publish)
-    assert helper.main(args) == 3
-    assert not list(tmp_path.rglob(".*.tmp"))
-    assert not analyzer.exists() and not config.exists() and not launcher.exists()
 
 
-def test_bootstrap_repair_rolls_back_post_replace_readback_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    original_read = helper.read_state
-    config_reads = 0
-
-    def fail_second_config_read(path):
-        nonlocal config_reads
-        if path == config:
-            config_reads += 1
-            if config_reads == 2:
-                raise helper.Refusal("injected post-replace readback failure")
-        return original_read(path)
-
-    monkeypatch.setattr(helper, "read_state", fail_second_config_read)
-    assert helper.main(args) == 3
-    assert not analyzer.exists() and not config.exists() and not launcher.exists()
-    assert not list(tmp_path.rglob(".*.tmp"))
 
 
-def test_bootstrap_repair_rollback_continues_after_refusal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper, args, analyzer, _config, launcher = _repair_install_args(tmp_path)
-    assert helper.main(args) == 0
-    before = analyzer.read_bytes()
-    source = Path(args[args.index("--source") + 1])
-    source.write_text(
-        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\ndescription = "new"\n',
-        encoding="utf-8",
-    )
-    original_fsync = helper.fsync_parent
-    failed = False
-
-    def fail_launcher_once(path):
-        nonlocal failed
-        if path == launcher and not failed:
-            failed = True
-            raise OSError("injected launcher fsync failure")
-        original_fsync(path)
-
-    monkeypatch.setattr(helper, "fsync_parent", fail_launcher_once)
-    original_rollback = helper.rollback_mutation
-
-    def refuse_launcher_rollback(mutation):
-        if mutation.target == launcher:
-            raise helper.Refusal("injected rollback refusal")
-        original_rollback(mutation)
-
-    monkeypatch.setattr(helper, "rollback_mutation", refuse_launcher_rollback)
-    assert helper.main(args) == 3
-    assert analyzer.read_bytes() == before
 
 
 @pytest.mark.parametrize("unsafe", ("analyzer", "launcher"))
 def test_bootstrap_repair_remove_refuses_unsafe_artifact_before_config_mutation(
     tmp_path: Path, unsafe: str
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    assert helper.main(args) == 0
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     before = config.read_bytes()
     target = analyzer if unsafe == "analyzer" else launcher
     target.unlink()
     target.symlink_to(tmp_path / f"foreign-{unsafe}")
 
-    assert helper.main(["remove", "--config", str(config), "--analyzer", str(analyzer),
-                        "--launcher", str(launcher)]) == 3
+    assert helper.main(args) == 3
     assert config.read_bytes() == before
     assert target.is_symlink()
 
 
-@pytest.mark.parametrize("command", ("install", "remove"))
 def test_bootstrap_repair_refuses_malformed_toml_inside_managed_markers(
-    tmp_path: Path, command: str
+    tmp_path: Path,
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     malformed = (
         f"{helper.REG_BEGIN}\n[agents.{REPAIR_ANALYZER}]\nvalue = [\n{helper.REG_END}\n"
     ).encode("utf-8")
     config.write_bytes(malformed)
-    if command == "install":
-        status = helper.main(args)
-    else:
-        status = helper.main(["remove", "--config", str(config), "--analyzer", str(analyzer),
-                              "--launcher", str(launcher)])
+    status = helper.main(args)
     assert status == 3
     assert config.read_bytes() == malformed
-    assert not analyzer.exists() and not launcher.exists()
+    assert analyzer.exists() and launcher.exists()
 
 
 @pytest.mark.parametrize(
@@ -1249,12 +1076,16 @@ def test_portable_python_shebang_uses_filesystem_bytes_and_256_byte_limit(
 
 
 def test_bootstrap_repair_embedded_launcher_and_config_markers_are_foreign(tmp_path: Path) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     launcher.write_text(f'comment = "{helper.LAUNCHER_MARKER}"\n', encoding="utf-8")
     config.write_text(
         f'description = "{helper.REG_BEGIN} {helper.REG_END}"\n', encoding="utf-8"
     )
-    assert helper.main(args) == 3
+    assert not helper.launcher_is_managed(helper.read_state(launcher))
+    assert helper.main(args) == 0
     assert launcher.read_text(encoding="utf-8").startswith("comment")
     assert config.read_text(encoding="utf-8").startswith("description")
 
@@ -1263,14 +1094,14 @@ def test_bootstrap_repair_embedded_launcher_and_config_markers_are_foreign(tmp_p
 def test_bootstrap_repair_config_round_trips_existing_bytes_exactly(
     tmp_path: Path, original: bytes
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
-    config.write_bytes(original)
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, _launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path, existing_config=True
+    )
+    block = helper.registration_block(analyzer, True).encode("utf-8")
+    config.write_bytes(original + b"\n" + block)
 
     assert helper.main(args) == 0
-    assert helper.main(
-        ["remove", "--config", str(config), "--analyzer", str(analyzer),
-         "--launcher", str(launcher)]
-    ) == 0
     assert config.exists()
     assert config.read_bytes() == original
 
@@ -1288,34 +1119,13 @@ def test_config_fragment_round_trips_owner_bytes_without_final_newline(
     assert config.read_bytes() == original
 
 
-def _assert_repair_analyzer_install_state(codex_home: Path) -> None:
-    """The one supported personal-scope repair agent is read-only and managed."""
-    agents_dir = codex_home / "agents"
-    analyzer = agents_dir / f"{REPAIR_ANALYZER}.toml"
-    assert analyzer.is_file()
-    text = analyzer.read_text(encoding="utf-8")
-    assert REPAIR_ANALYZER_MARKER in text
-    data = tomllib.loads(text)
-    assert data["name"] == REPAIR_ANALYZER
-    assert data["model"] == "gpt-5.6-terra"
-    assert data["model_reasoning_effort"] == "high"
-    assert data["sandbox_mode"] == "read-only"
-    for name in ("claude-wrapper-repair", "gemini-wrapper-repair", "agy-wrapper-repair"):
-        assert not (agents_dir / f"{name}.toml").exists()
-    assert not list(agents_dir.glob("*-wrapper-repair.toml"))
-
-
-def _assert_repair_analyzer_registration(codex_home: Path) -> None:
-    text = (codex_home / "config.toml").read_text(encoding="utf-8")
-    assert "# >>> triad-codex-dispatch managed repair analyzer registration >>>" in text
-    data = tomllib.loads(text)
-    registration = data["agents"][REPAIR_ANALYZER]
-    assert registration["description"] == (
-        "Read-only triad repair analyzer for untrusted vendor run logs."
-    )
-    assert registration["config_file"] == str(
-        codex_home / "agents" / f"{REPAIR_ANALYZER}.toml"
-    )
+def _assert_legacy_repair_state_absent(codex_home: Path) -> None:
+    assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
+    config = codex_home / "config.toml"
+    if config.exists():
+        text = config.read_text(encoding="utf-8")
+        assert "managed repair analyzer registration" not in text
+        assert f"[agents.{REPAIR_ANALYZER}]" not in text
 
 
 def _assert_profile_does_not_disable_multi_agent(profile_path: Path) -> None:
@@ -1338,8 +1148,7 @@ def test_default_install_keeps_ordinary_codex_and_installs_prompt_rules(tmp_path
     assert result.returncode == 0, result.stderr + result.stdout
     home = Path(env["HOME"])
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
-    _assert_repair_analyzer_install_state(home / ".codex")
-    _assert_repair_analyzer_registration(home / ".codex")
+    _assert_legacy_repair_state_absent(home / ".codex")
     assert (
         Path(env["XDG_CONFIG_HOME"])
         / "triad-codex-dispatch"
@@ -1361,16 +1170,10 @@ def test_default_install_keeps_ordinary_codex_and_installs_prompt_rules(tmp_path
     assert "preserves provider login" in result.stdout
     assert "codex-triad" not in result.stdout
     apply_launcher = _launcher_bin / "triad-apply-repair"
-    assert apply_launcher.is_file()
-    assert os.access(apply_launcher, os.X_OK)
-    expected_python = json.dumps(str(Path(sys.executable).resolve()))
-    expected_target = json.dumps(str(repo_root / "bin" / "apply_patch.py"))
-    apply_text = apply_launcher.read_text(encoding="utf-8")
-    assert (
-        f"os.execve({expected_python}, [{expected_python}, \"-E\", {expected_target}] + sys.argv[1:], env)"
-        in apply_text
-    )
-    assert 'env["TRIAD_CLASSIFIER_EXTENSION"]' in apply_text
+    assert not apply_launcher.exists()
+    _outer, owner = _owner_apply_argv(result.stdout)
+    assert owner[0] == "python3"
+    assert owner[1] == str(repo_root / "bin" / "apply_patch.py")
 
 
 def test_default_install_routes_exact_wrapper_calls_to_active_reviewer(tmp_path):
@@ -1414,94 +1217,10 @@ def test_default_install_preserves_owner_approval_keys_and_adds_env_guard(tmp_pa
     assert not (codex_home / "triad-codex-dispatch.config.toml").exists()
 
 
-def test_reinstall_refreshes_the_managed_repair_analyzer(tmp_path: Path) -> None:
-    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install")
-    assert first.returncode == 0, first.stderr + first.stdout
-
-    analyzer = Path(env["HOME"]) / ".codex" / "agents" / f"{REPAIR_ANALYZER}.toml"
-    analyzer.write_text(
-        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n'
-        'description = "stale managed content"\n',
-        encoding="utf-8",
-    )
-
-    second, _env, _launchers = _run_bootstrap(
-        tmp_path,
-        repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
-        arg="--install",
-    )
-
-    assert second.returncode == 0, second.stderr + second.stdout
-    assert analyzer.read_text(encoding="utf-8") == (
-        Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
-        / "agents"
-        / f"{REPAIR_ANALYZER}.toml"
-    ).read_text(encoding="utf-8")
-    _assert_repair_analyzer_registration(Path(env["HOME"]) / ".codex")
 
 
-def test_apply_repair_launcher_forwards_argv_unchanged(tmp_path: Path) -> None:
-    repo_root = _make_repo_root(tmp_path, real_agents=True)
-    capture = tmp_path / "apply-argv.json"
-    (repo_root / "bin" / "apply_patch.py").write_text(
-        "import json, os, sys\n"
-        "from pathlib import Path\n"
-        "proposal = Path(sys.argv[sys.argv.index('--proposal-file') + 1])\n"
-        "Path(os.environ['TRIAD_TEST_APPLY_ARGV']).write_text(json.dumps({\n"
-        "    'argv': sys.argv[1:], 'proposal': proposal.read_text(encoding='utf-8')\n"
-        "}))\n",
-        encoding="utf-8",
-    )
-    installed, env, launcher_bin = _run_bootstrap(
-        tmp_path, repo_root=repo_root, arg="--install"
-    )
-    assert installed.returncode == 0, installed.stderr + installed.stdout
-
-    marker_name = "shell-injection-marker"
-    proposal = tmp_path / f"proposal space ' $(touch {marker_name}) `touch {marker_name}`.json"
-    proposal.write_text('{"classification":"retry"}\n', encoding="utf-8")
-    args = ["--cli", "claude", "--proposal-file", str(proposal)]
-    command = shlex.join([str(launcher_bin / "triad-apply-repair"), *args])
-    unrelated_cwd = tmp_path / "unrelated-cwd"
-    unrelated_cwd.mkdir()
-    invoked = subprocess.run(
-        ["/bin/sh", "-c", command],
-        text=True,
-        capture_output=True,
-        env={**env, "TRIAD_TEST_APPLY_ARGV": str(capture)},
-        cwd=unrelated_cwd,
-        timeout=5,
-    )
-
-    assert invoked.returncode == 0, invoked.stderr
-    recorded = json.loads(capture.read_text(encoding="utf-8"))
-    assert recorded["argv"] == args
-    assert recorded["proposal"] == '{"classification":"retry"}\n'
-    assert not (unrelated_cwd / marker_name).exists()
 
 
-def test_install_registers_repair_analyzer_without_replacing_agents_settings(
-    tmp_path: Path,
-) -> None:
-    codex_home = tmp_path / "home" / ".codex"
-    codex_home.mkdir(parents=True)
-    (codex_home / "config.toml").write_text(
-        "[agents]\nmax_threads = 7\n", encoding="utf-8"
-    )
-
-    result, _env, _launchers = _run_bootstrap(
-        tmp_path,
-        arg="--install",
-        env_overrides={
-            "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
-        },
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    data = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
-    assert data["agents"]["max_threads"] == 7
-    _assert_repair_analyzer_registration(codex_home)
 
 
 def test_plain_install_warns_for_managed_legacy_profile_without_deleting_it(
@@ -1626,9 +1345,8 @@ def test_plain_install_warns_and_continues_for_unsafe_opt_out_profile(
     assert _install_target_fingerprint(unsafe_paths) == before
     for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
         assert (launchers / name).is_file()
-    assert (launchers / "triad-apply-repair").is_file()
-    assert (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").is_file()
-    _assert_repair_analyzer_registration(codex_home)
+    assert not (launchers / "triad-apply-repair").exists()
+    _assert_legacy_repair_state_absent(codex_home)
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert classifier.is_file()
     assert shell_rc.read_bytes() == b"# owner shell\n"
@@ -1675,9 +1393,8 @@ def test_plain_install_warns_and_continues_for_unsafe_opt_out_shell(
     assert _install_target_fingerprint(unsafe_paths) == before
     for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
         assert (launchers / name).is_file()
-    assert (launchers / "triad-apply-repair").is_file()
-    assert (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").is_file()
-    _assert_repair_analyzer_registration(codex_home)
+    assert not (launchers / "triad-apply-repair").exists()
+    _assert_legacy_repair_state_absent(codex_home)
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
     assert classifier.is_file()
 
@@ -1747,7 +1464,9 @@ def test_paired_legacy_opt_in_suppresses_warning_and_updates_managed_shell_entry
     assert shell_rc.read_bytes() != old_shell
 
 
-def test_install_refuses_unmanaged_repair_analyzer_registration(tmp_path: Path) -> None:
+def test_install_cleanup_preserves_foreign_repair_analyzer_registration(
+    tmp_path: Path,
+) -> None:
     codex_home = tmp_path / "home" / ".codex"
     codex_home.mkdir(parents=True)
     config = codex_home / "config.toml"
@@ -1759,7 +1478,7 @@ def test_install_refuses_unmanaged_repair_analyzer_registration(tmp_path: Path) 
     )
     config.write_text(foreign, encoding="utf-8")
 
-    result, _env, _launchers = _run_bootstrap(
+    result, _env, launchers = _run_bootstrap(
         tmp_path,
         arg="--install",
         env_overrides={
@@ -1768,9 +1487,13 @@ def test_install_refuses_unmanaged_repair_analyzer_registration(tmp_path: Path) 
         },
     )
 
-    assert result.returncode != 0
-    assert "unmanaged repair analyzer registration" in result.stderr
-    assert config.read_text(encoding="utf-8") == foreign
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert config.read_text(encoding="utf-8").startswith(foreign)
+    assert tomllib.loads(config.read_text(encoding="utf-8"))["agents"][
+        REPAIR_ANALYZER
+    ]["description"] == "foreign"
+    for wrapper in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+        assert (launchers / wrapper).is_file()
 
 
 def test_install_preserves_invalid_registration_config_without_publishing_analyzer(
@@ -1796,32 +1519,27 @@ def test_install_preserves_invalid_registration_config_without_publishing_analyz
     assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
 
 
-@pytest.mark.parametrize("command", ("install", "remove"))
 def test_bootstrap_repair_refuses_reversed_reserved_marker_comments(
-    tmp_path: Path, command: str,
+    tmp_path: Path,
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     foreign = (
         f"{helper.REG_END}\n"
         f"{helper.REG_BEGIN}\n"
     ).encode("utf-8")
     config.write_bytes(foreign)
 
-    if command == "install":
-        status = helper.main(args)
-    else:
-        status = helper.main(
-            ["remove", "--config", str(config), "--analyzer", str(analyzer),
-             "--launcher", str(launcher)]
-        )
+    status = helper.main(args)
 
     assert status == 3
     assert config.read_bytes() == foreign
-    assert not analyzer.exists()
-    assert not launcher.exists()
+    assert analyzer.exists()
+    assert launcher.exists()
 
 
-@pytest.mark.parametrize("command", ("install", "remove"))
 @pytest.mark.parametrize(
     "markers",
     (
@@ -1832,25 +1550,22 @@ def test_bootstrap_repair_refuses_reversed_reserved_marker_comments(
     ),
 )
 def test_bootstrap_repair_refuses_orphan_or_duplicate_reserved_marker_comments(
-    tmp_path: Path, command: str, markers: tuple[str, ...]
+    tmp_path: Path, markers: tuple[str, ...]
 ) -> None:
-    helper, args, analyzer, config, launcher = _repair_install_args(tmp_path)
+    helper = _load_bootstrap_repair_module()
+    args, analyzer, config, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
+    )
     marker_text = {"begin": helper.REG_BEGIN, "end": helper.REG_END}
     foreign = "".join(f"{marker_text[marker]}\n" for marker in markers).encode("utf-8")
     config.write_bytes(foreign)
 
-    if command == "install":
-        status = helper.main(args)
-    else:
-        status = helper.main(
-            ["remove", "--config", str(config), "--analyzer", str(analyzer),
-             "--launcher", str(launcher)]
-        )
+    status = helper.main(args)
 
     assert status == 3
     assert config.read_bytes() == foreign
-    assert not analyzer.exists()
-    assert not launcher.exists()
+    assert analyzer.exists()
+    assert launcher.exists()
 
 
 @pytest.mark.parametrize("kind", ("symlink", "fifo"))
@@ -1918,60 +1633,8 @@ def test_registration_round_trip_preserves_unrelated_config_bytes(tmp_path: Path
     assert config.read_text(encoding="utf-8") == original
 
 
-def test_registration_publish_failure_rolls_back_new_analyzer(tmp_path: Path) -> None:
-    codex_home = tmp_path / "home" / ".codex"
-    result, _env, _launchers = _run_bootstrap(
-        tmp_path,
-        arg="--install",
-        env_overrides={
-            "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "0",
-            "TRIAD_BOOTSTRAP_TEST_FAIL_REPAIR_REGISTRATION_PUBLISH": "1",
-        },
-    )
-
-    assert result.returncode != 0
-    assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
-    assert not (codex_home / "config.toml").exists()
-    assert not (codex_home / "rules" / "triad-codex-dispatch.rules").exists()
 
 
-def test_registration_publish_failure_does_not_publish_shell_entry(
-    tmp_path: Path,
-) -> None:
-    codex_home = tmp_path / "home" / ".codex"
-    codex_home.mkdir(parents=True)
-    config = codex_home / "config.toml"
-    owner_config = b'owner_key = "preserve exactly"\n'
-    config.write_bytes(owner_config)
-    shell_rc = tmp_path / "shellrc"
-    owner_shell = "# owner shell\n"
-    shell_rc.write_text(owner_shell, encoding="utf-8")
-
-    result, _env, launchers = _run_bootstrap(
-        tmp_path,
-        arg="--install",
-        env_overrides={
-            "CODEX_HOME": str(codex_home),
-            "TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE": "1",
-            "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
-            "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
-            "TRIAD_BOOTSTRAP_TEST_FAIL_REPAIR_REGISTRATION_PUBLISH": "1",
-        },
-    )
-
-    assert result.returncode != 0
-    for name in (
-        "claude_wrapper.py",
-        "gemini_wrapper.py",
-        "antigravity_wrapper.py",
-        "triad-apply-repair",
-    ):
-        assert not (launchers / name).exists()
-    assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
-    assert config.read_bytes() == owner_config
-    assert shell_rc.read_text(encoding="utf-8") == owner_shell
-    assert not (codex_home / "rules" / "triad-codex-dispatch.rules").exists()
 
 
 @pytest.mark.parametrize("kind", ("symlink", "fifo"))
@@ -1981,8 +1644,11 @@ def test_remove_refuses_unsafe_config_and_preserves_managed_analyzer(
     installed, env, _launchers = _run_bootstrap(tmp_path, arg="--install")
     assert installed.returncode == 0, installed.stderr + installed.stdout
     codex_home = Path(env["HOME"]) / ".codex"
-    analyzer = codex_home / "agents" / f"{REPAIR_ANALYZER}.toml"
-    config = codex_home / "config.toml"
+    helper = _load_bootstrap_repair_module()
+    _args, analyzer, config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper, codex_home, existing_config=True
+    )
+    seeded_launcher.replace(_launchers / "triad-apply-repair")
     target = tmp_path / "foreign-config.toml"
     if kind == "symlink":
         original = config.read_bytes()
@@ -2011,7 +1677,7 @@ def test_remove_refuses_unsafe_config_and_preserves_managed_analyzer(
 
 
 @pytest.mark.parametrize("kind", ("symlink", "unmanaged"))
-def test_install_refuses_nonmanaged_repair_analyzer_target(
+def test_install_cleanup_handles_foreign_legacy_repair_analyzer_target(
     tmp_path: Path, kind: str
 ) -> None:
     codex_home = tmp_path / "home" / ".codex"
@@ -2026,14 +1692,20 @@ def test_install_refuses_nonmanaged_repair_analyzer_target(
         analyzer.write_text('name = "foreign-agent"\n', encoding="utf-8")
     before = analyzer.readlink() if kind == "symlink" else analyzer.read_text(encoding="utf-8")
 
-    result, _env, _launchers = _run_bootstrap(
+    result, _env, launchers = _run_bootstrap(
         tmp_path,
         arg="--install",
         env_overrides={"CODEX_HOME": str(codex_home)},
     )
 
-    assert result.returncode != 0
-    assert "repair analyzer" in result.stderr
+    if kind == "symlink":
+        assert result.returncode != 0
+        assert "repair analyzer" in result.stderr
+        assert not any(launchers.iterdir())
+    else:
+        assert result.returncode == 0, result.stderr + result.stdout
+        for wrapper in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+            assert (launchers / wrapper).is_file()
     assert analyzer.is_symlink() if kind == "symlink" else analyzer.is_file()
     if kind == "symlink":
         assert analyzer.readlink() == before
@@ -2041,7 +1713,9 @@ def test_install_refuses_nonmanaged_repair_analyzer_target(
         assert analyzer.read_text(encoding="utf-8") == before
 
 
-def test_install_refuses_nonregular_repair_analyzer_target(tmp_path: Path) -> None:
+def test_install_cleanup_refuses_nonregular_legacy_repair_analyzer_target(
+    tmp_path: Path,
+) -> None:
     repo_root = _make_repo_root(tmp_path, real_agents=True)
     codex_home, config, classifier, shell_rc, config_before = (
         _seed_preflight_artifacts(tmp_path)
@@ -2059,8 +1733,6 @@ def test_install_refuses_nonregular_repair_analyzer_target(tmp_path: Path) -> No
             env_overrides={
                 "CODEX_HOME": str(codex_home),
                 "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-                "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
-                "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
             },
             timeout=15,
         )
@@ -2079,7 +1751,7 @@ def test_install_refuses_nonregular_repair_analyzer_target(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize("kind", ("fifo", "symlink", "unmanaged"))
-def test_install_refuses_unsafe_repair_launcher_before_any_mutation(
+def test_install_cleanup_refuses_unsafe_legacy_repair_launcher_before_wrapper_publication(
     tmp_path: Path, kind: str
 ) -> None:
     repo_root = _make_repo_root(tmp_path, real_agents=True)
@@ -2106,23 +1778,26 @@ def test_install_refuses_unsafe_repair_launcher_before_any_mutation(
             env_overrides={
                 "CODEX_HOME": str(codex_home),
                 "TRIAD_CLASSIFIER_EXTENSION": str(classifier),
-                "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY": "1",
-                "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc),
             },
             timeout=15,
         )
-        assert result.returncode != 0
-        assert "repair apply launcher" in result.stderr
-        assert sorted(path.name for path in launchers.iterdir()) == [
-            "triad-apply-repair"
-        ]
-        assert config.read_bytes() == config_before
-        assert not list(codex_home.glob("*.config.toml"))
-        assert not (codex_home / "agents").exists()
-        assert not (codex_home / "rules").exists()
-        assert classifier.read_text(encoding="utf-8") == '{"existing": true}\n'
-        assert shell_rc.read_text(encoding="utf-8") == "# existing shell rc\n"
-        assert not (repo_root / "bin" / "_logs").exists()
+        if kind == "unmanaged":
+            assert result.returncode == 0, result.stderr + result.stdout
+            assert apply_launcher.read_text(encoding="utf-8").endswith("# foreign\n")
+            for wrapper in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+                assert (launchers / wrapper).is_file()
+        else:
+            assert result.returncode != 0
+            assert "repair apply launcher" in result.stderr
+            assert sorted(path.name for path in launchers.iterdir()) == [
+                "triad-apply-repair"
+            ]
+            assert config.read_bytes() == config_before
+            assert not list(codex_home.glob("*.config.toml"))
+            assert not (codex_home / "rules").exists()
+            assert classifier.read_text(encoding="utf-8") == '{"existing": true}\n'
+            assert shell_rc.read_text(encoding="utf-8") == "# existing shell rc\n"
+            assert not (repo_root / "bin" / "_logs").exists()
         if kind == "symlink":
             assert apply_launcher.is_symlink()
             assert foreign.read_text(encoding="utf-8") == "foreign\n"
@@ -2131,7 +1806,7 @@ def test_install_refuses_unsafe_repair_launcher_before_any_mutation(
             apply_launcher.unlink(missing_ok=True)
 
 
-def test_install_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
+def test_install_cleanup_refuses_symlinked_legacy_analyzer_parent_before_wrapper_publication(
     tmp_path: Path,
 ) -> None:
     repo_root = _make_repo_root(tmp_path, real_agents=True)
@@ -2140,6 +1815,12 @@ def test_install_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
     )
     foreign_agents = tmp_path / "foreign-agents"
     foreign_agents.mkdir()
+    frozen = foreign_agents / f"{REPAIR_ANALYZER}.toml"
+    frozen.write_text(
+        f'{REPAIR_ANALYZER_MARKER}\nname = "{REPAIR_ANALYZER}"\n',
+        encoding="utf-8",
+    )
+    frozen_before = frozen.read_bytes()
     (codex_home / "agents").symlink_to(foreign_agents, target_is_directory=True)
 
     result, _env, launchers = _run_bootstrap(
@@ -2158,7 +1839,7 @@ def test_install_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
 
     assert result.returncode != 0
     assert "unsafe ancestor" in result.stderr
-    assert not (foreign_agents / f"{REPAIR_ANALYZER}.toml").exists()
+    assert frozen.read_bytes() == frozen_before
     assert not any(launchers.iterdir())
     assert config.read_bytes() == config_before
     assert not list(codex_home.glob("*.config.toml"))
@@ -2177,7 +1858,11 @@ def test_remove_refuses_unsafe_repair_target_before_any_mutation(tmp_path: Path)
     assert installed.returncode == 0, installed.stderr + installed.stdout
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
     codex_home = Path(env["HOME"]) / ".codex"
-    analyzer = codex_home / "agents" / f"{REPAIR_ANALYZER}.toml"
+    helper = _load_bootstrap_repair_module()
+    _args, analyzer, _config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper, codex_home, existing_config=True
+    )
+    seeded_launcher.replace(launcher_bin / "triad-apply-repair")
     analyzer.unlink()
     os.mkfifo(analyzer)
     protected = [
@@ -2221,6 +1906,11 @@ def test_remove_refuses_symlinked_repair_analyzer_parent_before_any_mutation(
     assert installed.returncode == 0, installed.stderr + installed.stdout
     repo_root = Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"])
     codex_home = Path(env["HOME"]) / ".codex"
+    helper = _load_bootstrap_repair_module()
+    _args, _analyzer, _config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper, codex_home, existing_config=True
+    )
+    seeded_launcher.replace(launcher_bin / "triad-apply-repair")
     agents = codex_home / "agents"
     foreign_agents = tmp_path / "foreign-agents"
     agents.rename(foreign_agents)
@@ -2270,7 +1960,11 @@ def test_remove_canonicalizes_the_same_trusted_root_alias_as_install(
         env_overrides={"CODEX_HOME": str(codex_home_alias)},
     )
     assert installed.returncode == 0, installed.stderr + installed.stdout
-    assert (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").is_file()
+    helper = _load_bootstrap_repair_module()
+    _args, analyzer, _config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper, codex_home, existing_config=True
+    )
+    seeded_launcher.replace(launcher_bin / "triad-apply-repair")
 
     removed, _env, _launchers = _run_bootstrap(
         tmp_path,
@@ -2280,15 +1974,20 @@ def test_remove_canonicalizes_the_same_trusted_root_alias_as_install(
     )
 
     assert removed.returncode == 0, removed.stderr + removed.stdout
-    assert not (codex_home / "agents" / f"{REPAIR_ANALYZER}.toml").exists()
+    assert not analyzer.exists()
     assert not (launcher_bin / "triad-apply-repair").exists()
 
 
 def test_remove_deletes_only_managed_repair_analyzer_and_apply_launcher(tmp_path: Path) -> None:
     installed, env, launcher_bin = _run_bootstrap(tmp_path, arg="--install")
     assert installed.returncode == 0, installed.stderr + installed.stdout
-    analyzer = Path(env["HOME"]) / ".codex" / "agents" / f"{REPAIR_ANALYZER}.toml"
+    codex_home = Path(env["HOME"]) / ".codex"
+    helper = _load_bootstrap_repair_module()
+    _args, analyzer, _config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper, codex_home, existing_config=True
+    )
     apply_launcher = launcher_bin / "triad-apply-repair"
+    seeded_launcher.replace(apply_launcher)
 
     removed, _env, _launchers = _run_bootstrap(
         tmp_path,
@@ -2642,7 +2341,7 @@ def test_check_uses_codex_home_for_repair_agents_profile_and_rules(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    _assert_repair_analyzer_install_state(codex_home)
+    _assert_legacy_repair_state_absent(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
     _assert_profile_does_not_disable_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
@@ -2685,7 +2384,7 @@ def test_check_expands_codex_home_for_repair_agents_profile_and_rules(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     codex_home = Path(env["HOME"]) / "custom-codex-home"
-    _assert_repair_analyzer_install_state(codex_home)
+    _assert_legacy_repair_state_absent(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
     _assert_profile_does_not_disable_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
@@ -2718,7 +2417,7 @@ def test_check_supports_workspace_contained_install_targets(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (workspace_bin / "claude_wrapper.py").is_file()
     assert (workspace_config / "triad-codex-dispatch" / "classifier-patches.json").is_file()
-    _assert_repair_analyzer_install_state(workspace_codex)
+    _assert_legacy_repair_state_absent(workspace_codex)
     assert (workspace_codex / "triad-codex-dispatch.config.toml").is_file()
     _assert_profile_does_not_disable_multi_agent(workspace_codex / "triad-codex-dispatch.config.toml")
     assert (workspace_codex / "rules" / "triad-codex-dispatch.rules").is_file()
@@ -2746,7 +2445,7 @@ def test_check_ignores_python_stderr_when_parsing_install_paths(tmp_path):
     assert f"Codex runtime profile installed: {codex_home}" in result.stdout
     assert f"Codex command rules installed: {codex_home / 'rules' / 'triad-codex-dispatch.rules'}" in result.stdout
     assert (launcher_bin / "claude_wrapper.py").is_file()
-    _assert_repair_analyzer_install_state(codex_home)
+    _assert_legacy_repair_state_absent(codex_home)
     assert (codex_home / "triad-codex-dispatch.config.toml").is_file()
     _assert_profile_does_not_disable_multi_agent(codex_home / "triad-codex-dispatch.config.toml")
     assert (codex_home / "rules" / "triad-codex-dispatch.rules").is_file()
@@ -3878,11 +3577,9 @@ def test_remove_rejects_invalid_rules_name_before_any_mutation(tmp_path: Path) -
             "claude_wrapper.py",
             "gemini_wrapper.py",
             "antigravity_wrapper.py",
-            "triad-apply-repair",
         )
     ] + [
         codex_home / "config.toml",
-        codex_home / "agents" / f"{REPAIR_ANALYZER}.toml",
         codex_home / "triad-codex-dispatch.config.toml",
         codex_home / "rules" / "triad-codex-dispatch.rules",
     ]
@@ -3916,11 +3613,9 @@ def test_remove_rejects_invalid_runtime_profile_approval_policy_before_any_mutat
             "claude_wrapper.py",
             "gemini_wrapper.py",
             "antigravity_wrapper.py",
-            "triad-apply-repair",
         )
     ] + [
         codex_home / "config.toml",
-        codex_home / "agents" / f"{REPAIR_ANALYZER}.toml",
         codex_home / "triad-codex-dispatch.config.toml",
         codex_home / "rules" / "triad-codex-dispatch.rules",
     ]
@@ -3964,7 +3659,6 @@ def test_remove_rolls_back_public_commands_after_late_command_failure(
     codex_home = Path(env["HOME"]) / ".codex"
     remaining = [
         shell_rc,
-        codex_home / "agents" / f"{REPAIR_ANALYZER}.toml",
         codex_home / "triad-codex-dispatch.config.toml",
         codex_home / "config.toml",
         codex_home / "rules" / "triad-codex-dispatch.rules",
@@ -4125,7 +3819,7 @@ def test_initially_absent_config_survives_three_installs(tmp_path: Path) -> None
         assert repeated.returncode == 0, repeated.stderr + repeated.stdout
 
 
-def test_initially_absent_config_survives_two_installs_then_remove(
+def test_initially_absent_config_leaves_empty_file_after_two_installs_then_remove(
     tmp_path: Path,
 ) -> None:
     first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
@@ -4141,7 +3835,9 @@ def test_initially_absent_config_survives_two_installs_then_remove(
         tmp_path, repo_root=repo_root, arg="--remove", timeout=5
     )
     assert removed.returncode == 0, removed.stderr + removed.stdout
-    assert not (Path(env["HOME"]) / ".codex" / "config.toml").exists()
+    config = Path(env["HOME"]) / ".codex" / "config.toml"
+    assert config.exists()
+    assert config.read_bytes() == b""
 
 
 def test_preexisting_empty_config_survives_install_then_remove(
@@ -4171,7 +3867,7 @@ def test_preexisting_empty_config_survives_install_then_remove(
     assert config.read_bytes() == b""
 
 
-def test_preexisting_empty_config_survives_remove_after_registration_deleted(
+def test_preexisting_empty_config_has_no_repair_registration_before_remove(
     tmp_path: Path,
 ) -> None:
     codex_home = tmp_path / "owner-codex-home"
@@ -4186,16 +3882,11 @@ def test_preexisting_empty_config_survives_remove_after_registration_deleted(
     )
     assert installed.returncode == 0, installed.stderr + installed.stdout
 
-    helper = _load_bootstrap_repair_module()
     analyzer = codex_home / "agents" / f"{REPAIR_ANALYZER}.toml"
-    before, after, managed, original_existed = helper.split_registration(
-        config.read_text(encoding="utf-8"), config, analyzer
+    assert not analyzer.exists()
+    assert "managed repair analyzer registration" not in config.read_text(
+        encoding="utf-8"
     )
-    assert managed
-    assert original_existed
-    environment_fragment = (before + after).encode("utf-8")
-    assert environment_fragment == helper.current_config_fragment(b"\n")
-    config.write_bytes(environment_fragment)
 
     removed, _env, _launchers = _run_bootstrap(
         tmp_path,
@@ -4286,17 +3977,20 @@ def test_fresh_layout_preserves_owner_key_appended_after_managed_policy(
 def test_remove_refuses_to_reparent_bare_key_after_managed_registration(
     tmp_path: Path,
 ) -> None:
-    first, env, _launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
+    first, env, launchers = _run_bootstrap(tmp_path, arg="--install", timeout=5)
     assert first.returncode == 0, first.stderr + first.stdout
 
-    config = Path(env["HOME"]) / ".codex" / "config.toml"
+    codex_home = Path(env["HOME"]) / ".codex"
+    helper = _load_bootstrap_repair_module()
+    _args, analyzer, config, seeded_launcher = _seed_frozen_legacy_repair_state(
+        helper, codex_home, existing_config=True
+    )
+    seeded_launcher.replace(launchers / "triad-apply-repair")
     marker = "# <<< triad-codex-dispatch managed repair analyzer registration <<<\n"
     edited = config.read_text(encoding="utf-8").replace(
         marker, marker + 'owner_note = "preserve"\n', 1
     )
     config.write_text(edited, encoding="utf-8")
-    analyzer = Path(env["HOME"]) / ".codex" / "agents" / f"{REPAIR_ANALYZER}.toml"
-
     removed, _env, _launchers = _run_bootstrap(
         tmp_path,
         repo_root=Path(env["TRIAD_BOOTSTRAP_REPO_ROOT"]),
@@ -4364,8 +4058,8 @@ def test_install_migrates_only_the_exact_legacy_managed_environment_policy(
         + end
         + "\n"
     )
-    assert config.read_text(encoding="utf-8") == prefix + expected + suffix
-    assert config.with_suffix(".toml.bak").read_text(encoding="utf-8") == prefix + legacy + suffix
+    assert config.read_text(encoding="utf-8") == prefix + expected
+    assert config.with_suffix(".toml.bak").read_text(encoding="utf-8") == prefix + legacy
 
 
 def test_install_uses_numbered_backup_and_reports_retention_guidance(
@@ -4393,9 +4087,7 @@ def test_install_uses_numbered_backup_and_reports_retention_guidance(
     assert result.returncode == 0, result.stderr + result.stdout
     assert 'inherit = "all"' in config.read_text(encoding="utf-8")
     assert first_backup.read_bytes() == b"existing owner backup\n"
-    assert Path(str(config) + ".bak2").read_text(encoding="utf-8") == (
-        legacy + "\n" + _managed_repair_registration(codex_home)
-    )
+    assert Path(str(config) + ".bak2").read_text(encoding="utf-8") == legacy
     assert f"retained config backup: {config}.bak2" in result.stderr
     assert "keep it until Codex starts normally" in result.stderr
     assert "delete it if rollback is no longer needed" in result.stderr
@@ -4437,7 +4129,7 @@ def test_install_preserves_edited_managed_environment_policy(
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert config.read_text(encoding="utf-8") == original
+    assert config.read_text(encoding="utf-8") == "# owner bytes\n" + managed_block
     assert not config.with_suffix(".toml.bak").exists()
 
 
@@ -4459,7 +4151,9 @@ def test_install_preserves_user_owned_environment_policy(tmp_path: Path) -> None
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert config.read_text(encoding="utf-8") == original
+    assert config.read_text(encoding="utf-8") == (
+        '[shell_environment_policy]\ninherit = "none"\nset = { HOME = "/owner" }\n'
+    )
     assert not config.with_suffix(".toml.bak").exists()
 
 
@@ -4593,8 +4287,9 @@ def test_install_preserves_crlf_current_or_migrates_legacy_bytes(
     codex_home.mkdir()
     config = codex_home / "config.toml"
     prefix = b"# preserve CRLF prefix\r\n[custom]\r\nvalue = \"unchanged\"\r\n\r\n"
+    owner_suffix = b"\r\n# preserve CRLF suffix\r\n\r\n"
     suffix = (
-        b"\r\n# preserve CRLF suffix\r\n\r\n\n"
+        owner_suffix + b"\n"
         + _managed_repair_registration(codex_home).encode("utf-8")
     )
     original = prefix + _managed_environment_policy_bytes(legacy=legacy, newline=b"\r\n") + suffix
@@ -4613,12 +4308,16 @@ def test_install_preserves_crlf_current_or_migrates_legacy_bytes(
     expected = (
         prefix
         + _managed_environment_policy_bytes(legacy=False, newline=b"\r\n")
-        + suffix
+        + owner_suffix
     )
     assert config.read_bytes() == expected
     backup = config.with_suffix(".toml.bak")
     if legacy:
-        assert backup.read_bytes() == original
+        assert backup.read_bytes() == (
+            prefix
+            + _managed_environment_policy_bytes(legacy=True, newline=b"\r\n")
+            + owner_suffix
+        )
     else:
         assert not backup.exists()
 
