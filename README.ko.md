@@ -154,8 +154,11 @@ invalid round입니다. 전체 계약은
 ### 보안 모델 읽기
 
 *툴킷에 의존하기 전에 전체 threat model 을 보고 싶을 때만.*
-[SECURITY.md](SECURITY.md) 참고 — 지속적인 control 은 model trust 가 아니라
-privilege separation 입니다(아래 [보안](#보안-security) 에 요약).
+[SECURITY.md](SECURITY.md) 참고 — 지속적인 boundary는 explicit data
+authorization, pinned executable, digest/mutation check, strict result custody,
+deterministic owner apply입니다. Permission 선택은 provider/user/project에 남고,
+no-edit/no-execution containment는 provider가 실제로 enforce하지 않는 한
+prompt-controlled입니다(아래 [보안](#보안-security)에 요약).
 
 ### bootstrap 재실행 참고
 

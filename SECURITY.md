@@ -17,8 +17,7 @@ Run TRIAD from the same authenticated login terminal and project worktree used
 for development. Trusted Python and `PATH` values are prerequisites. Wrapper
 child-process scrubbing remains defense in depth after trusted startup: loader
 and interpreter injection variables are removed only after the trusted launcher
-and interpreter have begun. Wrapper child-process scrubbing remains defense in
-depth after trusted startup; it is not a substitute for native permission or
+and interpreter have begun. It is not a substitute for native permission or
 project-trust selection.
 
 Bootstrap pins the installer-selected Python. This is an explicit installation

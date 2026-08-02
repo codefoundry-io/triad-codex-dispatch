@@ -169,8 +169,12 @@ support. The installer does not install OS packages.
 ### Read the security model
 
 *Do this ONLY if you want the full threat model before relying on the toolkit.*
-See [SECURITY.md](SECURITY.md) — the durable control is privilege separation, not
-model trust (summarized under [Security](#security) below).
+See [SECURITY.md](SECURITY.md) — the durable boundaries are explicit data
+authorization, pinned executables, digest/mutation checks, strict result custody,
+and deterministic owner apply. Permission selection remains with the
+provider/user/project, and no-edit/no-execution containment is prompt-controlled
+unless a provider actually enforces it (summarized under [Security](#security)
+below).
 
 ### Notes on re-running bootstrap
 
@@ -189,8 +193,8 @@ Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]`, and retired apply/repair launchers whose markers
 and expected bytes match. Foreign, edited, linked, or non-regular targets are
-preserved and reported. This cleanup preserves owner-authored settings, rules, permission profiles,
-credentials, and unrelated files remain untouched.
+preserved and reported. This cleanup preserves owner-authored settings, rules,
+permission profiles, and credentials; unrelated files remain untouched.
 
 The wrapper `--sandbox` flags and missing-binary Gemini fallback triggers from
 older releases are removed. Delete those wrapper flags from callers. Missing or

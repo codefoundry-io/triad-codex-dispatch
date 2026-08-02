@@ -120,6 +120,26 @@ def test_02532_public_contract_is_native_and_full_coverage() -> None:
     assert "Antigravity settings는 agy 호출 중" not in korean
 
 
+def test_public_security_guidance_names_actual_durable_boundaries() -> None:
+    english = " ".join(_text(ROOT / "README.md").split())
+    korean = " ".join(_text(ROOT / "README.ko.md").split())
+    security = " ".join(_text(SECURITY).split())
+
+    assert "durable control is privilege separation" not in english
+    assert "지속적인 control 은 model trust 가 아니라 privilege separation" not in korean
+    assert "durable boundaries are explicit data authorization" in security
+    assert (
+        security.count(
+            "Wrapper child-process scrubbing remains defense in depth after trusted startup"
+        )
+        == 1
+    )
+    assert (
+        "This cleanup preserves owner-authored settings, rules, permission profiles, "
+        "and credentials; unrelated files remain untouched."
+    ) in english
+
+
 def test_formal_review_requires_full_family_batch_matrix_and_path_evidence() -> None:
     contract = "\n".join(
         _text(path)
