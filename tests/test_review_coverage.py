@@ -814,6 +814,11 @@ def test_not_safe_receipt_blocks_admission(tmp_path: Path) -> None:
         if family == "claude" else None,
     )
     assert review_coverage.admit_full_coverage(evidence, coverages).admitted is False
+    output = evidence.review_root.parent / "coverage-admission.json"
+    assert review_coverage.main(
+        _admit_args(evidence, tmp_path / "receipts", output)
+    ) != 0
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("severity", ["Critical", "Major"])
@@ -827,6 +832,11 @@ def test_critical_or_major_finding_blocks_admission(tmp_path: Path, severity: st
 
     coverages = _all_coverages(evidence, tmp_path, mutate)
     assert review_coverage.admit_full_coverage(evidence, coverages).admitted is False
+    output = evidence.review_root.parent / "coverage-admission.json"
+    assert review_coverage.main(
+        _admit_args(evidence, tmp_path / "receipts", output)
+    ) != 0
+    assert not output.exists()
 
 
 def test_open_questions_block_admission(tmp_path: Path) -> None:
@@ -837,6 +847,11 @@ def test_open_questions_block_admission(tmp_path: Path) -> None:
         if family == "claude" else None,
     )
     assert review_coverage.admit_full_coverage(evidence, coverages).admitted is False
+    output = evidence.review_root.parent / "coverage-admission.json"
+    assert review_coverage.main(
+        _admit_args(evidence, tmp_path / "receipts", output)
+    ) != 0
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("mode", ["finding-empty", "finding-hidden", "unresolved-no-finding", "unresolved-finding"])
