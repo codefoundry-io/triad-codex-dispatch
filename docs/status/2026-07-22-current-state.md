@@ -65,9 +65,10 @@ The bounded review routes are:
 
 - fresh Codex: `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`;
 - Claude: `opus`, `xhigh`;
-- primary Google route: authenticated `agy models` catalog selector
-  `gemini-3.1-pro-high`; exact outbound model argument `Gemini 3.1 Pro (High)`
-  with no `--effort`.
+- primary Google route: AGY 1.1.10 or newer, with authenticated `agy models`
+  catalog selector `gemini-3.1-pro-high`; exact outbound model argument
+  `gemini-3.1-pro-high` with no `--effort`. The display-label compatibility
+  route is historical.
 
 Sol- or Fable-class long-running models are not routine reviewers. They remain
 conditional escalations for genuinely ambiguous, security-sensitive, deeply
@@ -249,11 +250,11 @@ pull-request creation remain separate owner decisions.
 
 ## Current Google route and R12 ledger
 
-The current Google route keeps the catalog selector `gemini-3.1-pro-high`
-separate from the exact outbound `Gemini 3.1 Pro (High)` argument with no
-`--effort`. Authenticated `agy models` is catalog evidence only. Preflight proves
-argv construction and requested values; exposed identity must agree, and absent
-identity is `unexposed` once. The base slug plus `--effort high` remains
+The current Google route requires AGY 1.1.10 or newer, uses catalog selector
+`gemini-3.1-pro-high` as the exact outbound `gemini-3.1-pro-high` argument, and
+passes no `--effort`. Authenticated `agy models` is catalog evidence. Preflight
+proves argv construction and requested values; exposed identity must agree, and
+absent identity is `unexposed` once. The base slug plus `--effort high` remains
 unselected until a fresh runtime probe proves acceptance and identity agreement.
 
 R11 prior formal-round evidence remains historical: prompt SHA-256

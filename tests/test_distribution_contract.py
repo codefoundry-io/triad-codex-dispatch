@@ -957,14 +957,18 @@ def test_task_2a_provider_guides_delegate_shared_formal_preparation() -> None:
             assert stale not in flat, (path, stale)
 
 
-def test_task_2a_provider_guides_keep_routes_and_do_not_impose_agy_fence_gate() -> None:
+def test_task_2a_provider_guides_use_agy_110_stable_slug_route() -> None:
     claude = _text(PROVIDER_SKILLS[0])
     agy = _text(PROVIDER_SKILLS[1])
     assert '"--model", "opus",' in claude
     assert '"--effort", "xhigh",' in claude
     assert "claude_wrapper.py" in claude
     assert "antigravity_wrapper.py" in agy
-    assert '"--model", "Gemini 3.1 Pro (High)",' in agy
+    assert '"--model", "gemini-3.1-pro-high",' in agy
+    agy_flat = " ".join(agy.split())
+    assert "authenticated `agy --version`" in agy_flat
+    assert "`1.1.10` or newer" in agy_flat
+    assert "older or unprobeable" in agy_flat
     for obsolete in (
         "Unfenced SAFE example:",
         "Unfenced NOT-SAFE example:",
@@ -1033,7 +1037,7 @@ def test_task_2b_routing_reference_keeps_routes_and_outcomes_without_git_protoco
     for phrase in (
         "Fresh Codex: `gpt-5.6-terra`, `xhigh`, `fork_turns=\"none\"`",
         "Claude: `opus`, `xhigh`",
-        "Primary Google: agy with the exact display label `Gemini 3.1 Pro (High)`",
+        "Primary Google: AGY `1.1.10` or newer with the exact stable selector",
         "catalog evidence uses `gemini-3.1-pro-high`",
         "authenticated `agy models` evidence",
         "Rejection or unavailability leaves the required leg missing",
@@ -1787,7 +1791,7 @@ def test_formal_review_uses_owner_routing_baseline_and_bounded_escalation(
     assert 'reasoning_effort="xhigh"' in fresh_codex
     assert '"--model", "opus",' in claude
     assert '"--effort", "xhigh",' in claude
-    assert '"--model", "Gemini 3.1 Pro (High)",' in antigravity
+    assert '"--model", "gemini-3.1-pro-high",' in antigravity
 
     flat = " ".join(routing.split())
     for phrase in (
@@ -1831,14 +1835,18 @@ def test_formal_review_uses_owner_routing_baseline_and_bounded_escalation(
         "authenticated `agy models` output proves that the stable selector is "
         "advertised" in flat
     )
-    assert "catalog selector remains evidence only" in flat
-    assert "exact display label `Gemini 3.1 Pro (High)`" in flat
+    assert "authenticated `agy --version`" in flat
+    assert "`1.1.10` or newer" in flat
+    assert "older or unprobeable" in flat
+    assert "exact stable selector `gemini-3.1-pro-high`" in flat
+    assert "current formal argv uses `gemini-3.1-pro-high`" in flat
+    assert "omits `--effort`" in flat
     assert "fresh successful runtime probe" in flat
     antigravity_flat = " ".join(antigravity.split())
     for probe in (
         "`--model gemini-3.1-pro-high` with no `--effort`",
         "`--model gemini-3.1-pro --effort high`",
-        '`--model "Gemini 3.1 Pro (High)"` with no `--effort` as the control',
+        '`--model "Gemini 3.1 Pro (High)"` with no `--effort` as the historical AGY 1.1.7 control',
     ):
         assert probe in flat
         assert probe in antigravity_flat
@@ -3457,7 +3465,7 @@ def test_task4_handoffs_separate_catalog_outbound_and_runtime_identity() -> None
     for path in paths:
         text = " ".join(_text(path).split())
         assert "catalog selector `gemini-3.1-pro-high`" in text
-        assert "outbound `Gemini 3.1 Pro (High)`" in text
+        assert "outbound `gemini-3.1-pro-high`" in text
         assert "no `--effort`" in text
         assert "exposed identity must agree" in text
         assert "absent identity is `unexposed`" in text
@@ -3577,7 +3585,7 @@ def test_task4_handoffs_record_exact_r12_ledger_without_invented_r10_hash() -> N
 
 def test_task4_current_route_summaries_state_catalog_outbound_and_effort() -> None:
     changelog = " ".join(
-        _text(CHANGELOG).split("## 0.2.528", 1)[0].split()
+        _text(CHANGELOG).split("## 0.2.531", 1)[0].split()
     )
     current = " ".join(
         _text(ROOT / "docs" / "status" / "2026-07-22-current-state.md")
@@ -3602,15 +3610,30 @@ def test_task4_current_route_summaries_state_catalog_outbound_and_effort() -> No
 
     for summary in (changelog, current, resume, routing):
         assert "catalog selector `gemini-3.1-pro-high`" in summary
-        assert "outbound model argument `Gemini 3.1 Pro (High)`" in summary
+        assert "outbound model argument `gemini-3.1-pro-high`" in summary
         assert "no `--effort`" in summary
+        assert "AGY 1.1.10" in summary
 
-    assert (
-        "agy `gemini-3.1-pro-high` as the default formal routes" not in changelog
-    )
-    assert "primary Google route: agy with `gemini-3.1-pro-high`" not in current
-    assert "primary agy gemini-3.1-pro-high" not in resume
-    assert "| Routes | Terra/xhigh, Opus/xhigh, agy `gemini-3.1-pro-high` |" not in routing
+    assert "display-label compatibility route is historical" in changelog
+    assert "display-label compatibility route is historical" in current
+    assert "display-label compatibility route is historical" in resume
+    assert "display-label compatibility route is historical" in routing
+
+
+def test_agy_110_formal_route_is_policy_only_and_wrapper_stays_passthrough() -> None:
+    antigravity = " ".join(_text(PROVIDER_SKILLS[1]).split())
+    routing = " ".join(_text(REVIEW_ROUTING_REFERENCE).split())
+    wrapper = _text(ROOT / "bin" / "antigravity_wrapper.py")
+
+    for text in (antigravity, routing):
+        assert "`1.1.10` or newer" in text
+        assert "older or unprobeable" in text
+        assert "Google leg" in text
+        assert "`--model gemini-3.1-pro-high` with no `--effort`" in text
+
+    assert "_AGY_MODEL_ALIASES" not in wrapper
+    assert 'route_args += ["--model", model]' in wrapper
+    assert 'route_args += ["--effort", effort]' in wrapper
 
 
 def test_task4_r6_normalization_is_historical_and_superseded() -> None:

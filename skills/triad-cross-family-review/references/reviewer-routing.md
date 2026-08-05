@@ -25,14 +25,16 @@ Unless the review decision records a justified escalation, use these routes:
 
 - Fresh Codex: `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`.
 - Claude: `opus`, `xhigh`.
-- Primary Google: agy with the exact display label `Gemini 3.1 Pro (High)`;
-  catalog evidence uses `gemini-3.1-pro-high`.
+- Primary Google: AGY `1.1.10` or newer with the exact stable selector
+  `gemini-3.1-pro-high`; catalog evidence uses `gemini-3.1-pro-high`.
 
 Capture live proof of the selected route at the first possible proof point:
 
 - accepted exact Codex spawn
 - exact Claude argv/provider acceptance
-- authenticated `agy models` evidence for the exact selector before formal dispatch, with the exact selector present
+- authenticated `agy --version` evidence of `1.1.10` or newer, plus
+  authenticated `agy models` evidence for the exact selector before formal
+  dispatch, with the exact selector present
 
 For every review ID, record the exact route and rationale/availability proof.
 Rejection or unavailability leaves the required leg missing under the gate
@@ -71,9 +73,11 @@ invalid.
 A missing selector, request rejection, or exposed identity conflict also
 leaves the Google leg missing/invalid.
 
-For Google, authenticated `agy models` output proves that the stable selector is
-advertised before formal dispatch. The current formal argv uses the exact display label `Gemini 3.1 Pro (High)` and
-omits `--effort`; the catalog selector remains evidence only. Wrapper preflight
+For Google, authenticated `agy --version` must report `1.1.10` or newer and
+authenticated `agy models` output proves that the stable selector is
+advertised before formal dispatch. An older or unprobeable version leaves the
+required Google leg missing/invalid. The current formal argv uses
+`gemini-3.1-pro-high` and omits `--effort`. Wrapper preflight
 reports the requested `model` and `effort` and proves argv construction, never a
 locally invented `effective_model`. Record actual provider request acceptance
 and require any runtime-exposed identity to agree with the requested label. If
@@ -83,13 +87,14 @@ rerun these three candidates as separate fresh runtime probes:
 
 - `--model gemini-3.1-pro-high` with no `--effort`;
 - `--model gemini-3.1-pro --effort high`; and
-- `--model "Gemini 3.1 Pro (High)"` with no `--effort` as the control.
+- `--model "Gemini 3.1 Pro (High)"` with no `--effort` as the historical
+  AGY 1.1.7 control.
 
 Catalog presence or provider acceptance alone does not authorize a route
-change. Keep the control route unless another candidate is accepted and its
+change. Keep the stable slug route unless another candidate is accepted and its
 runtime-exposed identity agrees with the requested Pro High route. Any
 alternative remains unselected until its fresh successful runtime probe
-confirms both conditions.
+confirms both conditions. The display-label compatibility route is historical.
 
 A Gemini preflight/dispatch proves route availability only. For a formal
 round, separately record owner authorization for the exact Gemini route,

@@ -2,6 +2,13 @@
 
 ## 0.2.532 — 2026-08-03
 
+- Adopts AGY 1.1.10's repaired headless model-selection contract for formal
+  Google review. Authenticated `agy --version` must report 1.1.10 or newer,
+  authenticated `agy models` must expose catalog selector
+  `gemini-3.1-pro-high`, and the outbound model argument
+  `gemini-3.1-pro-high` uses no `--effort`. The display-label compatibility
+  route is historical; generic wrapper model/effort passthrough remains
+  unchanged.
 - Candidate release: provider, user, and project settings now own permission
   selection and workspace trust. TRIAD does not install or inject a permission
   profile, command rule, pre-spawn `shell_environment_policy`, read-only repair

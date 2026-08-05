@@ -61,16 +61,17 @@ Formal three-family preparation is defined by the
 [triad-cross-family-review skill](../triad-cross-family-review/SKILL.md). Use
 its leader-prepared shared review directory as agy's `--cwd` and keep the
 provider leg read-only.
-Before a formal dispatch, require authenticated `agy models` evidence that the
-exact `gemini-3.1-pro-high` selector is present.
-That catalog selector is policy/evidence only. The current formal argv uses the
-exact display label `Gemini 3.1 Pro (High)` and omits `--effort`:
+Before a formal dispatch, require authenticated `agy --version` evidence that
+reports `1.1.10` or newer and authenticated `agy models` evidence that the
+exact `gemini-3.1-pro-high` selector is present. An older or unprobeable
+version leaves the required Google leg unavailable. The current formal argv
+uses the exact stable selector and omits `--effort`:
 ```python
 review_argv = [
     "/absolute/path/to/antigravity_wrapper.py",
     "--prompt-file", "/absolute/path/to/agy-review-prompt.txt",
     "--cwd", "/absolute/path/to/prepared-review-directory",
-    "--model", "Gemini 3.1 Pro (High)",
+    "--model", "gemini-3.1-pro-high",
 ]
 ```
 
@@ -82,13 +83,14 @@ three candidates as separate fresh runtime probes:
 
 - `--model gemini-3.1-pro-high` with no `--effort`;
 - `--model gemini-3.1-pro --effort high`; and
-- `--model "Gemini 3.1 Pro (High)"` with no `--effort` as the control.
+- `--model "Gemini 3.1 Pro (High)"` with no `--effort` as the historical
+  AGY 1.1.7 control.
 
 Catalog presence or provider acceptance alone does not authorize a route
-change. Keep the control route unless another candidate is accepted and its
+change. Keep the stable slug route unless another candidate is accepted and its
 runtime-exposed identity agrees with the requested Pro High route. Any
 alternative remains unselected until its fresh successful runtime probe
-confirms both conditions.
+confirms both conditions. The display-label compatibility route is historical.
 
 For unbatched `formal-gate` compatibility only, return the semantic fields
 required by the shared contract: `verdict`, `findings`,
@@ -100,7 +102,7 @@ provider/batch under exact custody: persist and hash the exact original UTF-8
 response bytes at `<family>/<batch-id>.json`, then validate and admit them under
 the shared batched contract.
 
-Archive actual provider request acceptance for the exact outbound display label
+Archive actual provider request acceptance for the exact outbound stable selector
 and archive provider identity when exposed. If identity telemetry is absent,
 record it as `unexposed` once without claiming a hidden actual model. Any
 selector absence, rejection, or exposed conflict leaves the Google leg
@@ -123,11 +125,11 @@ launcher_argv = [
 
 Run the wrapper from the same authenticated login terminal used for
 development. TRIAD inherits AGY permissions from that launch context and does
-not select or override them. Discover an accepted Google model from current
-`agy models` output in that terminal; do not apply a version threshold or a
-baked model name. Antigravity's web tools are native to the provider route, so
-do not invent a wrapper `--search` flag. Credentials stay outside approved
-review data.
+not select or override them. For ordinary non-formal use, discover an accepted
+Google model from current `agy models` output in that terminal and keep the
+wrapper's free-form passthrough. Formal use follows the versioned route above.
+Antigravity's web tools are native to the provider route, so do not invent a
+wrapper `--search` flag. Credentials stay outside approved review data.
 
 ## Result handling
 An initial tool response with a running session or cell handle is pending, not unavailable,

@@ -20,7 +20,7 @@ a passing formal verdict.
 | Impact | Pre-0.2.532 test-source exclusions are history. The 0.2.532 all-tests/no-exclusion boundary includes all repository test source; normal SDD implementation review includes relevant test source |
 | Mutation check | One simple content digest is recorded before dispatch and compared after every required leg terminates; a mismatch invalidates the round |
 | Review input | The leader-prepared shared review directory and common task are the complete review input; no prompt inlines a diff or file body |
-| Routes | Terra/xhigh, Opus/xhigh, authenticated `agy models` catalog selector `gemini-3.1-pro-high`; outbound model argument `Gemini 3.1 Pro (High)` with no `--effort` |
+| Routes | Terra/xhigh, Opus/xhigh, AGY 1.1.10 or newer, authenticated `agy models` catalog selector `gemini-3.1-pro-high`; outbound model argument `gemini-3.1-pro-high` with no `--effort`; the display-label compatibility route is historical |
 | Default approval path | 0.2.532 inherits provider permissions from the authenticated user/project environment and generates no Codex permission state |
 | Fail-closed posture | Native permission denial, missing family coverage, digest/mutation mismatch, or incomplete strict admission invalidates the round; no bypass is inserted |
 | AGY truncation | Exact own-line bytes/lines marker is terminal, quarantined, and non-repairable |
@@ -192,10 +192,12 @@ file round-trips byte-for-byte. R9 is closed and not PASS.
 
 ## Current route and R12 reconciliation
 
-The authenticated catalog selector `gemini-3.1-pro-high` is distinct from the
-exact outbound `Gemini 3.1 Pro (High)` argument, with no `--effort`. Preflight
-proves requested argv construction only; exposed identity must agree, and absent
-identity is `unexposed` once. The base-slug plus `--effort high` route is not
+The current Google route requires AGY 1.1.10 or newer. The authenticated
+catalog selector `gemini-3.1-pro-high` is the exact outbound
+`gemini-3.1-pro-high` argument, with no `--effort`; the display-label
+compatibility route is historical. Preflight proves requested argv construction
+only; exposed identity must agree, and absent identity is `unexposed` once. The
+base-slug plus `--effort high` route is not
 current policy until a fresh runtime probe proves acceptance and identity
 agreement.
 

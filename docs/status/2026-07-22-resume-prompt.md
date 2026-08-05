@@ -63,9 +63,10 @@ source-grounded observations, exact full-file ranges, and strict coverage
 receipts. A manifest path alone is not coverage.
 
 Use fresh Codex gpt-5.6-terra/xhigh/fork_turns none, Claude opus/xhigh, and
-primary agy authenticated `agy models` catalog selector
-`gemini-3.1-pro-high`; exact outbound model argument `Gemini 3.1 Pro (High)`
-with no `--effort`. Sol/Fable are conditional long-running escalations, not
+primary AGY 1.1.10 or newer with authenticated `agy models` catalog selector
+`gemini-3.1-pro-high`; exact outbound model argument `gemini-3.1-pro-high`
+with no `--effort`. The display-label compatibility route is historical.
+Sol/Fable are conditional long-running escalations, not
 routine reviewers. Gemini is fallback-only for the no-final-summary exit `4`
 plus wrapper-owned pre-submission `PtyStartError` proof. Every final-summary
 result is fallback-ineligible. Missing/invalid `TRIAD_AGY_BIN` and missing `agy`
@@ -196,9 +197,9 @@ asking the owner again.
 
 ## Current route and latest invalid round
 
-Use the catalog selector `gemini-3.1-pro-high` only as authenticated `agy
-models` evidence. The exact outbound `Gemini 3.1 Pro (High)` route uses no
-`--effort`; preflight reports requested argv values, exposed identity must
+Require AGY 1.1.10 or newer and authenticated `agy models` evidence for catalog
+selector `gemini-3.1-pro-high`. The exact outbound `gemini-3.1-pro-high` route
+uses no `--effort`; preflight reports requested argv values, exposed identity must
 agree, and absent identity is `unexposed` once. Adopt the base slug with
 `--effort high` only after a fresh acceptance and identity probe.
 
