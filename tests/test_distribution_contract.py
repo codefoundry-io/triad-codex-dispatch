@@ -120,6 +120,23 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
         assert stale not in current
 
 
+def test_governing_agy_documents_match_the_current_formal_route() -> None:
+    governing = {
+        path: _text(ROOT / path)
+        for path in (
+            "docs/superpowers/specs/2026-08-05-agy-1.1.10-formal-route-design.md",
+            "docs/superpowers/plans/2026-08-05-agy-1.1.10-formal-route.md",
+        )
+    }
+
+    for path, text in governing.items():
+        assert "Historical, superseded, and non-executable" in text, path
+        assert "2026-08-05-triad-0.2.533-owner-decisions-and-release.md" in text, path
+        assert "--model gemini-3.1-pro-high" in text, path
+        assert "--effort high" in text, path
+        assert "one focused Google leg" in text, path
+
+
 def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> None:
     wrappers = "\n".join(
         _text(ROOT / "bin" / name)
