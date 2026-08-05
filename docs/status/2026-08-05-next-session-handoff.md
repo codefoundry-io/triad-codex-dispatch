@@ -2,9 +2,9 @@
 
 Date: 2026-08-06
 
-Status: pre-r4 candidate handoff. This document records the clean candidate
-state immediately before the final complete-scope review; final r4 and local
-installation evidence belongs under `_runs/` and must not be inferred here.
+Status: post-r4 bounded-correction handoff. Review round r4 produced three
+admitted `SAFE` verdicts with Minor findings. Those findings are corrected in
+the pending r5 candidate; final admission and installation remain incomplete.
 
 ## Start here
 
@@ -15,10 +15,10 @@ Work from:
 ```
 
 The implementation branch is `release/0.2.532`; the plugin manifest version is
-`0.2.533`. The clean candidate includes the owner-approved 0.2.533 tasks, the
-r2 governing-document correction, and the bounded r3 Minor corrections recorded
-below. Resolve the exact candidate with `git rev-parse HEAD`; this handoff is
-part of that candidate rather than an earlier detached status snapshot.
+`0.2.533`. The pending r5 candidate includes the owner-approved 0.2.533 tasks,
+the r2 and r3 corrections, and the bounded r4 corrections recorded below.
+Resolve the exact candidate with `git rev-parse HEAD`; do not infer it from an
+earlier review digest or distribution archive.
 
 Before changing anything, verify:
 
@@ -52,8 +52,8 @@ workspace and child-repository state.
   verification.
 - Explicitly superseded the conflicting 0.2.532 AGY design and implementation
   plan, and regression-bound their current-authority banners.
-- Source tests for the clean pre-r4 candidate: `422 passed`. Do not reuse the
-  earlier 406-test snapshot.
+- Source tests for the clean pre-r4 candidate: `422 passed`. The r5 candidate
+  requires a fresh full-suite result; do not reuse the earlier snapshot.
 
 Important 0.2.533 commits before the bounded r3 correction, newest last:
 
@@ -67,31 +67,31 @@ dc59558 fix: reject empty benchmark evidence
 21bb477 docs: supersede stale formal route records
 ```
 
-## Final review state before r4
+## Final review state and pending r5
 
-Review round `final-0.2.533-r3` used prepared digest:
+Review round `final-0.2.533-r4` used prepared digest:
 
 ```text
-56cadaa423565413e9506114d391599af85190695bb8448d3c691b4bc2b54441
+353115f5e54ce74a3d93fa0bd9f9f252734a86454c4a12013b5015df2f87e480
 ```
 
 - Google: valid `SAFE`, no findings.
-- Claude: valid `SAFE`, five Minor findings.
+- Claude: valid `SAFE`, three Minor findings.
 - Fresh Codex: valid `SAFE`, one Minor finding.
-- Prepared directory and worktree: `ROUND_INTEGRITY_OK`.
+- Prepared directory digest matched every result.
 
-The r3 round is advisory, not final admission. Fresh Codex incorrectly proposed
-packaging a missing repair protocol: the canonical tracked
-`docs/references/repair-protocol.md` exists and is included by `git archive`.
-Its supported observation was that this active SECURITY/bootstrap reference was
-omitted from the r3 prepared FILELIST. Claude also found bounded defects in
-archive-test isolation, unstructured AGY route-mismatch admission, current
-handoff/changelog wording, and one-provider-call banner coverage. Those defects
-are corrected in the pre-r4 candidate.
+The r4 round is advisory rather than final admission because it found four
+bounded Minor defects. The pending r5 candidate:
 
-Run a fresh complete `final-0.2.533-r4` round over a new digest with
-`docs/references/repair-protocol.md` included. Do not reuse r3 verdicts for final
-admission.
+- applies the formal Gemini one-provider-call ceiling to both packaged schema
+  operand syntaxes;
+- records AGY timeout runtime identity as `unexposed` rather than null;
+- removes the retired packet-validation wrapper description; and
+- reconciles this handoff and the current-authority plan with completed work.
+
+Run a fresh complete `final-0.2.533-r5` round over a new digest, including the
+active `docs/references/repair-protocol.md` boundary. Do not reuse r4 verdicts
+for final admission.
 
 ## Approved owner decisions
 
@@ -114,16 +114,16 @@ because its manifest is already versioned `0.2.533`. That inventory is not
 installed/cache byte identity, bootstrap proof, or fresh-process skill exposure;
 those acceptance steps have not happened yet.
 
-An earlier archive was staged at:
+The latest verified pre-r5 archive was staged at:
 
 ```text
-_runs/distribution/0.2.533/triad-codex-dispatch-0.2.533.tar
+_runs/distribution/0.2.533-final-r4/triad-codex-dispatch-0.2.533.tar
 ```
 
 Its SHA-256 was
-`a6a61ea548031e1f9c2d72f9072b5409bf6596bddd50b37150d2663c714cc7d2`
-and its unpacked bytes passed `402` tests, but it predates `1d53775`. It is stale
-and must not be installed or used as final evidence.
+`b3648c538a5b61f7655a4838550f7887b4dfc2a6e81f1f78be0c6521ccbdd8c7`
+and its unpacked bytes passed `422` tests. It predates the r4 corrections and is
+stale; do not install it or use it as final evidence.
 
 After a unanimous fresh review round:
 
@@ -141,8 +141,8 @@ After a unanimous fresh review round:
 8. Tell the owner to open a new interactive Codex session. The current session
    cannot reload the updated skill catalog.
 
-Do not push, tag, publish, merge, or create a release unless separately
-authorized.
+The owner authorized remote publication and skill update on 2026-08-06. Execute
+them only after unanimous r5 admission and exact packaged-byte verification.
 
 ## Argus continuation after TRIAD
 

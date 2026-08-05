@@ -15,7 +15,10 @@
 - Requires packaged-byte and fresh-process evidence before a distribution claim.
 - Limits the separately authorized formal Gemini fallback to one provider call;
   capacity failure and invalid structured output are terminal without hidden
-  capacity or schema-repair calls.
+  capacity or schema-repair calls. The ceiling applies to both supported
+  packaged `LegVerdict` operand syntaxes.
+- Records `unexposed` runtime identity when an AGY request times out before an
+  init event can expose the selected model.
 - Rejects benchmark inputs with zero cases or zero planted findings, and adds a
   clean-HEAD distribution verifier that stages exact archive bytes, compares
   load-bearing hashes, and runs tests from the extracted package.

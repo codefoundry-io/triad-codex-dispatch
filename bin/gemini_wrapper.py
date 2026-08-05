@@ -2,7 +2,7 @@
 """Single-shot Gemini CLI transport wrapper.
 
 Forwards a prompt to Gemini's JSON output mode along with only native model,
-working-directory, timeout, schema, packet-validation, repair, and debug
+working-directory, timeout, schema, repair, and debug
 controls. Provider-owned permission and workspace-trust settings are left to
 the native CLI.
 
@@ -81,7 +81,10 @@ def main() -> int:
         log("empty prompt")
         return EXIT_ARG_ERROR
 
-    formal_verdict = args.pydantic == "verdict_schema:LegVerdict"
+    formal_verdict = args.pydantic in {
+        "verdict_schema:LegVerdict",
+        "verdict_schema.LegVerdict",
+    }
     pydantic_cls = None
     if args.pydantic:
         try:
