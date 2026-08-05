@@ -74,8 +74,9 @@ group.
 
 Formal plan and pre-merge three-family gates use one leader-prepared shared
 review directory containing current approved production source, configuration,
-and documentation. For the 0.2.532 candidate, the no-exclusion boundary
-includes all repository test source. Normal SDD implementation review includes
+and documentation. The exact project or owner boundary determines test-source
+exclusions; absent that exact boundary, dispatch stops for owner input. Normal
+SDD implementation review includes
 relevant test source; other advisory review uses its separately owner-approved
 data scope.
 
@@ -87,34 +88,20 @@ hooks, or generated scripts.
 Before a formal gate, classify every test failure as production defect,
 test-case defect, or intentional specification change and resolve or approve it.
 
-The gate requires full affected-source coverage. The full diff is navigation evidence and is bound to the complete
-affected-source closure. Every required family reviews every affected
-production source in every deterministic batch. Source-grounded observations,
-exact full-file ranges, changed-hunk or impact-edge evidence, and strict
-coverage admission are required. A manifest path alone is not coverage.
-Provider-native file-read telemetry is retained and digest-bound when exposed;
-otherwise coverage is prompt-controlled and admitted through source-grounded
-receipts, independent family review, and leader reproduction. TRIAD does not
-claim provider-enforced proof of every read.
-
-The intentional evidence boundary requires UTF-8 current source. A non-UTF-8
-source fails closed with `non-UTF-8 source`; the leader must not omit it from the
-closure. Defer the candidate or obtain approval for a separately reviewed
-design that adds support.
-
-The immutable prepared directory, source and evidence digests, canonical
-candidate binding, pre/post mutation checks, exact receipt custody, and machine
-admission artifact protect result integrity. They do not choose runtime
+Each required family inspects the same complete focused directory once per
+round. One strict `LegVerdict` binds the family, review ID, and content digest.
+The immutable directory digest, canonical-worktree fingerprint, local schema
+validation, independent family review, and leader reproduction protect result
+integrity. They do not prove that a provider read every byte or choose runtime
 permissions.
 
 ## Google fallback boundary
 
-AGY is the primary Google route. Ordinary/non-formal Gemini fallback is eligible
-only for a no-final-summary exit `4` (`EXIT_BINARY_MISSING`) paired with the
-wrapper-owned pre-submission `PtyStartError` diagnostic for a supported missing
-or unstartable executable. Every final-summary result is post-dispatch and
-fallback-ineligible. Missing or invalid `TRIAD_AGY_BIN` and missing `agy` on
-`PATH` are direct, fallback-ineligible route-setup errors.
+AGY is the primary Google route. Version, executable, and model-catalog checks
+happen before a formal round. If AGY is unavailable before submission, the
+leader may select a separately authorized Gemini route before starting a fresh
+round. Any result event, timeout, vendor failure, or schema failure is
+post-submission and cannot activate a replacement inside that round.
 
 Formal Gemini fallback requires separate owner authorization for the exact
 route, provider, data boundary, and objective. It uses the same immutable

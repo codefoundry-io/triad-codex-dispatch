@@ -18,7 +18,6 @@ import json
 import sys
 
 from _common import (
-    build_validation_context,
     validate_wrapper_cwd,
     load_prompt_text,
     EXIT_ARG_ERROR,
@@ -73,8 +72,6 @@ def main() -> int:
         default=None,
         help="pydantic class spec (module.path:ClassName) for schema enforcement",
     )
-    p.add_argument("--sealed-packet-root", default=None)
-    p.add_argument("--expected-packet-sha256", default=None)
     p.add_argument(
         "--repair-mode",
         action="store_true",
@@ -114,16 +111,6 @@ def main() -> int:
             log(f"--pydantic load failed: {e}")
             return EXIT_ARG_ERROR
 
-    try:
-        validation_context = build_validation_context(
-            pydantic_cls,
-            args.sealed_packet_root,
-            args.expected_packet_sha256,
-        )
-    except Exception as e:
-        log(f"sealed validation context failed: {e}")
-        return EXIT_ARG_ERROR
-
     claude_bin = require_binary("claude")
 
     def build_cmd(effective_prompt: str) -> list[str]:
@@ -149,7 +136,6 @@ def main() -> int:
         pydantic_cls=pydantic_cls,
         last_msg_path=None,
         repair_mode=args.repair_mode,
-        validation_context=validation_context,
     )
 
     audit_cmd = build_cmd(args.prompt)

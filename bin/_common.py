@@ -24,6 +24,7 @@ from __future__ import annotations
 import fcntl
 import errno
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -36,7 +37,6 @@ import sys
 import tempfile
 import threading
 import time
-import types
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -510,104 +510,13 @@ def validate_wrapper_cwd(cwd: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
-SEALED_VALIDATION_CONTEXT = frozenset(
-    {"sealed_packet_root", "expected_packet_sha256"}
-)
-
-
-def build_validation_context(
-    pydantic_cls: Any,
-    sealed_packet_root: Optional[str],
-    expected_packet_sha256: Optional[str],
-) -> Optional[dict[str, str]]:
-    """Validate one schema's optional sealed-packet context before dispatch."""
-    paired = bool(sealed_packet_root) == bool(expected_packet_sha256)
-    if not paired:
-        raise ValueError(
-            "--sealed-packet-root and --expected-packet-sha256 must be "
-            "supplied together"
-        )
-    if sealed_packet_root and pydantic_cls is None:
-        raise ValueError("sealed packet identity requires --pydantic")
-
-    raw_required = (
-        getattr(pydantic_cls, "required_validation_context", frozenset())
-        if pydantic_cls is not None
-        else frozenset()
-    )
-    if not isinstance(raw_required, (set, frozenset)) or not all(
-        isinstance(item, str) for item in raw_required
-    ):
-        raise ValueError(
-            "Pydantic required_validation_context must be a set of strings"
-        )
-    required = frozenset(raw_required)
-    unsupported = required - SEALED_VALIDATION_CONTEXT
-    if unsupported:
-        raise ValueError(
-            "unsupported Pydantic validation context: "
-            f"{sorted(unsupported)}"
-        )
-
-    if not sealed_packet_root:
-        if required:
-            raise ValueError(
-                "missing supported Pydantic validation context: "
-                f"{sorted(required)}"
-            )
-        return None
-    if required != SEALED_VALIDATION_CONTEXT:
-        raise ValueError(
-            "sealed packet schema requires exact validation context: "
-            f"{sorted(SEALED_VALIDATION_CONTEXT)}"
-        )
-
-    raw_root = Path(sealed_packet_root).expanduser()
-    if not raw_root.is_absolute() or raw_root.is_symlink():
-        raise ValueError(
-            "--sealed-packet-root must be an absolute non-symlink directory"
-        )
-    resolved_text = validate_wrapper_cwd(str(raw_root))
-    if resolved_text is None:
-        raise ValueError("--sealed-packet-root must resolve to a directory")
-    resolved = Path(resolved_text)
-    if (
-        raw_root != resolved
-        or resolved.name != "packet"
-        or not resolved.parent.name.strip()
-    ):
-        raise ValueError(
-            "--sealed-packet-root must be a canonical "
-            "<nonempty-review-id>/packet directory"
-        )
-    if (
-        not isinstance(expected_packet_sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", expected_packet_sha256) is None
-    ):
-        raise ValueError(
-            "--expected-packet-sha256 must be 64 lowercase hex characters"
-        )
-    context = {
-        "sealed_packet_root": str(resolved),
-        "expected_packet_sha256": expected_packet_sha256,
-    }
-    verifier = getattr(pydantic_cls, "verify_sealed_packet", None)
-    if not callable(verifier):
-        raise ValueError(
-            "sealed packet schema must provide verify_sealed_packet(context)"
-        )
-    verifier(context)
-    return context
-
-
-
 def _redact_prompt_args(cmd: list[str]) -> list[str]:
     """Keep argv shape in durable audit logs without storing prompt payloads."""
     redacted: list[str] = []
     redact_next: str | None = None
     for arg in cmd:
         if redact_next is not None:
-            if redact_next == "prompt":
+            if redact_next in {"prompt", "schema"}:
                 redacted.append(f"<redacted:{len(arg)} chars>")
             else:
                 redacted.append("<redacted:prompt-file-path>")
@@ -621,12 +530,20 @@ def _redact_prompt_args(cmd: list[str]) -> list[str]:
             redacted.append(arg)
             redact_next = "prompt-file"
             continue
+        if arg == "--json-schema":
+            redacted.append(arg)
+            redact_next = "schema"
+            continue
         if arg.startswith("--prompt="):
             value = arg.split("=", 1)[1]
             redacted.append(f"--prompt=<redacted:{len(value)} chars>")
             continue
         if arg.startswith("--prompt-file="):
             redacted.append("--prompt-file=<redacted:prompt-file-path>")
+            continue
+        if arg.startswith("--json-schema="):
+            value = arg.split("=", 1)[1]
+            redacted.append(f"--json-schema=<redacted:{len(value)} chars>")
             continue
         redacted.append(arg)
     if redact_next is not None:
@@ -755,83 +672,32 @@ def classify(
     return _weak_fallback or "unknown"
 
 
-# ─── Pydantic helpers (NEW) ───────────────────────────────────────────────
+# ─── Pydantic helpers ─────────────────────────────────────────────────────
 
-_CANONICAL_FORMAL_REVIEW_OPERAND = "triad_formal_review_schema:FormalReview"
-_PACKAGED_FORMAL_REVIEW_MODULE = "_triad_packaged_formal_review_schema"
-_packaged_formal_review_module: Optional[types.ModuleType] = None
-_packaged_formal_review_lock = threading.Lock()
+_PACKAGED_VERDICT_OPERAND = "verdict_schema:LegVerdict"
 
 
-def _read_exact_regular_nofollow(source_path: Path) -> bytes:
-    """Read bytes only from an attested no-follow regular-file descriptor."""
-    required_flags = ("O_NOFOLLOW", "O_CLOEXEC", "O_NONBLOCK")
-    flags = os.O_RDONLY
-    for name in required_flags:
-        value = getattr(os, name, None)
-        if value is None:
-            raise ImportError(f"canonical formal-review schema requires os.{name}")
-        flags |= value
-
+def _load_packaged_verdict_class():
+    """Load the shipped verdict model from its exact sibling path."""
+    source = Path(__file__).resolve(strict=True).with_name("verdict_schema.py")
+    if source.is_symlink() or not source.is_file():
+        raise ImportError("packaged verdict schema must be a regular sibling file")
+    module_name = "_triad_packaged_verdict_schema"
+    spec = importlib.util.spec_from_file_location(module_name, source)
+    if spec is None or spec.loader is None:
+        raise ImportError("unable to load packaged verdict schema")
+    module = importlib.util.module_from_spec(spec)
+    prior = sys.modules.get(module_name)
+    sys.modules[module_name] = module
     try:
-        fd = os.open(source_path, flags)
-    except OSError as exc:
-        raise ImportError(
-            "canonical formal-review schema must be an exact regular sibling file"
-        ) from exc
-    try:
-        opened = os.fstat(fd)
-        current = source_path.lstat()
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or not stat.S_ISREG(current.st_mode)
-            or not os.path.samestat(opened, current)
-        ):
-            raise ImportError(
-                "canonical formal-review schema must be an exact regular sibling file"
-            )
-        with os.fdopen(fd, "rb", closefd=False) as stream:
-            return stream.read()
-    finally:
-        os.close(fd)
-
-
-def _load_packaged_formal_review_module() -> types.ModuleType:
-    """Load the bundled schema from the exact regular sibling file.
-
-    The public operand is intentionally not resolved through ``sys.path`` or
-    the canonical module name.  Hardened callers therefore cannot be diverted
-    to a same-named module while custom schemas keep the broad import gate.
-    """
-    global _packaged_formal_review_module
-    with _packaged_formal_review_lock:
-        if _packaged_formal_review_module is not None:
-            return _packaged_formal_review_module
-
-        source_path = Path(__file__).resolve(strict=True).with_name(
-            "triad_formal_review_schema.py"
-        )
-        source = _read_exact_regular_nofollow(source_path)
-
-        module = types.ModuleType(_PACKAGED_FORMAL_REVIEW_MODULE)
-        module.__file__ = str(source_path)
-        module.__package__ = ""
-        module.__loader__ = None
-        prior = sys.modules.get(_PACKAGED_FORMAL_REVIEW_MODULE)
-        sys.modules[_PACKAGED_FORMAL_REVIEW_MODULE] = module
-        try:
-            exec(
-                compile(source, str(source_path), "exec", dont_inherit=True),
-                module.__dict__,
-            )
-        except BaseException:
-            if prior is None:
-                sys.modules.pop(_PACKAGED_FORMAL_REVIEW_MODULE, None)
-            else:
-                sys.modules[_PACKAGED_FORMAL_REVIEW_MODULE] = prior
-            raise
-        _packaged_formal_review_module = module
-        return module
+        spec.loader.exec_module(module)
+    except BaseException:
+        if prior is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = prior
+        raise
+    return module.LegVerdict
 
 
 def load_pydantic_class(spec: str):
@@ -849,22 +715,27 @@ def load_pydantic_class(spec: str):
             "pydantic 2 is unavailable in this Python runtime; run "
             f"`{install_command}` in your normal terminal"
         )
-    if spec == _CANONICAL_FORMAL_REVIEW_OPERAND:
-        mod = _load_packaged_formal_review_module()
-        cls_name = "FormalReview"
-    elif _wrapper_hardened() and os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
+    if spec == _PACKAGED_VERDICT_OPERAND:
+        cls = _load_packaged_verdict_class()
+        if not (
+            isinstance(cls, type)
+            and BaseModel is not None
+            and issubclass(cls, BaseModel)
+        ):
+            raise TypeError(f"{spec} is not a pydantic BaseModel subclass")
+        return cls
+    if _wrapper_hardened() and os.environ.get("TRIAD_ALLOW_PYDANTIC_IMPORT") != "1":
         # Hardened installs (public codex-host product) must opt in explicitly:
         # --pydantic imports arbitrary Python outside the vendor sandbox.
         raise PermissionError(
             "--pydantic imports Python code outside the sandbox; under "
             "TRIAD_WRAPPER_HARDENED=1 set TRIAD_ALLOW_PYDANTIC_IMPORT=1 only "
             "for trusted schema modules")
+    if ":" in spec:
+        mod_path, cls_name = spec.rsplit(":", 1)
     else:
-        if ":" in spec:
-            mod_path, cls_name = spec.rsplit(":", 1)
-        else:
-            mod_path, cls_name = spec.rsplit(".", 1)
-        mod = importlib.import_module(mod_path)
+        mod_path, cls_name = spec.rsplit(".", 1)
+    mod = importlib.import_module(mod_path)
     cls = getattr(mod, cls_name)
     if not (isinstance(cls, type) and BaseModel is not None and issubclass(cls, BaseModel)):
         raise TypeError(f"{spec} is not a pydantic BaseModel subclass")
@@ -888,60 +759,8 @@ def schema_block_for_prompt(
     *,
     body_semantics_only: bool = False,
 ) -> str:
-    """Build the schema injection block for the prompt.
-
-    Generic schemas retain the compact shape and dummy example. The packaged
-    FormalReview contract adds its complete nested schema and cross-field
-    verdict rules.
-    """
+    """Build the generic schema injection block for a provider prompt."""
     schema = cls.model_json_schema()
-    if (
-        cls.__module__ == _PACKAGED_FORMAL_REVIEW_MODULE
-        and cls.__name__ == "FormalReview"
-    ):
-        schema.pop("description", None)
-        complete_schema = json.dumps(
-            schema,
-            ensure_ascii=False,
-            sort_keys=True,
-            indent=2,
-        )
-        return (
-            "The JSON object must match this complete canonical FormalReview "
-            f"JSON Schema:\n{complete_schema}\n\n"
-            "Required top-level fields: `review_id`, `packet_sha256`, `verdict`, "
-            "`findings`, `open_questions`.\n"
-            "Each finding requires: `severity`, `location`, `trigger`, `evidence`, "
-            "`correction`.\n"
-            "`verdict` must be exactly `SAFE` or `NOT-SAFE`.\n"
-            "`severity` must be exactly `Critical`, `Major`, or `Minor`.\n"
-            "A Critical or Major finding requires `NOT-SAFE`.\n"
-            "Any non-empty `open_questions` requires `NOT-SAFE`.\n"
-            "Otherwise `verdict` must be `SAFE`.\n\n"
-            "Final-format rules:\n"
-            "- Return one complete top-level envelope containing all five required "
-            "fields.\n"
-            "- Set `review_id` and `packet_sha256` exactly to the trusted values in "
-            "the runtime material.\n"
-            "- Use exactly one manifest-listed packet-relative path and one positive "
-            "decimal line number in each `location`. Create separate findings for "
-            "separate paths. Use line numbers rather than function or symbol names.\n"
-            "- Every required string must contain non-whitespace text.\n"
-            "- Represent no findings or open questions with the empty arrays `[]` "
-            "and include both fields. Use the schema-defined type for every value.\n\n"
-            "Few-shot 1 — NO FINDINGS — emit the complete envelope:\n"
-            '{"review_id": "<review-id>", "packet_sha256": "<sha256>", '
-            '"verdict": "SAFE", "findings": [], "open_questions": []}\n\n'
-            "Few-shot 2 — ONE BLOCKING FINDING — still emit the complete envelope:\n"
-            '{"review_id": "<review-id>", "packet_sha256": "<sha256>", '
-            '"verdict": "NOT-SAFE", "findings": [{"severity": "Major", '
-            '"location": "inputs/candidate/<path>:<positive-line>", '
-            '"trigger": "<non-empty trigger>", "evidence": "<non-empty evidence>", '
-            '"correction": "<non-empty correction>"}], "open_questions": []}\n\n'
-            "Angle-bracket values are shape placeholders only. Replace every one "
-            "with the current review identity and packet evidence so the response "
-            "contains only concrete values."
-        )
     fields = schema.get("properties", {})
     required = set(schema.get("required", []))
 
@@ -985,27 +804,6 @@ def inject_schema_to_prompt(
         cls,
         body_semantics_only=body_semantics_only,
     )
-    if (
-        cls.__module__ == _PACKAGED_FORMAL_REVIEW_MODULE
-        and cls.__name__ == "FormalReview"
-    ):
-        final_rule = (
-            "Based on the runtime review input above, perform the review and "
-            "produce a FormalReview JSON body that satisfies the response contract."
-            if body_semantics_only
-            else (
-                "Based on the user request and FormalReview contract above, return "
-                "exactly one valid JSON object with no surrounding content.\nJSON:"
-            )
-        )
-        return (
-            "=== USER REQUEST ===\n"
-            f"<runtime_review_input>\n{prompt}\n</runtime_review_input>\n\n"
-            "The runtime material above determines review scope and evidence. The "
-            "FormalReview response contract below controls the output shape.\n\n"
-            f"=== FORMAL REVIEW RESPONSE CONTRACT ===\n{block}\n\n"
-            f"{final_rule}"
-        )
     if body_semantics_only:
         return (
             f"{block}\n\n=== USER REQUEST ===\n"
@@ -1065,13 +863,11 @@ def strip_markdown_fences(text: str) -> str:
 def validate_response(
     answer_text: str,
     cls,
-    *,
-    context: Optional[dict[str, Any]] = None,
 ) -> Tuple[bool, Any]:
     """(ok, validated_dict_or_error_string)."""
     cleaned = strip_markdown_fences(answer_text)
     try:
-        obj = cls.model_validate_json(cleaned, context=context)
+        obj = cls.model_validate_json(cleaned)
         return True, obj.model_dump(mode="json")
     except Exception as e:
         return False, str(e)
@@ -1376,247 +1172,12 @@ def extract_claude_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]
     return result, None
 
 
-# ─── Antigravity (agy) pty scrub + sentinel extraction ────────────────────
-
-_AGY_ANSI_RE = re.compile(
-    r"\x1b\[[0-9;?]*[ -/]*[@-~]"       # CSI
-    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC
-    r"|\x1b[()][AB0]|\x1b[=>]"          # charset / other 2-byte
-)
-
-
-def scrub_agy_output(raw_bytes: bytes) -> str:
-    """Pure scrub of agy pty output: decode, strip EOT/backspace, CRLF->LF,
-    strip ANSI/control. No sentinel logic (see extract_antigravity_answer)."""
-    text = raw_bytes.decode("utf-8", errors="replace")
-    text = text.replace("\x04", "").replace("\x08", "")
-    text = text.replace("\r\n", "\n").replace("\r", "")
-    text = _AGY_ANSI_RE.sub("", text)
-    return text
-
-
-import glob as _glob
-
-
-_AGY_BRAIN_GLOB = "*/.system_generated/logs/transcript.jsonl"
-
-
-def _agy_brain_dir() -> str:
-    """The agy conversation-store root (override via AGY_BRAIN_DIR for tests)."""
-    return os.environ.get(
-        "AGY_BRAIN_DIR",
-        os.path.expanduser("~/.gemini/antigravity-cli/brain"),
-    )
-
-
-def snapshot_agy_transcripts(brain_dir: str | None = None) -> dict:
-    """{transcript_path: mtime} for every conversation transcript, BEFORE a run.
-
-    Paired with extract_agy_answer_from_transcript to BOUND the candidate set to
-    conversations created/touched during this call. Identity within that set is
-    by the per-invocation sentinel (see extract_agy_answer_from_transcript), NOT
-    by mtime — several agy calls may be in flight concurrently. Missing brain dir
-    -> {} (first-ever run)."""
-    base = brain_dir or _agy_brain_dir()
-    out: dict = {}
-    for pth in _glob.glob(os.path.join(base, _AGY_BRAIN_GLOB)):
-        try:
-            out[pth] = os.path.getmtime(pth)
-        except OSError:
-            # The path EXISTS (glob saw it) — record its presence with a 0.0
-            # mtime rather than dropping it (P4 round-3): a transiently
-            # stat-failing PRE-EXISTING transcript must never look "new" to
-            # the post-run candidate rule, which keys on path presence.
-            out[pth] = 0.0
-    return out
-
-
-_AGY_MARKER_RE = re.compile(r"<<<AGY_DONE_[0-9a-f]+>>>")
-
-# Scan refusal threshold for one transcript candidate (see _scan_transcript).
-_AGY_TRANSCRIPT_MAX_BYTES = 50 * 1024 * 1024
-
-
-def _scan_transcript(pth: str, marker: str) -> Tuple[bool, Optional[str]]:
-    """Stream ONE transcript once (context-managed, UTF-8-safe). Returns
-    (owns, final_done_content):
-
-      - `owns` = a USER_INPUT/USER_EXPLICIT record's content has `marker` as its
-        LAST agy-marker (the wrapper-appended sealed-prompt footer). A foreign
-        call that merely QUOTES `marker` mid-prompt has its OWN footer marker
-        last, so it does NOT own this sentinel (replay defense).
-      - `final_done_content` = the last PLANNER_RESPONSE/MODEL/DONE record's
-        content (str), or None when that record explicitly declares `content`
-        in `truncated_fields`.
-
-    Malformed/partial JSON lines, valid-JSON non-object records, and non-str
-    content are all skipped so a concurrently-appended foreign transcript can
-    never crash the scan (errors='replace' handles a truncated multi-byte char;
-    the isinstance guards handle `null`/`[]`/`123`/dict-content). (False, None)
-    on OSError. Streaming (not `.read()`) bounds memory on a large transcript.
-
-    ASSUMPTION (ground-truthed 500/500 real transcripts, 2026-07-11): a
-    single-shot `agy -p` conversation holds EXACTLY ONE USER_INPUT/USER_EXPLICIT
-    record, so `owns` and the global last-DONE `final` always belong to the same
-    turn. If a future agy multiplexes several turns into one transcript.jsonl
-    (e.g. a --resume path), bind `final` to the segment FOLLOWING the owning
-    USER_INPUT record instead of the whole file before routing such calls here."""
-    owns = False
-    final: Optional[str] = None
-    try:
-        # Resource bound (P4 round-2): a real agy transcript is KB-MB scale;
-        # refuse to scan a pathological/foreign multi-GB candidate rather than
-        # buffer it — skipping fails closed (not an owner -> pty-scrub path).
-        if os.path.getsize(pth) > _AGY_TRANSCRIPT_MAX_BYTES:
-            return (False, None)
-        with open(pth, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(rec, dict):
-                    continue
-                content = rec.get("content")
-                if not isinstance(content, str):
-                    continue
-                if (rec.get("type") == "USER_INPUT"
-                        and rec.get("source") == "USER_EXPLICIT"):
-                    ms = _AGY_MARKER_RE.findall(content)
-                    if ms and ms[-1] == marker:
-                        owns = True
-                elif (rec.get("type") == "PLANNER_RESPONSE"
-                        and rec.get("source") == "MODEL"
-                        and rec.get("status") == "DONE"):
-                    truncated_fields = rec.get("truncated_fields")
-                    final = (
-                        None
-                        if isinstance(truncated_fields, list)
-                        and "content" in truncated_fields
-                        else content
-                    )
-    except OSError:
-        return (False, None)
-    return (owns, final)
-
-
-def extract_agy_answer_from_transcript(
-    brain_dir: str | None,
-    before: dict,
-    sentinel: str,
-) -> Optional[str]:
-    """Read THIS call's final answer from agy's own transcript.jsonl (P4.5
-    transport, concurrency-hardened 2026-07-11).
-
-    agy has no native JSON/-o-file output; every run writes a per-conversation
-    transcript whose last non-truncated `PLANNER_RESPONSE/MODEL/DONE` record
-    carries the complete ANSI-free answer. A long agentic run drops the trailing
-    marker from the ANSWER, but the wrapper-sealed marker is ALWAYS present in
-    the USER_INPUT record — that (not the answer, not mtime) is the identity
-    anchor. An explicitly truncated final content field is rejected so the
-    caller can use its per-process PTY fallback.
-
-    `before` = snapshot_agy_transcripts() taken BEFORE the run bounds the
-    candidate set to conversations CREATED during this call (new paths only —
-    a single-shot `agy -p` always starts a new conversation). Among those, THIS
-    call's transcript is the one that OWNS `sentinel` (_scan_transcript: its
-    USER_INPUT footer's LAST marker == this sentinel). EXACTLY ONE owner with a
-    DONE record -> return its answer; ZERO owners (crash before USER_INPUT / not
-    yet flushed / schema drift) or MORE THAN ONE (a genuine collision) -> None,
-    and the caller falls back to the per-call pty-scrub (which reads THIS
-    process's own bytes and can NEVER return a foreign answer). Selection is
-    NEVER by mtime.
-
-    Concurrency contract: the identity guarantee covers calls dispatched
-    THROUGH this wrapper (each seals its own footer marker last). A concurrent
-    RAW/manual agy call that quotes a live wrapper call's sealed prompt
-    verbatim while that call's own transcript is absent is outside the
-    contract — documented residual, not a supported flow.
-
-    `sentinel` is REQUIRED — the wrapper always supplies its per-invocation id."""
-    base = brain_dir or _agy_brain_dir()
-    after = snapshot_agy_transcripts(base)
-    # Ownership candidates are NEW conversations only (P4 round-2 tightening):
-    # a single-shot `agy -p` ALWAYS creates a new conversation dir (ground-
-    # truthed across the whole brain store), so a pre-existing transcript can
-    # never be this call's — excluding mtime-bumped old paths removes both the
-    # stale-schema-repair corner and needless scanning of foreign transcripts
-    # that were created before the snapshot and are still being appended.
-    fresh = [pth for pth in after if pth not in before]
-    if not fresh:
-        return None
-    marker = f"<<<{sentinel}>>>"
-    owner_count = 0
-    owner_final: Optional[str] = None
-    for pth in fresh:
-        owns, final = _scan_transcript(pth, marker)
-        if owns:
-            owner_count += 1
-            owner_final = final
-    if owner_count != 1 or owner_final is None:
-        return None
-    content = owner_final.rstrip()
-    if content.endswith(marker):
-        content = content[:-len(marker)].rstrip()
-    return content or None
-
-
-def extract_antigravity_answer(
-    scrubbed: str, killed: bool, expected_sentinel: str
-) -> Tuple[Optional[str], Optional[str]]:
-    """Find the exact per-call sentinel in already-scrubbed text. Present and
-    TERMINAL -> (answer_without_sentinel, None). Absent -> (None, 'no-sentinel').
-
-    Uses the LAST marker occurrence (rfind) so an early echoed marker — e.g.
-    the model quoting the closing instruction back at the top — does not
-    truncate a real answer that ends at the genuine terminal marker.
-
-    P4.c strictness (spec 3-way 2026-07-11): the accepted marker must be
-    TERMINAL — the tail after it is whitespace only (the sealed prompt says
-    "and nothing after it"; the live-spike healthy tail is a single '\\n')
-    AND the marker is newline-preceded (own-line floor, re-confirm round-2:
-    the sealed prompt instructs the marker "on its own line", so an INLINE
-    early echo at the exact end of a truncated capture must not pass).
-    Either violation means the genuine terminal marker never arrived
-    -> (None, 'non-terminal-marker'), never a partial prefix as ok. Widen to
-    a residue allowlist ONLY on captured real-fixture evidence (anchored
-    full-tail match, <=1024 chars), never a broad pattern.
-
-    killed=True fails closed here as belt-and-suspenders — the driver
-    already short-circuits killed -> timeout BEFORE extraction; this guards
-    a future caller that skips that ordering.
-    """
-    if killed:
-        return None, "killed-partial"
-    marker = f"<<<{expected_sentinel}>>>"
-    idx = scrubbed.rfind(marker)
-    if idx == -1:
-        return None, "no-sentinel"
-    if scrubbed[idx + len(marker):].strip():
-        return None, "non-terminal-marker"
-    if idx > 0 and not scrubbed[:idx].endswith("\n"):
-        # Own-line floor (re-confirm round-2, both families): the sealed
-        # prompt instructs the marker "on its own line", so a genuine
-        # terminal marker is newline-preceded. An INLINE marker at the exact
-        # end of a truncated capture ("I will end with <<<S>>>") would
-        # otherwise pass the whitespace-tail check and surface the partial
-        # prefix as ok. idx==0 stays allowed: an empty body routes to the
-        # driver's empty-answer-body, not here.
-        return None, "non-terminal-marker"
-    return scrubbed[:idx].rstrip(), None
-
-
 # ─── Subprocess core ──────────────────────────────────────────────────────
 
 # Loader / interpreter injection env vars scrubbed from the vendor child (I-2/I-3).
-# `_run_once` is the one `subprocess.Popen` site (codex/gemini/claude), and
-# `_pty.run_via_pty` (the agy transport) is a SEPARATE vendor-child spawn — agy
-# does NOT go through Popen. BOTH spawn sites apply the SAME scrub via the shared
-# `scrubbed_child_env()` below, so a poisoned parent env cannot reach the vendor
-# CLI (gemini/claude/agy are Node runtimes; codex/agy spawn tools). The classic
+# `_run_once` is the one `subprocess.Popen` site for every provider wrapper.
+# Every vendor child receives the same scrubbed environment, so a poisoned
+# parent env cannot reach a provider CLI. The classic
 # vectors: the dynamic loader (LD_PRELOAD / LD_AUDIT / the macOS DYLD_* family),
 # the Node runtime (NODE_OPTIONS=--require=<evil.js> would run workspace code
 # OUTSIDE any sandbox; NODE_PATH), the Python / shell / Perl / Ruby interpreters
@@ -1635,10 +1196,8 @@ _CHILD_ENV_SCRUB = (
 
 def scrubbed_child_env(base=None) -> dict:
     """The single-source vendor-child env: `base` (default `os.environ`) minus the
-    `_CHILD_ENV_SCRUB` injection vars. Applied at BOTH vendor-child spawn sites —
-    `_run_once` (Popen) and `_pty.run_via_pty` (agy pty transport, env=None) — so
-    the scrub policy lives in exactly ONE place. Returns a fresh dict (safe to
-    mutate, e.g. the pty transport's `setdefault("TERM", "dumb")`)."""
+    `_CHILD_ENV_SCRUB` injection vars. `_run_once` applies it at the single
+    provider-child spawn site. Returns a fresh dict."""
     src = base if base is not None else os.environ
     return {k: v for k, v in src.items() if k not in _CHILD_ENV_SCRUB}
 
@@ -1668,6 +1227,7 @@ def _run_once(
     cwd: Optional[str],
     timeout: int,
     stdin_text: Optional[str] = None,
+    classify_and_log: bool = True,
 ) -> RunResult:
     """One Popen invocation.
 
@@ -1678,7 +1238,10 @@ def _run_once(
     reading. When None (default), stdin is DEVNULL (gemini/claude behavior
     unchanged).
     """
-    log(f"exec cwd={cwd or os.getcwd()} timeout={timeout}s argv={cmd}")
+    log(
+        f"exec cwd={cwd or os.getcwd()} timeout={timeout}s "
+        f"argv={_redact_prompt_args(cmd)}"
+    )
     start = time.monotonic()
 
     # Scrub loader/interpreter injection vars so a poisoned parent env cannot
@@ -1780,18 +1343,21 @@ def _run_once(
         result = RunResult(ec, stdout, stderr, elapsed)
 
     result.vendor_exit_code = rc
-    result.classification = classify(
-        cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
-    )
+    if classify_and_log:
+        result.classification = classify(
+            cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
+        )
 
-    # One-line deterministic summary (immediately visible to leader/user).
-    # SEMANTIC stderr classification (tool-not-installed / vendor warning)
-    # stays the leader's judgment over the mirrored raw stderr.
-    log(
-        f"[wrapper] {cli} {result.classification} "
-        f"exit={result.exit_code} vendor={result.vendor_exit_code} "
-        f"elapsed={elapsed:.1f}s"
-    )
+        # One-line deterministic summary (immediately visible to leader/user).
+        # SEMANTIC stderr classification (tool-not-installed / vendor warning)
+        # stays the leader's judgment over the mirrored raw stderr.
+        log(
+            f"[wrapper] {cli} {result.classification} "
+            f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+            f"elapsed={elapsed:.1f}s"
+        )
+    else:
+        result.classification = "unclassified"
 
     return result
 
@@ -1806,7 +1372,6 @@ def run_cli_with_retry(
     last_msg_path: Optional[str] = None,
     repair_mode: bool = False,
     prompt_via_stdin: bool = False,
-    validation_context: Optional[dict[str, Any]] = None,
 ) -> RunResult:
     """Top-level driver.
 
@@ -2043,9 +1608,7 @@ def run_cli_with_retry(
         if pydantic_cls is None:
             return result
 
-        ok, validated_or_err = validate_response(
-            answer, pydantic_cls, context=validation_context
-        )
+        ok, validated_or_err = validate_response(answer, pydantic_cls)
         if ok:
             result.validated = validated_or_err
             return result
@@ -2053,7 +1616,7 @@ def run_cli_with_retry(
         result.validation_error = str(validated_or_err)
         log(f"schema validation failed: {validated_or_err}")
 
-        if schema_repair_attempt >= 1 or repair_mode or validation_context:
+        if schema_repair_attempt >= 1 or repair_mode:
             return promote_schema_fail(result)
 
         # 1 retry — augment prompt with the failure notice and loop.

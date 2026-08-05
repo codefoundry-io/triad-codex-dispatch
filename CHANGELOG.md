@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.533 — 2026-08-05
+
+- Replaces batched review evidence with one focused directory and one strict
+  Claude, Google, and fresh Codex `LegVerdict` per round.
+- Repeats complete three-family rounds after bounded fixes until unanimous
+  admitted `SAFE`, conflict, oscillation, invalidity, or an owner decision.
+- Requires owner approval before design, specification, capability,
+  generalization, or scope changes; external reviewers never write code.
+- Migrates AGY to the 1.1.10 native `stream-json` and `json-schema` contract,
+  forwards explicit model and effort, and removes PTY, sentinel, sandbox,
+  permission-bypass, packet, batch, and receipt runtime paths.
+- Requires packaged-byte and fresh-process evidence before a distribution claim.
+
 ## 0.2.532 — 2026-08-03
 
 - Adopts AGY 1.1.10's repaired headless model-selection contract for formal

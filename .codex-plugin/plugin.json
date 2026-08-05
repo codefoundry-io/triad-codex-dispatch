@@ -1,7 +1,7 @@
 {
   "name": "triad-codex-dispatch",
-  "version": "0.2.532",
-  "description": "Codex-led triad dispatch skills and wrapper runbooks for Claude, Antigravity, Gemini (enterprise tier), and cross-family review.",
+  "version": "0.2.533",
+  "description": "Codex-led reviewer dispatch for Claude, Antigravity, Gemini, and convergent cross-family review.",
   "author": {
     "name": "codefoundry-io"
   },
@@ -11,17 +11,16 @@
   "interface": {
     "displayName": "Triad Codex Dispatch",
     "shortDescription": "Cross-family dispatch and review workflows for Codex",
-    "longDescription": "Send bounded requests to authenticated Claude Code, Antigravity, or Gemini CLIs and coordinate independent cross-family reviews from Codex.",
+    "longDescription": "Coordinate reviewer-only Claude, Google-family, and fresh Codex legs over one focused directory, with Codex retaining all implementation authority.",
     "developerName": "codefoundry-io",
     "category": "Developer Tools",
     "capabilities": [
       "Interactive",
-      "Read",
-      "Write"
+      "Read"
     ],
     "defaultPrompt": [
-      "Use $triad-cross-family-review to review this change. Confirm the objective, review target, approved data, and exclusions before external dispatch; select batched-full-coverage for the operational pre-merge gate and reserve formal-gate for the unbatched compatibility formal-plan result profile only.",
-      "Use $triad-antigravity-dispatch for an owner-authorized review. State the objective, review target, approved data, exclusions, and result profile before dispatch."
+      "Use $triad-cross-family-review to review this change. Confirm the objective, approved data, and exact exclusions, then give Claude, Google, and fresh Codex the same complete focused directory. Codex reproduces findings, writes bounded fixes, and asks the owner before any design or scope change.",
+      "Use $triad-antigravity-dispatch for an owner-authorized reviewer-only Google-family leg through AGY 1.1.10 or newer with an explicit model and effort."
     ]
   },
   "keywords": [

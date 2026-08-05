@@ -129,14 +129,12 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 로그인하세요; 개인 Google-family 사용자는 `agy` 를 쓰세요. 팀이 bootstrap 에서
 필수로 요구하려면 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1` 을 설정합니다.
 bootstrap 은 실행 파일 존재를 Gemini fallback candidate 로만 표시하며
-인증·model·version probe를 실행하지 않습니다. 일반/비정식 Gemini fallback은
-no-final-summary exit `4` (`EXIT_BINARY_MISSING`)와 지원되는 missing/unstartable
-executable을 입증하는 wrapper-owned 제출 전 `PtyStartError`가 함께 있을 때만
-eligible합니다. 모든 final-summary result는 fallback-ineligible입니다.
-missing/invalid `TRIAD_AGY_BIN` 및 `PATH`에 `agy`가 없음은 fallback trigger가 아닌
-route-setup error입니다. AGY를 설치/설정하거나 separate Google route를 명시적으로
-authorize하세요. 직접 Gemini 요청으로 agy-first 규칙을 우회할 수 없습니다.
-content, schema, timeout, capacity, post-dispatch 실패는 agy 경로에 남습니다.
+인증·model·version probe를 실행하지 않습니다. review round 전에 리더가 AGY version과
+model catalog를 확인합니다. 이 제출 전 route proof가 실패하면 owner가 Gemini를
+authorize하고 리더가 그 route로 fresh round를 시작할 수 있습니다. 제출된 AGY call,
+result event, timeout, schema error, provider failure는 Google leg를 invalid로 만들며
+같은 round 안의 provider 교체를 허용하지 않습니다. 직접 Gemini 요청으로 AGY-first
+규칙을 우회할 수 없습니다.
 
 정식 Gemini fallback에는 exact route, provider, data boundary, objective에 대한
 separate owner authorization이 필요합니다. same immutable prepared directory,
@@ -168,7 +166,7 @@ family가 unavailable이면 invalid round입니다. 전체 계약은
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.532 업그레이드
+### 0.2.533 업그레이드
 
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
@@ -176,10 +174,12 @@ plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
 edited, linked, non-regular target은 보존하고 보고합니다. owner-authored 설정을 보존하며
 rule, permission profile, credential, 관련 없는 파일을 건드리지 않습니다.
 
-이전 wrapper `--sandbox` flag와 missing-binary Gemini fallback trigger는 제거되었습니다.
-Caller에서 해당 flag를 삭제하세요. missing/invalid `TRIAD_AGY_BIN` 또는 `PATH`에
-`agy`가 없음은 route-setup error로 중단됩니다. AGY를 설치/설정하거나 separate
-Google route를 명시적으로 authorize하세요. 일반 `codex`가 정상 경로입니다.
+review runtime은 하나의 complete focused directory, required family별 하나의
+`LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
+receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.10 이상을
+요구하고 native `stream-json`과 `json-schema`를 사용합니다. formal route는
+`gemini-3.1-pro-high`와 `high` effort를 전달합니다. provider permission과 project
+trust policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
 
 ## 사용
 
@@ -418,10 +418,10 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
 
-Worktree-first review는 packet-bound `FormalReview` schema, sealed-packet flag,
-source snapshot을 사용하지 않습니다. 이 option의 legacy wrapper support는 명시적
-compatibility 용도로 남을 수 있지만 일반 또는 formal worktree review의 일부가 아니며
-gate prerequisite도 아닙니다.
+Cross-family review는 focused prepared-directory digest, canonical worktree
+fingerprint, family별 하나의 strict `LegVerdict`를 사용합니다. 리더는 result와
+snapshot을 reviewed evidence 밖에 두며 bounded correction 뒤에는 fresh complete
+round를 시작합니다.
 
 Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocation은 provider
 실행 전에 3,600 seconds보다 오래된 managed UUID/file-IPC entry를 best-effort

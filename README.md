@@ -142,16 +142,12 @@ subsection only when its "do this ONLY if…" line applies to you.
 `gemini` and log in; individual Google-family users should use `agy` instead. Set
 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1` if a team wants bootstrap to require it.
 Bootstrap labels executable presence as a Gemini fallback candidate only; it
-does not run authentication, model, or version probes. Ordinary/non-formal
-Gemini fallback is eligible only for a no-final-summary exit `4`
-(`EXIT_BINARY_MISSING`) with the wrapper-owned pre-submission `PtyStartError`
-diagnostic for a supported missing or unstartable executable; every
-final-summary result is fallback-ineligible. Missing or invalid
-`TRIAD_AGY_BIN` and missing `agy` on `PATH` are direct, fallback-ineligible
-route-setup errors rather than fallback triggers. Install or configure AGY, or
-explicitly authorize a separate Google route. A direct Gemini request does not
-bypass the agy-first rule; content, schema, timeout, capacity, or post-dispatch
-failures—including native permission denial—remain on the agy failure path.
+does not run authentication, model, or version probes. Before a review round,
+the leader proves the AGY version and model catalog. When that pre-submission
+route proof fails, the owner may authorize Gemini and the leader starts a fresh
+round on that route. A submitted AGY call, result event, timeout, schema error,
+or provider failure invalidates the Google leg and cannot activate an in-round
+replacement. A direct Gemini request does not bypass the AGY-first rule.
 
 A formal Gemini fallback requires separate owner authorization for the exact
 route, provider, data boundary, and objective. It retains the same immutable
@@ -188,7 +184,7 @@ below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.532
+### Upgrading to 0.2.533
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -197,11 +193,12 @@ and expected bytes match. Foreign, edited, linked, or non-regular targets are
 preserved and reported. This cleanup preserves owner-authored settings, rules,
 permission profiles, and credentials; unrelated files remain untouched.
 
-The wrapper `--sandbox` flags and missing-binary Gemini fallback triggers from
-older releases are removed. Delete those wrapper flags from callers. Missing or
-invalid `TRIAD_AGY_BIN` or missing `agy` on `PATH` now stops as a route-setup
-error; install/configure AGY or explicitly authorize a separate Google route.
-Ordinary `codex` remains the normal path.
+The review runtime now uses one complete focused directory, one `LegVerdict`
+from each required family, and fresh complete rounds after bounded fixes. Batch,
+packet, receipt, PTY, and sentinel review transports are removed. AGY requires
+1.1.10 or newer and uses native `stream-json` plus `json-schema`; the formal
+route passes `gemini-3.1-pro-high` with `high` effort. Provider permission and
+project-trust policy remain native. Ordinary `codex` remains the normal path.
 
 ## Use
 
@@ -449,10 +446,10 @@ full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
 
-Worktree-first review does not use the packet-bound `FormalReview` schema,
-sealed-packet flags, or a source snapshot. Legacy wrapper support for those
-options may remain for explicit compatibility, but it is not part of the normal
-or formal worktree review and is not a gate prerequisite.
+Cross-family review uses the focused prepared-directory digest, the canonical
+worktree fingerprint, and one strict `LegVerdict` per family. The leader keeps
+results and snapshots outside reviewed evidence and starts a fresh complete
+round after any bounded correction.
 
 Every normal non-`--repair-mode` wrapper invocation that reaches its dispatch
 driver performs best-effort cleanup of managed UUID/file-IPC entries older than
