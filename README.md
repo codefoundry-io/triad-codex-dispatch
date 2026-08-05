@@ -153,7 +153,9 @@ A formal Gemini fallback requires separate owner authorization for the exact
 route, provider, data boundary, and objective. It retains the same immutable
 prepared directory, prompt-controlled no-edit/no-execution contract,
 digest/mutation invalidation, complete three-family round, and strict
-`LegVerdict` admission. An
+`LegVerdict` admission. The exact formal schema route makes one provider call;
+capacity failure or invalid structured output is terminal for that invocation,
+with no hidden capacity retry or schema-repair provider call. An
 unavailable required family leaves an invalid round. See the
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md)
 for the complete gate.

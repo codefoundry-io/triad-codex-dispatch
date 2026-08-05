@@ -139,7 +139,10 @@ result event, timeout, schema error, provider failure는 Google leg를 invalid�
 정식 Gemini fallback에는 exact route, provider, data boundary, objective에 대한
 separate owner authorization이 필요합니다. same immutable prepared directory,
 prompt-controlled no-edit/no-execution contract, digest/mutation invalidation,
-complete three-family round, strict `LegVerdict` admission을 유지합니다. required
+complete three-family round, strict `LegVerdict` admission을 유지합니다. 이 exact
+formal schema route는 provider call을 한 번만 실행합니다. capacity failure 또는
+invalid structured output은 해당 invocation의 terminal 결과이며 숨겨진 capacity
+retry나 schema-repair provider call을 실행하지 않습니다. required
 family가 unavailable이면 invalid round입니다. 전체 계약은
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md)를
 따릅니다.

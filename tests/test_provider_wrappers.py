@@ -264,3 +264,125 @@ def test_gemini_route_keeps_native_json_without_review_protocol(monkeypatch, cap
         "-m",
         "gemini-enterprise",
     ]
+
+
+def test_gemini_formal_verdict_route_does_not_make_schema_repair_call(
+    monkeypatch, capsys
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(gemini_wrapper, "require_binary", lambda _name: "/opt/bin/gemini")
+    monkeypatch.setattr(gemini_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
+
+    def fake_once(_cli, cmd, cwd, timeout, *, stdin_text=None):
+        calls.append(cmd)
+        assert cwd is None
+        assert timeout == 600
+        assert stdin_text is None
+        return _common.RunResult(
+            exit_code=0,
+            stdout='{"response":"{}"}',
+            stderr="",
+            elapsed_s=0.1,
+            classification="ok",
+            vendor_exit_code=0,
+        )
+
+    monkeypatch.setattr(_common, "_run_once", fake_once)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gemini_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+        ],
+    )
+
+    assert gemini_wrapper.main() == _common.EXIT_SCHEMA_FAIL
+    assert capsys.readouterr().out == ""
+    assert len(calls) == 1
+
+
+def test_gemini_formal_verdict_route_does_not_make_capacity_retry_call(
+    monkeypatch, capsys
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setenv("TRIAD_SERVER_CAP_NO_BACKOFF", "1")
+    monkeypatch.setattr(gemini_wrapper, "require_binary", lambda _name: "/opt/bin/gemini")
+    monkeypatch.setattr(gemini_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
+
+    def fake_once(_cli, cmd, cwd, timeout, *, stdin_text=None):
+        calls.append(cmd)
+        assert cwd is None
+        assert timeout == 600
+        assert stdin_text is None
+        return _common.RunResult(
+            exit_code=_common.EXIT_CLI_FAIL,
+            stdout="",
+            stderr="capacity exhausted",
+            elapsed_s=0.1,
+            classification="server-capacity",
+            vendor_exit_code=1,
+        )
+
+    monkeypatch.setattr(_common, "_run_once", fake_once)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gemini_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+        ],
+    )
+
+    assert gemini_wrapper.main() == _common.EXIT_RATE_GIVE_UP
+    assert capsys.readouterr().out == ""
+    assert len(calls) == 1
+
+
+def test_gemini_custom_schema_keeps_existing_schema_repair_call(
+    monkeypatch, capsys
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(gemini_wrapper, "require_binary", lambda _name: "/opt/bin/gemini")
+    monkeypatch.setattr(gemini_wrapper, "load_pydantic_class", lambda _spec: _StructuredAnswer)
+    monkeypatch.setattr(gemini_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
+
+    def fake_once(_cli, cmd, cwd, timeout, *, stdin_text=None):
+        calls.append(cmd)
+        assert cwd is None
+        assert timeout == 600
+        assert stdin_text is None
+        return _common.RunResult(
+            exit_code=0,
+            stdout='{"response":"{}"}',
+            stderr="",
+            elapsed_s=0.1,
+            classification="ok",
+            vendor_exit_code=0,
+        )
+
+    monkeypatch.setattr(_common, "_run_once", fake_once)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gemini_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "example:StructuredAnswer",
+        ],
+    )
+
+    assert gemini_wrapper.main() == _common.EXIT_SCHEMA_FAIL
+    assert capsys.readouterr().out == ""
+    assert len(calls) == 2

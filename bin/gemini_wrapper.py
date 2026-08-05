@@ -81,6 +81,7 @@ def main() -> int:
         log("empty prompt")
         return EXIT_ARG_ERROR
 
+    formal_verdict = args.pydantic == "verdict_schema:LegVerdict"
     pydantic_cls = None
     if args.pydantic:
         try:
@@ -110,6 +111,7 @@ def main() -> int:
         pydantic_cls=pydantic_cls,
         last_msg_path=None,
         repair_mode=args.repair_mode,
+        single_provider_call=formal_verdict,
     )
 
     audit_cmd = build_cmd(args.prompt)

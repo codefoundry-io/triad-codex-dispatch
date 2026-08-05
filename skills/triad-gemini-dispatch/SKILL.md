@@ -23,6 +23,10 @@ fresh complete round. Give it the same prepared directory, prompt, digest,
 read/search-only contract, and `verdict_schema:LegVerdict`. Never replace a
 failed in-flight AGY leg with Gemini inside the same round.
 
+The exact formal `verdict_schema:LegVerdict` route makes one provider call.
+Capacity failure or invalid structured output is terminal for that invocation;
+the wrapper makes no hidden capacity retry or schema-repair provider call.
+
 Gemini reviews only; it does not edit or execute candidate code. The leader
 reproduces every finding and asks the owner before any proposed design,
 specification, capability, or scope change.

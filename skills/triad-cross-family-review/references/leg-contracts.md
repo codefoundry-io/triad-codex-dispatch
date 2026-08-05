@@ -40,6 +40,21 @@ flags. If AGY is unavailable before submission, the leader may select the
 documented Gemini route before starting a fresh round. A failure after
 submission invalidates the Google leg; do not substitute providers mid-round.
 
+For a separately authorized pre-submission Gemini fallback, use the packaged
+wrapper and the exact owner-authorized Gemini model:
+
+```text
+python3 <toolkit>/bin/gemini_wrapper.py
+  --prompt-file <leader-owned-prompt>
+  --cwd <prepared-directory>
+  --model <owner-authorized-gemini-model>
+  --pydantic verdict_schema:LegVerdict
+```
+
+This exact formal schema route makes one provider call. Capacity failure or
+invalid structured output is terminal for that invocation; the wrapper makes
+no capacity retry or schema-repair provider call.
+
 ## Fresh Codex
 
 Spawn a fresh default child with:
@@ -66,4 +81,3 @@ python3 <toolkit>/bin/verdict_schema.py validate
 
 The no-edit contract is prompt-controlled unless runtime metadata proves a
 stronger boundary. Mutation detection, not a sandbox claim, decides admission.
-

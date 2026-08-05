@@ -1374,15 +1374,18 @@ def run_cli_with_retry(
     last_msg_path: Optional[str] = None,
     repair_mode: bool = False,
     prompt_via_stdin: bool = False,
+    single_provider_call: bool = False,
 ) -> RunResult:
     """Top-level driver.
 
     Layers (in order):
     1. Schema injection — if `pydantic_cls`, prepend the schema block to prompt.
-    2. Server-capacity retry — `SERVER_CAP_BACKOFF_S` (skipped if `repair_mode`).
+    2. Server-capacity retry — `SERVER_CAP_BACKOFF_S` (skipped if
+       `repair_mode` or `single_provider_call`).
     3. Answer extraction — cli-aware (JSONL events / single JSON object).
     4. Schema validation — if `pydantic_cls`, validate; on failure, retry once
-       (mode = "schema_repair") with a clarifying suffix in the prompt.
+       (mode = "schema_repair") with a clarifying suffix in the prompt unless
+       `single_provider_call` is set.
 
     `cmd_builder(prompt) -> argv` lets us rebuild the argv after schema-repair
     prompt mutation without leaking command construction into this function.
@@ -1486,7 +1489,9 @@ def run_cli_with_retry(
         cmd = cmd_builder(effective_prompt)
 
         # Layer 2: server-cap retry.
-        max_retries = 0 if repair_mode else SERVER_CAP_MAX_RETRIES
+        max_retries = (
+            0 if repair_mode or single_provider_call else SERVER_CAP_MAX_RETRIES
+        )
         result: Optional[RunResult] = None
         for attempt in range(max_retries + 1):
             r = _run_once(
@@ -1618,7 +1623,7 @@ def run_cli_with_retry(
         result.validation_error = str(validated_or_err)
         log(f"schema validation failed: {validated_or_err}")
 
-        if schema_repair_attempt >= 1 or repair_mode:
+        if schema_repair_attempt >= 1 or repair_mode or single_provider_call:
             return promote_schema_fail(result)
 
         # 1 retry — augment prompt with the failure notice and loop.
