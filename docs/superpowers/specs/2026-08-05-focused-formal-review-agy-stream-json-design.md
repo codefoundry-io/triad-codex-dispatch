@@ -1,7 +1,7 @@
 # Focused Formal Review and AGY Stream-JSON Design
 
 **Date:** 2026-08-05  
-**Status:** Proposed for owner review  
+**Status:** Owner-approved direction; implementation planning  
 **Repository:** `triad-codex-dispatch-reliability`
 
 ## Goal
@@ -11,8 +11,8 @@ preserving the controls required for a valid three-family gate.
 
 The default formal round will make exactly one Claude call, one Google-family
 call, and one fresh-context Codex call over one leader-prepared directory. The
-existing family-by-batch receipt matrix remains available only as an explicit
-full-audit profile.
+family-by-batch receipt matrix and its full-coverage profile are retired rather
+than preserved as an alternate route.
 
 At the same time, replace the Google wrapper's PTY, completion-sentinel, and
 shared-transcript extraction path with AGY 1.1.10's native stream-JSON output
@@ -25,8 +25,9 @@ live-verified `gemini-3.1-pro-high` slug and explicitly supplies
 1. `formal-gate` becomes the operational default for formal plan and
    pre-merge review.
 2. A default formal round has three provider calls total: one per family.
-3. `batched-full-coverage` remains available as an explicit `full-audit`
-   choice. TRIAD never escalates to it automatically.
+3. Remove `batched-full-coverage`, `BatchReceipt`, per-hunk shards, batch
+   manifests, path-evidence matrices, and full-audit admission from the active
+   skill and distribution.
 4. The leader selects an exact decision-relevant evidence boundary. The
    prepared directory contains complete current files for that boundary,
    governing documentation, and one canonical readable diff file.
@@ -44,9 +45,9 @@ live-verified `gemini-3.1-pro-high` slug and explicitly supplies
 
 ## Non-goals
 
-- Removing the current full-audit evidence, batch, receipt, or admission code.
 - Claiming that a focused formal gate proves every tracked repository path was
   read by every provider.
+- Preserving compatibility for the retired batch/full-coverage interfaces.
 - Inferring test-source exclusions or expanding the owner-approved data
   boundary.
 - Changing provider authentication, Codex approval policy, sandbox policy, or
@@ -78,18 +79,17 @@ instructions or the owner provide exact test roots. Normal implementation
 review includes relevant test source. The implementation must not infer or
 broaden either boundary.
 
-The existing `review_evidence.py` and `review_coverage.py` machinery is not run
-for the default profile. It remains the implementation of explicit full-audit
-mode. This prevents the default path from materializing per-hunk shards,
-provider batch manifests, or a family-by-batch receipt matrix.
+The existing `review_evidence.py` and `review_coverage.py` batch machinery is
+removed from the active distribution. The focused path does not materialize
+per-hunk shards, provider batch manifests, or a family-by-batch receipt matrix.
 
 ## Compact result contract
 
-Add a strict `FocusedFormalReview` model beside the existing legacy
-`FormalReview` model. The existing sealed-packet model and validator remain
-unchanged for compatibility.
+Replace the packet-bound `FormalReview` and batch-specific result types with one
+small strict `LegVerdict` model, following the Claude-led skill's result shape
+while retaining the Codex workspace's shared-directory and digest rules.
 
-`FocusedFormalReview` contains:
+`LegVerdict` contains:
 
 - `review_id`
 - `family`: `claude`, `google`, or `codex`
@@ -108,8 +108,8 @@ Major finding and no open question. Minor findings may accompany `SAFE`.
 
 Each external wrapper validates the result locally against this model. The
 fresh Codex leg returns the same JSON object, and the leader validates it with
-the repository validator before admitting the leg. A positive summary or
-provider disclaimer that omits the exact contract is not a verdict.
+the same small repository validator before admitting the leg. A positive
+summary or provider disclaimer that omits the exact contract is not a verdict.
 
 The surface list is review transparency, not machine proof of exhaustive file
 reads. The focused profile claims complete evaluation of the leader-selected
@@ -128,7 +128,7 @@ decision boundary, not the old per-family assigned-path coverage guarantee.
      `--model gemini-3.1-pro-high --effort high`;
    - a fresh default Codex child with the workspace-native spawn contract.
 5. Each leg performs read-only, non-executing inspection and returns one
-   `FocusedFormalReview` object.
+   `LegVerdict` object.
 6. The leader validates all three objects, including review ID, family, and
    content digest.
 7. After all required legs terminate, the leader recomputes the directory
@@ -139,9 +139,9 @@ decision boundary, not the old per-family assigned-path coverage guarantee.
 9. The gate passes only when all three admitted verdicts are `SAFE` and no
    reproduced contradiction remains.
 
-There is no automatic batching fallback. If one focused packet demonstrably
-exceeds a provider limit, the leader reports that evidence and obtains an owner
-decision before selecting a smaller boundary or explicit full-audit mode.
+There is no batching fallback. If one focused packet demonstrably exceeds a
+provider limit, the leader reports that evidence and obtains an owner decision
+before selecting a smaller exact decision boundary and starting a fresh round.
 
 ## AGY 1.1.10 transport
 
@@ -172,17 +172,17 @@ driver, completion-sentinel sealing, shared transcript discovery, and
 sentinel-based transcript admission from `antigravity_wrapper.py`. Do not copy
 the reference checkout's older model-selection or minimum-version policy.
 
-## Explicit full-audit profile
+## Retired batch architecture
 
-`batched-full-coverage` remains a supported compatibility name and is
-documented as explicit `full-audit`. It keeps the existing deterministic impact
-closure, patch shards, batch manifests, strict `BatchReceipt` results,
-family-complete retry, residual ledger, and `review_coverage.py` admission.
+`batched-full-coverage` is not renamed or hidden behind an option. It is removed
+from the supported skill contract. Its full-diff impact closure, patch shards,
+batch manifests, `BatchReceipt` matrix, family-complete retry, residual ledger,
+and coverage-admission code are deleted when no non-batch caller remains.
 
-The default skill must not select full-audit because a diff is large, because
-zero findings seem suspicious, or because complete-read proof would be nice to
-have. It is selected only by an explicit owner request or a separately approved
-project gate that names the full-audit profile.
+Historical release notes and committed plans remain historical records, but
+active skills, references, wrapper instructions, package manifests, bootstrap
+contracts, and current README guidance must not advertise or select the retired
+route.
 
 ## Failure and invalidation rules
 
@@ -200,15 +200,17 @@ project gate that names the full-audit profile.
 
 ## Implementation boundaries
 
-The production change is intentionally narrow:
+The production change is intentionally direct:
 
-- extend `bin/triad_formal_review_schema.py` with the focused result model and a
-  focused-result file-validation CLI path while preserving the legacy path;
+- replace the packet-bound formal and batch schemas with a small
+  `bin/verdict_schema.py` containing `LegVerdict`, `LegFinding`, and deterministic
+  file validation;
 - replace the AGY PTY/transcript transport in `bin/antigravity_wrapper.py` with
   AGY 1.1.10 stream-JSON and native JSON-schema handling;
-- make `formal-gate` the default operational profile in
-  `skills/triad-cross-family-review/` and provider dispatch references;
-- retain and clearly label `batched-full-coverage` as explicit full-audit;
+- reduce `skills/triad-cross-family-review/` to one focused three-leg review
+  flow and align each provider dispatch reference with the same `LegVerdict`;
+- remove batch/full-coverage runtime modules and batch-only tests after caller
+  tracing proves they have no remaining active consumer;
 - update distribution copies, bootstrap contracts, and English documentation;
   and
 - add focused unit, hostile-input, distribution-contract, skill-pressure, and
@@ -221,18 +223,17 @@ or repository-wide source archive is introduced.
 
 Implementation is accepted when all of the following are demonstrated:
 
-1. A default formal prompt produces exactly one dispatch per family and does
-   not create batch manifests or per-path receipts.
-2. All three result routes enforce `FocusedFormalReview`, including digest and
+1. The review flow produces exactly one dispatch per family and has no batch
+   profile, batch manifest, per-path receipt, or coverage-admission route.
+2. All three result routes enforce `LegVerdict`, including digest and
    verdict semantics.
-3. Explicit full-audit still passes its existing unit and admission tests.
-4. AGY 1.1.10 stream-JSON success, malformed-event, timeout, authorization,
+3. AGY 1.1.10 stream-JSON success, malformed-event, timeout, authorization,
    capacity, schema-failure, and single-repair cases are covered.
-5. A live Google smoke proves
+4. A live Google smoke proves
    `--model gemini-3.1-pro-high --effort high` and returns an admitted
    structured result.
-6. The full repository test suite, shell syntax checks, distribution contract,
+5. The full repository test suite, shell syntax checks, distribution contract,
    and diff checks pass.
-7. The plugin is exported and installed from the workspace-owned source, and a
+6. The plugin is exported and installed from the workspace-owned source, and a
    fresh Codex session proves the updated review skill is exposed.
-8. No file outside `/Users/chaniri/codex_workspace` is modified.
+7. No file outside `/Users/chaniri/codex_workspace` is modified.
