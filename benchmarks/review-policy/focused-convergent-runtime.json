@@ -1,0 +1,107 @@
+{
+  "date": "2026-08-05",
+  "policy": "focused-convergent",
+  "calls_per_round": 3,
+  "round_count": 2,
+  "total_calls": 6,
+  "batch_artifacts": 0,
+  "prompt_bytes_total": 9408,
+  "routes": {
+    "claude": {
+      "requested_model": "opus",
+      "requested_effort": "xhigh",
+      "transport": "native-json-schema-single-call"
+    },
+    "google": {
+      "agy_version": "1.1.10",
+      "requested_model": "gemini-3.1-pro-high",
+      "requested_effort": "high",
+      "transport": "stream-json-native-json-schema-single-call"
+    },
+    "codex": {
+      "requested_model": "gpt-5.6-terra",
+      "requested_effort": "xhigh",
+      "fork_turns": "none",
+      "runtime_identity": "unexposed"
+    }
+  },
+  "calibration": {
+    "excluded_from_steady_state_metrics": true,
+    "provider_calls": 4,
+    "reason": "The pre-fix round had malformed results, a Claude schema-repair second call, and a changed worktree fingerprint; it was invalid and used only to correct the transport contract."
+  },
+  "rounds": [
+    {
+      "review_id": "benchmark-r1b",
+      "content_digest": "6cc042980940aa1e5adbf901f67fc004e255f993f8d982bc57f91aed80feb021",
+      "prompt_bytes": 4665,
+      "calls": 3,
+      "integrity": "ROUND_INTEGRITY_OK",
+      "binding": "THREE_LEG_BINDING_OK",
+      "verdicts": {
+        "claude": "NOT-SAFE",
+        "google": "NOT-SAFE",
+        "codex": "NOT-SAFE"
+      },
+      "elapsed_seconds": {
+        "claude": 66.45,
+        "google": 29.92,
+        "codex": "unexposed"
+      },
+      "adjudicated_finding_ids": ["LOCAL-1", "LOCAL-2", "CROSS-1", "DOC-1"],
+      "clean_control_false_findings": 0
+    },
+    {
+      "review_id": "benchmark-r2",
+      "content_digest": "f0069c48a10c17abe116af2d533868670c178b053119a9dd91b3499d3d09221e",
+      "prompt_bytes": 4743,
+      "calls": 3,
+      "integrity": "ROUND_INTEGRITY_OK",
+      "binding": "THREE_LEG_BINDING_OK",
+      "verdicts": {
+        "claude": "SAFE",
+        "google": "SAFE",
+        "codex": "SAFE"
+      },
+      "elapsed_seconds": {
+        "claude": 63.48,
+        "google": 28.44,
+        "codex": "unexposed"
+      },
+      "adjudicated_finding_ids": [],
+      "clean_control_false_findings": 0
+    }
+  ],
+  "results": [
+    {
+      "case_id": "clean",
+      "contract_valid": true,
+      "finding_ids": [],
+      "mutation_admitted": false
+    },
+    {
+      "case_id": "local-defect",
+      "contract_valid": true,
+      "finding_ids": ["LOCAL-1", "LOCAL-2"],
+      "mutation_admitted": false
+    },
+    {
+      "case_id": "cross-file-defect",
+      "contract_valid": true,
+      "finding_ids": ["CROSS-1"],
+      "mutation_admitted": false
+    },
+    {
+      "case_id": "config-doc-mismatch",
+      "contract_valid": true,
+      "finding_ids": ["DOC-1"],
+      "mutation_admitted": false
+    },
+    {
+      "case_id": "corrected-reconfirm",
+      "contract_valid": true,
+      "finding_ids": [],
+      "mutation_admitted": false
+    }
+  ]
+}

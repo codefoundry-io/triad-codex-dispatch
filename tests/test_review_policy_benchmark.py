@@ -52,3 +52,24 @@ def test_corrected_fixture_closes_both_local_contract_defects() -> None:
     assert local["expected_finding_ids"] == ["LOCAL-1", "LOCAL-2"]
     assert "type(raw) is not int" in corrected
     assert "int(raw)" not in corrected
+
+
+def test_checked_in_runtime_benchmark_proves_two_round_convergence() -> None:
+    baseline = _load("baseline-batched.json")
+    cases = _load("cases.json")
+    focused = _load("focused-convergent-runtime.json")
+
+    report = benchmark.aggregate(baseline, focused, cases)
+
+    assert focused["total_calls"] == 6
+    assert [round_["verdicts"] for round_ in focused["rounds"]] == [
+        {"claude": "NOT-SAFE", "google": "NOT-SAFE", "codex": "NOT-SAFE"},
+        {"claude": "SAFE", "google": "SAFE", "codex": "SAFE"},
+    ]
+    assert all(round_["integrity"] == "ROUND_INTEGRITY_OK" for round_ in focused["rounds"])
+    assert report["focused"]["planted_defect_recall"] == 1.0
+    assert report["focused"]["contract_validity_rate"] == 1.0
+    assert report["focused"]["false_finding_count"] == 0
+    assert report["focused"]["mutation_admitted_count"] == 0
+    assert report["focused"]["call_reduction"] == 0.875
+    assert report == _load("focused-convergent-report.json")

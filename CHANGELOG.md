@@ -12,6 +12,9 @@
   forwards explicit model and effort, and removes PTY, sentinel, sandbox,
   permission-bypass, packet, batch, and receipt runtime paths.
 - Requires packaged-byte and fresh-process evidence before a distribution claim.
+- Records a two-round runtime benchmark: six total provider calls, 4/4
+  adjudicated defect recall, 3/3 confirmation `SAFE`, zero admitted mutations,
+  and an 87.5% call reduction against the captured 24-call batch plan.
 
 ## 0.2.532 — 2026-08-03
 
