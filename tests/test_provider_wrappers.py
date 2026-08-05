@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,12 @@ sys.path.insert(0, str(BIN))
 import _common  # noqa: E402
 import claude_wrapper  # noqa: E402
 import gemini_wrapper  # noqa: E402
+
+
+class _StructuredAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
 
 
 def _ok() -> _common.RunResult:
@@ -121,6 +128,85 @@ def test_claude_route_forwards_model_effort_and_native_json(monkeypatch, capsys)
         "--effort",
         "xhigh",
     ]
+
+
+def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: "/opt/bin/claude")
+    monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: _StructuredAnswer)
+    monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        claude_wrapper,
+        "run_cli_with_retry",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("generic retry path used")),
+    )
+
+    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+        calls.append(cmd)
+        assert classify_and_log is False
+        return _common.RunResult(
+            exit_code=0,
+            stdout='{"is_error":false,"result":"{\\"ok\\":true}","structured_output":{"ok":true}}',
+            stderr="",
+            elapsed_s=0.2,
+            vendor_exit_code=0,
+        )
+
+    monkeypatch.setattr(_common, "_run_once", fake_once)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
+            "--model",
+            "opus",
+            "--effort",
+            "xhigh",
+            "--pydantic",
+            "fake:Answer",
+        ],
+    )
+
+    assert claude_wrapper.main() == 0
+    assert capsys.readouterr().out == '{"ok": true}\n'
+    assert len(calls) == 1
+    assert "--json-schema" in calls[0]
+
+
+def test_claude_structured_route_rejects_result_text_fallback(
+    monkeypatch, capsys
+) -> None:
+    calls = 0
+    monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: "/opt/bin/claude")
+    monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: _StructuredAnswer)
+    monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+
+    def fake_once(_cli, _cmd, _cwd, _timeout, *, classify_and_log):
+        nonlocal calls
+        calls += 1
+        assert classify_and_log is False
+        return _common.RunResult(
+            exit_code=0,
+            stdout='{"is_error":false,"result":"{\\"ok\\":true}"}',
+            stderr="",
+            elapsed_s=0.2,
+            vendor_exit_code=0,
+        )
+
+    monkeypatch.setattr(_common, "_run_once", fake_once)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py", "--prompt", "review", "--pydantic", "fake:Answer",
+        ],
+    )
+
+    assert claude_wrapper.main() == _common.EXIT_SCHEMA_FAIL
+    assert capsys.readouterr().out == ""
+    assert calls == 1
 
 
 def test_gemini_route_keeps_native_json_without_review_protocol(monkeypatch, capsys) -> None:

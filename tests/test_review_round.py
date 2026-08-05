@@ -99,6 +99,7 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     brief = ReviewBrief(
         review_id="review-r1",
         review_kind="pre-merge",
+        family="google",
         objective="Check parser compatibility.",
         prepared_dir=prepared,
         content_digest="a" * 64,
@@ -109,10 +110,23 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
 
     assert prompt.count("review-r1") == 1
     assert prompt.count("a" * 64) == 1
+    assert "Reviewer family: google" in prompt
+    assert "Set `family` to exactly `google`" in prompt
+    for field in (
+        '"review_id"',
+        '"content_digest"',
+        '"criteria_checked"',
+        '"affected_surfaces_inspected"',
+        '"severity"',
+        '"trigger"',
+        '"correction"',
+    ):
+        assert field in prompt
     assert str(prepared) in prompt
     assert "LegVerdict" in prompt
     assert "BatchReceipt" not in prompt
     assert "batch_manifest" not in prompt
+    assert "All paths must be prepared-directory-relative" in prompt
     assert "Do not edit or execute candidate code" in prompt
 
 
@@ -140,3 +154,39 @@ def test_cli_capture_and_verify(prepared, worktree, tmp_path):
     assert verified.returncode == 0
     assert verified.stdout.strip() == "ROUND_INTEGRITY_OK"
 
+
+def test_cli_renders_family_bound_prompt(prepared, tmp_path):
+    prompt_file = (tmp_path / "prompt.txt").resolve()
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            "review-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "claude",
+            "--objective",
+            "Check compatibility.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            "a" * 64,
+            "--criterion",
+            "correctness",
+            "--approved-boundary",
+            "all prepared files",
+            "--output",
+            str(prompt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 0, rendered.stderr
+    prompt = prompt_file.read_text(encoding="utf-8")
+    assert "Reviewer family: claude" in prompt
+    assert "Set `family` to exactly `claude`" in prompt

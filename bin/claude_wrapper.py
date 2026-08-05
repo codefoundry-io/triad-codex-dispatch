@@ -2,9 +2,8 @@
 """Single-shot Claude CLI transport wrapper.
 
 Forwards a prompt to Claude's JSON output mode along with only native model,
-effort, fallback-model, working-directory, timeout, schema, packet-validation,
-repair, and debug controls. Provider-owned permission and trust settings are
-left to the native CLI.
+effort, fallback-model, working-directory, timeout, schema, and debug controls.
+Provider-owned permission and trust settings are left to the native CLI.
 
 Stdout is the final answer text from envelope `.result` (or, with
 ``--pydantic``, the validated JSON object). Stderr is wrapper logging and
@@ -17,6 +16,7 @@ import argparse
 import json
 import sys
 
+import _common
 from _common import (
     validate_wrapper_cwd,
     load_prompt_text,
@@ -30,6 +30,76 @@ from _common import (
 
 
 EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
+
+
+def _run_native_structured_once(
+    cmd: list[str], cwd: str, timeout: int, pydantic_cls
+) -> _common.RunResult:
+    """Run one Claude call and validate its native structured output."""
+    result = _common._run_once(
+        "claude", cmd, cwd, timeout, classify_and_log=False
+    )
+    answer, extraction_error = _common.extract_claude_answer(
+        result.stdout, result.stderr
+    )
+    try:
+        envelope = json.loads(result.stdout)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        envelope = None
+    has_native_structured_output = (
+        isinstance(envelope, dict)
+        and envelope.get("structured_output") is not None
+    )
+
+    if result.exit_code != _common.EXIT_OK:
+        classification = _common.classify(
+            "claude",
+            result.stderr,
+            result.stdout,
+            result.exit_code,
+            vendor_exit_code=result.vendor_exit_code,
+        )
+        result.classification = classification
+        result.exit_code = _common.map_classification_to_exit(classification)
+        result.final_answer = ""
+    elif extraction_error is not None:
+        result.extraction_error = extraction_error
+        classification = _common.classify(
+            "claude", extraction_error, "", _common.EXIT_CLI_FAIL,
+            vendor_exit_code=result.vendor_exit_code,
+        )
+        if classification == "unknown":
+            classification = "extraction-error"
+        result.classification = classification
+        result.exit_code = _common.map_classification_to_exit(classification)
+        result.final_answer = ""
+    elif not has_native_structured_output:
+        result.classification = "schema-fail"
+        result.exit_code = _common.EXIT_SCHEMA_FAIL
+        result.validation_error = "claude native structured_output is missing"
+        result.final_answer = ""
+    else:
+        valid, validated_or_error = _common.validate_response(
+            answer, pydantic_cls
+        )
+        if valid:
+            result.classification = "ok"
+            result.validated = validated_or_error
+            result.final_answer = json.dumps(
+                validated_or_error, ensure_ascii=False
+            )
+        else:
+            result.classification = "schema-fail"
+            result.exit_code = _common.EXIT_SCHEMA_FAIL
+            result.validation_error = str(validated_or_error)
+            result.final_answer = ""
+
+    log(
+        f"[wrapper] claude {result.classification} "
+        f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+        f"elapsed={result.elapsed_s:.1f}s"
+    )
+    return result
 
 
 def main() -> int:
@@ -113,7 +183,9 @@ def main() -> int:
 
     claude_bin = require_binary("claude")
 
-    def build_cmd(effective_prompt: str) -> list[str]:
+    def build_cmd(
+        effective_prompt: str, native_schema: str | None = None
+    ) -> list[str]:
         cmd = [
             claude_bin,   # resolved/pinned path (finding #3) — never a bare name
             "-p", effective_prompt,
@@ -125,20 +197,36 @@ def main() -> int:
             cmd += ["--effort", args.effort]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
+        if native_schema is not None:
+            cmd += ["--json-schema", native_schema]
         return cmd
 
-    result = run_cli_with_retry(
-        "claude",
-        build_cmd,
-        args.prompt,
-        cwd=args.cwd,
-        timeout=args.timeout,
-        pydantic_cls=pydantic_cls,
-        last_msg_path=None,
-        repair_mode=args.repair_mode,
-    )
+    native_schema = None
+    if pydantic_cls is not None:
+        native_schema = json.dumps(
+            pydantic_cls.model_json_schema(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        result = _run_native_structured_once(
+            build_cmd(args.prompt, native_schema),
+            args.cwd,
+            args.timeout,
+            pydantic_cls,
+        )
+    else:
+        result = run_cli_with_retry(
+            "claude",
+            build_cmd,
+            args.prompt,
+            cwd=args.cwd,
+            timeout=args.timeout,
+            pydantic_cls=None,
+            last_msg_path=None,
+            repair_mode=args.repair_mode,
+        )
 
-    audit_cmd = build_cmd(args.prompt)
+    audit_cmd = build_cmd(args.prompt, native_schema)
     persist_result_artifacts(
         "claude", sys.argv, audit_cmd, args.prompt, result, debug=args.debug
     )

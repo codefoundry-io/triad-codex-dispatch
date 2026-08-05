@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import stat
 from pathlib import Path
 
 
@@ -52,6 +53,9 @@ def test_active_skill_links_resolve_inside_each_skill() -> None:
 
 def test_cross_family_skill_has_one_round_unit_and_owner_design_gate() -> None:
     text = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    convergence = _text(
+        SKILLS / "triad-cross-family-review" / "references" / "convergence.md"
+    )
     compact = " ".join(text.split())
 
     assert "one Claude LegVerdict" in text
@@ -61,6 +65,14 @@ def test_cross_family_skill_has_one_round_unit_and_owner_design_gate() -> None:
     assert "There is no arbitrary round cap" in text
     assert "Do not retain review batches" in compact
     assert "fresh Codex process" in compact
+    for owner_slot in (
+        "Proposed delta:",
+        "Evidence:",
+        "Impact:",
+        "Decision needed:",
+    ):
+        assert owner_slot in convergence
+    assert "Do not implement the proposed delta while asking" in convergence
 
 
 def test_formal_routes_are_explicit_and_reviewer_only() -> None:
@@ -121,6 +133,16 @@ def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> Non
         "run_via_pty",
     ):
         assert stale not in wrappers
+
+
+def test_provider_wrappers_are_packaged_as_executables() -> None:
+    for name in (
+        "antigravity_wrapper.py",
+        "claude_wrapper.py",
+        "gemini_wrapper.py",
+    ):
+        mode = (ROOT / "bin" / name).stat().st_mode
+        assert mode & stat.S_IXUSR, name
 
 
 def test_distribution_documents_fresh_process_acceptance() -> None:

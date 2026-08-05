@@ -1,0 +1,18 @@
+diff --git a/local_defect/validator.py b/local_defect/validator.py
+--- a/local_defect/validator.py
++++ b/local_defect/validator.py
+@@
+-        return True
++        return False
+diff --git a/cross_file/caller.py b/cross_file/caller.py
+--- a/cross_file/caller.py
++++ b/cross_file/caller.py
+@@
+-        return True
++        return False
+diff --git a/config_doc/settings.json b/config_doc/settings.json
+--- a/config_doc/settings.json
++++ b/config_doc/settings.json
+@@
+-  "retry_limit": 5
++  "retry_limit": 3
