@@ -17,7 +17,8 @@ full-audit profile.
 At the same time, replace the Google wrapper's PTY, completion-sentinel, and
 shared-transcript extraction path with AGY 1.1.10's native stream-JSON output
 and JSON-schema request surface. The formal Google selector remains the
-live-verified `gemini-3.1-pro-high` slug with no separate effort flag.
+live-verified `gemini-3.1-pro-high` slug and explicitly supplies
+`--effort high`.
 
 ## Owner-approved decisions
 
@@ -124,7 +125,7 @@ decision boundary, not the old per-family assigned-path coverage guarantee.
 4. The leader starts all three legs before consuming a verdict:
    - Claude through the installed Claude wrapper;
    - Google through the AGY 1.1.10 wrapper with
-     `--model gemini-3.1-pro-high` and no `--effort`;
+     `--model gemini-3.1-pro-high --effort high`;
    - a fresh default Codex child with the workspace-native spawn contract.
 5. Each leg performs read-only, non-executing inspection and returns one
    `FocusedFormalReview` object.
@@ -148,7 +149,7 @@ The Google wrapper invokes AGY non-interactively with native stream output:
 
 ```text
 agy -p <prompt> --output-format stream-json --json-schema <schema> \
-  --model gemini-3.1-pro-high
+  --model gemini-3.1-pro-high --effort high
 ```
 
 The exact ordering may follow the CLI's accepted syntax. The behavioral
@@ -156,7 +157,7 @@ contract is:
 
 - require AGY 1.1.10 or newer;
 - preserve the formal selector `gemini-3.1-pro-high`;
-- omit a separate effort flag for the formal route;
+- explicitly supply `--effort high` for the formal route;
 - do not inject sandbox or permission-bypass arguments;
 - parse only events from the current child process stdout;
 - accept only the terminal result event for the current request;
@@ -227,8 +228,9 @@ Implementation is accepted when all of the following are demonstrated:
 3. Explicit full-audit still passes its existing unit and admission tests.
 4. AGY 1.1.10 stream-JSON success, malformed-event, timeout, authorization,
    capacity, schema-failure, and single-repair cases are covered.
-5. A live Google smoke proves `gemini-3.1-pro-high` without `--effort` and
-   returns an admitted structured result.
+5. A live Google smoke proves
+   `--model gemini-3.1-pro-high --effort high` and returns an admitted
+   structured result.
 6. The full repository test suite, shell syntax checks, distribution contract,
    and diff checks pass.
 7. The plugin is exported and installed from the workspace-owned source, and a
