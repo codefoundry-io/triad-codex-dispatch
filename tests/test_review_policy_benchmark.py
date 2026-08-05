@@ -40,3 +40,15 @@ def test_focused_policy_replaces_captured_batch_fanout_without_losing_recall():
     assert report["focused"]["contract_validity_rate"] == 1.0
     assert report["focused"]["batch_artifacts"] == 0
     assert report["policy"] == "focused-convergent"
+
+
+def test_corrected_fixture_closes_both_local_contract_defects() -> None:
+    cases = _load("cases.json")
+    local = next(case for case in cases if case["case_id"] == "local-defect")
+    corrected = (
+        FIXTURES / "fixtures" / "round-2" / "local_defect" / "validator.py"
+    ).read_text(encoding="utf-8")
+
+    assert local["expected_finding_ids"] == ["LOCAL-1", "LOCAL-2"]
+    assert "type(raw) is not int" in corrected
+    assert "int(raw)" not in corrected

@@ -1,6 +1,4 @@
 def validate_count(raw: object) -> bool:
-    try:
-        count = int(raw)
-    except (TypeError, ValueError):
+    if type(raw) is not int:
         return False
-    return count >= 0
+    return raw >= 0

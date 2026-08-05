@@ -7,8 +7,8 @@
   },
   {
     "case_id": "local-defect",
-    "expected_finding_ids": ["LOCAL-1"],
-    "objective": "Detect a local branch that returns success after schema validation fails.",
+    "expected_finding_ids": ["LOCAL-1", "LOCAL-2"],
+    "objective": "Detect both the fail-open exception branch and coercion of non-integer values.",
     "round": 1
   },
   {
@@ -26,7 +26,7 @@
   {
     "case_id": "corrected-reconfirm",
     "expected_finding_ids": [],
-    "objective": "Confirm the bounded fixes for LOCAL-1, CROSS-1, and DOC-1 without introducing a new design.",
+    "objective": "Confirm the bounded fixes for LOCAL-1, LOCAL-2, CROSS-1, and DOC-1 without introducing a new design.",
     "round": 2
   }
 ]

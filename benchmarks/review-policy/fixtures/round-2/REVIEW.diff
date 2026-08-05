@@ -2,8 +2,14 @@ diff --git a/local_defect/validator.py b/local_defect/validator.py
 --- a/local_defect/validator.py
 +++ b/local_defect/validator.py
 @@
+-    try:
+-        count = int(raw)
+-    except (TypeError, ValueError):
 -        return True
+-    return count >= 0
++    if type(raw) is not int:
 +        return False
++    return raw >= 0
 diff --git a/cross_file/caller.py b/cross_file/caller.py
 --- a/cross_file/caller.py
 +++ b/cross_file/caller.py

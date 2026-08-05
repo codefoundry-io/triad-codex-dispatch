@@ -5,7 +5,8 @@ four contracts. Review every complete file for remaining Critical or Major
 correctness, propagation, or compatibility defects.
 
 - `clean/`: `display_name` preserves the input `name` value.
-- `local_defect/`: invalid or negative counts are rejected.
+- `local_defect/`: only genuine integer values are accepted, and negative
+  integers are rejected.
 - `cross_file/`: absent tokens never authorize access.
 - `config_doc/`: the packaged retry limit equals the governing default.
 
