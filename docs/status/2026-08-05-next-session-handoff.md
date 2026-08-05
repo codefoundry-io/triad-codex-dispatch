@@ -1,6 +1,10 @@
 # TRIAD 0.2.533 Next-Session Handoff
 
-Date: 2026-08-05
+Date: 2026-08-06
+
+Status: pre-r4 candidate handoff. This document records the clean candidate
+state immediately before the final complete-scope review; final r4 and local
+installation evidence belongs under `_runs/` and must not be inferred here.
 
 ## Start here
 
@@ -10,10 +14,11 @@ Work from:
 /Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability
 ```
 
-The implementation branch is `release/0.2.532`; the intended plugin manifest
-version is `0.2.533`. The bounded post-review correction is commit `1d53775`
-(`fix: bind review routes to captured evidence`). A later handoff-only commit
-may be the session HEAD.
+The implementation branch is `release/0.2.532`; the plugin manifest version is
+`0.2.533`. The clean candidate includes the owner-approved 0.2.533 tasks, the
+r2 governing-document correction, and the bounded r3 Minor corrections recorded
+below. Resolve the exact candidate with `git rev-parse HEAD`; this handoff is
+part of that candidate rather than an earlier detached status snapshot.
 
 Before changing anything, verify:
 
@@ -42,44 +47,51 @@ workspace and child-repository state.
   3 calls per round instead of 24 planned, 87.5% call reduction, 4/4
   adjudicated finding recall, zero clean-control false findings, and 3/3
   confirmation `SAFE`.
-- Source tests after final bounded corrections: `406 passed in 120.99s`.
+- Limited the formal Gemini fallback to one provider call, rejected zero-case
+  and zero-planted-finding benchmarks, and added clean-HEAD exact-archive
+  verification.
+- Explicitly superseded the conflicting 0.2.532 AGY design and implementation
+  plan, and regression-bound their current-authority banners.
+- Source tests for the clean pre-r4 candidate: `422 passed`. Do not reuse the
+  earlier 406-test snapshot.
 
-Important commits, newest last before this handoff:
+Important 0.2.533 commits before the bounded r3 correction, newest last:
 
 ```text
 33dd517 docs: record convergent runtime benchmark
 1d53775 fix: bind review routes to captured evidence
+e928212 docs: plan 0.2.533 owner-approved completion
+0ae7b2d fix: limit formal Gemini fallback to one call
+dc59558 fix: reject empty benchmark evidence
+62e3df7 feat: verify exact distribution archive bytes
+21bb477 docs: supersede stale formal route records
 ```
 
-## Final review state
+## Final review state before r4
 
-Final review round `final-0.2.533-r1` used prepared digest:
+Review round `final-0.2.533-r3` used prepared digest:
 
 ```text
-8c7d3ca6614b2ae08f624f07e26c427ad9604f9500b0bd14a4cf52e8c8293e8f
+56cadaa423565413e9506114d391599af85190695bb8448d3c691b4bc2b54441
 ```
 
-- Google: valid `SAFE`.
-- Claude: valid `NOT-SAFE`.
-- Fresh Codex: valid `NOT-SAFE`.
+- Google: valid `SAFE`, no findings.
+- Claude: valid `SAFE`, five Minor findings.
+- Fresh Codex: valid `SAFE`, one Minor finding.
 - Prepared directory and worktree: `ROUND_INTEGRITY_OK`.
 
-The reproduced approved-design defects were corrected in `1d53775`:
+The r3 round is advisory, not final admission. Fresh Codex incorrectly proposed
+packaging a missing repair protocol: the canonical tracked
+`docs/references/repair-protocol.md` exists and is included by `git archive`.
+Its supported observation was that this active SECURITY/bootstrap reference was
+omitted from the r3 prepared FILELIST. Claude also found bounded defects in
+archive-test isolation, unstructured AGY route-mismatch admission, current
+handoff/changelog wording, and one-provider-call banner coverage. Those defects
+are corrected in the pre-r4 candidate.
 
-- render-time digest is recomputed from the prepared bytes;
-- unusable review IDs fail before dispatch;
-- the prompt correctly allows `NOT-SAFE` with an open question and no finding;
-- AGY invalidates an exposed model conflict and records exposed/unexposed
-  runtime identity;
-- structured Claude and AGY preflight restore stale-run-log pruning;
-- `--repair-mode` plus Claude structured output fails explicitly;
-- the English and Korean READMEs no longer advertise retired deterministic
-  batch/receipt/coverage behavior;
-- distribution tests reject the remaining retired documentation phrases.
-
-No fresh three-family round has reviewed `1d53775` yet. A fresh round over a
-new prepared directory and digest is required after the remaining owner
-decisions are applied.
+Run a fresh complete `final-0.2.533-r4` round over a new digest with
+`docs/references/repair-protocol.md` included. Do not reuse r3 verdicts for final
+admission.
 
 ## Approved owner decisions
 

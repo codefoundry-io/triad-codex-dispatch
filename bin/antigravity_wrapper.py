@@ -169,8 +169,7 @@ def _interpret_run(
             f"terminal result status is {status!r}",
         )
     if (
-        pydantic_cls is not None
-        and expected_model is not None
+        expected_model is not None
         and exposed_model is not None
         and exposed_model != expected_model
     ):

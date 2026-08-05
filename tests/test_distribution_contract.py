@@ -135,6 +135,18 @@ def test_governing_agy_documents_match_the_current_formal_route() -> None:
         assert "--model gemini-3.1-pro-high" in text, path
         assert "--effort high" in text, path
         assert "one focused Google leg" in text, path
+        assert "one provider call" in text, path
+
+
+def test_current_release_docs_bind_the_superseded_agy_route_and_candidate() -> None:
+    changelog = _text(ROOT / "CHANGELOG.md")
+    handoff = _text(ROOT / "docs/status/2026-08-05-next-session-handoff.md")
+
+    assert "`gemini-3.1-pro-high --effort high`" in changelog
+    assert "0.2.532 route is historical and superseded" in changelog
+    assert "pre-r4 candidate" in handoff
+    assert "final-0.2.533-r3" in handoff
+    assert "docs/references/repair-protocol.md" in handoff
 
 
 def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> None:

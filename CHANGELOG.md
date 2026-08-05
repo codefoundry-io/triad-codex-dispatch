@@ -9,8 +9,9 @@
 - Requires owner approval before design, specification, capability,
   generalization, or scope changes; external reviewers never write code.
 - Migrates AGY to the 1.1.10 native `stream-json` and `json-schema` contract,
-  forwards explicit model and effort, and removes PTY, sentinel, sandbox,
-  permission-bypass, packet, batch, and receipt runtime paths.
+  uses the exact `gemini-3.1-pro-high --effort high` route, invalidates every
+  exposed model conflict, and removes PTY, sentinel, sandbox, permission-bypass,
+  packet, batch, and receipt runtime paths.
 - Requires packaged-byte and fresh-process evidence before a distribution claim.
 - Limits the separately authorized formal Gemini fallback to one provider call;
   capacity failure and invalid structured output are terminal without hidden
@@ -30,7 +31,8 @@
   `gemini-3.1-pro-high`, and the outbound model argument
   `gemini-3.1-pro-high` uses no `--effort`. The display-label compatibility
   route is historical; generic wrapper model/effort passthrough remains
-  unchanged.
+  unchanged. This 0.2.532 route is historical and superseded by the exact
+  0.2.533 route above.
 - Candidate release: provider, user, and project settings now own permission
   selection and workspace trust. TRIAD does not install or inject a permission
   profile, command rule, pre-spawn `shell_environment_policy`, read-only repair

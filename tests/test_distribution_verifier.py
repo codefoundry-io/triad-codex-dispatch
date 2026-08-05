@@ -140,6 +140,36 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
     ) == report
 
 
+def test_verifier_ignores_external_pytest_configuration(
+    fixture_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verifier = _load_verifier()
+    (fixture_repo.parent / "pytest.ini").write_text(
+        "[pytest]\naddopts = --external-option-must-not-load\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--external-env-option-must-not-load")
+    output = fixture_repo / "_runs" / "distribution" / "isolated-pytest"
+
+    report = verifier.verify_distribution(fixture_repo, output)
+
+    assert report["tests"]["passed"] == 1
+    assert report["tests"]["environment"] == {
+        "PYTEST_ADDOPTS": "unset",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    }
+    assert report["tests"]["argv"][-8:] == [
+        "-c",
+        "/dev/null",
+        "--rootdir",
+        report["extracted_root"],
+        "--confcutdir",
+        report["extracted_root"],
+        "-p",
+        "no:cacheprovider",
+    ]
+
+
 def test_verifier_cli_runs_the_exact_archive_flow(fixture_repo: Path) -> None:
     output = fixture_repo / "_runs" / "distribution" / "cli"
 

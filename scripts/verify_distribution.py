@@ -30,7 +30,11 @@ def sha256_file(path: Path) -> str:
 
 
 def _run(
-    argv: list[str], *, cwd: Path, check: bool = True
+    argv: list[str],
+    *,
+    cwd: Path,
+    check: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         argv,
@@ -38,6 +42,7 @@ def _run(
         check=False,
         capture_output=True,
         text=True,
+        env=env,
     )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "no output"
@@ -194,13 +199,39 @@ def verify_distribution(
         if not matches:
             raise RuntimeError(f"source/archive hash mismatch: {relative}")
 
-    test_argv = [sys.executable, "-m", "pytest", "tests", "-q"]
-    test_result = _run(test_argv, cwd=extracted_root, check=False)
+    test_argv = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests",
+        "-q",
+        "-c",
+        os.devnull,
+        "--rootdir",
+        str(extracted_root),
+        "--confcutdir",
+        str(extracted_root),
+        "-p",
+        "no:cacheprovider",
+    ]
+    test_env = os.environ.copy()
+    test_env.pop("PYTEST_ADDOPTS", None)
+    test_env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    test_result = _run(
+        test_argv,
+        cwd=extracted_root,
+        check=False,
+        env=test_env,
+    )
     if test_result.returncode != 0:
         detail = test_result.stdout + test_result.stderr
         raise RuntimeError(
             f"archive package tests failed ({test_result.returncode}):\n{detail}"
         )
+    passed_match = re.search(r"(?m)(\d+) passed(?:,| in |$)", test_result.stdout)
+    passed = int(passed_match.group(1)) if passed_match is not None else 0
+    if passed < 1:
+        raise RuntimeError("archive package tests reported no passing tests")
 
     report: dict[str, object] = {
         "archive": str(archive),
@@ -210,6 +241,11 @@ def verify_distribution(
         "hashes": hashes,
         "tests": {
             "argv": test_argv,
+            "environment": {
+                "PYTEST_ADDOPTS": "unset",
+                "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            },
+            "passed": passed,
             "returncode": test_result.returncode,
             "stdout": test_result.stdout,
             "stderr": test_result.stderr,

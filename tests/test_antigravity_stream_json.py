@@ -144,6 +144,24 @@ def test_exposed_model_conflict_invalidates_successful_result() -> None:
     assert admitted.runtime_identity == "gemini-3.1-pro-high"
 
 
+def test_exposed_model_conflict_invalidates_unstructured_result() -> None:
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": "plausible answer from the wrong route",
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(raw, None, "another-model")
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "route-mismatch"
+    assert admitted.final_answer == ""
+    assert admitted.runtime_identity == "gemini-3.1-pro-high"
+
+
 def test_structured_result_requires_native_terminal_payload() -> None:
     raw = _run_result(_stream({"status": "SUCCESS", "response": '{"ok":true}'}))
 
