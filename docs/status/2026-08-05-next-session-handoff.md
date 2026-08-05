@@ -2,9 +2,10 @@
 
 Date: 2026-08-06
 
-Status: post-r4 bounded-correction handoff. Review round r4 produced three
-admitted `SAFE` verdicts with Minor findings. Those findings are corrected in
-the pending r5 candidate; final admission and installation remain incomplete.
+Status: post-r5 bounded-correction handoff. Review round r5 was invalid because
+the Claude leg timed out, and fresh Codex returned an admitted `NOT-SAFE` Major
+finding. That production defect is corrected in the pending r6 candidate;
+final admission and installation remain incomplete.
 
 ## Start here
 
@@ -15,8 +16,8 @@ Work from:
 ```
 
 The implementation branch is `release/0.2.532`; the plugin manifest version is
-`0.2.533`. The pending r5 candidate includes the owner-approved 0.2.533 tasks,
-the r2 and r3 corrections, and the bounded r4 corrections recorded below.
+`0.2.533`. The pending r6 candidate includes the owner-approved 0.2.533 tasks,
+the r2 through r4 corrections, and the bounded r5 correction recorded below.
 Resolve the exact candidate with `git rev-parse HEAD`; do not infer it from an
 earlier review digest or distribution archive.
 
@@ -52,8 +53,8 @@ workspace and child-repository state.
   verification.
 - Explicitly superseded the conflicting 0.2.532 AGY design and implementation
   plan, and regression-bound their current-authority banners.
-- Source tests for the clean pre-r4 candidate: `422 passed`. The r5 candidate
-  requires a fresh full-suite result; do not reuse the earlier snapshot.
+- Source tests for the pending r6 candidate: `425 passed` under Python 3.12.13
+  and pytest 9.0.3. Do not reuse earlier 406-, 422-, or 424-test snapshots.
 
 Important 0.2.533 commits before the bounded r3 correction, newest last:
 
@@ -67,30 +68,29 @@ dc59558 fix: reject empty benchmark evidence
 21bb477 docs: supersede stale formal route records
 ```
 
-## Final review state and pending r5
+## Final review state and pending r6
 
-Review round `final-0.2.533-r4` used prepared digest:
+Review round `final-0.2.533-r5` used prepared digest:
 
 ```text
-353115f5e54ce74a3d93fa0bd9f9f252734a86454c4a12013b5015df2f87e480
+ecd7656c459383fded6dc05d32c0e2a45e47f760e86b59a3949f7b99d1a2b337
 ```
 
 - Google: valid `SAFE`, no findings.
-- Claude: valid `SAFE`, three Minor findings.
-- Fresh Codex: valid `SAFE`, one Minor finding.
-- Prepared directory digest matched every result.
+- Claude: invalid; the wrapper timed out after 600 seconds and produced no
+  `LegVerdict`.
+- Fresh Codex: valid `NOT-SAFE`, one Major finding.
+- Prepared directory and canonical worktree: `ROUND_INTEGRITY_OK`.
 
-The r4 round is advisory rather than final admission because it found four
-bounded Minor defects. The pending r5 candidate:
+The Codex finding reproduced against canonical source: the AGY event loop kept
+only the last exposed `init.model`, so a conflicting earlier identity could be
+overwritten by a later expected identity before successful admission. The
+pending r6 candidate preserves the first exposed conflict, records it as
+runtime evidence, rejects the leg as `route-mismatch`, and adds a regression
+test for the conflicting two-init sequence.
 
-- applies the formal Gemini one-provider-call ceiling to both packaged schema
-  operand syntaxes;
-- records AGY timeout runtime identity as `unexposed` rather than null;
-- removes the retired packet-validation wrapper description; and
-- reconciles this handoff and the current-authority plan with completed work.
-
-Run a fresh complete `final-0.2.533-r5` round over a new digest, including the
-active `docs/references/repair-protocol.md` boundary. Do not reuse r4 verdicts
+Run a fresh complete `final-0.2.533-r6` round over a new digest, including the
+active `docs/references/repair-protocol.md` boundary. Do not reuse r5 verdicts
 for final admission.
 
 ## Approved owner decisions
@@ -114,7 +114,7 @@ because its manifest is already versioned `0.2.533`. That inventory is not
 installed/cache byte identity, bootstrap proof, or fresh-process skill exposure;
 those acceptance steps have not happened yet.
 
-The latest verified pre-r5 archive was staged at:
+The latest verified pre-r6 archive was staged at:
 
 ```text
 _runs/distribution/0.2.533-final-r4/triad-codex-dispatch-0.2.533.tar
@@ -142,7 +142,9 @@ After a unanimous fresh review round:
    cannot reload the updated skill catalog.
 
 The owner authorized remote publication and skill update on 2026-08-06. Execute
-them only after unanimous r5 admission and exact packaged-byte verification.
+them only after unanimous r6 admission and exact packaged-byte verification.
+The exact changed r6 external-review boundary requires a new owner approval
+before Claude or Google dispatch.
 
 ## Argus continuation after TRIAD
 

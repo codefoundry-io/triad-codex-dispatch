@@ -128,13 +128,20 @@ def _interpret_run(
 
     events, result = parse_agy_stream(run.stdout)
     exposed_model = None
+    route_conflict = None
     for event in events:
         if event.get("event") != "init":
             continue
         init = event.get("init")
         if isinstance(init, dict) and isinstance(init.get("model"), str):
             exposed_model = init["model"]
-    run.runtime_identity = exposed_model or run.runtime_identity
+            if (
+                expected_model is not None
+                and exposed_model != expected_model
+                and route_conflict is None
+            ):
+                route_conflict = exposed_model
+    run.runtime_identity = route_conflict or exposed_model or run.runtime_identity
     status = result.get("status") if isinstance(result, dict) else None
 
     if run.vendor_exit_code != 0:
@@ -171,14 +178,13 @@ def _interpret_run(
         )
     if (
         expected_model is not None
-        and exposed_model is not None
-        and exposed_model != expected_model
+        and route_conflict is not None
     ):
         return _fail(
             run,
             "route-mismatch",
             _common.EXIT_TERMINAL,
-            f"requested model {expected_model!r} but AGY exposed {exposed_model!r}",
+            f"requested model {expected_model!r} but AGY exposed {route_conflict!r}",
         )
 
     if pydantic_cls is not None:
