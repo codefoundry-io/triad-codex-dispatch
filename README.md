@@ -202,6 +202,18 @@ packet, receipt, PTY, and sentinel review transports are removed. AGY requires
 route passes `gemini-3.1-pro-high` with `high` effort. Provider permission and
 project-trust policy remain native. Ordinary `codex` remains the normal path.
 
+Maintainers can verify exact clean-HEAD archive bytes before installation:
+
+```bash
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.533-final-r2'
+```
+
+Use a new output label for every attempt; the verifier refuses an existing
+directory. It rejects a dirty source tree, archives `HEAD`, safely extracts the
+archive, compares the manifest and core review-skill hashes, runs the full test
+suite from the extracted bytes, and writes `verification.json`. Authenticated
+fresh-process skill exposure remains a separate release procedure.
+
 ## Use
 
 Ask Codex to use these installed skills:

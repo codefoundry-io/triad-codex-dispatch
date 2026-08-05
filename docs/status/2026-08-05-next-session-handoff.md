@@ -81,27 +81,26 @@ No fresh three-family round has reviewed `1d53775` yet. A fresh round over a
 new prepared directory and digest is required after the remaining owner
 decisions are applied.
 
-## Pending owner decisions
+## Approved owner decisions
 
-Do not silently choose these. Ask once, recommend the following defaults, and
-continue after the owner answers:
+The owner approved all three recommended defaults in the resumed 2026-08-05
+session:
 
-1. Apply the one-provider-call rule to the separately authorized Gemini formal
-   fallback too. Recommended: yes.
-2. Add a lightweight workspace-owned distribution verifier that stages exact
-   archive bytes and runs package tests. Keep authenticated fresh-process skill
-   exposure as a release procedure rather than a normal unit test.
-   Recommended: yes.
-3. Reject a benchmark with zero cases or zero planted findings instead of
-   reporting a misleading `1.0`. Recommended: fail closed.
-
-These are policy/generalization choices, not authorization to edit before the
-owner decides.
+1. The separately authorized Gemini formal fallback follows the one-provider-call
+   rule.
+2. A lightweight workspace-owned verifier stages exact archive bytes and runs
+   package tests; authenticated fresh-process skill exposure remains a release
+   procedure rather than a normal unit test.
+3. A benchmark with zero cases or zero planted findings fails closed.
 
 ## Distribution and installation state
 
-The live installed plugin is still enabled version `0.2.532`, sourced from this
-repository. Installation of 0.2.533 has not happened.
+When this handoff was written, the live installed inventory reported enabled
+version `0.2.532` sourced from this repository. On resumption,
+`codex plugin list --json` reported `0.2.533` from the same local source path
+because its manifest is already versioned `0.2.533`. That inventory is not
+installed/cache byte identity, bootstrap proof, or fresh-process skill exposure;
+those acceptance steps have not happened yet.
 
 An earlier archive was staged at:
 
@@ -114,9 +113,10 @@ Its SHA-256 was
 and its unpacked bytes passed `402` tests, but it predates `1d53775`. It is stale
 and must not be installed or used as final evidence.
 
-After the owner decisions and a unanimous fresh review round:
+After a unanimous fresh review round:
 
-1. Rebuild the archive from the new clean HEAD inside `_runs/`.
+1. Run `scripts/verify_distribution.py` from the login-shell Python environment
+   with the new clean HEAD and a new output directory inside `_runs/`.
 2. Compare manifest and core-skill SHA-256 values between source and archive.
 3. Run the full suite from the unpacked archive bytes.
 4. Obtain explicit permission before mutating `~/.codex`, `~/.local/bin`, or

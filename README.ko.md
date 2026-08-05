@@ -184,6 +184,18 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.10 
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. provider permission과 project
 trust policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
 
+maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
+
+```bash
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.533-final-r2'
+```
+
+시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
+dirty source tree를 거부하고 `HEAD`를 archive한 뒤 안전하게 추출하며 manifest와 core
+review-skill hash를 비교하고 extracted byte에서 전체 test suite를 실행한 다음
+`verification.json`을 기록합니다. authenticated fresh-process skill exposure는 별도 release
+procedure로 유지합니다.
+
 ## 사용
 
 Codex에게 다음 skill을 사용하도록 요청합니다.
