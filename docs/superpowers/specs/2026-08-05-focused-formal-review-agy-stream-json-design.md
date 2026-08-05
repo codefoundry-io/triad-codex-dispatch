@@ -24,7 +24,8 @@ live-verified `gemini-3.1-pro-high` slug and explicitly supplies
 
 1. `formal-gate` becomes the operational default for formal plan and
    pre-merge review.
-2. A default formal round has three provider calls total: one per family.
+2. Each formal round has one call per family. A finding-driven fix starts a
+   fresh three-family confirmation round; three calls is not a lifetime cap.
 3. Remove `batched-full-coverage`, `BatchReceipt`, per-hunk shards, batch
    manifests, path-evidence matrices, and full-audit admission from the active
    skill and distribution.
@@ -42,6 +43,15 @@ live-verified `gemini-3.1-pro-high` slug and explicitly supplies
 9. The Claude-led checkout outside `codex_workspace` is a read-only reference,
    not an implementation target.
 10. AGY behavior from versions before 1.1.10 is not copied into this design.
+11. Rounds continue until all required families return admissible `SAFE`, the
+    owner decides a surfaced design question, or conflict/oscillation makes
+    further unchanged review wasteful. There is no arbitrary round cap.
+12. A reviewer proposal that changes approved design, specification, scope, or
+    capability is never implemented automatically. The leader reproduces the
+    claim and asks the owner for a decision before editing the affected design
+    or implementation.
+13. Skill policy is accepted only after benchmark evidence and packaged-plugin
+    verification; source-checkout behavior alone is insufficient.
 
 ## Non-goals
 
@@ -134,14 +144,44 @@ decision boundary, not the old per-family assigned-path coverage guarantee.
 7. After all required legs terminate, the leader recomputes the directory
    digest and worktree fingerprint. Any mutation invalidates the round.
 8. The leader reproduces each finding against the canonical worktree and
-   classifies it as a bounded defect/underspecification or an owner-decision
-   design change.
+   classifies it as either:
+   - a defect or underspecification inside the approved design, eligible for
+     the smallest bounded correction; or
+   - a design/specification change, generalization, new capability, or scope
+     expansion, which requires an explicit owner decision before editing.
 9. The gate passes only when all three admitted verdicts are `SAFE` and no
    reproduced contradiction remains.
 
 There is no batching fallback. If one focused packet demonstrably exceeds a
 provider limit, the leader reports that evidence and obtains an owner decision
 before selecting a smaller exact decision boundary and starting a fresh round.
+
+## Finding convergence and owner decisions
+
+One round is one independent Claude, Google-family, and fresh Codex verdict over
+identical evidence. The leader never votes or averages labels.
+
+After reproducing findings:
+
+- verified defects inside the approved design receive the smallest bounded
+  fix, project verification, a newly prepared digest-bound directory, and a
+  fresh three-family round;
+- refuted findings are recorded with the contradictory evidence and are not
+  implemented;
+- design/specification changes, generalizations, new capabilities, and scope
+  expansions are presented to the owner with the concrete delta, evidence,
+  impact, and decision required; work on that affected area pauses until the
+  owner decides;
+- contradictory verified findings make the item `CONFLICTED` and require owner
+  adjudication; and
+- alternating recommendations without material candidate or evidence change
+  make the round `OSCILLATING`; the leader stops redispatching unchanged bytes
+  and asks the owner.
+
+There is no fixed maximum round count. The loop continues only when a bounded
+fix, owner decision, corrected route, or new evidence materially changes the
+review basis. An unchanged failed or invalid round is not replayed merely to
+seek a preferred verdict.
 
 ## AGY 1.1.10 transport
 
@@ -184,6 +224,45 @@ active skills, references, wrapper instructions, package manifests, bootstrap
 contracts, and current README guidance must not advertise or select the retired
 route.
 
+## Benchmark-driven skill policy
+
+Before finalizing the replacement policy, benchmark the old batch architecture
+against the focused round using identical synthetic review cases. Do not send
+private product source for this benchmark.
+
+The benchmark set contains at least:
+
+- a clean change that should converge `SAFE` without findings;
+- a planted local implementation defect;
+- a planted cross-file caller/consumer defect;
+- a planted configuration or governing-document mismatch; and
+- a corrected follow-up candidate that exercises the fix-to-reconfirm loop.
+
+Record provider-call count, prompt and result bytes, wall time, token/usage data
+when exposed, contract-validity rate, planted-defect recall, false findings,
+mutation detection, and round convergence. Existing captured batch artifacts
+may supply the old fan-out and transport-cost baseline; do not spend another
+24 provider calls merely to recreate known batch overhead.
+
+The active skill policy is updated from these measurements. It must keep one
+leg per family per round, focused evidence, structured verdicts, owner gates for
+design changes, and evidence-based convergence. A benchmark result may tune
+prompt wording or evidence-boundary guidance; it cannot silently restore
+family-by-batch coverage.
+
+## Distribution contract
+
+This is a distributable Codex plugin change, not a source-checkout-only tool.
+The versioned package must contain the reduced skill, compact verdict schema,
+updated wrappers, benchmark fixtures/report, and no active batch runtime.
+
+Acceptance uses the packaged bytes: export the plugin, validate its manifest
+and file inventory, install it through the supported bootstrap path, start a
+fresh Codex process, prove the reduced skill is exposed, and run wrapper smoke
+tests through the installed package. Source-only unit tests cannot satisfy this
+contract. Remote publication, push, tag, or GitHub release remains a separate
+external-state action.
+
 ## Failure and invalidation rules
 
 - A missing, refused, malformed, route-mismatched, or semantically incomplete
@@ -214,7 +293,7 @@ The production change is intentionally direct:
 - update distribution copies, bootstrap contracts, and English documentation;
   and
 - add focused unit, hostile-input, distribution-contract, skill-pressure, and
-  live wrapper tests.
+  benchmark/live wrapper tests.
 
 No new generic orchestration framework, custom review agent, provider daemon,
 or repository-wide source archive is introduced.
@@ -232,8 +311,13 @@ Implementation is accepted when all of the following are demonstrated:
 4. A live Google smoke proves
    `--model gemini-3.1-pro-high --effort high` and returns an admitted
    structured result.
-5. The full repository test suite, shell syntax checks, distribution contract,
+5. Benchmark evidence shows detection quality, false findings, call/token cost,
+   and fix-to-reconfirm convergence for the packaged policy.
+6. A reproduced design/specification change pauses for owner decision instead
+   of being implemented automatically.
+7. The full repository test suite, shell syntax checks, distribution contract,
    and diff checks pass.
-6. The plugin is exported and installed from the workspace-owned source, and a
+8. The plugin is exported and installed from the workspace-owned source, and a
    fresh Codex session proves the updated review skill is exposed.
-7. No file outside `/Users/chaniri/codex_workspace` is modified.
+9. No file outside `/Users/chaniri/codex_workspace` is modified unless the
+   owner separately authorizes an installation or publication target.
