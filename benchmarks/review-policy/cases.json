@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "clean",
+    "expected_finding_ids": [],
+    "objective": "Confirm a bounded parser rename preserves documented behavior.",
+    "round": 1
+  },
+  {
+    "case_id": "local-defect",
+    "expected_finding_ids": ["LOCAL-1"],
+    "objective": "Detect a local branch that returns success after schema validation fails.",
+    "round": 1
+  },
+  {
+    "case_id": "cross-file-defect",
+    "expected_finding_ids": ["CROSS-1"],
+    "objective": "Trace a changed callee result into an unchanged caller that treats failure as success.",
+    "round": 1
+  },
+  {
+    "case_id": "config-doc-mismatch",
+    "expected_finding_ids": ["DOC-1"],
+    "objective": "Detect that the packaged default conflicts with the governing deployment documentation.",
+    "round": 1
+  },
+  {
+    "case_id": "corrected-reconfirm",
+    "expected_finding_ids": [],
+    "objective": "Confirm the bounded fixes for LOCAL-1, CROSS-1, and DOC-1 without introducing a new design.",
+    "round": 2
+  }
+]
