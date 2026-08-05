@@ -141,8 +141,8 @@ content, schema, timeout, capacity, post-dispatch 실패는 agy 경로에 남습
 정식 Gemini fallback에는 exact route, provider, data boundary, objective에 대한
 separate owner authorization이 필요합니다. same immutable prepared directory,
 prompt-controlled no-edit/no-execution contract, digest/mutation invalidation,
-full batch matrix, strict admission을 유지합니다. required family가 unavailable이면
-invalid round입니다. 전체 계약은
+complete three-family round, strict `LegVerdict` admission을 유지합니다. required
+family가 unavailable이면 invalid round입니다. 전체 계약은
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md)를
 따릅니다.
 

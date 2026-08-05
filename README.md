@@ -156,7 +156,8 @@ failures—including native permission denial—remain on the agy failure path.
 A formal Gemini fallback requires separate owner authorization for the exact
 route, provider, data boundary, and objective. It retains the same immutable
 prepared directory, prompt-controlled no-edit/no-execution contract,
-digest/mutation invalidation, full batch matrix, and strict admission. An
+digest/mutation invalidation, complete three-family round, and strict
+`LegVerdict` admission. An
 unavailable required family leaves an invalid round. See the
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md)
 for the complete gate.

@@ -37,7 +37,8 @@
 **Rewrite or modify**
 
 - `skills/triad-cross-family-review/SKILL.md` and `references/review-prompt-contract.md`.
-- All four provider `SKILL.md` files.
+- All three provider `SKILL.md` files; the fresh Codex leg stays native and is
+  documented in the cross-family leg contract rather than a separate skill.
 - `bin/antigravity_wrapper.py`, `bin/_common.py`.
 - `scripts/bootstrap.sh`, `.codex-plugin/plugin.json`, `CHANGELOG.md`, `README.md`, `README.ko.md`, `SECURITY.md`.
 - `tests/test_distribution_contract.py`, `tests/test_provider_packet_context.py`, `tests/test_bootstrap.py`, `tests/test_log_cleanup.py`, `tests/test_migration_contract.py`.
@@ -213,7 +214,7 @@ git commit -m "feat: add compact review verdict and round integrity"
 **Files:**
 - Rewrite: `skills/triad-cross-family-review/SKILL.md`, `references/review-prompt-contract.md`
 - Create: `references/leg-contracts.md`, `references/convergence.md`
-- Modify: four provider skills, `tests/test_distribution_contract.py`
+- Modify: three provider skills, `tests/test_distribution_contract.py`
 - Delete after folding: `fresh-codex-formal-review.md`, `reviewer-routing.md`
 
 **Interfaces:**

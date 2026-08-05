@@ -119,7 +119,8 @@ fallback-ineligible. Missing or invalid `TRIAD_AGY_BIN` and missing `agy` on
 Formal Gemini fallback requires separate owner authorization for the exact
 route, provider, data boundary, and objective. It uses the same immutable
 prepared directory, prompt-controlled no-edit/no-execution contract,
-digest/mutation invalidation, full batch matrix, and strict admission. An
+digest/mutation invalidation, complete three-family round, and strict
+`LegVerdict` admission. An
 unavailable required family leaves an invalid round. See the
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md).
 
