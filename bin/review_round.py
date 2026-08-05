@@ -7,12 +7,16 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
+
+
+_REVIEW_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
 class RoundIntegrityError(ValueError):
@@ -169,8 +173,12 @@ def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) ->
 def render_review_prompt(brief: ReviewBrief) -> str:
     if not brief.objective.strip() or not brief.criteria or not brief.approved_boundary:
         raise RoundIntegrityError("review brief requires objective, criteria, and approved boundary")
+    if not _REVIEW_ID_RE.fullmatch(brief.review_id):
+        raise RoundIntegrityError("review ID must match [A-Za-z0-9][A-Za-z0-9._-]*")
     if len(brief.content_digest) != 64 or any(char not in "0123456789abcdef" for char in brief.content_digest):
         raise RoundIntegrityError("review brief content digest must be 64 lowercase hexadecimal characters")
+    if _prepared_digest(brief.prepared_dir) != brief.content_digest:
+        raise RoundIntegrityError("review brief content digest does not match prepared directory")
     criteria = "\n".join(f"- {value}" for value in brief.criteria)
     boundary = "\n".join(f"- {value}" for value in brief.approved_boundary)
     return (
@@ -193,7 +201,8 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         '"path":"relative/path","line":1,"trigger":"condition","evidence":"specific evidence",'
         '"correction":"bounded correction"}],"affected_surfaces_inspected":["relative/path"],'
         '"open_questions":[]}. All paths must be prepared-directory-relative. '
-        "Use an empty findings array only for SAFE. "
+        "SAFE permits Minor findings but no Critical/Major finding and no open question. "
+        "NOT-SAFE requires at least one Critical/Major finding or one open question. "
         "Report proposed design/specification changes as findings or open questions; do not implement them."
     )
 

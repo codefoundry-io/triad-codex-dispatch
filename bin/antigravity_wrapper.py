@@ -119,12 +119,21 @@ def _fail(
 def _interpret_run(
     run: _common.RunResult,
     pydantic_cls: Any,
+    expected_model: str | None = None,
 ) -> _common.RunResult:
     """Admit one terminal AGY result and ignore intermediate step text."""
     if run.exit_code == _common.EXIT_TIMEOUT:
         return _fail(run, "timeout", _common.EXIT_TIMEOUT, "provider timed out")
 
-    _events, result = parse_agy_stream(run.stdout)
+    events, result = parse_agy_stream(run.stdout)
+    exposed_model = None
+    for event in events:
+        if event.get("event") != "init":
+            continue
+        init = event.get("init")
+        if isinstance(init, dict) and isinstance(init.get("model"), str):
+            exposed_model = init["model"]
+    run.runtime_identity = exposed_model or "unexposed"
     status = result.get("status") if isinstance(result, dict) else None
 
     if run.vendor_exit_code != 0:
@@ -158,6 +167,18 @@ def _interpret_run(
             "vendor-error",
             _common.EXIT_TERMINAL,
             f"terminal result status is {status!r}",
+        )
+    if (
+        pydantic_cls is not None
+        and expected_model is not None
+        and exposed_model is not None
+        and exposed_model != expected_model
+    ):
+        return _fail(
+            run,
+            "route-mismatch",
+            _common.EXIT_TERMINAL,
+            f"requested model {expected_model!r} but AGY exposed {exposed_model!r}",
         )
 
     if pydantic_cls is not None:
@@ -230,6 +251,8 @@ def main() -> int:
         _common.log("prompt must be non-empty and timeout must be positive")
         return _common.EXIT_ARG_ERROR
 
+    _common.prune_stale_run_logs("antigravity")
+
     pydantic_cls = None
     if args.pydantic:
         try:
@@ -287,7 +310,7 @@ def main() -> int:
         args.timeout,
         classify_and_log=False,
     )
-    result = _interpret_run(raw, pydantic_cls)
+    result = _interpret_run(raw, pydantic_cls, args.model)
     _common.log(
         f"[wrapper] antigravity {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "

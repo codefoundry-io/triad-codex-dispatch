@@ -256,20 +256,17 @@ classify every test failure as production defect, test-case defect, or intention
 specification change and resolve or approve it. Reviewers do not run candidate
 code, tests, builds, hooks, or generated scripts.
 
-The full diff is navigation evidence, not the review boundary. The leader binds
-it to the complete affected-source closure, exact current source bytes, and a
-deterministic receipt contract, and every required family reviews every affected
-production source in every deterministic batch. Source-grounded observations,
-exact full-file ranges, changed-hunk or impact-edge evidence, and strict
-coverage admission are required. A manifest path alone is not coverage.
-Provider-native file-read telemetry is retained and digest-bound when exposed;
-otherwise coverage is prompt-controlled and admitted through source-grounded
-receipts, independent family review, and leader reproduction, not claimed as
-provider-enforced proof.
+The full diff is navigation evidence, not the review boundary. The leader
+prepares one focused directory containing the complete current files,
+configuration, and governing documentation relevant to the decision. Every
+required family reviews that same complete directory once and returns one
+strict `LegVerdict` bound to its family, review ID, and directory digest.
+The leader captures the directory digest and canonical-worktree fingerprint
+before dispatch, verifies both after all legs terminate, and reproduces every
+finding against the canonical worktree. Reviewer coverage is prompt-controlled
+unless the provider exposes a stronger boundary; it is never promoted from a
+manifest path or provider confidence statement alone.
 
-The evidence boundary is intentional: a non-UTF-8 current source fails closed
-with `non-UTF-8 source`. Do not omit it from the closure; defer the candidate or
-obtain owner approval for a separately reviewed design that adds support.
 Commit, push, install/update, merge, release, and publication still require
 their own owner authorization.
 

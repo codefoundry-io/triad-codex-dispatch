@@ -36,6 +36,7 @@ def _run_native_structured_once(
     cmd: list[str], cwd: str, timeout: int, pydantic_cls
 ) -> _common.RunResult:
     """Run one Claude call and validate its native structured output."""
+    _common.prune_stale_run_logs("claude")
     result = _common._run_once(
         "claude", cmd, cwd, timeout, classify_and_log=False
     )
@@ -115,7 +116,7 @@ def main() -> int:
     p.add_argument(
         "--cwd",
         default=None,
-        help="Process working directory (caller 의무 — sibling dir for isolation)",
+        help="Process working directory (caller-owned — use a sibling directory for isolation)",
     )
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
     p.add_argument(
@@ -180,6 +181,10 @@ def main() -> int:
         except Exception as e:
             log(f"--pydantic load failed: {e}")
             return EXIT_ARG_ERROR
+
+    if args.repair_mode and pydantic_cls is not None:
+        log("--repair-mode is unavailable with --pydantic structured output")
+        return EXIT_ARG_ERROR
 
     claude_bin = require_binary("claude")
 

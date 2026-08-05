@@ -132,9 +132,11 @@ def test_claude_route_forwards_model_effort_and_native_json(monkeypatch, capsys)
 
 def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) -> None:
     calls: list[list[str]] = []
+    pruned: list[str] = []
     monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: "/opt/bin/claude")
     monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: _StructuredAnswer)
     monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", pruned.append)
     monkeypatch.setattr(
         claude_wrapper,
         "run_cli_with_retry",
@@ -173,6 +175,7 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
     assert capsys.readouterr().out == '{"ok": true}\n'
     assert len(calls) == 1
     assert "--json-schema" in calls[0]
+    assert pruned == ["claude"]
 
 
 def test_claude_structured_route_rejects_result_text_fallback(
@@ -182,6 +185,7 @@ def test_claude_structured_route_rejects_result_text_fallback(
     monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: "/opt/bin/claude")
     monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: _StructuredAnswer)
     monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
 
     def fake_once(_cli, _cmd, _cwd, _timeout, *, classify_and_log):
         nonlocal calls
@@ -207,6 +211,30 @@ def test_claude_structured_route_rejects_result_text_fallback(
     assert claude_wrapper.main() == _common.EXIT_SCHEMA_FAIL
     assert capsys.readouterr().out == ""
     assert calls == 1
+
+
+def test_claude_rejects_repair_mode_on_structured_route(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: _StructuredAnswer)
+    monkeypatch.setattr(
+        claude_wrapper,
+        "require_binary",
+        lambda _name: (_ for _ in ()).throw(AssertionError("provider resolved")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "fake:Answer",
+            "--repair-mode",
+        ],
+    )
+
+    assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
+    assert capsys.readouterr().out == ""
 
 
 def test_gemini_route_keeps_native_json_without_review_protocol(monkeypatch, capsys) -> None:

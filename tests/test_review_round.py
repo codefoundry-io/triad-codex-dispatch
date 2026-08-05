@@ -16,6 +16,7 @@ sys.path.insert(0, str(BIN))
 from review_round import (  # noqa: E402
     ReviewBrief,
     RoundIntegrityError,
+    _prepared_digest,
     capture_round,
     render_review_prompt,
     verify_round,
@@ -96,20 +97,21 @@ def test_untracked_file_content_changes_fingerprint(prepared, worktree):
 
 
 def test_rendered_prompt_binds_focused_round_once(prepared):
+    digest = _prepared_digest(prepared)
     brief = ReviewBrief(
         review_id="review-r1",
         review_kind="pre-merge",
         family="google",
         objective="Check parser compatibility.",
         prepared_dir=prepared,
-        content_digest="a" * 64,
+        content_digest=digest,
         criteria=("correctness", "compatibility"),
         approved_boundary=("src/source.py", "REVIEW.diff"),
     )
     prompt = render_review_prompt(brief)
 
     assert prompt.count("review-r1") == 1
-    assert prompt.count("a" * 64) == 1
+    assert prompt.count(digest) == 1
     assert "Reviewer family: google" in prompt
     assert "Set `family` to exactly `google`" in prompt
     for field in (
@@ -128,6 +130,39 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert "batch_manifest" not in prompt
     assert "All paths must be prepared-directory-relative" in prompt
     assert "Do not edit or execute candidate code" in prompt
+    assert "NOT-SAFE requires at least one Critical/Major finding or one open question" in prompt
+
+
+def test_render_rejects_digest_not_bound_to_prepared_bytes(prepared):
+    brief = ReviewBrief(
+        review_id="review-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Check parser compatibility.",
+        prepared_dir=prepared,
+        content_digest="a" * 64,
+        criteria=("correctness",),
+        approved_boundary=("all prepared files",),
+    )
+
+    with pytest.raises(RoundIntegrityError, match="does not match prepared directory"):
+        render_review_prompt(brief)
+
+
+def test_render_rejects_review_id_the_verdict_cannot_admit(prepared):
+    brief = ReviewBrief(
+        review_id="review r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Check parser compatibility.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("all prepared files",),
+    )
+
+    with pytest.raises(RoundIntegrityError, match="review ID"):
+        render_review_prompt(brief)
 
 
 def test_cli_capture_and_verify(prepared, worktree, tmp_path):
@@ -173,7 +208,7 @@ def test_cli_renders_family_bound_prompt(prepared, tmp_path):
             "--prepared-dir",
             str(prepared),
             "--content-digest",
-            "a" * 64,
+            _prepared_digest(prepared),
             "--criterion",
             "correctness",
             "--approved-boundary",

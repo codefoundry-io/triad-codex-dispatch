@@ -239,18 +239,14 @@ generated script를 실행하지 않습니다.
 Before a formal gate, classify every test failure as production defect, test-case defect,
 or intentional specification change and resolve or approve it.
 
-full diff는 navigation evidence이지 review boundary가 아닙니다. Leader는 이를
-complete affected-source closure, exact current source byte, deterministic receipt
-contract에 bind합니다. Every required family reviews every affected production source
-in every deterministic batch. Source-grounded observation, exact full-file range,
-changed-hunk/impact-edge evidence, strict coverage admission이 필요하며 manifest path만으로는
-coverage가 아닙니다. Provider-native file-read telemetry가 노출되면 digest-bound로
-보존하고, 없으면 prompt-controlled coverage를 source-grounded receipt, independent family
-review, leader reproduction으로 admit합니다. provider-enforced proof라고 주장하지 않습니다.
-
-non-UTF-8 current source는 `non-UTF-8 source`로 fail closed합니다. closure에서
-누락하지 말고 candidate를 defer하거나 지원을 추가하는 별도 reviewed design에 대한
-owner approval을 받습니다.
+full diff는 navigation evidence이지 review boundary가 아닙니다. Leader는 현재 결정에
+관련된 complete current file, configuration, governing documentation을 하나의 focused
+directory에 준비합니다. 모든 required family는 그 동일한 complete directory를 한 번씩
+검토하고 family, review ID, directory digest에 bind된 strict `LegVerdict` 하나를
+반환합니다. Leader는 dispatch 전에 directory digest와 canonical-worktree fingerprint를
+capture하고 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
+재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는
+prompt-controlled이며, manifest path나 provider confidence만으로 승격하지 않습니다.
 
 이 계약은 credential, token, cookie, authentication file, environment dump, provider
 log, 관련 없는 path를 provider-visible input에서 제외한다는 보안 경계를 바꾸지

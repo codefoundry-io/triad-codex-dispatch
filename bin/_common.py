@@ -296,6 +296,8 @@ class RunResult:
     vendor_exit_code: int = -1
     # Antigravity provider/result custody boundary. Other wrappers leave it unset.
     dispatch_phase: Optional[str] = None
+    # Provider-exposed runtime identity, or ``unexposed`` when the route omits it.
+    runtime_identity: Optional[str] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -1824,6 +1826,7 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
         "elapsed_s": round(result.elapsed_s, 2),
         "classification": result.classification,
         "dispatch_phase": result.dispatch_phase,
+        "runtime_identity": result.runtime_identity,
         "mode": result.mode,
         "repair_attempt": result.repair_attempt,
         "schema_repair_attempt": result.schema_repair_attempt,
@@ -2533,6 +2536,7 @@ def emit_run_log(
         "vendor_exit_code": result.vendor_exit_code,
         "classification": result.classification,
         "dispatch_phase": result.dispatch_phase,
+        "runtime_identity": result.runtime_identity,
         "mode": result.mode,
         "elapsed_s": round(result.elapsed_s, 2),
         "stderr": result.stderr,

@@ -112,6 +112,10 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
         "`BatchReceipt`",
         "packet-bound `FormalReview`",
         "sealed-packet flag",
+        "deterministic batch",
+        "receipt contract",
+        "coverage admission",
+        "non-UTF-8 source",
     ):
         assert stale not in current
 

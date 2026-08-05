@@ -116,12 +116,32 @@ def test_structured_result_uses_native_payload_then_local_validation() -> None:
         )
     )
 
-    admitted = wrapper._interpret_run(raw, _Answer)
+    admitted = wrapper._interpret_run(raw, _Answer, "gemini-3.1-pro-high")
 
     assert admitted.exit_code == _common.EXIT_OK
     assert admitted.classification == "ok"
     assert admitted.validated == {"ok": True}
     assert admitted.final_answer == '{"ok": true}'
+    assert admitted.runtime_identity == "gemini-3.1-pro-high"
+
+
+def test_exposed_model_conflict_invalidates_successful_result() -> None:
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": '{"ok":true}',
+                "structured_output": {"ok": True},
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(raw, _Answer, "another-model")
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "route-mismatch"
+    assert admitted.final_answer == ""
+    assert admitted.runtime_identity == "gemini-3.1-pro-high"
 
 
 def test_structured_result_requires_native_terminal_payload() -> None:
@@ -164,6 +184,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 10))
     monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
 
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log):
         calls.append(cmd)
@@ -205,8 +226,10 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
 def test_preflight_proves_version_and_route_without_provider_submission(
     monkeypatch, capsys
 ) -> None:
+    pruned: list[str] = []
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 10))
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
     monkeypatch.setattr(
         wrapper._common,
         "_run_once",
@@ -236,3 +259,4 @@ def test_preflight_proves_version_and_route_without_provider_submission(
         "provider_started": False,
         "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
     }
+    assert pruned == ["antigravity"]
