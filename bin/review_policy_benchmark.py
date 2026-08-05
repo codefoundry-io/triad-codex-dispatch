@@ -22,6 +22,8 @@ def aggregate(
         raise ValueError("every benchmark case needs a non-empty case_id")
     if len(case_ids) != len(set(case_ids)):
         raise ValueError("benchmark case_id values must be unique")
+    if not cases:
+        raise ValueError("benchmark requires at least one case")
 
     expected = {
         case["case_id"]: set(case.get("expected_finding_ids", []))
@@ -52,6 +54,9 @@ def aggregate(
         false_findings += len(actual_ids - expected_ids)
         valid += result.get("contract_valid") is True
         mutations += result.get("mutation_admitted") is True
+
+    if planted == 0:
+        raise ValueError("benchmark requires at least one planted finding")
 
     baseline_calls = baseline.get("planned_calls_per_round")
     focused_calls = focused.get("calls_per_round")

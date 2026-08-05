@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
@@ -73,3 +75,34 @@ def test_checked_in_runtime_benchmark_proves_two_round_convergence() -> None:
     assert report["focused"]["mutation_admitted_count"] == 0
     assert report["focused"]["call_reduction"] == 0.875
     assert report == _load("focused-convergent-report.json")
+
+
+def test_benchmark_rejects_zero_cases() -> None:
+    with pytest.raises(ValueError, match="at least one case"):
+        benchmark.aggregate(
+            {"planned_calls_per_round": 24},
+            {"calls_per_round": 3, "results": []},
+            [],
+        )
+
+
+def test_benchmark_rejects_zero_planted_findings() -> None:
+    cases = [{"case_id": "clean", "expected_finding_ids": []}]
+    focused = {
+        "calls_per_round": 3,
+        "results": [
+            {
+                "case_id": "clean",
+                "contract_valid": True,
+                "finding_ids": [],
+                "mutation_admitted": False,
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="at least one planted finding"):
+        benchmark.aggregate(
+            {"planned_calls_per_round": 24},
+            focused,
+            cases,
+        )
