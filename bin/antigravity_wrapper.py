@@ -123,9 +123,6 @@ def _interpret_run(
 ) -> _common.RunResult:
     """Admit one terminal AGY result and ignore intermediate step text."""
     run.runtime_identity = "unexposed"
-    if run.exit_code == _common.EXIT_TIMEOUT:
-        return _fail(run, "timeout", _common.EXIT_TIMEOUT, "provider timed out")
-
     events, result = parse_agy_stream(run.stdout)
     exposed_model = None
     route_conflict = None
@@ -142,6 +139,9 @@ def _interpret_run(
             ):
                 route_conflict = exposed_model
     run.runtime_identity = route_conflict or exposed_model or run.runtime_identity
+    if run.exit_code == _common.EXIT_TIMEOUT:
+        return _fail(run, "timeout", _common.EXIT_TIMEOUT, "provider timed out")
+
     status = result.get("status") if isinstance(result, dict) else None
 
     if run.vendor_exit_code != 0:

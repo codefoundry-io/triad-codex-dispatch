@@ -236,6 +236,25 @@ def test_timeout_records_unexposed_runtime_identity() -> None:
     assert admitted.runtime_identity == "unexposed"
 
 
+def test_timeout_records_exposed_conflicting_runtime_identity() -> None:
+    raw = _run_result(
+        json.dumps(
+            {
+                "event": "init",
+                "init": {"model": "unexpected-model"},
+            }
+        )
+    )
+    raw.exit_code = _common.EXIT_TIMEOUT
+
+    admitted = wrapper._interpret_run(raw, None, "gemini-3.1-pro-high")
+
+    assert admitted.exit_code == _common.EXIT_TIMEOUT
+    assert admitted.classification == "timeout"
+    assert admitted.final_answer == ""
+    assert admitted.runtime_identity == "unexpected-model"
+
+
 def test_main_forwards_native_route_and_prints_validated_terminal_json(
     monkeypatch, capsys
 ) -> None:

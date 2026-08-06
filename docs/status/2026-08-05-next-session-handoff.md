@@ -2,9 +2,9 @@
 
 Date: 2026-08-06
 
-Status: post-r5 bounded-correction handoff. Review round r5 was invalid because
-the Claude leg timed out, and fresh Codex returned an admitted `NOT-SAFE` Major
-finding. That production defect is corrected in the pending r6 candidate;
+Status: post-r6 bounded-correction handoff. Review round r6 was invalid because
+fresh Codex returned an admitted `NOT-SAFE` Major finding. That production
+defect and two documentation defects are corrected in the pending r7 candidate;
 final admission and installation remain incomplete.
 
 ## Start here
@@ -16,8 +16,8 @@ Work from:
 ```
 
 The implementation branch is `release/0.2.532`; the plugin manifest version is
-`0.2.533`. The pending r6 candidate includes the owner-approved 0.2.533 tasks,
-the r2 through r4 corrections, and the bounded r5 correction recorded below.
+`0.2.533`. The pending r7 candidate includes the owner-approved 0.2.533 tasks,
+the r2 through r4 corrections, and the bounded r5 and r6 corrections recorded below.
 Resolve the exact candidate with `git rev-parse HEAD`; do not infer it from an
 earlier review digest or distribution archive.
 
@@ -53,8 +53,8 @@ workspace and child-repository state.
   verification.
 - Explicitly superseded the conflicting 0.2.532 AGY design and implementation
   plan, and regression-bound their current-authority banners.
-- Source tests for the pending r6 candidate: `425 passed` under Python 3.12.13
-  and pytest 9.0.3. Do not reuse earlier 406-, 422-, or 424-test snapshots.
+- Source tests for the pending r7 candidate: `426 passed` under Python 3.12.13
+  and pytest 9.0.3. Do not reuse earlier 406-, 422-, 424-, or 425-test snapshots.
 
 Important 0.2.533 commits before the bounded r3 correction, newest last:
 
@@ -68,30 +68,38 @@ dc59558 fix: reject empty benchmark evidence
 21bb477 docs: supersede stale formal route records
 ```
 
-## Final review state and pending r6
+## Final review state and pending r7
 
-Review round `final-0.2.533-r5` used prepared digest:
+Review round `final-0.2.533-r6` used prepared digest:
 
 ```text
-ecd7656c459383fded6dc05d32c0e2a45e47f760e86b59a3949f7b99d1a2b337
+3cce9ef71c9f688ddb970b7ac2a85b1f60b2b5c06593220a016fc22980251562
 ```
 
 - Google: valid `SAFE`, no findings.
-- Claude: invalid; the wrapper timed out after 600 seconds and produced no
-  `LegVerdict`.
+- Claude: valid `SAFE`, three Minor findings.
 - Fresh Codex: valid `NOT-SAFE`, one Major finding.
 - Prepared directory and canonical worktree: `ROUND_INTEGRITY_OK`.
 
-The Codex finding reproduced against canonical source: the AGY event loop kept
-only the last exposed `init.model`, so a conflicting earlier identity could be
-overwritten by a later expected identity before successful admission. The
-pending r6 candidate preserves the first exposed conflict, records it as
-runtime evidence, rejects the leg as `route-mismatch`, and adds a regression
-test for the conflicting two-init sequence.
+The Codex Major and one Claude Minor reproduced against canonical source: the
+AGY timeout branch returned before parsing partial stream output, so an exposed
+or conflicting `init.model` was discarded as `unexposed`. The pending r7
+candidate parses partial events first, preserves the first conflicting or last
+exposed runtime identity, keeps timeout as the terminal classification, and
+adds a regression test.
 
-Run a fresh complete `final-0.2.533-r6` round over a new digest, including the
-active `docs/references/repair-protocol.md` boundary. Do not reuse r5 verdicts
-for final admission.
+The other two Claude Minors also reproduced. The current-authority release plan
+showed only the colon form of the formal Gemini schema operand even though the
+implementation accepts both colon and dotted forms. Its example now matches
+the shipped two-operand set. The r6 prepared boundary wording counted the 77
+repository-relative candidate paths plus `TASK.md` and `REVIEW.diff` but did
+not explicitly name `FILELIST.txt` itself. The next round must state the exact
+80-file boundary: 77 paths listed in `FILELIST.txt`, plus `FILELIST.txt`,
+`TASK.md`, and `REVIEW.diff`.
+
+Run a fresh complete `final-0.2.533-r7` round over a new digest, including the
+active `docs/references/repair-protocol.md` boundary and the explicit 80-file
+count above. Do not reuse r5 or r6 verdicts for final admission.
 
 ## Approved owner decisions
 
@@ -114,7 +122,7 @@ because its manifest is already versioned `0.2.533`. That inventory is not
 installed/cache byte identity, bootstrap proof, or fresh-process skill exposure;
 those acceptance steps have not happened yet.
 
-The latest verified pre-r6 archive was staged at:
+The latest verified pre-r7 archive was staged at:
 
 ```text
 _runs/distribution/0.2.533-final-r4/triad-codex-dispatch-0.2.533.tar
@@ -142,8 +150,8 @@ After a unanimous fresh review round:
    cannot reload the updated skill catalog.
 
 The owner authorized remote publication and skill update on 2026-08-06. Execute
-them only after unanimous r6 admission and exact packaged-byte verification.
-The exact changed r6 external-review boundary requires a new owner approval
+them only after unanimous r7 admission and exact packaged-byte verification.
+The exact changed r7 external-review boundary requires a new owner approval
 before Claude or Google dispatch.
 
 ## Argus continuation after TRIAD
