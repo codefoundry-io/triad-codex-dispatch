@@ -1,5 +1,9 @@
 # AGY 0.2.528 functional integration design
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE.** Do not execute this design. Use
+> the current [0.2.532 plan](../plans/2026-07-30-native-permissions-full-coverage-review.md)
+> and [0.2.532 design](2026-07-30-native-permissions-full-coverage-review-design.md).
+
 Date: 2026-07-22
 Source commit: `94a24cb2e59972cd8fccefd06c05a6a7b77166b8`
 Target: `codex/triad-reliability-redesign`

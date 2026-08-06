@@ -1,0 +1,18 @@
+{
+  "baseline": {
+    "batch_artifacts": 465,
+    "calls_per_round": 24,
+    "prompt_bytes": 186634
+  },
+  "focused": {
+    "batch_artifacts": 0,
+    "call_reduction": 0.875,
+    "calls_per_round": 3,
+    "case_count": 5,
+    "contract_validity_rate": 1.0,
+    "false_finding_count": 0,
+    "mutation_admitted_count": 0,
+    "planted_defect_recall": 1.0
+  },
+  "policy": "focused-convergent"
+}

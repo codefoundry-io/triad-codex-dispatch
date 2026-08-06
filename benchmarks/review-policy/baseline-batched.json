@@ -1,0 +1,12 @@
+{
+  "artifact_source": "_runs/reviews/2026-08-05-v02532-premerge-r46",
+  "batch_artifacts": 465,
+  "batches_per_family": 8,
+  "candidate_diff_bytes": 933311,
+  "changed_path_count": 55,
+  "families": 3,
+  "impact_path_count": 93,
+  "planned_calls_per_round": 24,
+  "prompt_bytes": 186634,
+  "test_path_count": 12
+}

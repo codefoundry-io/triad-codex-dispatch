@@ -1,27 +1,26 @@
 # Triad Codex Dispatch current state
 
-Updated: 2026-07-24
+Updated: 2026-08-03
 
 ## Authoritative checkout
 
 - Development root: `/Users/chaniri/codex_workspace`
 - Product worktree:
   `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability`
-- Branch: `release/0.2.529`
-- Local `HEAD`: `f0376dfc34006e0ee73e6ea4673a0d7f1c4a8586`
-  (`feat: streamline worktree-first triad review`)
-- This branch has no configured upstream. The worktree contains staged release
-  edits plus the current unstaged simplification and Agent Review corrections.
+- Branch: `release/0.2.532`
+- Candidate version/date: `0.2.532`, `2026-08-03`.
+- The tracked candidate records current behavior and migration only; external
+  verification and publication remain pending. No post-candidate formal gate,
+  installation, tag, release, or remote result is claimed here.
 
 Preserve the unrelated dirty checkout at
 `/Users/chaniri/triad-codex-dispatch`. Do not reset, clean, copy over, merge
 into, or otherwise modify it.
 
-Do not commit, push, merge, release, or create a pull request as an incidental
-verification step. Git history and remote-state mutations remain separately
-authorized and may present an automatic security review approval request.
+Do not push, merge, tag, release, or create a pull request as an incidental
+verification step. Remote-state mutations remain separately authorized.
 
-`codex plugin list --json` reports the local plugin enabled at `0.2.529` from
+Historical pre-0.2.532 evidence: `codex plugin list --json` reported the local plugin enabled at `0.2.529` from
 this worktree. The plugin cache and managed launchers/rules were refreshed: the
 three exact wrapper rules resolve to `prompt`, and no dedicated profile or
 `codex-triad` shell entry exists. Bootstrap preserved the owner's edited
@@ -41,13 +40,23 @@ ask the owner.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
 body. Record one simple content digest before dispatch and compare it after every
-required leg terminates; a mismatch invalidates the round. Formal plan and
-pre-merge review excludes test source only when the exact project-or-owner
-boundary is supplied. Normal SDD implementation review includes relevant test
+required leg terminates; a mismatch invalidates the round. The 0.2.532
+all-tests/no-exclusion boundary includes all repository test source. Normal SDD implementation review includes relevant test
 source. Before a formal gate, classify every test failure as production defect,
 test-case defect, or intentional specification change and resolve or approve it.
-Provider legs use only their approved read-only inspection route and must not run
-candidate code, tests, builds, hooks, or generated scripts.
+The retired wrapper sandbox/profile state is historical. Each provider leg still
+receives a prompt-controlled no-edit/no-execution obligation and must not run
+candidate code, tests, builds, hooks, or generated scripts; that obligation is
+provider- or OS-enforced only when the selected route actually supplies such
+enforcement.
+
+The full diff is navigation evidence bound to the complete affected-source
+closure and exact current source bytes. Every required family reviews every
+affected production source in every deterministic batch. Source-grounded
+observations, exact full-file ranges, changed-hunk or impact-edge evidence, and
+strict coverage admission are required. Provider-native file-read telemetry is
+digest-bound when exposed; otherwise coverage remains prompt-controlled and is
+admitted through receipts, independent family review, and leader reproduction.
 
 The historical R14-R17 path-list attempts below remain preserved verbatim as
 historical evidence; they do not direct the current shared-directory flow.
@@ -56,49 +65,42 @@ The bounded review routes are:
 
 - fresh Codex: `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`;
 - Claude: `opus`, `xhigh`;
-- primary Google route: authenticated `agy models` catalog selector
-  `gemini-3.1-pro-high`; exact outbound model argument `Gemini 3.1 Pro (High)`
-  with no `--effort`.
+- primary Google route: AGY 1.1.10 or newer, with authenticated `agy models`
+  catalog selector `gemini-3.1-pro-high`; exact outbound model argument
+  `gemini-3.1-pro-high` with no `--effort`. The display-label compatibility
+  route is historical.
 
 Sol- or Fable-class long-running models are not routine reviewers. They remain
 conditional escalations for genuinely ambiguous, security-sensitive, deeply
-integrative, or adjudication-heavy work. Gemini is fallback-only after proven
-pre-submission agy route unavailability.
+integrative, or adjudication-heavy work. Gemini is fallback-only for the exact
+no-final-summary exit `4` plus wrapper-owned pre-submission `PtyStartError`
+proof. Every final-summary result is fallback-ineligible. Missing/invalid
+`TRIAD_AGY_BIN` and missing `agy` on `PATH` are direct route-setup errors.
 
-The shipped distribution carries no qualifying enforcement proof, so formal
-Gemini fallback remains unavailable. Ordinary/non-formal fallback remains
-available after proven pre-submission agy unavailability. The canonical admission
-details are in the
+Formal Gemini fallback requires separate owner authorization for the exact
+route, provider, data boundary, and objective. It retains the same immutable
+prepared directory, prompt-controlled no-edit contract, digest/mutation
+invalidation, full batch matrix, and strict admission. An unavailable required
+family leaves an invalid round. The canonical admission details are in the
 [formal reviewer routing contract](../../skills/triad-cross-family-review/references/reviewer-routing.md).
 
-## Agent-review distribution contract
+## Native distribution contract
 
-The normal human-run `scripts/bootstrap.sh --install` keeps ordinary `codex` and
-installs exact managed-launcher `prefix_rule` entries with
-`decision = "prompt"`. It does not install a dedicated profile or replace the
-owner's approval, reviewer, sandbox, or Auto-review policy.
+Run ordinary `codex` and TRIAD from the same authenticated login terminal and
+project worktree used for development. Provider, user, and project settings own
+permission and trust selection. TRIAD does not install profiles, rules, a
+pre-spawn environment policy, or a permission override.
 
-That combination routes eligible exact Claude, agy, and Gemini wrapper calls to
-Codex Agent review instead of bypassing review or repeatedly asking the owner.
-The generated justification identifies an owner-authorized triad review and
-excludes credentials, tokens, cookies, authentication files, environment dumps,
-provider logs, and unrelated paths.
-
-Agent Review requires `approvals_reviewer = "auto_review"` and an interactive
-approval category. `approval_policy = "on-request"` is sufficient. If the owner
-uses a granular approval policy, both `granular.rules = true` and
-`granular.sandbox_approval = true` are required; other granular choices remain
-owner-owned. A false category is rejected before Agent Review sees the request.
-Do not auto-install `[auto_review].policy`; it would replace owner instructions
-and cannot override a managed guardian policy. `/approve` is only a narrow
-owner override for one exact recorded denial.
-
-The legacy profile generator remains explicit opt-in migration compatibility.
-It is not the normal start path.
+Bootstrap publishes the three provider wrapper launchers as one staged
+all-or-nothing command group, pins the classifier path, and prints the direct
+login-shell `python3 bin/apply_patch.py` owner argv with explicit
+`--classifier-file`. Repair analysis uses a fresh native proposal-only child.
+Exact plugin-owned legacy artifacts are removed only when their markers and
+expected bytes match; owner-authored settings and credentials are preserved.
 
 An explicit owner invocation of the matching triad skill authorizes the named
 provider review calls once while provider, destination, worktree, scope, and
-data boundary remain unchanged. Agent review is the execution-time security
+data boundary remain unchanged. Native permission handling is the execution-time security
 decision. Commit, push, install/update, merge, release, publication, and any
 other provider remain separate owner decisions.
 
@@ -248,11 +250,11 @@ pull-request creation remain separate owner decisions.
 
 ## Current Google route and R12 ledger
 
-The current Google route keeps the catalog selector `gemini-3.1-pro-high`
-separate from the exact outbound `Gemini 3.1 Pro (High)` argument with no
-`--effort`. Authenticated `agy models` is catalog evidence only. Preflight proves
-argv construction and requested values; exposed identity must agree, and absent
-identity is `unexposed` once. The base slug plus `--effort high` remains
+The current Google route requires AGY 1.1.10 or newer, uses catalog selector
+`gemini-3.1-pro-high` as the exact outbound `gemini-3.1-pro-high` argument, and
+passes no `--effort`. Authenticated `agy models` is catalog evidence. Preflight
+proves argv construction and requested values; exposed identity must agree, and
+absent identity is `unexposed` once. The base slug plus `--effort high` remains
 unselected until a fresh runtime probe proves acceptance and identity agreement.
 
 R11 prior formal-round evidence remains historical: prompt SHA-256
@@ -314,9 +316,9 @@ current approved production source, configuration, and documentation plus a
 common task as the complete review input. Every leg receives the same directory
 and task; no prompt inlines a diff or file body. Record one simple content
 digest before dispatch and compare it after every required leg terminates; a
-mismatch invalidates the round. Test source stays out of reviewer scope; local
-test execution and the full-worktree mutation fingerprint remain leader
-operations.
+mismatch invalidates the round. Under the current 0.2.532 no-exclusion boundary,
+all repository test source is included; local test execution and the
+full-worktree mutation fingerprint remain leader operations.
 
 ## R14 corrected formal round
 
@@ -432,10 +434,13 @@ of locally retained status/diff evidence, with no inline patch or file body.
   `709 passed in 152.64s`; `bash -n scripts/bootstrap.sh`, `git diff --check`,
   and `git diff --cached --check` passed. The prior SDD Terra review including
   tests was `APPROVED` with no findings; a fresh post-correction SDD Terra review
-  and complete R22 formal gate remain pending. The formal shared review directory
-  must physically exclude the exact test-source root
-  `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/tests`;
-  local leader tests remain required.
+  and complete R22 formal gate remain pending. Historical R20 boundary
+  (superseded for 0.2.532): the formal shared review directory physically
+  excluded the exact test-source root
+  `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/tests`,
+  while local leader tests remained required. Current 0.2.532 formal rounds use
+  the exact no-exclusion boundary: `tests/` is included in the prepared review
+  directory.
 - On 2026-07-24 the owner authorized deployment of `0.2.529` only if the skill
   verification and all gates pass. No deployment has happened yet. This handoff
   does not claim that a commit, push, tag, release, or install occurred.

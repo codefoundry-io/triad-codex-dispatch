@@ -1,7 +1,7 @@
 interface:
   display_name: "Triad Gemini Dispatch"
   short_description: "Gemini business, Vertex, or API-key fallback"
-  default_prompt: "Use $triad-gemini-dispatch only after the agy route is proven unavailable before submission; it is not a direct-request route."
+  default_prompt: "Use $triad-gemini-dispatch only after agy is proven unavailable before submission; it is not a direct-request route. State the objective, review target, approved data, exclusions, and result profile before dispatch."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

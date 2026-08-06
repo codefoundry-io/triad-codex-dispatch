@@ -1,59 +1,23 @@
 #!/usr/bin/env python3
-"""Single-shot Claude CLI subprocess wrapper.
+"""Single-shot Claude CLI transport wrapper.
 
-Always runs in vendor JSON mode:
-  claude -p "<prompt>" --output-format json
+Forwards a prompt to Claude's JSON output mode along with only native model,
+effort, fallback-model, working-directory, timeout, schema, and debug controls.
+Provider-owned permission and trust settings are left to the native CLI.
 
-Stdout = the final answer text from envelope `.result` field (or, with
-`--pydantic`, the validated JSON object). Stderr = wrapper log + Claude's
-brief progress noise (pre-bootstrap settings/plugin lines).
-
-Audit log: _logs/claude/audit.jsonl (gitignored).
-
-ISOLATION CONTRACT (caller responsibility — wrapper is transport-only):
-  Claude worker 의 본 본질 = leader (claude main session) 와 분리된 별
-  instance, objective 시각 의무 (CLAUDE.md / project context / leader
-  frame 부담 X). 본 isolation 은 caller 가 sibling dir setup 으로 보장:
-
-    1. 사용자 가 sibling dir (e.g. `~/triad-claude-worker/`) 안 1회 cd
-    2. `claude` 1회 실행 → OAuth 로그인 (subscription path 정합)
-    3. caller (triad-claude-dispatch SKILL) 가 wrapper 호출 시
-       `--cwd <sibling-dir>` 명시
-
-  본 dir 안 `CLAUDE.md` 부재 = leader frame 차단 자동. wrapper 안 추가
-  isolation flag (--mcp-config / --strict-mcp-config / --setting-sources
-  / --no-session-persistence / --exclude-dynamic-system-prompt-sections)
-  박지 X — sibling dir 의 본 settings 가 의무.
-
-Options:
-  --effort {low,medium,high,xhigh,max}
-        Override `--effort` (claude 의 본 reasoning level).
-        Default = vendor default. Read-only deep work → high.
-  --fallback-model <name>
-        Auto-fallback when default model overloaded.
-  --permission-mode {default,acceptEdits,auto,bypassPermissions,dontAsk,plan}
-        Permission mode override. `bypassPermissions` 박지 X (Triad safety).
-  --pydantic module.path:ClassName
-        Inject a JSON schema block into the prompt and validate the answer
-        with `cls.model_validate_json()`. On validation fail, retry once
-        with a clarifying suffix; second failure → exit 66.
-  --sealed-packet-root /absolute/<review-id>/packet
-  --expected-packet-sha256 <64-lowercase-hex>
-        Paired trusted validation context for schemas that require packet
-        identity. Invalid or incomplete context fails before provider startup.
-  --repair-mode
-        Compatibility: one provider attempt with automatic retries disabled.
-        The current read-only analyzer never invokes provider wrappers.
+Stdout is the final answer text from envelope `.result` (or, with
+``--pydantic``, the validated JSON object). Stderr is wrapper logging and
+Claude's progress noise. Audit results are written to
+``_logs/claude/audit.jsonl`` (gitignored).
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 
+import _common
 from _common import (
-    build_validation_context,
     validate_wrapper_cwd,
     load_prompt_text,
     EXIT_ARG_ERROR,
@@ -66,15 +30,77 @@ from _common import (
 
 
 EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
-PERMISSION_CHOICES = (
-    "default",
-    "acceptEdits",
-    "auto",
-    "bypassPermissions",
-    "dontAsk",
-    "plan",
-)
-PERMISSION_FORBIDDEN = ("bypassPermissions",)
+
+
+def _run_native_structured_once(
+    cmd: list[str], cwd: str, timeout: int, pydantic_cls
+) -> _common.RunResult:
+    """Run one Claude call and validate its native structured output."""
+    _common.prune_stale_run_logs("claude")
+    result = _common._run_once(
+        "claude", cmd, cwd, timeout, classify_and_log=False
+    )
+    answer, extraction_error = _common.extract_claude_answer(
+        result.stdout, result.stderr
+    )
+    try:
+        envelope = json.loads(result.stdout)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        envelope = None
+    has_native_structured_output = (
+        isinstance(envelope, dict)
+        and envelope.get("structured_output") is not None
+    )
+
+    if result.exit_code != _common.EXIT_OK:
+        classification = _common.classify(
+            "claude",
+            result.stderr,
+            result.stdout,
+            result.exit_code,
+            vendor_exit_code=result.vendor_exit_code,
+        )
+        result.classification = classification
+        result.exit_code = _common.map_classification_to_exit(classification)
+        result.final_answer = ""
+    elif extraction_error is not None:
+        result.extraction_error = extraction_error
+        classification = _common.classify(
+            "claude", extraction_error, "", _common.EXIT_CLI_FAIL,
+            vendor_exit_code=result.vendor_exit_code,
+        )
+        if classification == "unknown":
+            classification = "extraction-error"
+        result.classification = classification
+        result.exit_code = _common.map_classification_to_exit(classification)
+        result.final_answer = ""
+    elif not has_native_structured_output:
+        result.classification = "schema-fail"
+        result.exit_code = _common.EXIT_SCHEMA_FAIL
+        result.validation_error = "claude native structured_output is missing"
+        result.final_answer = ""
+    else:
+        valid, validated_or_error = _common.validate_response(
+            answer, pydantic_cls
+        )
+        if valid:
+            result.classification = "ok"
+            result.validated = validated_or_error
+            result.final_answer = json.dumps(
+                validated_or_error, ensure_ascii=False
+            )
+        else:
+            result.classification = "schema-fail"
+            result.exit_code = _common.EXIT_SCHEMA_FAIL
+            result.validation_error = str(validated_or_error)
+            result.final_answer = ""
+
+    log(
+        f"[wrapper] claude {result.classification} "
+        f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+        f"elapsed={result.elapsed_s:.1f}s"
+    )
+    return result
 
 
 def main() -> int:
@@ -90,7 +116,7 @@ def main() -> int:
     p.add_argument(
         "--cwd",
         default=None,
-        help="Process working directory (caller 의무 — sibling dir for isolation)",
+        help="Process working directory (caller-owned — use a sibling directory for isolation)",
     )
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
     p.add_argument(
@@ -113,36 +139,15 @@ def main() -> int:
         help="Auto-fallback model name when default overloaded",
     )
     p.add_argument(
-        "--sandbox",
-        choices=("read-only", "workspace-write"),
-        default=None,
-        help="Wrapper-ENFORCED worker posture (L13 mode-switch, owner adjudication "
-             "#3 2026-07-05). read-only -> --tools Read,Glob,Grep (a real "
-             "restriction — --allowedTools only PRE-APPROVES) + --strict-mcp-config "
-             "+ --setting-sources user + dontAsk; workspace-write -> acceptEdits + "
-             "REQUIRES --cwd (rm/rmdir/sed are auto-approved in acceptEdits — "
-             "blast radius must be an isolated dir) + --strict-mcp-config. "
-             "Mutually exclusive with --permission-mode. Lab default = omitted "
-             "(transport-only; the CALLER owns isolation per the SKILL contract); "
-             "TRIAD_CLAUDE_ENFORCE_SANDBOX=1 (public codex-host bootstrap) makes "
-             "--sandbox REQUIRED.")
-    p.add_argument(
-        "--permission-mode",
-        default=None,
-        choices=PERMISSION_CHOICES,
-        help="Permission mode override",
-    )
-    p.add_argument(
         "--pydantic",
         default=None,
         help="pydantic class spec (module.path:ClassName) for schema enforcement",
     )
-    p.add_argument("--sealed-packet-root", default=None)
-    p.add_argument("--expected-packet-sha256", default=None)
     p.add_argument(
         "--repair-mode",
         action="store_true",
-        help="Compatibility: one provider attempt with automatic retries disabled",
+        help="Compatibility diagnostic: one provider attempt with retries disabled; "
+             "the fresh native proposal-only repair child does not invoke providers",
     )
     p.add_argument(
         "--debug",
@@ -165,25 +170,8 @@ def main() -> int:
         log(f"--cwd validation failed: {e}")
         return EXIT_ARG_ERROR
 
-    if args.sandbox and args.permission_mode:
-        log("--sandbox and --permission-mode are mutually exclusive "
-            "(--sandbox synthesizes the permission posture)")
-        return EXIT_ARG_ERROR
-    if os.environ.get("TRIAD_CLAUDE_ENFORCE_SANDBOX") == "1" and not args.sandbox:
-        log("TRIAD_CLAUDE_ENFORCE_SANDBOX=1: --sandbox read-only|workspace-write "
-            "is required (raw transport-only dispatch is disabled on this install)")
-        return EXIT_ARG_ERROR
-    if args.sandbox == "workspace-write" and not args.cwd:
-        log("--sandbox workspace-write requires --cwd (acceptEdits auto-approves "
-            "rm/rmdir/sed — the blast radius must be an isolated directory)")
-        return EXIT_ARG_ERROR
-
     if not args.prompt.strip():
         log("empty prompt")
-        return EXIT_ARG_ERROR
-
-    if args.permission_mode in PERMISSION_FORBIDDEN:
-        log(f"--permission-mode {args.permission_mode} forbidden by Triad safety")
         return EXIT_ARG_ERROR
 
     pydantic_cls = None
@@ -194,19 +182,15 @@ def main() -> int:
             log(f"--pydantic load failed: {e}")
             return EXIT_ARG_ERROR
 
-    try:
-        validation_context = build_validation_context(
-            pydantic_cls,
-            args.sealed_packet_root,
-            args.expected_packet_sha256,
-        )
-    except Exception as e:
-        log(f"sealed validation context failed: {e}")
+    if args.repair_mode and pydantic_cls is not None:
+        log("--repair-mode is unavailable with --pydantic structured output")
         return EXIT_ARG_ERROR
 
     claude_bin = require_binary("claude")
 
-    def build_cmd(effective_prompt: str) -> list[str]:
+    def build_cmd(
+        effective_prompt: str, native_schema: str | None = None
+    ) -> list[str]:
         cmd = [
             claude_bin,   # resolved/pinned path (finding #3) — never a bare name
             "-p", effective_prompt,
@@ -218,35 +202,36 @@ def main() -> int:
             cmd += ["--effort", args.effort]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
-        if args.permission_mode:
-            cmd += ["--permission-mode", args.permission_mode]
-        if args.sandbox == "read-only":
-            # --tools RESTRICTS (vs --allowedTools which only pre-approves);
-            # strict-mcp-config blocks settings-inherited MCP servers;
-            # --setting-sources user drops project hooks/CLAUDE.md (a
-            # dispatched-into repo must not execute hooks on a read leg).
-            cmd += ["--tools", "Read,Glob,Grep",
-                    "--strict-mcp-config",
-                    "--setting-sources", "user",
-                    "--permission-mode", "dontAsk"]
-        elif args.sandbox == "workspace-write":
-            cmd += ["--strict-mcp-config",
-                    "--permission-mode", "acceptEdits"]
+        if native_schema is not None:
+            cmd += ["--json-schema", native_schema]
         return cmd
 
-    result = run_cli_with_retry(
-        "claude",
-        build_cmd,
-        args.prompt,
-        cwd=args.cwd,
-        timeout=args.timeout,
-        pydantic_cls=pydantic_cls,
-        last_msg_path=None,
-        repair_mode=args.repair_mode,
-        validation_context=validation_context,
-    )
+    native_schema = None
+    if pydantic_cls is not None:
+        native_schema = json.dumps(
+            pydantic_cls.model_json_schema(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        result = _run_native_structured_once(
+            build_cmd(args.prompt, native_schema),
+            args.cwd,
+            args.timeout,
+            pydantic_cls,
+        )
+    else:
+        result = run_cli_with_retry(
+            "claude",
+            build_cmd,
+            args.prompt,
+            cwd=args.cwd,
+            timeout=args.timeout,
+            pydantic_cls=None,
+            last_msg_path=None,
+            repair_mode=args.repair_mode,
+        )
 
-    audit_cmd = build_cmd(args.prompt)
+    audit_cmd = build_cmd(args.prompt, native_schema)
     persist_result_artifacts(
         "claude", sys.argv, audit_cmd, args.prompt, result, debug=args.debug
     )

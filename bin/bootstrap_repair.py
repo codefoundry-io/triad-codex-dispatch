@@ -2,8 +2,10 @@
 from __future__ import annotations
 import ast
 import argparse
+import hashlib
 import json
 import os
+import re
 import shlex
 import stat
 import sys
@@ -15,6 +17,9 @@ from pathlib import Path
 
 NAME = "triad-repair-analyzer"
 ANALYZER_MARKER = "# triad-codex-dispatch managed repair analyzer"
+FROZEN_REPAIR_ANALYZER_SHA256 = (
+    "549d49b7ca1d50fe4bed5a86bb4775a11b56036c646e7fa91b29383aae7d3a0e"
+)
 REG_BEGIN = "# >>> triad-codex-dispatch managed repair analyzer registration >>>"
 REG_END = "# <<< triad-codex-dispatch managed repair analyzer registration <<<"
 LAUNCHER = "triad-apply-repair"
@@ -35,6 +40,9 @@ CONFIG_FRAGMENT_INSERTED_SEPARATOR = (
 )
 SHELL_ENTRY_BEGIN = b"# >>> triad-codex-dispatch codex-triad >>>"
 SHELL_ENTRY_END = b"# <<< triad-codex-dispatch codex-triad <<<"
+FROZEN_SHELL_ENTRY_SHA256 = (
+    "018cb43c9954d0b39abac95ff38f3310c409259db93380729bb94ea1f97b2006"
+)
 CURRENT_CONFIG_FRAGMENT_TEXT = (
     b"[shell_environment_policy]\n"
     b'inherit = "all"\n'
@@ -48,6 +56,34 @@ LEGACY_CONFIG_FRAGMENT_TEXT = (
 LEGACY_AGENT_HEADER_A = "# Codex named subagent"
 LEGACY_AGENT_HEADER_B = "wrapper repair agent"
 LEGACY_AGENT_SCOPE = "Installed by bootstrap to the Codex personal agent-discovery scope"
+_LEGACY_PROFILE_BROAD_DIRECTORY_ROOTS = frozenset(
+    [
+        Path(value).resolve()
+        for value in (
+            "/",
+            "/usr",
+            "/usr/local",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/usr/sbin",
+            "/bin",
+            "/sbin",
+            "/opt",
+            "/opt/homebrew",
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/lib",
+            "/lib64",
+            "/etc",
+            "/var",
+            "/tmp",
+            "/root",
+        )
+    ]
+    + [Path.home().resolve()]
+)
+
 
 class Refusal(RuntimeError):
     pass
@@ -95,21 +131,6 @@ class CommandArtifact:
 
 
 @dataclass(frozen=True)
-class RepairInstallPlan:
-    source_state: State
-    apply_state: State
-    runtime_state: State
-    config: Path
-    analyzer: Path
-    launcher: Path
-    config_before: State | None
-    analyzer_before: State | None
-    launcher_before: State | None
-    config_data: bytes
-    launcher_data: bytes
-
-
-@dataclass(frozen=True)
 class RepairRemovePlan:
     config: Path
     analyzer: Path
@@ -117,6 +138,8 @@ class RepairRemovePlan:
     config_before: State | None
     analyzer_before: State | None
     launcher_before: State | None
+    analyzer_unmanaged: bool
+    launcher_unmanaged: bool
     base: str
     managed_registration: bool
     original_config_existed: bool
@@ -213,14 +236,7 @@ def same(state: State) -> bool:
 
 
 def analyzer_data_is_managed(data: bytes) -> bool:
-    header = f"{ANALYZER_MARKER}\n".encode("utf-8")
-    if not data.startswith(header):
-        return False
-    try:
-        parsed = tomllib.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
-        return False
-    return isinstance(parsed, dict) and parsed.get("name") == NAME
+    return hashlib.sha256(data).hexdigest() == FROZEN_REPAIR_ANALYZER_SHA256
 
 
 def analyzer_is_managed(state: State | None) -> bool:
@@ -234,27 +250,58 @@ def launcher_is_managed(state: State | None) -> bool:
         lines = state.data.decode("utf-8").splitlines()
     except UnicodeDecodeError:
         return False
-    legacy = (
-        len(lines) == 5
-        and lines[0].startswith("#!")
-        and lines[0].endswith(" -E")
-        and lines[1] == LAUNCHER_MARKER
-        and lines[2:4] == ["import os", "import sys"]
-        and lines[4].startswith("os.execv(")
-        and lines[4].endswith(" + sys.argv[1:])")
+    if len(lines) not in {5, 7} or lines[1] != LAUNCHER_MARKER:
+        return False
+    shebang_python = _shebang_python(lines[0], isolated=True)
+    if shebang_python is None:
+        return False
+    try:
+        tree = ast.parse("\n".join(lines[2:]) + "\n")
+    except SyntaxError:
+        return False
+    if (
+        len(tree.body) != len(lines) - 2
+        or not _exact_import(tree.body[0], "os")
+        or not _exact_import(tree.body[1], "sys")
+    ):
+        return False
+    body = tree.body[2:]
+    if len(lines) == 5:
+        executed = _exec_call(body[0], "execv", env_arg=False)
+        if executed is None:
+            return False
+        python, argv = executed
+        return (
+            python == shebang_python
+            and len(argv) == 2
+            and argv[0] == python
+            and os.path.isabs(argv[1])
+            and Path(argv[1]).name == "apply_patch.py"
+        )
+    env_assign = body[0]
+    if not (
+        isinstance(env_assign, ast.Assign)
+        and len(env_assign.targets) == 1
+        and isinstance(env_assign.targets[0], ast.Name)
+        and env_assign.targets[0].id == "env"
+        and _matches_expression(env_assign.value, "os.environ.copy()")
+    ):
+        return False
+    classifier = _string_assignment(
+        body[1], owner="env", key="TRIAD_CLASSIFIER_EXTENSION"
     )
-    pinned = (
-        len(lines) == 7
-        and lines[0].startswith("#!")
-        and lines[0].endswith(" -E")
-        and lines[1] == LAUNCHER_MARKER
-        and lines[2:4] == ["import os", "import sys"]
-        and lines[4] == "env = os.environ.copy()"
-        and lines[5].startswith('env["TRIAD_CLASSIFIER_EXTENSION"] = ')
-        and lines[6].startswith("os.execve(")
-        and lines[6].endswith(" + sys.argv[1:], env)")
+    executed = _exec_call(body[2], "execve", env_arg=True)
+    if classifier is None or not os.path.isabs(classifier) or executed is None:
+        return False
+    python, argv = executed
+    return (
+        python == shebang_python
+        and len(argv) == 3
+        and argv[0] == python
+        and argv[1] == "-E"
+        and os.path.isabs(argv[2])
+        and Path(argv[2]).name == "apply_patch.py"
     )
-    return legacy or pinned
 
 
 def parse_text(state: State | None, path: Path) -> str:
@@ -348,28 +395,6 @@ def split_registration(
     if reserved:
         raise Refusal(f"malformed managed repair analyzer registration in {path}")
     return text, "", False, False
-
-
-def registration(state: State | None, config: Path, analyzer: Path) -> tuple[bytes, bool]:
-    original = parse_text(state, config)
-    parsed_config(original, config)
-    before, after, had, original_existed = split_registration(
-        original, config, analyzer
-    )
-    if not had:
-        original_existed = state is not None
-    base = before + after
-    agents = parsed_config(base, config).get("agents", {})
-    if not isinstance(agents, dict) or NAME in agents:
-        raise Refusal(f"refusing to overwrite unmanaged repair analyzer registration in {config}")
-    block = registration_block(analyzer, original_existed)
-    if had:
-        result_text = before + ("\n" if original_existed else "") + block + after
-    else:
-        result_text = before + ("\n" if original_existed else "") + block
-    result = result_text.encode("utf-8")
-    parsed_config(result.decode("utf-8"), config)
-    return result, had
 
 
 def _state_from_fd(path: Path, fd: int) -> State:
@@ -1270,14 +1295,6 @@ def command_artifacts_from_manifest(path: Path, *, require_data: bool) -> list[C
     return artifacts
 
 
-def default_classifier_path() -> Path:
-    override = os.environ.get("TRIAD_CLASSIFIER_EXTENSION")
-    if override:
-        return Path(override).expanduser()
-    base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    return base / "triad-codex-dispatch" / "classifier-patches.json"
-
-
 def portable_python_shebang(python: Path) -> bytes:
     runtime = os.fspath(python)
     if any(char.isspace() for char in runtime):
@@ -1408,91 +1425,306 @@ def ensure_classifier(path: Path) -> str:
     return "created"
 
 
-def _managed_artifact_marker(kind: str) -> bytes:
-    if kind == "profile":
-        return PROFILE_MARKER
-    if kind == "rules":
-        return RULES_MARKER
-    raise Refusal(f"unknown managed artifact kind: {kind}")
+def _legacy_path_assignment(line: str, access: str) -> str | None:
+    suffix = f' = "{access}"'
+    if not line.endswith(suffix):
+        return None
+    literal = line[: -len(suffix)]
+    try:
+        value = ast.literal_eval(literal)
+    except (SyntaxError, ValueError):
+        return None
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        return None
+    if value.startswith("//") or os.path.normpath(value) != value:
+        return None
+    canonical = '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return value if line == canonical + suffix else None
+
+
+def _legacy_profile_data_is_owned(data: bytes) -> bool:
+    """Recognize the complete 0.2.531 profile renderer shape, never its marker alone."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if not text.endswith("\n"):
+        return False
+    lines = text[:-1].split("\n")
+    if len(lines) < 28:
+        return False
+    approval = lines[11]
+    if approval not in {
+        'approval_policy = "never"',
+        'approval_policy = "on-request"',
+        'approval_policy = "untrusted"',
+    }:
+        return False
+    expected_prefix = [
+        PROFILE_MARKER.decode("ascii"),
+        "# Generated by scripts/bootstrap.sh --install.",
+        "# Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1 to refresh.",
+        "# Explicit external-CLI consent profile: triad dispatch may send relevant",
+        "# prompt/repo review material to authenticated claude, agy, and gemini CLIs.",
+        "# Permission-profile system (developers.openai.com/codex/permissions).",
+        "# Do NOT reintroduce legacy sandbox_mode / [sandbox_workspace_write] in this",
+        "# or any loaded config layer: legacy sandbox settings disable",
+        "# default_permissions, which would neutralize the triad_leader permission",
+        "# profile's scoping.",
+        "",
+        approval,
+        'approvals_reviewer = "auto_review"',
+        'default_permissions = "triad_leader"',
+        "",
+        "[permissions.triad_leader]",
+        'description = "Triad leader session: workspace writes plus triad runtime dirs; network on."',
+        'extends = ":workspace"',
+        "",
+        "[permissions.triad_leader.filesystem]",
+        "# --- SEC-3 exec-target write-denies (wrapper .py / launchers / python3 / vendor CLIs) ---",
+    ]
+    if lines[: len(expected_prefix)] != expected_prefix:
+        return False
+    reallow = (
+        "# --- re-allows: log_dir/debug_dir are nested under bin_dir "
+        "(more-specific-wins survives that deny); classifier_dir is a separate, "
+        "non-nested directory allowed independently ---"
+    )
+    try:
+        reallow_index = lines.index(reallow, len(expected_prefix))
+    except ValueError:
+        return False
+    read_lines = lines[len(expected_prefix) : reallow_index]
+    if lines[-3:] != [
+        "",
+        "[permissions.triad_leader.network]",
+        "enabled = true",
+    ]:
+        return False
+    write_lines = lines[reallow_index + 1 : -3]
+    if not 3 <= len(read_lines) <= 6 or len(write_lines) != 3:
+        return False
+    read_paths = [_legacy_path_assignment(line, "read") for line in read_lines]
+    write_paths = [_legacy_path_assignment(line, "write") for line in write_lines]
+    if any(path is None for path in (*read_paths, *write_paths)):
+        return False
+    paths = [path for path in (*read_paths, *write_paths) if path is not None]
+    if len(paths) != len(set(paths)):
+        return False
+    bin_directory = Path(paths[0])
+    launcher_directory = Path(paths[1])
+    if bin_directory.name != "bin":
+        return False
+    python_name = Path(paths[2]).name
+    python_name_parts = python_name.split(".")
+    if python_name_parts[0] != "python3" or any(
+        not part.isdecimal() for part in python_name_parts[1:]
+    ):
+        return False
+    historical_vendor_order = {"claude": 0, "gemini": 1, "agy": 2}
+    vendor_names = [Path(path).name for path in paths[3 : len(read_paths)]]
+    if any(name not in historical_vendor_order for name in vendor_names):
+        return False
+    if len(vendor_names) != len(set(vendor_names)):
+        return False
+    vendor_order = [historical_vendor_order[name] for name in vendor_names]
+    if vendor_order != sorted(vendor_order):
+        return False
+    classifier_directory, log_directory, debug_directory = map(
+        Path, paths[len(read_paths) :]
+    )
+    if any(
+        directory.resolve() in _LEGACY_PROFILE_BROAD_DIRECTORY_ROOTS
+        for directory in (
+            bin_directory,
+            launcher_directory,
+            classifier_directory,
+        )
+    ):
+        return False
+    if log_directory != bin_directory / "_logs":
+        return False
+    if debug_directory != bin_directory / "_debug":
+        return False
+    return classifier_directory not in {bin_directory, log_directory, debug_directory}
+
+
+def _canonical_legacy_string_literal(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _legacy_rules_data_is_owned(data: bytes) -> bool:
+    """Recognize the exact three-block 0.2.531 rules shape with bound path roots."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if not text.endswith("\n"):
+        return False
+    sections = text[:-1].split("\n\n")
+    header = "\n".join(
+        (
+            RULES_MARKER.decode("ascii"),
+            "# Generated by scripts/bootstrap.sh --install.",
+            "# Re-run with TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=1 to refresh.",
+            "# These rules prompt on wrapper-specific command prefixes for approval review.",
+            "# They do not allow broad shell entrypoints such as bash -lc or zsh -lc.",
+        )
+    )
+    if len(sections) != 4 or sections[0] != header:
+        return False
+    wrappers = (
+        ("claude_wrapper.py", "Claude wrapper"),
+        ("antigravity_wrapper.py", "Antigravity wrapper"),
+        ("gemini_wrapper.py", "Gemini business-tier wrapper"),
+    )
+    launcher_directory: Path | None = None
+    repository_root: Path | None = None
+    for section, (wrapper, label) in zip(sections[1:], wrappers, strict=True):
+        lines = section.split("\n")
+        if len(lines) != 18:
+            return False
+        pattern_prefix = "    pattern = [["
+        pattern_suffix = "]],"
+        if not lines[1].startswith(pattern_prefix) or not lines[1].endswith(
+            pattern_suffix
+        ):
+            return False
+        try:
+            launcher = ast.literal_eval(
+                lines[1][len(pattern_prefix) : -len(pattern_suffix)]
+            )
+        except (SyntaxError, ValueError):
+            return False
+        if not isinstance(launcher, str):
+            return False
+        launcher_path = Path(launcher)
+        if not launcher_path.is_absolute() or launcher_path.name != wrapper:
+            return False
+        if lines[1] != (
+            f"    pattern = [[{_canonical_legacy_string_literal(launcher)}]],"
+        ):
+            return False
+        if launcher_directory is None:
+            launcher_directory = launcher_path.parent
+        elif launcher_path.parent != launcher_directory:
+            return False
+
+        def decoded(index: int) -> str | None:
+            line = lines[index]
+            if not line.startswith("        ") or not line.endswith(","):
+                return None
+            literal = line[8:-1]
+            try:
+                value = ast.literal_eval(literal)
+            except (SyntaxError, ValueError):
+                return None
+            if not isinstance(value, str) or line != (
+                f"        {_canonical_legacy_string_literal(value)},"
+            ):
+                return None
+            return value
+
+        repo_command = decoded(10)
+        prompt_command = decoded(6)
+        if repo_command is None or prompt_command is None:
+            return False
+        try:
+            repo_argv = shlex.split(repo_command)
+            prompt_argv = shlex.split(prompt_command)
+        except ValueError:
+            return False
+        if len(repo_argv) != 5 or repo_argv[1:] != [
+            "--prompt",
+            "hi",
+            "--sandbox",
+            "read-only",
+        ]:
+            return False
+        repo_wrapper = Path(repo_argv[0])
+        if (
+            not repo_wrapper.is_absolute()
+            or repo_wrapper.name != wrapper
+            or repo_wrapper.parent.name != "bin"
+        ):
+            return False
+        current_root = repo_wrapper.parent.parent
+        if repository_root is None:
+            repository_root = current_root
+        elif current_root != repository_root:
+            return False
+        prompt_path = current_root / "_runs" / "prompts" / "triad-prompt.txt"
+        if prompt_argv != [
+            launcher,
+            "--prompt-file",
+            str(prompt_path),
+            "--sandbox",
+            "read-only",
+        ]:
+            return False
+        justification = (
+            "Require approval review; approve only an owner-authorized triad review "
+            f"through the {label} when the worktree, scope, and named provider match "
+            "the owner's request and provider-visible input excludes credentials, "
+            "tokens, cookies, authentication files, environment dumps, provider "
+            "logs, and unrelated paths. This does not authorize "
+            "commit, push, install, merge, or release."
+        )
+        expected_values = {
+            5: shlex.join([launcher, "--prompt", "hi", "--sandbox", "read-only"]),
+            6: shlex.join(
+                [
+                    launcher,
+                    "--prompt-file",
+                    str(prompt_path),
+                    "--sandbox",
+                    "read-only",
+                ]
+            ),
+            9: f"{wrapper} --prompt hi --sandbox read-only",
+            10: shlex.join(
+                [str(repo_wrapper), "--prompt", "hi", "--sandbox", "read-only"]
+            ),
+            11: f"bash -lc {wrapper} --prompt hi",
+            12: f"zsh -lc {wrapper} --prompt hi",
+            13: shlex.join(
+                ["python3", str(repo_wrapper), "--prompt", "hi", "--sandbox", "read-only"]
+            ),
+            14: shlex.join(
+                [
+                    "/usr/bin/env",
+                    "python3",
+                    str(repo_wrapper),
+                    "--prompt",
+                    "hi",
+                    "--sandbox",
+                    "read-only",
+                ]
+            ),
+            15: "python3 -c print('not a triad wrapper')",
+        }
+        if lines[0] != "prefix_rule(" or lines[2] != '    decision = "prompt",':
+            return False
+        if lines[3] != (
+            "    justification = "
+            f"{_canonical_legacy_string_literal(justification)},"
+        ):
+            return False
+        if lines[4] != "    match = [" or lines[7:9] != ["    ],", "    not_match = ["]:
+            return False
+        if lines[16:] != ["    ],", ")"]:
+            return False
+        if any(decoded(index) != value for index, value in expected_values.items()):
+            return False
+    return True
 
 
 def _managed_artifact_data_is_owned(data: bytes, kind: str) -> bool:
-    lines = data.splitlines()
-    return bool(lines) and lines[0] == _managed_artifact_marker(kind)
-
-
-def _managed_artifact_state(path: Path, kind: str) -> State | None:
-    require_safe_ancestors(path)
-    state = read_state(path)
-    if state is not None:
-        selected = "Codex runtime profile" if kind == "profile" else "Codex command rules"
-        try:
-            state.data.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise Refusal(f"could not read selected {selected}: {path}") from error
-        if not _managed_artifact_data_is_owned(state.data, kind):
-            label = "Codex profile" if kind == "profile" else "Codex rules file"
-            raise Refusal(f"refusing to overwrite unmanaged {label}: {path}")
-    return state
-
-
-def preflight_managed_artifact(path: Path, kind: str) -> str:
-    return "managed" if _managed_artifact_state(path, kind) is not None else "absent"
-
-
-def inspect_managed_artifact(path: Path, kind: str) -> str:
-    """Inspect a legacy artifact without claiming ownership or mutating it.
-
-    Unlike the selected-artifact preflight, a safe regular foreign file is a
-    valid observation rather than an overwrite refusal. Unsafe paths and read
-    failures remain fail-closed refusals.
-    """
-    require_safe_ancestors(path)
-    state = read_state(path)
-    if state is None:
-        return "absent"
-    return "managed" if _managed_artifact_data_is_owned(state.data, kind) else "unmanaged"
-
-
-def install_managed_artifact(path: Path, kind: str, payload: bytes) -> str:
-    if not _managed_artifact_data_is_owned(payload, kind):
-        raise Refusal(f"managed {kind} payload has an invalid first logical line")
-    before = _managed_artifact_state(path, kind)
-    if before is not None and before.data == payload:
-        return "unchanged"
-    mode = before.mode if before is not None else creation_mode()
-    temp: Staged | None = None
-    journal: list[Mutation] = []
-    failure: BaseException | None = None
-    try:
-        temp = stage(path, payload, mode)
-        regular_swap_env = {
-            "profile": "TRIAD_BOOTSTRAP_TEST_SWAP_PROFILE_TO_REGULAR_BEFORE_WRITE",
-            "rules": "TRIAD_BOOTSTRAP_TEST_SWAP_RULES_TO_REGULAR_BEFORE_WRITE",
-        }[kind]
-        regular_swap_source = os.environ.get(regular_swap_env)
-        if regular_swap_source:
-            replacement = Path(regular_swap_source)
-            if read_state(replacement) is None:
-                raise Refusal(f"missing regular replacement test input: {replacement}")
-            os.replace(replacement, path)
-        swap_env = {
-            "profile": "TRIAD_BOOTSTRAP_TEST_SWAP_PROFILE_TO_SYMLINK_BEFORE_WRITE",
-            "rules": "TRIAD_BOOTSTRAP_TEST_SWAP_RULES_TO_SYMLINK_BEFORE_WRITE",
-        }[kind]
-        swap_target = os.environ.get(swap_env)
-        if swap_target:
-            try:
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
-            os.symlink(swap_target, path)
-        publish_to(temp, path, before, journal)
-    except BaseException as error:
-        failure = error
-    cleanup_failures = cleanup_all([temp] if temp is not None else [])
-    finalize_transaction(failure, journal, cleanup_failures)
-    return "updated" if before is not None else "created"
+    if kind == "profile":
+        return _legacy_profile_data_is_owned(data)
+    if kind == "rules":
+        return _legacy_rules_data_is_owned(data)
+    raise Refusal(f"unknown managed artifact kind: {kind}")
 
 
 def current_config_fragment(newline: bytes) -> bytes:
@@ -1522,125 +1754,6 @@ def _parsed_shared_config(state: State, path: Path) -> dict | None:
     except (UnicodeDecodeError, tomllib.TOMLDecodeError):
         return None
     return data if isinstance(data, dict) else None
-
-
-def _publish_config_backup(config: Path, before: State) -> Path:
-    number = 1
-    while True:
-        suffix = ".bak" if number == 1 else f".bak{number}"
-        backup = Path(os.fspath(config) + suffix)
-        require_safe_ancestors(backup)
-        if _path_is_absent(backup):
-            break
-        number += 1
-    _publish_single(backup, before.data, None, before.mode)
-    return backup
-
-
-def _contains_only_managed_registration(
-    existing: bytes, path: Path, data: dict
-) -> bool:
-    if set(data) != {"agents"}:
-        return False
-    agents = data.get("agents")
-    if not isinstance(agents, dict) or set(agents) != {NAME}:
-        return False
-    entry = agents.get(NAME)
-    if not isinstance(entry, dict):
-        return False
-    analyzer_raw = entry.get("config_file")
-    if not isinstance(analyzer_raw, str) or not Path(analyzer_raw).is_absolute():
-        return False
-    try:
-        before, after, managed, original_existed = split_registration(
-            existing.decode("utf-8"), path, Path(analyzer_raw)
-        )
-    except (UnicodeDecodeError, Refusal):
-        return False
-    return managed and not original_existed and not before and not after
-
-
-def merge_config_fragment(path: Path) -> str:
-    require_safe_ancestors(path)
-    before = read_state(path)
-    existing = before.data if before is not None else b""
-    if before is not None:
-        data = _parsed_shared_config(before, path)
-        if data is None:
-            return "malformed"
-    else:
-        data = {}
-
-    has_begin = CONFIG_FRAGMENT_BEGIN in existing
-    has_end = CONFIG_FRAGMENT_END in existing
-    if has_begin or has_end:
-        markers_once = (
-            existing.count(CONFIG_FRAGMENT_BEGIN) == 1
-            and existing.count(CONFIG_FRAGMENT_END) == 1
-        )
-        current_blocks = [current_config_fragment(nl) for nl in (b"\n", b"\r\n")]
-        legacy_blocks = [legacy_config_fragment(nl) for nl in (b"\n", b"\r\n")]
-        current_policy = tomllib.loads(CURRENT_CONFIG_FRAGMENT_TEXT.decode("utf-8"))[
-            "shell_environment_policy"
-        ]
-        exact_current = (
-            markers_once
-            and data.get("shell_environment_policy") == current_policy
-            and sum(existing.count(candidate) for candidate in current_blocks) == 1
-        )
-        if exact_current:
-            return "already-managed"
-        exact_legacy = (
-            markers_once
-            and data.get("shell_environment_policy") == {"inherit": "core"}
-            and sum(existing.count(candidate) for candidate in legacy_blocks) == 1
-        )
-        if not exact_legacy:
-            return "edited-managed"
-        old = next(candidate for candidate in legacy_blocks if existing.count(candidate) == 1)
-        newline = b"\r\n" if b"\r\n" in old else b"\n"
-        updated = existing.replace(old, current_config_fragment(newline), 1)
-        status = "migrated"
-    else:
-        if "shell_environment_policy" in data:
-            return "user-policy"
-        if existing.strip():
-            if existing.endswith(b"\r\n"):
-                updated = existing + current_config_fragment(b"\r\n")
-            elif existing.endswith(b"\n"):
-                updated = existing + current_config_fragment(b"\n")
-            else:
-                updated = (
-                    existing
-                    + CONFIG_FRAGMENT_INSERTED_SEPARATOR
-                    + current_config_fragment(b"\n")
-                )
-        else:
-            updated = current_config_fragment(b"\n")
-        status = "merged"
-
-    registration_only = (
-        before is not None
-        and _contains_only_managed_registration(existing, path, data)
-    )
-    backup = (
-        _publish_config_backup(path, before)
-        if before is not None and not registration_only
-        else None
-    )
-    _publish_single(
-        path,
-        updated,
-        before,
-        before.mode if before is not None else 0o600,
-    )
-    if backup is not None:
-        print(
-            f"[info] retained config backup: {backup}; keep it until Codex starts "
-            "normally, then delete it if rollback is no longer needed",
-            file=sys.stderr,
-        )
-    return status
 
 
 def remove_config_fragment(path: Path, *, preserve_empty: bool = False) -> str:
@@ -1732,19 +1845,12 @@ def _shell_entry_span(data: bytes, path: Path) -> tuple[int, int] | None:
     return begin_spans[0][0], end_spans[0][1]
 
 
-def _shell_entry_state(path: Path, action: str) -> tuple[State | None, tuple[int, int] | None]:
-    if action not in {"install", "remove"}:
-        raise Refusal(f"unknown shell-entry action: {action}")
+def _shell_entry_state(path: Path) -> tuple[State | None, tuple[int, int] | None]:
     require_safe_ancestors(path)
     before = read_state(path)
     if before is None:
         return None, None
     span = _shell_entry_span(before.data, path)
-    if span is None and action == "install" and b"codex-triad" in before.data:
-        raise Refusal(
-            f"refusing to modify unmanaged codex-triad shell entry in {path}; "
-            "remove it manually, then re-run --install"
-        )
     return before, span
 
 
@@ -1757,61 +1863,44 @@ def _shell_entry_base(
     return existing[: span[0]] + existing[span[1] :]
 
 
-def preflight_shell_entry(path: Path, action: str) -> str:
-    before, span = _shell_entry_state(path, action)
-    if before is None:
-        return "absent"
-    if action == "install":
-        base = _shell_entry_base(before, span)
-        if base and not base.endswith((b"\n", b"\r")):
-            raise Refusal(f"shell RC must end with a newline before install: {path}")
-    if span is not None:
-        return "managed"
-    return "unmanaged" if b"codex-triad" in before.data else "absent"
-
-
-def _shell_entry_block(profile: str) -> bytes:
-    first = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    rest = first + "._-"
-    if not profile or profile[0] not in first or any(char not in rest for char in profile):
-        raise Refusal(
-            "invalid shell-entry profile: must match "
-            "[A-Za-z0-9][A-Za-z0-9._-]*"
-        )
-    return (
-        SHELL_ENTRY_BEGIN
-        + b"\n"
-        + b"# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;\n"
-        + b"# removed by --remove. Legacy prompt-reviewed posture: wrapper root\n"
-        + b"# containment + hardened wrapper mode + enforced claude sandbox.\n"
-        + b"codex-triad() {\n"
-        + b'  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\\n'
-        + b"  TRIAD_WRAPPER_HARDENED=1 \\\n"
-        + b"  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \\\n"
-        + f'    command codex --profile {profile} --search "$@"\n'.encode("ascii")
-        + b"}\n"
-        + SHELL_ENTRY_END
-        + b"\n"
+def _historical_shell_entry_is_managed(data: bytes) -> bool:
+    if hashlib.sha256(data).hexdigest() == FROZEN_SHELL_ENTRY_SHA256:
+        return True
+    lines = data.splitlines(keepends=True)
+    if len(lines) != 11 or any(not line.endswith(b"\n") for line in lines):
+        return False
+    content = [line[:-1] for line in lines]
+    if content[:8] != [
+        SHELL_ENTRY_BEGIN,
+        b"# Managed by triad-codex-dispatch scripts/bootstrap.sh --install;",
+        b"# removed by --remove. Legacy prompt-reviewed posture: wrapper root",
+        b"# containment + hardened wrapper mode + enforced claude sandbox.",
+        b"codex-triad() {",
+        b'  TRIAD_WRAPPER_ALLOWED_ROOTS="${TRIAD_WRAPPER_ALLOWED_ROOTS:-$PWD}" \\',
+        b"  TRIAD_WRAPPER_HARDENED=1 \\",
+        b"  TRIAD_CLAUDE_ENFORCE_SANDBOX=1 \\",
+    ] or content[9:] != [b"}", SHELL_ENTRY_END]:
+        return False
+    match = re.fullmatch(
+        rb'    command codex --profile ([A-Za-z0-9][A-Za-z0-9._-]*) --search "\$@"',
+        content[8],
     )
+    return match is not None
 
 
-def update_shell_entry(path: Path, action: str, profile: str | None) -> str:
-    """Transform and publish one shell RC against the exact captured state."""
-    before, span = _shell_entry_state(path, action)
+def update_shell_entry(path: Path) -> str:
+    """Remove the exact frozen managed shell block from one captured RC."""
+    before, span = _shell_entry_state(path)
     existing = before.data if before is not None else b""
-    if action == "remove" and span is None:
+    if span is None:
         if before is not None and b"codex-triad" in existing:
             return "unmanaged"
         return "absent"
+    managed = existing[span[0] : span[1]]
+    if not _historical_shell_entry_is_managed(managed):
+        return "unmanaged"
 
     transformed = _shell_entry_base(before, span)
-    if action == "install":
-        if profile is None:
-            raise Refusal("shell-entry install requires --profile")
-        transformed += _shell_entry_block(profile)
-        # Refuse to publish a block that would not occupy exact logical lines,
-        # such as an append after an owner file lacking its final newline.
-        _shell_entry_span(transformed, path)
 
     temp: Staged | None = None
     journal: list[Mutation] = []
@@ -1832,27 +1921,7 @@ def update_shell_entry(path: Path, action: str, profile: str | None) -> str:
         failure = error
     cleanup_failures = cleanup_all([temp] if temp is not None else [])
     finalize_transaction(failure, journal, cleanup_failures)
-    return "installed" if action == "install" else "removed"
-
-
-def launcher_text(
-    python: Path,
-    apply_patch: Path,
-    classifier: Path | None = None,
-) -> bytes:
-    shebang = portable_python_shebang(python)
-    classifier = classifier or default_classifier_path()
-    if not classifier.is_absolute():
-        raise Refusal(f"classifier path must be absolute: {classifier}")
-    runtime = json.dumps(str(python), ensure_ascii=False)
-    target = json.dumps(str(apply_patch), ensure_ascii=False)
-    classifier_literal = json.dumps(str(classifier), ensure_ascii=False)
-    return shebang + (
-        f"{LAUNCHER_MARKER}\nimport os\nimport sys\n"
-        "env = os.environ.copy()\n"
-        f'env["TRIAD_CLASSIFIER_EXTENSION"] = {classifier_literal}\n'
-        f"os.execve({runtime}, [{runtime}, \"-E\", {target}] + sys.argv[1:], env)\n"
-    ).encode("utf-8")
+    return "removed"
 
 
 def cleanup(temp: Staged | None) -> None:
@@ -1966,114 +2035,6 @@ def finalize_transaction(
         )
 
 
-def prepare_install(args: argparse.Namespace) -> RepairInstallPlan:
-    if not args.source or not args.apply_patch:
-        raise Refusal("install requires --source and --apply-patch")
-    source, config, analyzer, apply = map(
-        Path, (args.source, args.config, args.analyzer, args.apply_patch)
-    )
-    launcher, runtime = Path(args.launcher), Path(args.python).resolve()
-    classifier = Path(args.classifier).expanduser()
-    for managed_path in (source, config, analyzer, apply, launcher, runtime):
-        require_safe_ancestors(managed_path)
-    if not classifier.is_absolute():
-        raise Refusal(f"classifier path must be absolute: {classifier}")
-    portable_python_shebang(runtime)
-    source_state, apply_state, runtime_state = (
-        read_state(source),
-        read_state(apply),
-        read_state(runtime),
-    )
-    if source_state is None or not analyzer_data_is_managed(source_state.data):
-        raise Refusal(f"missing managed repair analyzer source: {source}")
-    try:
-        tomllib.loads(source_state.data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-        raise Refusal(f"invalid repair analyzer source: {source}") from error
-    if apply_state is None or runtime_state is None:
-        raise Refusal("missing repair applier or resolved Python runtime")
-    try:
-        config_before = read_state(config)
-    except Refusal as error:
-        raise Refusal(f"refusing unsafe repair config: {config}") from error
-    try:
-        analyzer_before = read_state(analyzer)
-    except Refusal as error:
-        raise Refusal(f"refusing unsafe repair analyzer: {analyzer}") from error
-    try:
-        launcher_before = read_state(launcher)
-    except Refusal as error:
-        raise Refusal(f"refusing unsafe repair apply launcher: {launcher}") from error
-    if analyzer_before is not None and not analyzer_is_managed(analyzer_before):
-        raise Refusal(f"refusing to overwrite unmanaged repair analyzer: {analyzer}")
-    if launcher_before is not None and not launcher_is_managed(launcher_before):
-        raise Refusal(f"refusing to overwrite unmanaged repair apply launcher: {launcher}")
-    config_data, _had = registration(config_before, config, analyzer)
-    return RepairInstallPlan(
-        source_state=source_state,
-        apply_state=apply_state,
-        runtime_state=runtime_state,
-        config=config,
-        analyzer=analyzer,
-        launcher=launcher,
-        config_before=config_before,
-        analyzer_before=analyzer_before,
-        launcher_before=launcher_before,
-        config_data=config_data,
-        launcher_data=launcher_text(runtime, apply, classifier),
-    )
-
-
-def preflight_install(args: argparse.Namespace) -> None:
-    """Validate every repair-install input and target without writing anything."""
-    prepare_install(args)
-
-
-def install(args: argparse.Namespace) -> None:
-    plan = prepare_install(args)
-    temps: list[Staged] = []
-    journal: list[Mutation] = []
-    failure: BaseException | None = None
-    try:
-        temps.append(
-            stage(
-                plan.analyzer,
-                plan.source_state.data,
-                plan.analyzer_before.mode if plan.analyzer_before else 0o600,
-            )
-        )
-        temps.append(
-            stage(
-                plan.config,
-                plan.config_data,
-                plan.config_before.mode if plan.config_before else 0o600,
-            )
-        )
-        temps.append(
-            stage(
-                plan.launcher,
-                plan.launcher_data,
-                plan.launcher_before.mode if plan.launcher_before else 0o755,
-            )
-        )
-        if not same(plan.source_state):
-            raise Refusal(
-                f"repair analyzer source changed before publication: {plan.source_state.path}"
-            )
-        publish_to(temps[0], plan.analyzer, plan.analyzer_before, journal)
-        if os.environ.get("TRIAD_BOOTSTRAP_TEST_FAIL_REPAIR_REGISTRATION_PUBLISH") == "1":
-            raise OSError("injected registration publication failure")
-        publish_to(temps[1], plan.config, plan.config_before, journal)
-        if not same(plan.apply_state) or not same(plan.runtime_state):
-            raise Refusal("repair launcher input changed before publication")
-        publish_to(temps[2], plan.launcher, plan.launcher_before, journal)
-    except BaseException as error:
-        failure = error
-    finally:
-        cleanup_failures = cleanup_all(temps)
-    finalize_transaction(failure, journal, cleanup_failures)
-
-
 def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
     config, analyzer, launcher = Path(args.config), Path(args.analyzer), Path(args.launcher)
     for managed_path in (config, analyzer, launcher):
@@ -2108,11 +2069,17 @@ def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
     agents = parsed_config(base, config).get("agents", {})
     if not isinstance(agents, dict):
         raise Refusal(f"could not parse {config}")
+    analyzer_unmanaged = analyzer_before is not None and not analyzer_is_managed(
+        analyzer_before
+    )
+    launcher_unmanaged = launcher_before is not None and not launcher_is_managed(
+        launcher_before
+    )
     if not managed_registration and NAME in agents:
         analyzer_before = None
-    elif analyzer_before is not None and not analyzer_is_managed(analyzer_before):
+    elif analyzer_unmanaged:
         analyzer_before = None
-    if launcher_before is not None and not launcher_is_managed(launcher_before):
+    if launcher_unmanaged:
         launcher_before = None
     return RepairRemovePlan(
         config=config,
@@ -2121,6 +2088,8 @@ def prepare_remove(args: argparse.Namespace) -> RepairRemovePlan:
         config_before=config_before,
         analyzer_before=analyzer_before,
         launcher_before=launcher_before,
+        analyzer_unmanaged=analyzer_unmanaged,
+        launcher_unmanaged=launcher_unmanaged,
         base=base,
         managed_registration=managed_registration,
         original_config_existed=original_config_existed,
@@ -2134,6 +2103,16 @@ def preflight_remove(args: argparse.Namespace) -> None:
 
 def remove(args: argparse.Namespace) -> None:
     plan = prepare_remove(args)
+    if plan.analyzer_unmanaged:
+        print(
+            f"[warning] preserving unmanaged repair analyzer: {plan.analyzer}",
+            file=sys.stderr,
+        )
+    if plan.launcher_unmanaged:
+        print(
+            f"[warning] preserving unmanaged repair apply launcher: {plan.launcher}",
+            file=sys.stderr,
+        )
     journal: list[Mutation] = []
     temps: list[Staged] = []
     failure: BaseException | None = None
@@ -2163,15 +2142,11 @@ def remove(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
-    for command in ("install", "remove", "preflight-install", "preflight-remove"):
+    for command in ("remove", "preflight-remove"):
         child = sub.add_parser(command)
         child.add_argument("--config", required=True)
         child.add_argument("--analyzer", required=True)
         child.add_argument("--launcher", required=True)
-        child.add_argument("--source")
-        child.add_argument("--python", default=str(Path(sys.executable).resolve()))
-        child.add_argument("--apply-patch")
-        child.add_argument("--classifier", default=str(default_classifier_path()))
     for command in ("commands-install", "commands-remove"):
         child = sub.add_parser(command)
         child.add_argument("--manifest", required=True)
@@ -2201,25 +2176,17 @@ def parser() -> argparse.ArgumentParser:
     shell_entry.add_argument(
         "--action",
         required=True,
-        choices=("preflight-install", "preflight-remove", "install", "remove"),
+        choices=("remove",),
     )
     shell_entry.add_argument("--path", required=True)
-    shell_entry.add_argument("--profile")
     sub.add_parser("runtime-path")
     formal_ready = sub.add_parser("formal-schema-ready")
     formal_ready.add_argument("--requirements", required=True)
     classifier = sub.add_parser("classifier")
     classifier.add_argument("--action", required=True, choices=("preflight", "ensure"))
     classifier.add_argument("--path", required=True)
-    managed_artifact = sub.add_parser("managed-artifact")
-    managed_artifact.add_argument(
-        "--action", required=True, choices=("inspect", "preflight", "install")
-    )
-    managed_artifact.add_argument("--kind", required=True, choices=("profile", "rules"))
-    managed_artifact.add_argument("--path", required=True)
-    managed_artifact.add_argument("--payload-file")
     config_fragment = sub.add_parser("config-fragment")
-    config_fragment.add_argument("--action", required=True, choices=("merge", "remove"))
+    config_fragment.add_argument("--action", required=True, choices=("remove",))
     config_fragment.add_argument("--path", required=True)
     config_fragment.add_argument("--preserve-empty", action="store_true")
     return ap
@@ -2228,12 +2195,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        if args.command == "install":
-            install(args)
-        elif args.command == "remove":
+        if args.command == "remove":
             remove(args)
-        elif args.command == "preflight-install":
-            preflight_install(args)
         elif args.command == "preflight-remove":
             preflight_remove(args)
         elif args.command == "commands-install":
@@ -2262,11 +2225,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         elif args.command == "shell-entry":
-            action = args.action.removeprefix("preflight-")
-            if args.action.startswith("preflight-"):
-                print(preflight_shell_entry(Path(args.path), action))
-            else:
-                print(update_shell_entry(Path(args.path), action, args.profile))
+            print(update_shell_entry(Path(args.path)))
             return 0
         elif args.command == "runtime-path":
             print(runtime_path())
@@ -2278,33 +2237,11 @@ def main(argv: list[str] | None = None) -> int:
             action = preflight_classifier if args.action == "preflight" else ensure_classifier
             print(action(Path(args.path)))
             return 0
-        elif args.command == "managed-artifact":
-            path = Path(args.path)
-            if args.action == "inspect":
-                print(inspect_managed_artifact(path, args.kind))
-                return 0
-            if args.action == "preflight":
-                print(preflight_managed_artifact(path, args.kind))
-                return 0
-            if not args.payload_file:
-                raise Refusal("managed-artifact install requires --payload-file")
-            payload_path = Path(args.payload_file)
-            if not payload_path.is_absolute():
-                raise Refusal(f"managed artifact payload path must be absolute: {payload_path}")
-            payload_state = read_state(payload_path)
-            if payload_state is None:
-                raise Refusal(f"missing managed artifact payload: {payload_path}")
-            print(install_managed_artifact(path, args.kind, payload_state.data))
-            return 0
         elif args.command == "config-fragment":
-            path = Path(args.path)
-            if args.action == "merge":
-                status = merge_config_fragment(path)
-            else:
-                status = remove_config_fragment(
-                    path,
-                    preserve_empty=args.preserve_empty,
-                )
+            status = remove_config_fragment(
+                Path(args.path),
+                preserve_empty=args.preserve_empty,
+            )
             print(status)
             return 0
         else:

@@ -885,35 +885,47 @@ def test_commit_cleanup_continues_after_keyboard_interrupt(
     assert not list(tmp_path.glob(".*.triad-claim-*"))
 
 
-def _repair_args(helper, tmp_path: Path, *, existing_config: bool = False):
-    source = tmp_path / "source.toml"
-    source.write_text(
-        f'{helper.ANALYZER_MARKER}\nname = "{helper.NAME}"\nversion = 1\n',
+def _seed_frozen_legacy_repair_state(helper, tmp_path: Path):
+    config = tmp_path / "config.toml"
+    analyzer = tmp_path / "agents" / f"{helper.NAME}.toml"
+    analyzer.parent.mkdir()
+    analyzer.write_bytes(
+        (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "triad-repair-analyzer.ccc8ff09510b.toml"
+        ).read_bytes()
+    )
+    launcher = tmp_path / "triad-apply-repair"
+    launcher.write_bytes(
+        b"#!/usr/bin/python3 -E\n"
+        + helper.LAUNCHER_MARKER.encode("utf-8")
+        + b"\nimport os\nimport sys\n"
+        + b"os.execv('/usr/bin/python3', ['/usr/bin/python3', "
+        + b"'/managed/apply_patch.py'] + sys.argv[1:])\n"
+    )
+    config.write_text(
+        'owner = "preserve"\n\n'
+        + f"{helper.REG_BEGIN}\n"
+        + "# original config existed = true\n"
+        + f"[agents.{helper.NAME}]\n"
+        + f"description = {json.dumps(helper.REG_DESCRIPTION)}\n"
+        + f"config_file = {json.dumps(str(analyzer))}\n"
+        + f"{helper.REG_END}\n",
         encoding="utf-8",
     )
-    apply_patch = tmp_path / "apply_patch.py"
-    apply_patch.write_text("# apply\n", encoding="utf-8")
-    config = tmp_path / "config.toml"
-    if existing_config:
-        config.write_text('owner = "preserve"\n', encoding="utf-8")
-    analyzer = tmp_path / "agents" / f"{helper.NAME}.toml"
-    launcher = tmp_path / "triad-apply-repair"
     args = helper.parser().parse_args(
         [
-            "install",
-            "--source",
-            str(source),
+            "remove",
             "--config",
             str(config),
             "--analyzer",
             str(analyzer),
             "--launcher",
             str(launcher),
-            "--apply-patch",
-            str(apply_patch),
         ]
     )
-    return args, source, config, analyzer, launcher
+    return args, config, analyzer, launcher
 
 
 def _inject_cleanup_failure_after_real_cleanup(helper, monkeypatch):
@@ -927,57 +939,14 @@ def _inject_cleanup_failure_after_real_cleanup(helper, monkeypatch):
     monkeypatch.setattr(helper, "cleanup_all", cleanup_then_report_failure)
 
 
-def test_repair_install_rolls_back_when_staged_cleanup_fails_after_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    args, source, config, analyzer, launcher = _repair_args(helper, tmp_path)
-    helper.install(args)
-    before = {path: path.read_bytes() for path in (config, analyzer, launcher)}
-    source.write_text(
-        f'{helper.ANALYZER_MARKER}\nname = "{helper.NAME}"\nversion = 2\n',
-        encoding="utf-8",
-    )
-    commit_calls = 0
-    original_commit_all = helper.commit_all
-
-    def record_commit(journal):
-        nonlocal commit_calls
-        commit_calls += 1
-        return original_commit_all(journal)
-
-    _inject_cleanup_failure_after_real_cleanup(helper, monkeypatch)
-    monkeypatch.setattr(helper, "commit_all", record_commit)
-
-    with pytest.raises(OSError, match="post-publication staged cleanup failure"):
-        helper.install(args)
-
-    assert commit_calls == 0
-    assert {path: path.read_bytes() for path in (config, analyzer, launcher)} == before
-    assert not list(tmp_path.rglob(".*.tmp"))
-    assert not list(tmp_path.rglob(".*.triad-claim-*"))
-
-
 def test_repair_remove_rolls_back_when_staged_cleanup_fails_after_publication(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     helper = _load_bootstrap_repair_module()
-    args, _source, config, analyzer, launcher = _repair_args(
-        helper, tmp_path, existing_config=True
+    args, config, analyzer, launcher = _seed_frozen_legacy_repair_state(
+        helper, tmp_path
     )
-    helper.install(args)
     before = {path: path.read_bytes() for path in (config, analyzer, launcher)}
-    remove_args = helper.parser().parse_args(
-        [
-            "remove",
-            "--config",
-            str(config),
-            "--analyzer",
-            str(analyzer),
-            "--launcher",
-            str(launcher),
-        ]
-    )
     commit_calls = 0
     original_commit_all = helper.commit_all
 
@@ -990,7 +959,7 @@ def test_repair_remove_rolls_back_when_staged_cleanup_fails_after_publication(
     monkeypatch.setattr(helper, "commit_all", record_commit)
 
     with pytest.raises(OSError, match="post-publication staged cleanup failure"):
-        helper.remove(remove_args)
+        helper.remove(args)
 
     assert commit_calls == 0
     assert {path: path.read_bytes() for path in (config, analyzer, launcher)} == before
@@ -1047,108 +1016,12 @@ def test_classifier_ensure_creates_with_current_umask_and_never_clobbers(
     assert helper.ensure_classifier(classifier) == "ready"
 
 
-@pytest.mark.parametrize(
-    ("kind", "marker"),
-    (
-        ("profile", b"# triad-codex-dispatch managed runtime profile"),
-        ("rules", b"# triad-codex-dispatch managed command rules"),
-    ),
-)
-def test_managed_artifact_requires_exact_first_logical_line(
-    tmp_path: Path, kind: str, marker: bytes
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / kind
-    target.write_bytes(b"# owner line\n" + marker + b"\n")
-
-    with pytest.raises(helper.Refusal, match="unmanaged"):
-        helper.preflight_managed_artifact(target, kind)
 
 
-@pytest.mark.parametrize(
-    ("kind", "marker"),
-    (
-        ("profile", b"# triad-codex-dispatch managed runtime profile"),
-        ("rules", b"# triad-codex-dispatch managed command rules"),
-    ),
-)
-def test_managed_artifact_install_preserves_regular_replacement_after_capture(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    kind: str,
-    marker: bytes,
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / kind
-    target.write_bytes(marker + b"\nold\n")
-    foreign = b"foreign regular replacement\n"
-    original_stage = helper.stage
-    swapped = False
-
-    def stage_then_swap(path, data, mode):
-        nonlocal swapped
-        staged = original_stage(path, data, mode)
-        if path == target and not swapped:
-            replacement = tmp_path / f"{kind}-foreign"
-            replacement.write_bytes(foreign)
-            os.replace(replacement, target)
-            swapped = True
-        return staged
-
-    monkeypatch.setattr(helper, "stage", stage_then_swap)
-
-    with pytest.raises(helper.Refusal, match="path changed"):
-        helper.install_managed_artifact(target, kind, marker + b"\nnew\n")
-
-    assert swapped
-    assert target.read_bytes() == foreign
 
 
-def test_managed_artifact_install_preserves_existing_mode_and_new_umask(
-    tmp_path: Path,
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    marker = b"# triad-codex-dispatch managed runtime profile"
-    existing = tmp_path / "existing-profile"
-    existing.write_bytes(marker + b"\nold\n")
-    existing.chmod(0o604)
-
-    assert helper.install_managed_artifact(existing, "profile", marker + b"\nnew\n") == "updated"
-    assert existing.stat().st_mode & 0o777 == 0o604
-
-    created = tmp_path / "created-profile"
-    original_umask = os.umask(0o027)
-    try:
-        assert helper.install_managed_artifact(created, "profile", marker + b"\nnew\n") == "created"
-    finally:
-        os.umask(original_umask)
-    assert created.stat().st_mode & 0o777 == 0o640
 
 
-def test_shell_entry_transaction_preserves_existing_mode_and_owner_bytes(
-    tmp_path: Path,
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    shell_rc = tmp_path / "shellrc"
-    owner = b"# owner bytes before managed block\r\n"
-    block = (
-        b"# >>> triad-codex-dispatch codex-triad >>>\n"
-        b"codex-triad() { :; }\n"
-        b"# <<< triad-codex-dispatch codex-triad <<<\n"
-    )
-    shell_rc.write_bytes(owner + block)
-    shell_rc.chmod(0o604)
-
-    assert (
-        helper.update_shell_entry(shell_rc, "install", "triad-codex-dispatch")
-        == "installed"
-    )
-    assert shell_rc.stat().st_mode & 0o777 == 0o604
-    assert shell_rc.read_bytes().startswith(owner)
-    assert shell_rc.read_bytes().count(helper.SHELL_ENTRY_BEGIN) == 1
-    assert helper.update_shell_entry(shell_rc, "remove", None) == "removed"
-    assert shell_rc.stat().st_mode & 0o777 == 0o604
-    assert shell_rc.read_bytes() == owner
 
 
 def test_managed_quarantine_rolls_back_without_clobbering_foreign_destination(
@@ -1216,81 +1089,10 @@ def test_managed_quarantine_preserves_captured_bytes_and_mode(
     assert destination.stat().st_mode & 0o777 == 0o604
 
 
-@pytest.mark.parametrize("backup_kind", ("regular", "live-symlink", "dangling-symlink"))
-def test_config_fragment_merge_uses_bak2_without_mutating_existing_backup(
-    tmp_path: Path, backup_kind: str
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    config = tmp_path / "config.toml"
-    original = b'owner = "preserve"\n'
-    config.write_bytes(original)
-    backup = Path(str(config) + ".bak")
-    external = tmp_path / "external-backup"
-    if backup_kind == "regular":
-        backup.write_bytes(b"foreign backup\n")
-    else:
-        if backup_kind == "live-symlink":
-            external.write_bytes(b"external backup target\n")
-        backup.symlink_to(external)
-
-    assert helper.merge_config_fragment(config) == "merged"
-
-    assert config.read_bytes() != original
-    assert config.read_bytes().startswith(original)
-    if backup_kind == "regular":
-        assert backup.read_bytes() == b"foreign backup\n"
-    else:
-        assert backup.is_symlink()
-        if backup_kind == "live-symlink":
-            assert external.read_bytes() == b"external backup target\n"
-        else:
-            assert not external.exists()
-    assert Path(str(config) + ".bak2").read_bytes() == original
 
 
-def test_config_fragment_merge_uses_first_free_numbered_backup(tmp_path: Path) -> None:
-    helper = _load_bootstrap_repair_module()
-    config = tmp_path / "config.toml"
-    original = b'owner = "preserve"\n'
-    config.write_bytes(original)
-    Path(str(config) + ".bak").write_bytes(b"first backup\n")
-    Path(str(config) + ".bak2").write_bytes(b"second backup\n")
-
-    assert helper.merge_config_fragment(config) == "merged"
-
-    assert Path(str(config) + ".bak").read_bytes() == b"first backup\n"
-    assert Path(str(config) + ".bak2").read_bytes() == b"second backup\n"
-    assert Path(str(config) + ".bak3").read_bytes() == original
 
 
-def test_config_fragment_merge_keeps_backup_and_preserves_concurrent_replacement(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    config = tmp_path / "config.toml"
-    original = b'owner = "preserve"\n'
-    foreign = b'owner = "concurrent"\n'
-    config.write_bytes(original)
-    original_publish = helper.publish_to
-    swapped = False
-
-    def swap_before_config_publish(temp, target, expected, journal):
-        nonlocal swapped
-        if target == config and not swapped:
-            replacement = tmp_path / "config-concurrent"
-            replacement.write_bytes(foreign)
-            os.replace(replacement, config)
-            swapped = True
-        return original_publish(temp, target, expected, journal)
-
-    monkeypatch.setattr(helper, "publish_to", swap_before_config_publish)
-
-    with pytest.raises(helper.Refusal, match="path changed"):
-        helper.merge_config_fragment(config)
-
-    assert swapped
-    assert config.read_bytes() == foreign
-    assert Path(str(config) + ".bak").read_bytes() == original
 
 
 def test_config_fragment_remove_preserves_concurrent_replacement(
@@ -1391,136 +1193,22 @@ def test_narrow_bootstrap_commands_emit_only_path_or_status(
     ) == 0
     assert capsys.readouterr().out == "created\n"
 
-    profile = tmp_path / "profile.toml"
-    payload = tmp_path / "profile.payload"
-    payload.write_bytes(b"# triad-codex-dispatch managed runtime profile\nbody\n")
-    assert helper.main(
-        [
-            "managed-artifact",
-            "--action",
-            "preflight",
-            "--kind",
-            "profile",
-            "--path",
-            str(profile),
-        ]
-    ) == 0
-    assert capsys.readouterr().out == "absent\n"
-    assert helper.main(
-        [
-            "managed-artifact",
-            "--action",
-            "install",
-            "--kind",
-            "profile",
-            "--path",
-            str(profile),
-            "--payload-file",
-            str(payload),
-        ]
-    ) == 0
-    assert capsys.readouterr().out == "created\n"
-
     config = tmp_path / "config.toml"
-    assert helper.main(
-        ["config-fragment", "--action", "merge", "--path", str(config)]
-    ) == 0
-    assert capsys.readouterr().out == "merged\n"
+    config.write_bytes(helper.current_config_fragment(b"\n"))
     assert helper.main(
         ["config-fragment", "--action", "remove", "--path", str(config)]
     ) == 0
     assert capsys.readouterr().out == "removed-file\n"
 
 
-def test_managed_artifact_inspect_returns_safe_tri_state(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / "profile.toml"
-
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 0
-    assert capsys.readouterr().out == "absent\n"
-
-    target.write_bytes(helper.PROFILE_MARKER + b"\nowner = true\n")
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 0
-    assert capsys.readouterr().out == "managed\n"
-
-    target.write_bytes(b'owner = "foreign"\n')
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 0
-    assert capsys.readouterr().out == "unmanaged\n"
 
 
-def test_managed_artifact_inspect_refuses_non_regular_path(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / "profile.toml"
-    target.mkdir()
-
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 3
-    assert "refusing unsafe path" in capsys.readouterr().err
 
 
-def test_managed_artifact_inspect_refuses_symlink_leaf(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    referent = tmp_path / "referent.toml"
-    referent.write_bytes(helper.PROFILE_MARKER + b"\n")
-    target = tmp_path / "profile.toml"
-    target.symlink_to(referent)
-
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 3
-    assert "refusing unsafe path" in capsys.readouterr().err
-    assert referent.read_bytes() == helper.PROFILE_MARKER + b"\n"
 
 
-def test_managed_artifact_inspect_refuses_symlink_ancestor(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    real_parent = tmp_path / "real-parent"
-    real_parent.mkdir()
-    linked_parent = tmp_path / "linked-parent"
-    linked_parent.symlink_to(real_parent, target_is_directory=True)
-    target = linked_parent / "profile.toml"
-
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 3
-    assert "refusing unsafe ancestor" in capsys.readouterr().err
-    assert not (real_parent / "profile.toml").exists()
 
 
-def test_managed_artifact_inspect_refuses_injected_read_failure(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    target = tmp_path / "profile.toml"
-    target.write_bytes(helper.PROFILE_MARKER + b"\n")
-
-    def fail_read(_path: Path):
-        raise helper.Refusal("injected managed artifact read failure")
-
-    monkeypatch.setattr(helper, "read_state", fail_read)
-
-    assert helper.main(
-        ["managed-artifact", "--action", "inspect", "--kind", "profile", "--path", str(target)]
-    ) == 3
-    assert "injected managed artifact read failure" in capsys.readouterr().err
-    assert target.read_bytes() == helper.PROFILE_MARKER + b"\n"
 
 
 @pytest.mark.parametrize(
@@ -1544,23 +1232,3 @@ def test_managed_removal_requires_marker_on_exact_first_logical_line(
 
     assert helper.remove_managed_artifact(target, kind) == "unmanaged"
     assert target.read_bytes() == original
-
-
-@pytest.mark.parametrize("existing", (False, True), ids=("absent", "existing"))
-def test_config_fragment_merge_uses_private_new_mode_and_preserves_existing_mode(
-    tmp_path: Path, existing: bool
-) -> None:
-    helper = _load_bootstrap_repair_module()
-    config = tmp_path / "config.toml"
-    if existing:
-        config.write_bytes(b'owner = "preserve"\n')
-        config.chmod(0o644)
-
-    original_umask = os.umask(0)
-    try:
-        assert helper.merge_config_fragment(config) == "merged"
-    finally:
-        os.umask(original_umask)
-
-    expected_mode = 0o644 if existing else 0o600
-    assert config.stat().st_mode & 0o777 == expected_mode

@@ -1,5 +1,98 @@
 # Changelog
 
+## 0.2.533 — 2026-08-05
+
+- Replaces batched review evidence with one focused directory and one strict
+  Claude, Google, and fresh Codex `LegVerdict` per round.
+- Repeats complete three-family rounds after bounded fixes until unanimous
+  admitted `SAFE`, conflict, oscillation, invalidity, or an owner decision.
+- Requires owner approval before design, specification, capability,
+  generalization, or scope changes; external reviewers never write code.
+- Migrates AGY to the 1.1.10 native `stream-json` and `json-schema` contract,
+  uses the exact `gemini-3.1-pro-high --effort high` route, invalidates every
+  exposed model conflict, and removes PTY, sentinel, sandbox, permission-bypass,
+  packet, batch, and receipt runtime paths.
+- Requires packaged-byte and fresh-process evidence before a distribution claim.
+- Limits the separately authorized formal Gemini fallback to one provider call;
+  capacity failure and invalid structured output are terminal without hidden
+  capacity or schema-repair calls. The ceiling applies to both supported
+  packaged `LegVerdict` operand syntaxes.
+- Records `unexposed` runtime identity when an AGY request times out before an
+  init event can expose the selected model.
+- Rejects benchmark inputs with zero cases or zero planted findings, and adds a
+  clean-HEAD distribution verifier that stages exact archive bytes, compares
+  load-bearing hashes, and runs tests from the extracted package.
+- Records a two-round runtime benchmark: six total provider calls, 4/4
+  adjudicated defect recall, 3/3 confirmation `SAFE`, zero admitted mutations,
+  and an 87.5% call reduction against the captured 24-call batch plan.
+
+## 0.2.532 — 2026-08-03
+
+- Adopts AGY 1.1.10's repaired headless model-selection contract for formal
+  Google review. Authenticated `agy --version` must report 1.1.10 or newer,
+  authenticated `agy models` must expose catalog selector
+  `gemini-3.1-pro-high`, and the outbound model argument
+  `gemini-3.1-pro-high` uses no `--effort`. The display-label compatibility
+  route is historical; generic wrapper model/effort passthrough remains
+  unchanged. This 0.2.532 route is historical and superseded by the exact
+  0.2.533 route above.
+- Candidate release: provider, user, and project settings now own permission
+  selection and workspace trust. TRIAD does not install or inject a permission
+  profile, command rule, pre-spawn `shell_environment_policy`, read-only repair
+  agent, sandbox mode, or bypass. Trusted terminal/Python/`PATH` startup remains
+  a prerequisite; wrapper child-process scrubbing remains after trusted startup.
+- Binds the full diff to the complete affected-source closure and exact current
+  candidate bytes. Formal plan and pre-merge gates include all repository test
+  source for this release, while normal SDD implementation review includes
+  relevant test source. Every required family reviews every affected production
+  source in every deterministic batch with source-grounded observations, exact
+  full-file ranges, and strict digest-bound coverage admission.
+- Retains the packaged `FormalReview` operand and unbatched `formal-gate` result
+  only for explicit compatibility callers. Operational pre-merge review uses
+  `batched-full-coverage` and the strict `BatchReceipt` contract; the two result
+  shapes are not interchangeable.
+- Makes native AGY `permission-unavailable` a terminal post-dispatch result.
+  Ordinary/non-formal Gemini fallback is limited to no-final-summary exit `4`
+  plus the wrapper-owned pre-submission `PtyStartError` diagnostic. Every
+  final-summary result is fallback-ineligible. Missing/invalid `TRIAD_AGY_BIN`
+  and missing `agy` on `PATH` are direct route-setup errors, not fallback
+  triggers.
+- Requires separate owner authorization for an exact formal Gemini route and
+  preserves the same immutable prepared directory, prompt-controlled no-edit
+  contract, digest/mutation invalidation, full batch matrix, and strict
+  admission. An unavailable required family leaves an invalid round.
+- Replaces the installed repair Custom Agent and apply launcher with a fresh
+  native proposal-only child and a bootstrap-printed login-shell
+  `python3 bin/apply_patch.py` owner argv carrying the same explicit pinned
+  `--classifier-file` used by provider launchers.
+- Removes wrapper `--sandbox` flags and current permission-controller setup.
+  Install/remove clean up only exact plugin-owned legacy profiles, rules,
+  repair registration, pre-spawn environment-policy fragments, and retired
+  launchers; owner-authored settings and credentials are preserved.
+- Current non-UTF-8 source fails closed with `non-UTF-8 source`; it cannot be
+  omitted from closure. Candidate verification, formal admission, installation,
+  and publication remain pending and are not release facts in this changelog.
+
+## 0.2.531 — 2026-07-25
+
+- Adds one provider-neutral review prompt contract for Claude, Google-family,
+  and fresh Codex legs. It records the review mode, objective, perspective,
+  provider and destination, approved and excluded data, test-source boundary,
+  digest, inspection rules, evidence rules, and selected result profile before
+  dispatch.
+- Separates `consult`, `advisory-review`, and `formal-gate` result profiles.
+  Formal review retains the existing semantic verdict, evidence, citation,
+  digest, and invalidation rules; consult and advisory results cannot be
+  promoted to formal gate passes.
+- Requires explicit invocation for Claude, Antigravity, and Gemini provider
+  dispatch skills. Implicit cross-family activation may prepare a bounded review
+  but waits for an explicit owner request or matching standing authorization
+  before sending repository data externally.
+- Replaces broad independent-opinion defaults with prompts that require the
+  objective, approved data, exclusions, and result profile. Wrapper, model,
+  effort, fallback, extraction, repair, and AGY compatibility behavior remain
+  unchanged.
+
 ## 0.2.530 — 2026-07-25
 
 - Revalidates the formal AGY route against authenticated AGY 1.1.7. Controlled

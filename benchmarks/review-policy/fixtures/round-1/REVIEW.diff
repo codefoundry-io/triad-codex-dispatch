@@ -1,0 +1,24 @@
+diff --git a/clean/profile.py b/clean/profile.py
+--- a/clean/profile.py
++++ b/clean/profile.py
+@@
+-    return {"legacy_name": record["name"]}
++    return {"display_name": record["name"]}
+diff --git a/local_defect/validator.py b/local_defect/validator.py
+--- a/local_defect/validator.py
++++ b/local_defect/validator.py
+@@
+-        return False
++        return True
+diff --git a/cross_file/caller.py b/cross_file/caller.py
+--- a/cross_file/caller.py
++++ b/cross_file/caller.py
+@@
+-        return False
++        return True
+diff --git a/config_doc/settings.json b/config_doc/settings.json
+--- a/config_doc/settings.json
++++ b/config_doc/settings.json
+@@
+-  "retry_limit": 3
++  "retry_limit": 5

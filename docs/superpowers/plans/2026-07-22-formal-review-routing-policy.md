@@ -1,8 +1,8 @@
 # Formal Review Routing Policy Implementation Plan
 
-> **Superseded:** This plan is superseded by
-> `docs/status/2026-07-22-formal-review-routing-verification.md` and the
-> `docs/superpowers/specs/2026-07-23-r11-minor-hardening-design.md`.
+> **Superseded:** This plan is historical and non-executable. Use the current
+> [0.2.532 plan](2026-07-30-native-permissions-full-coverage-review.md) and
+> [0.2.532 design](../specs/2026-07-30-native-permissions-full-coverage-review-design.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

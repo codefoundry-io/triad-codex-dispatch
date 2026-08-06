@@ -1,7 +1,7 @@
 interface:
   display_name: "Triad Antigravity Dispatch"
   short_description: "Dispatch a single-shot agy Google-family leg"
-  default_prompt: "Use $triad-antigravity-dispatch for a Google-family consult."
+  default_prompt: "Use $triad-antigravity-dispatch for an owner-authorized Google-family review. State the objective, review target, approved data, exclusions, and result profile before dispatch."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

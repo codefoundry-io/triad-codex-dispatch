@@ -23,22 +23,21 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 - `skills/` 아래의 Codex 플러그인 skill.
 - bootstrap은 새로 Claude, agy, Gemini 세 provider wrapper command만 publish합니다.
   `triad-setup` 및 `triad-doctor`는 remove-only legacy cleanup 이름입니다.
-- 세 managed wrapper launcher의 정확한 command rules. `decision = "prompt"`를
-  사용하고 일반 `codex` session에서 동작합니다. Bootstrap은 전용 profile을
-  설치하거나 owner의 approval, reviewer, model, reasoning, sandbox 설정을 교체하지
-  않습니다.
-- classifier gap에는 설치된 read-only `triad-repair-analyzer` Custom Agent를
-  사용합니다. analyzer는 proposal을 반환하고, leader는 그 proposal만 고유한 UTF-8
-  JSON 파일에 기록합니다. owner가 일반 인증 terminal에서 설치된
-  `triad-apply-repair` 실행 파일로 적용합니다. legacy three-agent file은 active
-  repair route가 아니라 migration quarantine 또는 removal 대상입니다.
+- Native provider permission을 그대로 상속합니다. provider, user, project가
+  permission 선택을 소유하며 TRIAD는 permission mode를 선택하거나 override하지
+  않습니다. plugin-owned permission profile이나 command rule도 설치하지 않습니다.
+- classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
+  인증된 로그인 터미널에서 bootstrap이 출력한
+  `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
+  적용합니다. repair Custom Agent나 apply launcher는 설치하지 않습니다.
 
 ## 필수 설정 (~2분)
 
 세 단계면 일반 Codex에서 사용할 수 있는 설치를 마칩니다. 이 섹션 아래는 모두
 선택입니다.
 
-1. **native vendor 로그인.** leader `codex`와 사용할 worker 를 설치하고
+1. **native vendor 로그인.** 개발에 사용한 동일한 인증된 로그인 터미널과 project
+   worktree를 사용합니다. leader `codex`와 사용할 worker 를 설치하고
    로그인합니다 — toolkit 은 credential 을 발급/refresh 하지 않습니다:
    - `codex` — 설치 후 `codex login`.
    - `agy` — 설치 + OAuth 로그인 (개인 사용자의 Google-family worker).
@@ -78,64 +77,34 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    argv-safe 명령을 출력합니다. 소유한 Python 환경에서 그 명령을 실행한 뒤 bootstrap을
    다시 실행하세요. Bootstrap은 Python package를 설치하지 않습니다.
 
-   이 스크립트는 정확한 command rules와 세 provider wrapper command를 설치합니다.
-   또한 `$CODEX_HOME/config.toml`에 provenance-marked repair-analyzer 등록을 추가하고,
-   owner-authored policy가 없을 때 provenance-marked loader-environment guard를
-   추가합니다. 다른 config key는 모두 보존하며, owner가 작성하거나 편집한 environment
-   policy는 warning과 함께 그대로 두고 `--remove`는 정확한 managed block만 제거합니다.
-   전용 profile을 설치하거나 owner의 Codex approval/reviewer/sandbox key를 변경하지
-   않으며, provider 로그인이나 model probe도 실행하지 않습니다. 정확한 절대 launcher
-   rule은 `prompt`를 사용합니다.
+   이 스크립트는 three provider wrapper launchers를 하나의 staged all-or-nothing
+   command group으로 설치합니다. Codex permission profile, command rule,
+   repair-agent registration, pre-spawn `[shell_environment_policy]`는 설치하지
+   않습니다. owner-authored `config.toml`, rule, permission setting, credential,
+   관련 없는 파일을 보존합니다.
 
-   Bootstrap은 repair lifecycle의 analyzer, registration,
-   `triad-apply-repair` transaction이 성공한 뒤에만 provider wrapper command를
-   publish합니다. 늦은 repair-registration 실패가 발생하면 provider launcher,
-   `triad-apply-repair`, analyzer/registration, command rules, legacy shell entry는
-   publish되지 않습니다.
+   Bootstrap은 install-resolved classifier path를 provider launcher에 고정하고,
+   동일한 explicit `--classifier-file`을 포함한 login-shell
+   `python3 bin/apply_patch.py` owner argv를 Python `shlex.join`으로 출력합니다.
+   설치된 apply launcher는 없고 ambient default를 다시 계산하지 않습니다.
 
-   Agent Review를 자동으로 사용하려면 다음 단순 설정을 사용합니다:
-
-   ```toml
-   approval_policy = "on-request"
-   approvals_reviewer = "auto_review"
-   ```
-
-   기존 granular policy를 유지한다면 다른 category 선택은 그대로 두고
-   `granular.rules = true`와 `granular.sandbox_approval = true`인지 확인해야 합니다.
-   그래야 정확한 rule prompt와 sandbox escalation이 Agent Review에 도달하기 전에
-   자동 거절되지 않습니다. `approvals_reviewer = "user"`이면 wrapper는 동작하지만
-   사람이 승인합니다. `approval_policy = "never"`이면 Agent Review는 실행되지 않습니다.
-
-   이 설정은 OpenAI의 [Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review),
-   [rules](https://learn.chatgpt.com/docs/agent-configuration/rules),
-   [approval policy](https://learn.chatgpt.com/docs/config-file/config-advanced#approval-policies-and-sandbox-modes)
-   문서를 따릅니다.
-
-   플러그인은 `[auto_review].policy`를 설치하지 않습니다. 그러면 owner의 reviewer
-   지시를 교체할 수 있고 managed policy가 더 높은 precedence를 갖기 때문입니다.
-   명시적 owner 요청과 정확한 rule justification이 기본 reviewer policy에 필요한
-   authorization context를 제공합니다. 정확한 동작 하나가 거절되면 owner는 `/approve`로
-   그 기록 한 건만 선택할 수 있으며 broad allow rule로 바꾸면 안 됩니다.
-
-   Automatic review는 실행 시점 security check이지 owner workflow authorization이
+   Native permission 처리는 실행 시점 경계이지 owner workflow authorization이
    아닙니다. Commit, push, plugin 또는 dependency 설치, release, publication은 각각 별도의
    owner 결정이며, leader는 `approvals_reviewer = "auto_review"`가 활성화되어 있다는 이유만으로
    이를 시작하면 안 됩니다.
 
    > **배치 불변식 (hard).** bootstrap 은 설치 대상이 들어 있는 디렉터리가 아니라
-   > 작업할 project workspace 에서 실행하세요. bootstrap 은 command rules와
-   > provenance-marked config registration을 `$CODEX_HOME`(기본 `~/.codex/`), classifier patch 를
+   > 작업할 project workspace 에서 실행하세요. bootstrap 은 classifier patch 를
    > `~/.config/triad-codex-dispatch/`, launcher 를 `~/.local/bin`(또는
    > `TRIAD_BOOTSTRAP_BIN_DIR`)에 설치합니다. 이 대상과 그것이 실행하는 모든 것
    > (plugin cache, `python3` runtime)은 sandbox-writable root 밖에 있어야 하며,
    > 어느 하나라도 실행 디렉터리(예: `$HOME`) 안으로 resolve 되면 hard-fail 합니다.
 
-   일반 경로에는 의도적으로 전용 permission profile이 없습니다. 일반 `codex`는
-   `$HOME`이나 `~/.local/bin`, `$CODEX_HOME`, plugin cache의 상위 디렉터리가 아니라
-   실제 project/workspace root에서 시작하세요. 이후 workspace-write session의 root가
-   managed executable 위에 잡히면 그것을 다시 쓸 수 있으며, 설치 시 placement 검사는
-   미래 session root까지 강제하지 못합니다. 매 session의 exec-target deny가 필요한
-   owner에게만 legacy profile이 명시적 migration option으로 남습니다.
+   일반 `codex`는 동일한 인증된 로그인 터미널의 실제 project/worktree root에서
+   시작하세요. provider permission과 provider-owned workspace trust를 먼저 선택합니다.
+   TRIAD는 provider native permission을 상속하고 별도 permission/trust bypass를
+   넣지 않습니다. Trusted Python과 `PATH`가 prerequisite이며 trusted launcher와
+   interpreter가 시작된 뒤 wrapper child-process scrubbing은 유지됩니다.
 
    설치 후 대상 workspace 에서 일반 Codex session 을 새로 시작합니다:
 
@@ -146,7 +115,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    `/status`로 활성 approval policy를 확인하고, project/profile/managed layer가 예상
    reviewer를 바꾼 경우 `/debug-config`로 precedence를 확인하세요.
 
-이게 필수 경로의 전부입니다. repair 는 필요할 때만 surface 되는 수동 read-only
+이게 필수 경로의 전부입니다. repair 는 필요할 때만 surface 되는 proposal-only native-child
 단계입니다([Custom Subagent](#custom-subagent) 와 [보안](#보안-security) 참고).
 
 ## 선택 / 고급
@@ -160,29 +129,23 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 로그인하세요; 개인 Google-family 사용자는 `agy` 를 쓰세요. 팀이 bootstrap 에서
 필수로 요구하려면 `TRIAD_BOOTSTRAP_REQUIRE_GEMINI=1` 을 설정합니다.
 bootstrap 은 실행 파일 존재를 Gemini fallback candidate 로만 표시하며
-인증·model·version probe를 실행하지 않습니다. 일반/비정식 Gemini fallback은
-request 제출 전에 agy route가 명시적으로 없거나 시작 불가능한 경우에만 사용할
-수 있습니다.
-`phase=pre-dispatch-settings`는 필요조건일 뿐 충분조건이 아니며, 불확실한 phase와
-post-dispatch phase는 fallback 대상이 아닙니다. 직접 Gemini 요청으로 agy-first
-규칙을 우회할 수 없습니다. content, schema, timeout, capacity, post-dispatch 실패는
-agy 실패 경로에 남습니다. 정식 Gemini fallback은 별도 gate이며, 배포본에는 이를
-허용할 enforcement proof가 없고 automatic probe도 실행하지 않습니다. 정식 admission에
-필요한 owner-recorded proof는
+인증·model·version probe를 실행하지 않습니다. review round 전에 리더가 AGY version과
+model catalog를 확인합니다. 이 제출 전 route proof가 실패하면 owner가 Gemini를
+authorize하고 리더가 그 route로 fresh round를 시작할 수 있습니다. 제출된 AGY call,
+result event, timeout, schema error, provider failure는 Google leg를 invalid로 만들며
+같은 round 안의 provider 교체를 허용하지 않습니다. 직접 Gemini 요청으로 AGY-first
+규칙을 우회할 수 없습니다.
+
+정식 Gemini fallback에는 exact route, provider, data boundary, objective에 대한
+separate owner authorization이 필요합니다. same immutable prepared directory,
+prompt-controlled no-edit/no-execution contract, digest/mutation invalidation,
+complete three-family round, strict `LegVerdict` admission을 유지합니다. 이 exact
+formal schema route는 provider call을 한 번만 실행합니다. capacity failure 또는
+invalid structured output은 해당 invocation의 terminal 결과이며 숨겨진 capacity
+retry나 schema-repair provider call을 실행하지 않습니다. required
+family가 unavailable이면 invalid round입니다. 전체 계약은
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md)를
 따릅니다.
-
-### 기본 rules opt-out
-
-*command rules 를 설치하고 싶지 않을 때만.*
-
-일반 terminal에서 `TRIAD_BOOTSTRAP_INSTALL_CODEX_RULES=0`을 export한 뒤, 새로
-출력한 절대 bootstrap 명령을 실행합니다. 동등한 skip flag는
-`TRIAD_BOOTSTRAP_SKIP_CODEX_RULES=1`입니다. 이 opt-out은 policy-matched launcher도
-활성화할 configured rules path가 없을 때만 managed loader-environment guard를
-함께 건너뜁니다. 그 path에 owner-maintained rules가 이미 있으면 bootstrap은
-rules를 보존하고, launcher를 계속 활성화할 수 있으므로 guard도 유지합니다.
-repair-analyzer 등록은 별도입니다.
 
 ### Linux / WSL2 sandbox 지원
 
@@ -192,8 +155,8 @@ repair-analyzer 등록은 별도입니다.
 ### 보안 모델 읽기
 
 *툴킷에 의존하기 전에 전체 threat model 을 보고 싶을 때만.*
-[SECURITY.md](SECURITY.md) 참고 — 지속적인 control 은 model trust 가 아니라
-privilege separation 입니다(아래 [보안](#보안-security) 에 요약).
+[SECURITY.md](SECURITY.md)의 전체 threat model과 아래
+[보안](#보안-security) 요약을 참고하세요.
 
 ### bootstrap 재실행 참고
 
@@ -203,30 +166,35 @@ privilege separation 입니다(아래 [보안](#보안-security) 에 요약).
   `gemini` 를 업그레이드/이동한 뒤에도 다시 실행하세요.
 - 기존 Codex session 은 새 plugin skill 을 못 볼 수 있으니 설치/업데이트 후 새
   session 을 시작하세요.
-- agy 호출은 `~/.gemini/antigravity-cli/` 아래 Antigravity CLI runtime 설정을
-  transaction 으로 다룰 수 있습니다 — bootstrap 설치 대상이 아니라 provider
-  runtime 상태입니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### pre-0.2.529 업그레이드
+### 0.2.533 업그레이드
 
-이전 설치가 남긴 남아 있는 managed legacy profile 또는 shell artifact가
-있으면 일반 `--install`은 정확한 경로를 경고하고 자동 삭제를 하지 않습니다.
-선택하지 않은 legacy path가 unsafe 또는 unreadable이면 bootstrap은 거부 상세와
-경로를 warning으로 표시하고, 그 path를 따라가거나 변경하지 않은 채 선택된 일반
-artifact 설치를 계속합니다. 선택된 profile, rules, shell entry의 unsafe preflight는
-계속 fatal입니다.
+일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
+plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
+`[shell_environment_policy]`, retired apply/repair launcher만 정리합니다. Foreign,
+edited, linked, non-regular target은 보존하고 보고합니다. owner-authored 설정을 보존하며
+rule, permission profile, credential, 관련 없는 파일을 건드리지 않습니다.
 
-Legacy profile이 필요하면 `TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1`을 설정하세요.
-Legacy shell entry에는 `TRIAD_BOOTSTRAP_INSTALL_CODEX_PROFILE=1`과
-`TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY=1`이 모두 필요하며 shell flag만 설정하면
-거부됩니다. 이 compatibility path는 명시적 legacy opt-in입니다. 또는 의도적으로
-`--remove` 후 일반 재설치를 실행하세요. 일반 `codex`가 정상 시작 경로이며, 폐기된
-no-prompt `allow` posture는 복원되지 않습니다.
-pre-0.2.529에서 처음에는 없었던 config에 stale original config existed = true
-provenance가 남아 있으면, 진짜로 미리 존재하던 빈 파일과 구분할 수 없으므로 안전한
-zero-byte 파일로 남겨 둡니다.
+review runtime은 하나의 complete focused directory, required family별 하나의
+`LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
+receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.10 이상을
+요구하고 native `stream-json`과 `json-schema`를 사용합니다. formal route는
+`gemini-3.1-pro-high`와 `high` effort를 전달합니다. provider permission과 project
+trust policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
+
+maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
+
+```bash
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.533-final-r2'
+```
+
+시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
+dirty source tree를 거부하고 `HEAD`를 archive한 뒤 안전하게 추출하며 manifest와 core
+review-skill hash를 비교하고 extracted byte에서 전체 test suite를 실행한 다음
+`verification.json`을 기록합니다. authenticated fresh-process skill exposure는 별도 release
+procedure로 유지합니다.
 
 ## 사용
 
@@ -272,10 +240,9 @@ environment dump, provider log, 관련 없는 path를 제외해야 합니다.
 
 정식 plan 및 pre-merge 3-패밀리 gate는 one leader-prepared shared review directory를
 사용합니다. 이 directory에는 current approved production source, configuration, and
-documentation만 둡니다. Project instruction 또는 owner가 exact test-source exclusions를
-제공해야 하며 이를 추론하지 않습니다. 경계가 없으면 stop and ask the owner를
-수행합니다. 일반 SDD 구현 리뷰는 관련 test source를 포함하고, 다른 advisory review는
-별도로 owner가 승인한 data scope를 따릅니다.
+documentation을 둡니다. 이 release의 no-exclusion boundary는 모든 repository test
+source를 포함합니다. 일반 SDD 구현 리뷰는 관련 test source를 포함하고, 다른
+advisory review는 별도로 owner가 승인한 data scope를 따릅니다.
 Normal SDD implementation review includes relevant test source.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file body.
@@ -287,6 +254,15 @@ generated script를 실행하지 않습니다.
 Before a formal gate, classify every test failure as production defect, test-case defect,
 or intentional specification change and resolve or approve it.
 
+full diff는 navigation evidence이지 review boundary가 아닙니다. Leader는 현재 결정에
+관련된 complete current file, configuration, governing documentation을 하나의 focused
+directory에 준비합니다. 모든 required family는 그 동일한 complete directory를 한 번씩
+검토하고 family, review ID, directory digest에 bind된 strict `LegVerdict` 하나를
+반환합니다. Leader는 dispatch 전에 directory digest와 canonical-worktree fingerprint를
+capture하고 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
+재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는
+prompt-controlled이며, manifest path나 provider confidence만으로 승격하지 않습니다.
+
 이 계약은 credential, token, cookie, authentication file, environment dump, provider
 log, 관련 없는 path를 provider-visible input에서 제외한다는 보안 경계를 바꾸지
 않습니다. Commit, push, install/update, merge, release, publication은 계속 각각 별도의
@@ -296,16 +272,15 @@ owner authorization이 필요합니다.
 opt-in입니다: `TRIAD_WRAPPER_ALLOWED_ROOTS`가 설정된 경우에만 wrapper가 trusted root
 밖의 `--cwd` / `--prompt-file`을 거부합니다. 기본은 경로를 제약하지 않으므로
 approved-path containment는 provider가 실제로 enforce하지 않는 한 prompt-controlled입니다.
-그 외 경계는 선택한 `--cwd` worktree, 요청한 wrapper sandbox, 일반 Codex sandbox,
-정확한 rules에 의존합니다.
+그 외 경계는 선택한 `--cwd` worktree, native provider permission,
+immutable-directory digest, leader mutation check에 의존합니다.
 
 ## 문제 해결 (Troubleshooting)
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| Wrapper 호출이 automatic review 대신 수동 승인을 기다림 | 활성 reviewer가 `user`이거나 더 높은 precedence layer가 reviewer를 바꿨거나 생성 rule이 없거나 stale함 | `/status`와 `/debug-config`를 확인하고, 원한다면 적용 layer에서 `approvals_reviewer = "auto_review"`를 복구하고, stale rule이면 bootstrap을 다시 실행한 뒤 일반 `codex`를 재시작하세요. |
-| Wrapper rule이 Agent Review 전에 자동 거절됨 | 활성 granular policy의 `rules = false` 또는 `sandbox_approval = false`, 혹은 approval이 `never`임 | 다른 granular 선택은 보존하면서 두 category를 활성화하고 재시작하거나 `approval_policy = "on-request"`를 사용하세요. |
-| Automatic review가 wrapper 호출을 거부함 | Authorization이 없거나 범위를 벗어났거나, provider-visible input에 제외 대상 credential material이 있거나, reviewer가 다른 unsafe 조건을 찾음 | Input 범위를 줄이거나 필요한 owner authorization을 받으세요. Owner는 정확한 기록 한 건을 `/approve`로 선택할 수 있지만 broad allow rule을 설치하면 안 됩니다. |
+| Provider가 `permission-unavailable`을 반환 | native user/project permission 또는 trust가 headless action을 허용하지 않음 | 동일한 인증된 로그인 터미널에서 좁은 provider/user/project 결정을 한 뒤 fresh round를 시작하세요. TRIAD는 bypass를 넣지 않습니다. |
+| Gemini가 project worktree를 untrusted로 거부 | `--skip-trust` 제거 후 Gemini가 workspace trust를 소유 | 해당 worktree에 provider-native trust 결정을 하거나 중단하세요. TRIAD에는 trust bypass나 speculative detector가 없습니다. |
 | 디스패치가 `oauth-env`로 실패 | 워커 CLI 로그인이 만료됐거나 없음 | 해당 vendor의 native login 재실행(`claude` / `agy` OAuth, 또는 `codex login`). toolkit은 대신 재인증하지 않습니다 — 신호만 surface 하니 직접 로그인하세요. |
 | gemini leg이 `IneligibleTier`로 실패 | Gemini CLI *개인* tier 폐지 | `agy`(Antigravity) leg을 쓰세요 — 개인 사용자의 Google-family leg입니다. `gemini`는 business / Vertex / API-key 계정 전용. |
 | 설치/업데이트 후 새 skill이 안 보임 | 기존 Codex 세션은 새로 설치된 skill을 못 봄 | 새 Codex 세션을 시작하세요(플러그인 업데이트 뒤에는 launcher 경로 최신화를 위해 `bootstrap.sh --install` 재실행). |
@@ -319,7 +294,7 @@ approved-path containment는 provider가 실제로 enforce하지 않는 한 prom
 | `0` | 성공 — 이어서 답변 | 없음. |
 | `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | 해당 binary를 고치세요. AGY route에 한해서만 wrapper 소유 진단이 이 제출 전 실패를 함께 입증할 때 Gemini Enterprise fallback 대상입니다. |
 | `64` | 재시도 후에도 server capacity 소진 | 일시적 vendor 과부하; 기다렸다 재시도. |
-| `65` | 인증 / config / quota 또는 손실된 AGY 응답(예: `oauth-env`, `cli-subscription-cap`, `truncated-answer`) | `truncated-answer`이면 repair하거나 Gemini fallback으로 전환하지 말고 bounded, compact result를 요청하는 새 호출을 만드세요. 다른 분류는 재로그인하거나 quota reset을 기다리세요. |
+| `65` | 인증 / config / quota / native permission 또는 손실된 AGY 응답(예: `oauth-env`, `cli-subscription-cap`, `permission-unavailable`, `truncated-answer`) | `permission-unavailable`은 authentication, quota, truncated-answer와 구별되는 provider/user/project 결정입니다. `truncated-answer`는 repair하거나 Gemini fallback으로 전환하지 말고 새 bounded, compact result를 요청하세요. |
 | `66` | 구조화 출력(`--pydantic`) 스키마 검증 실패 | `schema-fail is terminal for that invocation`; leader가 판단한 뒤 explicit new invocation을 만들 수 있습니다. shared-directory formal path는 legacy packet-bound schema를 요구하지 않습니다. |
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |
 | `1` | Wrapper가 답변을 추출하지 못했거나(`extraction-error`) 분류가 `unknown`임 | 최종 wrapper 분류와 provider 진단을 확인한 뒤 적절히 재시도하거나 escalation하세요. |
@@ -334,20 +309,20 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   credential 복사, sandbox login 시도, company setup flow, authorization store는 없습니다.
 - **OS 또는 Python package를 설치하지 않습니다.** vendor CLI, `python3`, 배포된
   Python requirements, (Linux/WSL2에서) `bubblewrap`은 직접 설치하며, installer는
-  정확한 rules, launcher, provenance-marked loader 환경 방어를 쓰되 다른 owner config
-  key는 보존합니다. 선택된 Python에 Pydantic 2가 없으면 bootstrap은
+  three provider wrapper launchers만 쓰고 owner-authored config를 보존합니다. 선택된
+  Python에 Pydantic 2가 없으면 bootstrap은
   mutation 전에 멈추고 그 interpreter를 위한 정확한
   `python3 -m pip install -r .../requirements.txt` 명령을 출력합니다.
 - **자기개선 분류기는 heuristic이지 oracle이 아닙니다.** 진짜 실패를 그럴듯하지만
   틀린 class로 라우팅할 수 있습니다. worst case는 *integrity* 이슈 — 지속적 라우팅
   오분류이지 코드 실행이 **아닙니다**([보안](#보안-security) 참고) — 이지만,
   `~/.config/triad-codex-dispatch/classifier-patches.json`에 적용된 delta를
-  주기적으로 검토하세요. Bootstrap은 확정된 절대 경로를 provider/apply launcher에 고정하므로
+  주기적으로 검토하세요. Bootstrap은 확정된 절대 경로를 provider launcher와 출력된 owner apply argv에 고정하므로
   `TRIAD_CLASSIFIER_EXTENSION`을 바꾸면 bootstrap을 다시 실행해야 합니다.
-- **wrapper containment은 프로세스/권한 수준이지 OS 수준 confinement이 아닙니다.**
+- **wrapper containment은 프로세스 수준이지 OS 수준 confinement이 아닙니다.**
   wrapper-containment env는 wrapper 프로세스의 path/pydantic 처리를 gate할 뿐, OS
-  수준 격리 주장이 아닙니다. 경계는 process permission, 선택한 `--cwd` worktree,
-  Codex rules, 커밋 전 사용자 검토에 의존합니다.
+  수준 격리 주장이 아닙니다. 경계는 provider/user/project가 선택한 permission,
+  `--cwd` worktree, digest/mutation check, 커밋 전 사용자 검토에 의존합니다.
 
 ## 업데이트
 
@@ -356,9 +331,9 @@ codex plugin marketplace upgrade triad-codex-dispatch
 python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
 ```
 
-새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 전용 profile 없이 정확한
-rules, launcher, managed loader 환경 방어를 재적용합니다. legacy opt-in flag가 있으면
-실행 전에 다시 설정합니다. 업데이트 후 일반 Codex session을 새로 시작하세요.
+새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 permission state를 만들지 않고
+three provider wrapper launchers를 다시 publish하며 exact plugin-owned legacy cleanup을
+수행합니다. 업데이트 후 일반 Codex session을 새로 시작하세요.
 
 ## 설치 검증
 
@@ -381,8 +356,8 @@ agy 의 답과 함께 stderr 에 한 줄 성공 요약이 뜹니다:
 [wrapper] antigravity ok exit=0 vendor=0 elapsed=6.4s
 ```
 
-이 `[wrapper] antigravity ok …` 줄이 디스패치가 동작했다는 신호입니다 — 플러그인, launcher,
-rules 가 모두 연결된 것입니다. `ok` 는 분류이며, 다른 값(예: `oauth-env`,
+이 `[wrapper] antigravity ok …` 줄이 디스패치가 동작했다는 신호입니다 — 플러그인과 launcher가
+native provider environment에 연결된 것입니다. `ok` 는 분류이며, 다른 값(예: `oauth-env`,
 `server-capacity`)은 특정 실패를 뜻합니다 — [문제 해결](#문제-해결-troubleshooting) 참고.
 
 ### 개발자 경로 (선택 — clone + pytest)
@@ -413,32 +388,27 @@ codex plugin remove triad-codex-dispatch@triad-codex-dispatch
 codex plugin marketplace remove triad-codex-dispatch
 ```
 
-`--remove`는 wrapper launcher, 설치된
-`triad-repair-analyzer`, `triad-apply-repair`, 정확한 command rules, 예전 release가 만든 provenance-matched
-legacy profile/shell entry를 삭제합니다. 예전 설치가 남긴 legacy three-agent TOML도 함께
-삭제합니다. `$CODEX_HOME/config.toml`에서는 managed repair-analyzer registration과
-정확한 managed `[shell_environment_policy]` block을 제거합니다. 이 둘이 유일한
-managed content이고 owner content가 남지 않으면, `config.toml`은 설치 전에
-존재하지 않았던 경우에만 삭제합니다. 설치 전에 존재했던 파일과 owner content는
-보존합니다. 즉 absent-file restoration은 provenance-marked managed registration과
-environment-policy block이 둘 다 그대로 남아 있는 경우에만 적용됩니다.
+`--remove`는 three provider wrapper launchers와 exact plugin-owned legacy launcher,
+profile, command rule, repair-agent registration, `[shell_environment_policy]` fragment를
+marker와 expected byte가 정확히 일치할 때만 삭제합니다. exact legacy three-agent TOML도
+제거합니다. Foreign, edited, linked, non-regular target은 보존하고 보고합니다.
+owner-authored 설정을 보존하며 `config.toml`, rule, permission profile, credential,
+관련 없는 파일을 건드리지 않습니다.
 학습된 classifier patch는 의도적으로 보존됩니다. 이는 managed
 uninstall 범위 밖이며, owner가 학습된 routing을 폐기하려는 경우에만 별도로
 삭제해야 합니다.
 
 ## Custom Subagent
 
-classifier repair는 설치된 read-only `agent_type="triad-repair-analyzer"`와
-`fork_turns="none"`을 사용합니다. `task_name`은 label일 뿐이며, model, effort,
-sandbox는 설치된 agent가 소유합니다. agent는 proposal 또는 escalation만 반환하고
-patch를 적용하지 않습니다. leader는 proposal만 고유한 UTF-8 JSON 파일로 저장한 뒤
-Python `shlex.join`으로 argv list에서 owner command를 만듭니다:
+classifier repair는 prompt-controlled no-edit 동작을 가진 fresh native proposal-only
+child를 사용합니다. Child는 proposal 또는 escalation만 반환하고 patch를 적용하지
+않습니다. leader는 proposal만 고유 UTF-8 JSON에 저장하며 bootstrap은 Python
+`shlex.join`으로 direct owner command를 출력합니다:
 
-`triad-apply-repair --cli <cli> --proposal-file <absolute-path>`.
+`python3 bin/apply_patch.py --cli <cli> --proposal-file <absolute-path> --classifier-file <pinned-absolute-path>`.
 
-이 설치된 실행 파일은 owner의 일반 인증 terminal에서 실행합니다. selector가 없으면
-그 terminal에서 bootstrap을 실행하고 Codex를 재시작하며, generic agent로 낮추지
-않습니다. run log는 age-floor cleanup까지 남아 있습니다.
+동일한 인증된 로그인 터미널에서 출력된 절대 명령을 실행합니다. run log는 age-floor
+cleanup까지 남아 있습니다.
 
 직접 만든 Codex custom subagent가 triad dispatch skill을 호출해야 한다면 Codex
 `skills.config`에 필요한 `SKILL.md` 경로를 명시하세요. 경로는 live
@@ -459,25 +429,22 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
 
-Worktree-first review는 packet-bound `FormalReview` schema, sealed-packet flag,
-source snapshot을 사용하지 않습니다. 이 option의 legacy wrapper support는 명시적
-compatibility 용도로 남을 수 있지만 일반 또는 formal worktree review의 일부가 아니며
-gate prerequisite도 아닙니다.
+Cross-family review는 focused prepared-directory digest, canonical worktree
+fingerprint, family별 하나의 strict `LegVerdict`를 사용합니다. 리더는 result와
+snapshot을 reviewed evidence 밖에 두며 bounded correction 뒤에는 fresh complete
+round를 시작합니다.
 
 Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocation은 provider
 실행 전에 3,600 seconds보다 오래된 managed UUID/file-IPC entry를 best-effort
 cleanup합니다. Antigravity는 `--preflight-only` 전에도 cleanup합니다. Cleanup error는
 dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니다.
 
-Antigravity settings는 agy 호출 중 `~/.gemini/antigravity-cli/` 아래에서
-transaction으로 다룹니다. 같은 시간에 agy permission을 편집하거나 다른
-Antigravity settings 변경을 실행하지 마세요.
-
 ## 보안 (Security)
 
-지속적인 control은 model trust가 아니라 **privilege separation**입니다: 설치된
-read-only analyzer가 untrusted run log를 읽고 proposal만 반환하며, owner-run
-결정적 `triad-apply-repair`가 그 proposal을 검증하고 적용합니다. 전체 threat model:
+지속적인 control은 explicit data authorization, pinned executable,
+digest/mutation check, strict result custody, native proposal-only repair child와
+deterministic owner apply입니다. Permission 선택은 provider/user/project에 남습니다.
+전체 threat model:
 [SECURITY.md](SECURITY.md).
 
 ## Support
@@ -488,12 +455,9 @@ read-only analyzer가 untrusted run log를 읽고 proposal만 반환하며, owne
 
 ## 참고
 
-- 이 플러그인은 `danger-full-access`를 쓰지 않습니다.
-- 생성된 command rules는 `~/.local/bin` 또는 `TRIAD_BOOTSTRAP_BIN_DIR` 아래의 정확한
-  절대 launcher 파일만 match합니다. Launcher가 argv를 검증하고 설치된 plugin cache를
-  호출합니다. Rules는 항상 `prompt`를 사용합니다. `approval_policy=never`이면
-  Agent Review가 비활성화되어 fail-closed 합니다.
-- Automatic review는 commit, push, install, release, publication에 대한 owner workflow
+- TRIAD는 yolo, bypass, skip-trust, accept-edits 또는 동등한 permission control을
+  주입하지 않습니다.
+- Native permission decision은 commit, push, install, release, publication에 대한 owner workflow
   authorization을 제공하지 않습니다.
-- 정확히 설치된 `triad-repair-analyzer`는 pinned read-only sandbox를 사용하며,
-  proposal 또는 escalation만 반환하고 classifier change를 적용하지 않습니다.
+- Fresh repair child는 proposal 또는 escalation만 반환하고 classifier change를
+  적용하지 않습니다.

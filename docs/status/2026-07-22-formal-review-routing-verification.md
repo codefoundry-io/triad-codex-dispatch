@@ -1,14 +1,15 @@
-# Worktree-first review and Agent-review verification ledger
+# Native full-coverage review verification ledger
 
 Updated: 2026-07-24
 
 ## Scope
 
-This ledger covers the worktree-first review contract, provider skill examples,
-distributed ordinary-Codex bootstrap, public documentation, root workspace
-policy, and the accepted AGY truncation failure gate. It does not extend the
-historical packet-era R14 archive. The first live worktree round below was `NOT-SAFE` and
-therefore is not a passing formal verdict.
+This ledger's current authority is the 0.2.532 native full-coverage Behavioral
+contract below. The Deterministic evidence and External-state result sections
+retain pre-0.2.532 facts for provenance only; they are not current candidate
+acceptance evidence. The ledger does not extend the historical packet-era R14
+archive. The first live worktree round below was `NOT-SAFE` and therefore is not
+a passing formal verdict.
 
 ## Behavioral contract
 
@@ -16,16 +17,19 @@ therefore is not a passing formal verdict.
 | --- | --- |
 | Source | One leader-prepared shared review directory containing current approved production source, configuration, and documentation |
 | Navigation | Every leg receives the same directory and task; no prompt inlines a diff or file body; record one simple content digest before dispatch and compare it after every required leg terminates |
-| Impact | Project instructions or the owner supply exact test-source exclusions; if unavailable, stop and ask the owner. Formal plan/pre-merge legs exclude test source; normal SDD implementation review includes relevant test source |
+| Impact | Pre-0.2.532 test-source exclusions are history. The 0.2.532 all-tests/no-exclusion boundary includes all repository test source; normal SDD implementation review includes relevant test source |
 | Mutation check | One simple content digest is recorded before dispatch and compared after every required leg terminates; a mismatch invalidates the round |
 | Review input | The leader-prepared shared review directory and common task are the complete review input; no prompt inlines a diff or file body |
-| Routes | Terra/xhigh, Opus/xhigh, authenticated `agy models` catalog selector `gemini-3.1-pro-high`; outbound model argument `Gemini 3.1 Pro (High)` with no `--effort` |
-| Default approval path | `on-request` + `auto_review` + exact launcher `prompt` rules |
-| Fail-closed posture | Exact launcher rules always use `prompt`; `never` disables Agent Review and cannot create a global allow |
+| Routes | Terra/xhigh, Opus/xhigh, AGY 1.1.10 or newer, authenticated `agy models` catalog selector `gemini-3.1-pro-high`; outbound model argument `gemini-3.1-pro-high` with no `--effort`; the display-label compatibility route is historical |
+| Default approval path | 0.2.532 inherits provider permissions from the authenticated user/project environment and generates no Codex permission state |
+| Fail-closed posture | Native permission denial, missing family coverage, digest/mutation mismatch, or incomplete strict admission invalidates the round; no bypass is inserted |
 | AGY truncation | Exact own-line bytes/lines marker is terminal, quarantined, and non-repairable |
 | Workflow boundary | Commit/push/install/merge/release/publication remain separately authorized |
 
-Provider read-only policy remains intact. The leader prepares one shared review
+The retired wrapper sandbox/profile state is historical. Each provider leg still
+receives a prompt-controlled no-edit/no-execution obligation; it is provider- or
+OS-enforced only when the selected route actually supplies such enforcement.
+0.2.532 inherits provider permissions and generates no Codex permission state. The leader prepares one shared review
 directory and records one simple content digest before dispatch, then compares it
 after every required leg terminates; a mismatch invalidates the round. Every leg
 receives that same directory and task, with no inline diff or file body. The exact
@@ -35,6 +39,11 @@ every test failure as production defect, test-case defect, or intentional
 specification change and resolve or approve it.
 
 ## Deterministic evidence
+
+> **PRE-0.2.532 HISTORICAL / NON-ACCEPTANCE EVIDENCE.** The generated
+> wrapper-rule evaluator, managed launcher/rule state, installed cache/skill
+> exposure, and dated test results below are retained for provenance only. They
+> are not 0.2.532 acceptance evidence.
 
 | Check | Result |
 | --- | --- |
@@ -84,6 +93,11 @@ Darwin. Product bootstrap behavior is unchanged; the final combined suite
 passes.
 
 ## External-state result
+
+> **PRE-0.2.532 HISTORICAL / NON-ACCEPTANCE EVIDENCE.** The plugin cache,
+> managed launchers/rules, loader-environment guard, installed skill exposure,
+> and provider-round results below are historical.
+> This material is not 0.2.532 acceptance evidence.
 
 The plugin cache, managed launchers/rules, and loader-environment guard were
 refreshed locally without a dedicated profile or shell alias. A fresh ephemeral
@@ -178,10 +192,12 @@ file round-trips byte-for-byte. R9 is closed and not PASS.
 
 ## Current route and R12 reconciliation
 
-The authenticated catalog selector `gemini-3.1-pro-high` is distinct from the
-exact outbound `Gemini 3.1 Pro (High)` argument, with no `--effort`. Preflight
-proves requested argv construction only; exposed identity must agree, and absent
-identity is `unexposed` once. The base-slug plus `--effort high` route is not
+The current Google route requires AGY 1.1.10 or newer. The authenticated
+catalog selector `gemini-3.1-pro-high` is the exact outbound
+`gemini-3.1-pro-high` argument, with no `--effort`; the display-label
+compatibility route is historical. Preflight proves requested argv construction
+only; exposed identity must agree, and absent identity is `unexposed` once. The
+base-slug plus `--effort high` route is not
 current policy until a fresh runtime probe proves acceptance and identity
 agreement.
 
@@ -248,7 +264,8 @@ and documentation plus a common task as the complete review input. Every leg
 receives the same directory and task; no prompt inlines a diff or file body.
 Record one simple content digest before dispatch and compare it after every
 required leg terminates; a mismatch invalidates the round. Test source is not
-sent, opened, or reviewed by any leg. Local test execution and the full-worktree
+sent, opened, or reviewed by any leg only in this pre-0.2.532 history.
+0.2.532 formal plan/pre-merge rounds include all repository test source. Local test execution and the full-worktree
 mutation fingerprint remain leader responsibilities.
 
 The R14-R17 ledger blocks below are historical-only records. Their path-list-era

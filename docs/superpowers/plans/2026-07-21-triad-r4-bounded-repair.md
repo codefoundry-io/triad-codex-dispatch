@@ -1,5 +1,9 @@
 # Triad R4 Bounded Repair Implementation Plan
 
+> **HISTORICAL / SUPERSEDED / NON-EXECUTABLE.** Do not execute this plan. Use the
+> current [0.2.532 plan](2026-07-30-native-permissions-full-coverage-review.md)
+> and [0.2.532 design](../specs/2026-07-30-native-permissions-full-coverage-review-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Repair the six deterministically confirmed R3 defects and apply a simple one-hour best-effort cleanup policy without expanding the runtime.
