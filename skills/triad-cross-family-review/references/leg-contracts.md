@@ -14,11 +14,14 @@ python3 <toolkit>/bin/claude_wrapper.py
   --cwd <prepared-directory>
   --model opus
   --effort xhigh
+  --timeout 1800
   --pydantic verdict_schema:LegVerdict
 ```
 
 Claude receives no implementation task. Its terminal validated JSON is the
-Claude leg result.
+Claude leg result. The formal Claude leg uses the explicit 1,800-second
+end-to-end wrapper deadline; shorter polling waits are wake-up boundaries, not
+provider failures.
 
 ## Google family
 

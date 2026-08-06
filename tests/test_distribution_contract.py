@@ -138,14 +138,22 @@ def test_governing_agy_documents_match_the_current_formal_route() -> None:
         assert "one provider call" in text, path
 
 
-def test_current_release_docs_bind_the_superseded_agy_route_and_pending_r7_candidate() -> None:
+def test_current_release_docs_bind_the_superseded_agy_route_and_pending_r8_candidate() -> None:
     changelog = _text(ROOT / "CHANGELOG.md")
     handoff = _text(ROOT / "docs/status/2026-08-05-next-session-handoff.md")
+    release_plan = _text(
+        ROOT
+        / "docs"
+        / "superpowers"
+        / "plans"
+        / "2026-08-05-triad-0.2.533-owner-decisions-and-release.md"
+    )
 
     assert "`gemini-3.1-pro-high --effort high`" in changelog
     assert "0.2.532 route is historical and superseded" in changelog
-    assert "post-r6 bounded-correction" in handoff
-    assert "final-0.2.533-r7" in handoff
+    assert "post-r7 bounded-correction" in handoff
+    assert "final-0.2.533-r8" in handoff
+    assert "final-0.2.533-r8" in release_plan
     assert "docs/references/repair-protocol.md" in handoff
 
 

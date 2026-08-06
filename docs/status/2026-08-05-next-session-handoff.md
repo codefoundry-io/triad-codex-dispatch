@@ -2,10 +2,11 @@
 
 Date: 2026-08-06
 
-Status: post-r6 bounded-correction handoff. Review round r6 was invalid because
-fresh Codex returned an admitted `NOT-SAFE` Major finding. That production
-defect and two documentation defects are corrected in the pending r7 candidate;
-final admission and installation remain incomplete.
+Status: post-r7 bounded-correction handoff. Review round r7 was invalid because
+the Claude leg timed out at the incorrectly reused 600-second deadline. Google
+and fresh Codex returned admitted `SAFE`; Codex's one Minor documentation
+finding reproduced. The timeout contract and stale progress note are corrected
+in the pending r8 candidate; final admission and installation remain incomplete.
 
 ## Start here
 
@@ -16,8 +17,8 @@ Work from:
 ```
 
 The implementation branch is `release/0.2.532`; the plugin manifest version is
-`0.2.533`. The pending r7 candidate includes the owner-approved 0.2.533 tasks,
-the r2 through r4 corrections, and the bounded r5 and r6 corrections recorded below.
+`0.2.533`. The pending r8 candidate includes the owner-approved 0.2.533 tasks
+and the bounded r2 through r7 corrections recorded below.
 Resolve the exact candidate with `git rev-parse HEAD`; do not infer it from an
 earlier review digest or distribution archive.
 
@@ -53,7 +54,7 @@ workspace and child-repository state.
   verification.
 - Explicitly superseded the conflicting 0.2.532 AGY design and implementation
   plan, and regression-bound their current-authority banners.
-- Source tests for the pending r7 candidate: `426 passed` under Python 3.12.13
+- Source tests for the pending r8 candidate: `426 passed` under Python 3.12.13
   and pytest 9.0.3. Do not reuse earlier 406-, 422-, 424-, or 425-test snapshots.
 
 Important 0.2.533 commits before the bounded r3 correction, newest last:
@@ -68,38 +69,34 @@ dc59558 fix: reject empty benchmark evidence
 21bb477 docs: supersede stale formal route records
 ```
 
-## Final review state and pending r7
+## Final review state and pending r8
 
-Review round `final-0.2.533-r6` used prepared digest:
+Review round `final-0.2.533-r7` used prepared digest:
 
 ```text
-3cce9ef71c9f688ddb970b7ac2a85b1f60b2b5c06593220a016fc22980251562
+8e146f6d412fabb1580a63f81c59c547fc5005f471988b15250ecdb1e82d341c
 ```
 
 - Google: valid `SAFE`, no findings.
-- Claude: valid `SAFE`, three Minor findings.
-- Fresh Codex: valid `NOT-SAFE`, one Major finding.
+- Claude: invalid; the wrapper timed out at 600 seconds without a `LegVerdict`.
+- Fresh Codex: valid `SAFE`, one Minor documentation finding.
 - Prepared directory and canonical worktree: `ROUND_INTEGRITY_OK`.
 
-The Codex Major and one Claude Minor reproduced against canonical source: the
-AGY timeout branch returned before parsing partial stream output, so an exposed
-or conflicting `init.model` was discarded as `unexposed`. The pending r7
-candidate parses partial events first, preserves the first conflicting or last
-exposed runtime identity, keeps timeout as the terminal classification, and
-adds a regression test.
+The Codex Minor reproduced against canonical source: the current-authority
+release plan still described the post-r5 state and a pending r6 round. The
+pending r8 candidate updates that progress note to the completed invalid r7 and
+pending r8 state.
 
-The other two Claude Minors also reproduced. The current-authority release plan
-showed only the colon form of the formal Gemini schema operand even though the
-implementation accepts both colon and dotted forms. Its example now matches
-the shipped two-operand set. The r6 prepared boundary wording counted the 77
-repository-relative candidate paths plus `TASK.md` and `REVIEW.diff` but did
-not explicitly name `FILELIST.txt` itself. The next round must state the exact
-80-file boundary: 77 paths listed in `FILELIST.txt`, plus `FILELIST.txt`,
-`TASK.md`, and `REVIEW.diff`.
+The leader also reproduced the timeout contract gap. Prior owner direction and
+validated formal dispatch used a generous 1,800-second wrapper deadline, but
+the current leg contract omitted `--timeout`; the leader copied the r6
+600-second invocation into r7. The pending r8 skill reference requires
+`--timeout 1800` for the formal Claude leg while leaving ordinary Claude
+dispatch defaults unchanged.
 
-Run a fresh complete `final-0.2.533-r7` round over a new digest, including the
-active `docs/references/repair-protocol.md` boundary and the explicit 80-file
-count above. Do not reuse r5 or r6 verdicts for final admission.
+Run a fresh complete `final-0.2.533-r8` round over a new digest, including the
+active `docs/references/repair-protocol.md` boundary and the same explicit
+80-file boundary. Do not reuse r5 through r7 verdicts for final admission.
 
 ## Approved owner decisions
 
@@ -122,7 +119,7 @@ because its manifest is already versioned `0.2.533`. That inventory is not
 installed/cache byte identity, bootstrap proof, or fresh-process skill exposure;
 those acceptance steps have not happened yet.
 
-The latest verified pre-r7 archive was staged at:
+The latest verified pre-r8 archive was staged at:
 
 ```text
 _runs/distribution/0.2.533-final-r4/triad-codex-dispatch-0.2.533.tar
@@ -149,10 +146,11 @@ After a unanimous fresh review round:
 8. Tell the owner to open a new interactive Codex session. The current session
    cannot reload the updated skill catalog.
 
-The owner authorized remote publication and skill update on 2026-08-06. Execute
-them only after unanimous r7 admission and exact packaged-byte verification.
-The exact changed r7 external-review boundary requires a new owner approval
-before Claude or Google dispatch.
+The owner authorized remote publication, the skill update, and this bounded
+three-family review workflow on 2026-08-06. Execute publication and installation
+only after unanimous r8 admission and exact packaged-byte verification. Do not
+repeat an approval prompt while provider, objective, and data categories remain
+inside that authorization.
 
 ## Argus continuation after TRIAD
 
