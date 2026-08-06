@@ -77,10 +77,19 @@ def test_cross_family_skill_has_one_round_unit_and_owner_design_gate() -> None:
 
 def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     claude = _text(SKILLS / "triad-claude-dispatch" / "SKILL.md")
+    leg_contracts = _text(
+        SKILLS
+        / "triad-cross-family-review"
+        / "references"
+        / "leg-contracts.md"
+    )
     agy = _text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md")
     gemini = _text(SKILLS / "triad-gemini-dispatch" / "SKILL.md")
 
     assert "--model opus" in claude and "--effort xhigh" in claude
+    assert "--timeout 1800" in claude
+    assert "--timeout 1800" in leg_contracts
+    assert "wake-up boundaries" in leg_contracts
     assert "1.1.10 or newer" in agy
     assert "--model gemini-3.1-pro-high" in agy
     assert "--effort high" in agy
@@ -138,7 +147,7 @@ def test_governing_agy_documents_match_the_current_formal_route() -> None:
         assert "one provider call" in text, path
 
 
-def test_current_release_docs_bind_the_superseded_agy_route_and_pending_r8_candidate() -> None:
+def test_current_release_docs_bind_the_superseded_agy_route_and_pending_r9_candidate() -> None:
     changelog = _text(ROOT / "CHANGELOG.md")
     handoff = _text(ROOT / "docs/status/2026-08-05-next-session-handoff.md")
     release_plan = _text(
@@ -151,9 +160,11 @@ def test_current_release_docs_bind_the_superseded_agy_route_and_pending_r8_candi
 
     assert "`gemini-3.1-pro-high --effort high`" in changelog
     assert "0.2.532 route is historical and superseded" in changelog
-    assert "post-r7 bounded-correction" in handoff
-    assert "final-0.2.533-r8" in handoff
-    assert "final-0.2.533-r8" in release_plan
+    assert "post-r8 bounded-correction" in handoff
+    assert "final-0.2.533-r9" in handoff
+    assert "final-0.2.533-r9" in release_plan
+    assert "FINAL_REVIEW_ID" in release_plan
+    assert "final-r2" not in release_plan
     assert "docs/references/repair-protocol.md" in handoff
 
 

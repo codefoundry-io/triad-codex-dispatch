@@ -2,11 +2,10 @@
 
 Date: 2026-08-06
 
-Status: post-r7 bounded-correction handoff. Review round r7 was invalid because
-the Claude leg timed out at the incorrectly reused 600-second deadline. Google
-and fresh Codex returned admitted `SAFE`; Codex's one Minor documentation
-finding reproduced. The timeout contract and stale progress note are corrected
-in the pending r8 candidate; final admission and installation remain incomplete.
+Status: post-r8 bounded-correction handoff. Review round r8 returned admitted
+`SAFE` from all three families under the corrected 1,800-second deadline. Three
+Minor contract/documentation findings reproduced and are corrected in the
+pending r9 candidate; final r9 admission and installation remain incomplete.
 
 ## Start here
 
@@ -17,8 +16,8 @@ Work from:
 ```
 
 The implementation branch is `release/0.2.532`; the plugin manifest version is
-`0.2.533`. The pending r8 candidate includes the owner-approved 0.2.533 tasks
-and the bounded r2 through r7 corrections recorded below.
+`0.2.533`. The pending r9 candidate includes the owner-approved 0.2.533 tasks
+and the bounded r2 through r8 corrections recorded below.
 Resolve the exact candidate with `git rev-parse HEAD`; do not infer it from an
 earlier review digest or distribution archive.
 
@@ -54,7 +53,7 @@ workspace and child-repository state.
   verification.
 - Explicitly superseded the conflicting 0.2.532 AGY design and implementation
   plan, and regression-bound their current-authority banners.
-- Source tests for the pending r8 candidate: `426 passed` under Python 3.12.13
+- Source tests for the pending r9 candidate: `426 passed` under Python 3.12.13
   and pytest 9.0.3. Do not reuse earlier 406-, 422-, 424-, or 425-test snapshots.
 
 Important 0.2.533 commits before the bounded r3 correction, newest last:
@@ -69,34 +68,32 @@ dc59558 fix: reject empty benchmark evidence
 21bb477 docs: supersede stale formal route records
 ```
 
-## Final review state and pending r8
+## Final review state and pending r9
 
-Review round `final-0.2.533-r7` used prepared digest:
+Review round `final-0.2.533-r8` used prepared digest:
 
 ```text
-8e146f6d412fabb1580a63f81c59c547fc5005f471988b15250ecdb1e82d341c
+e2e5f1c7e04c9dc6e3b8bfb0382ac4c29e6ee974d9e7417e318c757d43f934b3
 ```
 
 - Google: valid `SAFE`, no findings.
-- Claude: invalid; the wrapper timed out at 600 seconds without a `LegVerdict`.
-- Fresh Codex: valid `SAFE`, one Minor documentation finding.
+- Claude: valid `SAFE`, two Minor timeout-contract findings; completed in
+  655.7 seconds under the explicit 1,800-second deadline.
+- Fresh Codex: valid `SAFE`, one Minor stale release-path finding.
 - Prepared directory and canonical worktree: `ROUND_INTEGRITY_OK`.
 
-The Codex Minor reproduced against canonical source: the current-authority
-release plan still described the post-r5 state and a pending r6 round. The
-pending r8 candidate updates that progress note to the completed invalid r7 and
-pending r8 state.
+The Claude Minors reproduced: `triad-claude-dispatch` summarized the formal
+route without `--timeout 1800`, and the distribution contract did not bind the
+deadline or wake-up-boundary text. The pending r9 candidate corrects both while
+leaving ordinary Claude dispatch defaults unchanged.
 
-The leader also reproduced the timeout contract gap. Prior owner direction and
-validated formal dispatch used a generous 1,800-second wrapper deadline, but
-the current leg contract omitted `--timeout`; the leader copied the r6
-600-second invocation into r7. The pending r8 skill reference requires
-`--timeout 1800` for the formal Claude leg while leaving ordinary Claude
-dispatch defaults unchanged.
+The Codex Minor also reproduced: Task 5 still used release-specific `final-r2`
+review and distribution paths. The pending r9 plan uses `FINAL_REVIEW_ID` and
+requires a fresh unused evidence directory for the admitted round.
 
-Run a fresh complete `final-0.2.533-r8` round over a new digest, including the
+Run a fresh complete `final-0.2.533-r9` round over a new digest, including the
 active `docs/references/repair-protocol.md` boundary and the same explicit
-80-file boundary. Do not reuse r5 through r7 verdicts for final admission.
+80-file boundary. Do not reuse r5 through r8 verdicts for final admission.
 
 ## Approved owner decisions
 
@@ -119,7 +116,7 @@ because its manifest is already versioned `0.2.533`. That inventory is not
 installed/cache byte identity, bootstrap proof, or fresh-process skill exposure;
 those acceptance steps have not happened yet.
 
-The latest verified pre-r8 archive was staged at:
+The latest verified pre-r9 archive was staged at:
 
 ```text
 _runs/distribution/0.2.533-final-r4/triad-codex-dispatch-0.2.533.tar
@@ -148,7 +145,7 @@ After a unanimous fresh review round:
 
 The owner authorized remote publication, the skill update, and this bounded
 three-family review workflow on 2026-08-06. Execute publication and installation
-only after unanimous r8 admission and exact packaged-byte verification. Do not
+only after unanimous r9 admission and exact packaged-byte verification. Do not
 repeat an approval prompt while provider, objective, and data categories remain
 inside that authorization.
 
