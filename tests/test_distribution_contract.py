@@ -101,6 +101,15 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     compact_prompt_contract = " ".join(prompt_contract.split())
     compact_reviewer_routing = " ".join(reviewer_routing.split())
 
+    assert "## Contents" in leg_contracts
+    for entry in (
+        "[Claude](#claude)",
+        "[Google family](#google-family)",
+        "[Fresh Codex](#fresh-codex)",
+        "[Shared containment boundary](#shared-containment-boundary)",
+    ):
+        assert entry in leg_contracts
+
     assert "--model opus" in claude and "--effort xhigh" in claude
     assert "--timeout 1800" in claude
     assert (

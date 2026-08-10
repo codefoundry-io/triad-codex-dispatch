@@ -1,5 +1,12 @@
 # Review leg contracts
 
+## Contents
+
+- [Claude](#claude)
+- [Google family](#google-family)
+- [Fresh Codex](#fresh-codex)
+- [Shared containment boundary](#shared-containment-boundary)
+
 Resolve one absolute toolkit root and one prepared directory. Render one shared
 prompt from `review-prompt-contract.md`; only the reviewer perspective and
 authorized provider route differ. Start every leg before collecting results.
@@ -136,6 +143,8 @@ python3 "<toolkit>/bin/verdict_schema.py" validate \
   --expected-family codex \
   --expected-content-digest "<digest>"
 ```
+
+## Shared containment boundary
 
 The no-edit contract is prompt-controlled unless runtime metadata proves a
 stronger boundary. Mutation detection, not a sandbox claim, decides admission.
