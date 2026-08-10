@@ -67,8 +67,8 @@ the round.
 3. **Finish current packet bytes.** Add current `TASK.md`, `REVIEW.diff`, and
    optional `EVIDENCE.md` only. Run
    `python3 bin/review_round.py manifest --prepared-dir "<shared>"` last. The generated root manifest is a
-   sorted JSON array of exact decoded `{path, sha256}` objects for every other regular file;
-   only the root `SOURCE_SHA256SUMS` is excluded. Prompts name the directory; they do not inline
+   sorted JSON array of exact decoded `{path, sha256}` objects. The manifest covers every regular file in the prepared directory except
+   `SOURCE_SHA256SUMS` itself. Prompts name the directory; they do not inline
    file bodies. Never include a prior-round task, prior-round diff, prior-round manifest,
    prior-round snapshot, prior-round prompt, prior-round status, or prior-round verdict.
    Outside `shared/source/product/`, the prepared `shared/` inventory is exactly

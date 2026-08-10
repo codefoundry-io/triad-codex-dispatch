@@ -17,7 +17,8 @@ The prepared directory contains complete current files relevant to the decision
 and governing documentation under `source/product/`. The only current-round
 files outside that tree are `TASK.md`, `REVIEW.diff`, optional `EVIDENCE.md`, and
 `SOURCE_SHA256SUMS`. The manifest is a sorted JSON array of exact decoded
-`{path, sha256}` objects for every other regular file in the prepared directory.
+`{path, sha256}` objects. The manifest covers every regular file in the prepared
+directory except `SOURCE_SHA256SUMS` itself.
 The diff is a navigation entry
 point, not an inline prompt payload.
 
