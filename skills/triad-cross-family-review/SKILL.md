@@ -96,7 +96,8 @@ the round.
 5. **Repair workflow defects before redispatch.** A packet workflow defect
    invalidates the round, including a shell invocation that fails before Python starts. Stop after the failed process;
    never retry a corrected command under the same ID. When `prepare` fails before returning a review root, record the failure and
-   restart from preparation with a fresh review ID; no root exists to clean up.
+   restart from preparation with a fresh review ID; no returned root is available for ordinary cleanup. If the recorded failure names
+   a partial review root that could not be removed, stop and report that exact path instead of retrying deletion or redispatching.
    Otherwise clean up the returned root. In either case, fix the skill or tool and its regression test before another dispatch,
    then start again from preparation with a fresh review ID. Never manually
    rebuild or alter a packet to bypass the defect.

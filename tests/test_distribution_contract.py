@@ -236,7 +236,13 @@ def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
     assert "Never manually rebuild or alter a packet to bypass the defect" in skill
     assert (
         "When `prepare` fails before returning a review root, record the failure and "
-        "restart from preparation with a fresh review ID; no root exists to clean up"
+        "restart from preparation with a fresh review ID; no returned root is available "
+        "for ordinary cleanup"
+        in skill
+    )
+    assert (
+        "If the recorded failure names a partial review root that could not be removed, "
+        "stop and report that exact path instead of retrying deletion or redispatching"
         in skill
     )
     assert "Otherwise clean up the returned root" in skill
