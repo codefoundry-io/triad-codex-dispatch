@@ -100,6 +100,13 @@ def test_checked_in_runtime_benchmark_proves_two_round_convergence() -> None:
     cases = _load("cases.json")
     focused = _load("focused-convergent-runtime.json")
 
+    assert focused["methodology_caveat"] == (
+        "LOCAL-2 was added to expected_finding_ids after reviewer output. "
+        "The preregistered defect set was detected 3/3; the checked-in 4/4 "
+        "and zero-false-finding aggregate uses amended ground truth. "
+        "Calls-per-round and batch-artifact counts are unaffected."
+    )
+
     report = benchmark.aggregate(baseline, focused, cases)
 
     assert focused["total_calls"] == 6

@@ -104,9 +104,12 @@
 - Rejects benchmark inputs with zero cases or zero planted findings, and adds a
   clean-HEAD distribution verifier that stages exact archive bytes, compares
   load-bearing hashes, and runs tests from the extracted package.
-- Records a two-round runtime benchmark: six total provider calls, 4/4
-  adjudicated defect recall, 3/3 confirmation `SAFE`, zero admitted mutations,
-  and an 87.5% call reduction against the captured 24-call batch plan.
+- Records a two-round runtime benchmark: six total provider calls, 3/3
+  preregistered defect recall, 3/3 confirmation `SAFE`, zero admitted mutations,
+  and an 87.5% call reduction against the captured 24-call batch plan. `LOCAL-2`
+  was added to the expected IDs after reviewer output, so the checked-in 4/4 and
+  zero-false-finding aggregate uses amended ground truth; the call and artifact
+  measurements are unaffected.
 
 ## 0.2.532 — 2026-08-03
 
