@@ -175,7 +175,11 @@ family가 unavailable이면 invalid round입니다. 전체 계약은
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.533 업그레이드
+### 0.2.534 업그레이드
+
+0.2.534는 0.2.533의 focused-review runtime을 유지하면서 bounded review contract와
+benchmark provenance를 바로잡습니다. 새로운 verdict severity, path root, permission
+mode, provider route는 추가하지 않습니다.
 
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
@@ -194,7 +198,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.533-final-r2'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.534-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
