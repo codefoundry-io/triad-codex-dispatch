@@ -52,7 +52,8 @@ the round.
    substitute another checkout or installed-cache copy.
    Invoke every packaged lifecycle subcommand as `python3 bin/review_round.py ...`; never execute
    `bin/review_round.py` directly. Both `--source-root` and `--member-list` inputs must be absolute canonical no-symlink paths, and `--member-list` must name an existing regular file; any violation is a workflow failure that invalidates the round and requires a fresh review ID. Then run `python3 bin/review_round.py prepare --review-id "<id>" --source-root "<root>"
-   --member-list "<file>" --required-members-json "$review_members_json"`. For every JSON-valued lifecycle option, pass the serialized JSON as one
+   --member-list "<file>" --required-members-json "$review_members_json"`. Use the canonical Git worktree root as `--source-root`; it must be the same canonical worktree root passed to `capture` and `verify`.
+   For every JSON-valued lifecycle option, pass the serialized JSON as one
    shell argument. With `/bin/zsh -lic`, pass a placeholder command name before the serialized JSON so zsh assigns
    that name to `$0` and the JSON to `$1`. Assign `$1` to a task-specific variable and expand that variable double-quoted; never splice nested quote fragments or leave JSON exposed to glob expansion.
    The command rejects any required path

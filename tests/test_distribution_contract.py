@@ -136,12 +136,17 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         in compact_reviewer_routing
     )
     assert (
-        "The prepared-directory digest and canonical-worktree fingerprint monitor "
-        "exactly those two surfaces"
+        "The prepared-directory digest monitors every prepared regular file"
         in compact_leg_contracts
     )
     assert (
-        "mutation outside both surfaces and network egress of packet content are "
+        "the canonical-worktree fingerprint monitors Git HEAD, staged and unstaged "
+        "tracked changes, and non-ignored untracked entries"
+        in compact_leg_contracts
+    )
+    assert (
+        "Git-ignored worktree paths, paths outside both directories, and network "
+        "egress of packet content are "
         "neither prevented nor detected by those fingerprints"
         in compact_leg_contracts
     )
@@ -326,6 +331,11 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "reserved `triad-review-<review-id>` system-temp namespace" in skill
     assert "creates the root exclusively" in skill
     assert "exact member list from the canonical source root" in skill
+    assert (
+        "Use the canonical Git worktree root as `--source-root`; it must be the same "
+        "canonical worktree root passed to `capture` and `verify`"
+        in skill
+    )
     assert "member-list file is the only source-copy IPC" in skill
     assert "`shared/source/product/<member>`" in skill
     assert "no unlisted source member is copied" in skill
