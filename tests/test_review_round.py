@@ -2132,6 +2132,11 @@ def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
     )
     assert "not expressly excluded by metadata.approved_boundary" in prompt
     assert "do not cite it as a finding or list it in affected_surfaces_inspected" in prompt
+    assert (
+        "Prepared product paths map to worktree-relative paths by removing their leading "
+        "source/product/ prefix"
+        in prompt
+    )
     assert "suspected normalized worktree-relative path and required check in open_questions" in prompt
     assert "which requires NOT-SAFE" in prompt
 

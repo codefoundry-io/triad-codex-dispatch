@@ -235,17 +235,17 @@ def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
     assert "Never reuse an earlier review ID" in skill
     assert "Never manually rebuild or alter a packet to bypass the defect" in skill
     assert (
-        "When `prepare` fails before returning a review root, record the failure and "
-        "restart from preparation with a fresh review ID; no returned root is available "
-        "for ordinary cleanup"
+        "If it neither returned a review root nor named an undeletable partial root, "
+        "record the failure; there is no root to clean up"
         in skill
     )
     assert (
-        "If the recorded failure names a partial review root that could not be removed, "
-        "stop and report that exact path instead of retrying deletion or redispatching"
+        "If it names a partial review root that could not be removed, stop and report "
+        "that exact path; do not retry deletion or redispatch"
         in skill
     )
-    assert "Otherwise clean up the returned root" in skill
+    assert "If it returned a review root, clean up that returned root" in skill
+    assert "After the first or third outcome" in skill
 
 
 def test_cross_family_skill_uses_current_task_authority_before_preparing() -> None:
@@ -384,11 +384,13 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "use supported exact cleanup, and return without entering provider dispatch" in skill
     assert (
         "For review rounds, after all required legs terminate, run "
-        "`python3 bin/review_round.py verify`"
+        "`python3 bin/review_round.py verify --prepared-dir \"<shared>\" "
+        "--worktree \"<canonical-worktree>\" "
+        "--snapshot \"<returned-root>/results/snapshot.json\"`"
     ) in skill
     assert (
         "the task-authorized zero-provider characterization runs "
-        "`python3 bin/review_round.py verify` through the Flow step 4 branch"
+        "that same command through the Flow step 4 branch"
     ) in skill
     assert "For review rounds, the gate passes only when all required families" in skill
     assert "For review rounds: Normal cleanup occurs only after final integrity" in skill

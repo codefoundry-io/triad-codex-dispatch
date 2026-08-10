@@ -881,6 +881,9 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         "prepared directory and is not expressly excluded by metadata.approved_boundary, do not cite "
         "it as a finding or list it in affected_surfaces_inspected. Put its suspected normalized "
         "worktree-relative path and required check in open_questions, which requires NOT-SAFE. "
+        "Prepared product paths map to worktree-relative paths by removing their leading "
+        "source/product/ prefix; state any other suspected omitted path directly as a normalized "
+        "worktree-relative POSIX path. "
         "Report proposed design/specification changes as findings or open questions; do not implement them."
     )
 

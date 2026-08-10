@@ -90,15 +90,17 @@ the round.
    A current task authorizes this branch only when it both prohibits provider dispatch and directs the lifecycle through verify and exact cleanup.
    This branch is not a review round or gate: make no review-admission, convergence, adjudication, or gate-passage claim.
    Only when the governing current task satisfies that selector, render the requested prompts with
-   packaged `python3 bin/review_round.py render`, run `python3 bin/review_round.py verify`, use supported exact cleanup, and return without entering provider dispatch.
+   packaged `python3 bin/review_round.py render`, run
+   `python3 bin/review_round.py verify --prepared-dir "<shared>" --worktree "<canonical-worktree>" --snapshot "<returned-root>/results/snapshot.json"`,
+   use supported exact cleanup, and return without entering provider dispatch.
    Otherwise continue through the normal three-family flow. Every rendered prompt carries dynamic values
    only in one canonical `Review metadata: ` JSON record.
 5. **Repair workflow defects before redispatch.** A packet workflow defect
    invalidates the round, including a shell invocation that fails before Python starts. Stop after the failed process;
-   never retry a corrected command under the same ID. When `prepare` fails before returning a review root, record the failure and
-   restart from preparation with a fresh review ID; no returned root is available for ordinary cleanup. If the recorded failure names
-   a partial review root that could not be removed, stop and report that exact path instead of retrying deletion or redispatching.
-   Otherwise clean up the returned root. In either case, fix the skill or tool and its regression test before another dispatch,
+   never retry a corrected command under the same ID. When `prepare` fails, follow exactly one outcome. If it neither returned a
+   review root nor named an undeletable partial root, record the failure; there is no root to clean up. If it names a partial review
+   root that could not be removed, stop and report that exact path; do not retry deletion or redispatch. If it returned a review root,
+   clean up that returned root. After the first or third outcome, fix the skill or tool and its regression test before another dispatch,
    then start again from preparation with a fresh review ID. Never manually
    rebuild or alter a packet to bypass the defect.
 6. **Dispatch the round.** Read
@@ -112,8 +114,8 @@ the round.
    the packaged validator. A missing, refused, malformed, route-mismatched, or
    incomplete required leg invalidates the round.
 8. **Verify integrity.** For review rounds, after all required legs terminate, run
-   `python3 bin/review_round.py verify`; the task-authorized zero-provider characterization runs
-   `python3 bin/review_round.py verify` through the Flow step 4 branch. Do not modify the canonical worktree until every
+   `python3 bin/review_round.py verify --prepared-dir "<shared>" --worktree "<canonical-worktree>" --snapshot "<returned-root>/results/snapshot.json"`;
+   the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch. Do not modify the canonical worktree until every
    required leg has terminated and verify prints `ROUND_INTEGRITY_OK`. A
    prepared-directory or worktree fingerprint mismatch invalidates the round.
 9. **Reproduce and converge.** Read
