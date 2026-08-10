@@ -876,6 +876,9 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         "is non-blocking in trigger and evidence. Missing deployment or operational context needed "
         "to decide current correctness belongs in open_questions and therefore requires NOT-SAFE. "
         "Never suppress genuine uncertainty to produce SAFE. "
+        "If a potentially relevant surface is absent from the prepared directory, do not cite it "
+        "as a finding or list it in affected_surfaces_inspected. Put its suspected normalized "
+        "worktree-relative path and required check in open_questions, which requires NOT-SAFE. "
         "Report proposed design/specification changes as findings or open questions; do not implement them."
     )
 

@@ -2107,6 +2107,26 @@ def test_rendered_prompt_distinguishes_suggestions_from_unknown_context(prepared
     assert "Never suppress genuine uncertainty to produce SAFE" in prompt
 
 
+def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
+    brief = ReviewBrief(
+        review_id="omitted-surface-r1",
+        review_kind="pre-merge",
+        family="codex",
+        objective="Trace affected callers.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("src/source.py",),
+    )
+
+    prompt = render_review_prompt(brief)
+
+    assert "If a potentially relevant surface is absent from the prepared directory" in prompt
+    assert "do not cite it as a finding or list it in affected_surfaces_inspected" in prompt
+    assert "suspected normalized worktree-relative path and required check in open_questions" in prompt
+    assert "which requires NOT-SAFE" in prompt
+
+
 def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_interpolation(
     tmp_path: Path,
 ) -> None:

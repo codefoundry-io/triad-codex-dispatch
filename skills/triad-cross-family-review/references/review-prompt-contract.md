@@ -79,5 +79,13 @@ or operational context needed to decide current correctness belongs in
 `open_questions` and therefore requires `NOT-SAFE`. Never suppress genuine
 uncertainty to produce `SAFE`.
 
+If a potentially relevant surface is absent from the prepared directory, do
+not cite it as a finding or list it in `affected_surfaces_inspected`. Put its
+suspected normalized worktree-relative path and the required check in
+`open_questions`, which requires `NOT-SAFE`. The leader reproduces the
+suspicion against the canonical worktree. If the surface is relevant, the
+leader prepares a new complete directory containing it and restarts every
+required family under a fresh review ID.
+
 Do not ask how to proceed, omit the verdict, wrap JSON in prose, or implement a
 proposed design change.
