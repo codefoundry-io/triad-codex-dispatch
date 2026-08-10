@@ -157,43 +157,43 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         assert "command-specific allowlist" in compact
         assert "--expected-permission-mode" not in compact
         assert "--init-preflight" not in compact
-    log_assignment = "TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs"
+    log_assignment = 'TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs"'
     assert leg_contracts.count(log_assignment) == 3
     provider_commands = (
         (
             "bin/claude_wrapper.py",
-            "  --prompt-file <leader-owned-prompt> \\",
-            "  --cwd <prepared-directory> \\",
+            '  --prompt-file "<leader-owned-prompt>" \\',
+            '  --cwd "<prepared-directory>" \\',
             "  --model opus \\",
             "  --effort xhigh \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
-            "  > <returned-root>/results/claude.json",
+            '  > "<returned-root>/results/claude.json"',
         ),
         (
             "bin/antigravity_wrapper.py",
-            "  --prompt-file <leader-owned-prompt> \\",
-            "  --cwd <prepared-directory> \\",
+            '  --prompt-file "<leader-owned-prompt>" \\',
+            '  --cwd "<prepared-directory>" \\',
             "  --model gemini-3.1-pro-high \\",
             "  --effort high \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
-            "  > <returned-root>/results/google.json",
+            '  > "<returned-root>/results/google.json"',
         ),
         (
             "bin/gemini_wrapper.py",
-            "  --prompt-file <leader-owned-prompt> \\",
-            "  --cwd <prepared-directory> \\",
-            "  --model <owner-authorized-gemini-model> \\",
+            '  --prompt-file "<leader-owned-prompt>" \\',
+            '  --cwd "<prepared-directory>" \\',
+            '  --model "<owner-authorized-gemini-model>" \\',
             "  --pydantic verdict_schema:LegVerdict \\",
-            "  > <returned-root>/results/google.json",
+            '  > "<returned-root>/results/google.json"',
         ),
     )
     for wrapper, *options in provider_commands:
         expected = "\n".join(
             (
                 f"{log_assignment} \\",
-                f"python3 <toolkit>/{wrapper} \\",
+                f'python3 "<toolkit>/{wrapper}" \\',
                 *options,
             )
         )
@@ -203,11 +203,11 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     for family in ("claude", "google", "codex"):
         assert "\n".join(
             (
-                "python3 <toolkit>/bin/verdict_schema.py validate \\",
-                f"  --result-file <{family}-result> \\",
-                "  --expected-review-id <review-id> \\",
+                'python3 "<toolkit>/bin/verdict_schema.py" validate \\',
+                f'  --result-file "<{family}-result>" \\',
+                '  --expected-review-id "<review-id>" \\',
                 f"  --expected-family {family} \\",
-                "  --expected-content-digest <digest>",
+                '  --expected-content-digest "<digest>"',
             )
         ) in leg_contracts
     assert "reviews only" in claude
@@ -274,20 +274,28 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         in skill
     )
     assert (
-        "python3 bin/review_round.py capture --prepared-dir <shared> "
-        "--worktree <canonical-worktree> "
-        "--output <returned-root>/results/snapshot.json"
+        'python3 bin/review_round.py capture --prepared-dir "<shared>" '
+        '--worktree "<canonical-worktree>" '
+        '--output "<returned-root>/results/snapshot.json"'
     ) in skill
     assert "bin/review_round.py prepare" in skill
-    assert "--required-members-json <json>" in skill
+    assert '--source-root "<root>"' in skill
+    assert '--member-list "<file>"' in skill
+    assert '--required-members-json "$review_members_json"' in skill
+    assert 'manifest --prepared-dir "<shared>"' in skill
+    assert '--expected-root "<returned-root>"' in skill
     assert canonical_prepare_inputs in skill
     assert (
         "For every JSON-valued lifecycle option, pass the serialized JSON as one "
         "shell argument"
     ) in skill
-    assert "supply the JSON as a positional argument to the login-shell program" in skill
     assert (
-        "assign it to a task-specific variable, and expand that variable double-quoted"
+        "pass a placeholder command name before the serialized JSON so zsh assigns "
+        "that name to `$0` and the JSON to `$1`"
+        in skill
+    )
+    assert (
+        "Assign `$1` to a task-specific variable and expand that variable double-quoted"
         in skill
     )
     assert "never splice nested quote fragments or leave JSON exposed to glob expansion" in skill
@@ -326,7 +334,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     )
     assert "results and prompts under the returned review root" in skill
     assert "snapshots and verdicts under that same current root" in skill
-    assert "`TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs`" in skill
+    assert '`TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs"`' in skill
     assert "bin/review_round.py cleanup" in skill
     assert "Normal cleanup occurs only after final integrity verification and adjudication" in skill
     assert "compare the expected root" in skill

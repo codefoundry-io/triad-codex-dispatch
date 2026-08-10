@@ -14,15 +14,15 @@ invocation contract, and restart every required family under a fresh ID.
 Use the packaged wrapper with the formal-quality route:
 
 ```text
-TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs \
-python3 <toolkit>/bin/claude_wrapper.py \
-  --prompt-file <leader-owned-prompt> \
-  --cwd <prepared-directory> \
+TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs" \
+python3 "<toolkit>/bin/claude_wrapper.py" \
+  --prompt-file "<leader-owned-prompt>" \
+  --cwd "<prepared-directory>" \
   --model opus \
   --effort xhigh \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
-  > <returned-root>/results/claude.json
+  > "<returned-root>/results/claude.json"
 ```
 
 Claude receives no implementation task. Its terminal validated JSON is the
@@ -39,11 +39,11 @@ or execute candidate code, tests, builds, hooks, or scripts.
 Validate the Claude result with:
 
 ```text
-python3 <toolkit>/bin/verdict_schema.py validate \
-  --result-file <claude-result> \
-  --expected-review-id <review-id> \
+python3 "<toolkit>/bin/verdict_schema.py" validate \
+  --result-file "<claude-result>" \
+  --expected-review-id "<review-id>" \
   --expected-family claude \
-  --expected-content-digest <digest>
+  --expected-content-digest "<digest>"
 ```
 
 ## Google family
@@ -52,15 +52,15 @@ Before the round, prove `agy --version` is at least 1.1.10 and `agy models`
 advertises `gemini-3.1-pro-high`. Use:
 
 ```text
-TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs \
-python3 <toolkit>/bin/antigravity_wrapper.py \
-  --prompt-file <leader-owned-prompt> \
-  --cwd <prepared-directory> \
+TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs" \
+python3 "<toolkit>/bin/antigravity_wrapper.py" \
+  --prompt-file "<leader-owned-prompt>" \
+  --cwd "<prepared-directory>" \
   --model gemini-3.1-pro-high \
   --effort high \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
-  > <returned-root>/results/google.json
+  > "<returned-root>/results/google.json"
 ```
 
 The wrapper uses AGY native `stream-json` plus `json-schema` and validates the
@@ -83,13 +83,13 @@ For a separately authorized pre-submission Gemini fallback, use the packaged
 wrapper and the exact owner-authorized Gemini model:
 
 ```text
-TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs \
-python3 <toolkit>/bin/gemini_wrapper.py \
-  --prompt-file <leader-owned-prompt> \
-  --cwd <prepared-directory> \
-  --model <owner-authorized-gemini-model> \
+TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs" \
+python3 "<toolkit>/bin/gemini_wrapper.py" \
+  --prompt-file "<leader-owned-prompt>" \
+  --cwd "<prepared-directory>" \
+  --model "<owner-authorized-gemini-model>" \
   --pydantic verdict_schema:LegVerdict \
-  > <returned-root>/results/google.json
+  > "<returned-root>/results/google.json"
 ```
 
 The owner-approved 1,800-second correction applies to the selected AGY route
@@ -104,11 +104,11 @@ no capacity retry or schema-repair provider call.
 Validate the Google result with:
 
 ```text
-python3 <toolkit>/bin/verdict_schema.py validate \
-  --result-file <google-result> \
-  --expected-review-id <review-id> \
+python3 "<toolkit>/bin/verdict_schema.py" validate \
+  --result-file "<google-result>" \
+  --expected-review-id "<review-id>" \
   --expected-family google \
-  --expected-content-digest <digest>
+  --expected-content-digest "<digest>"
 ```
 
 ## Fresh Codex
@@ -130,11 +130,11 @@ tests, builds, hooks, or scripts. Save its terminal JSON outside the prepared
 directory and validate it with:
 
 ```text
-python3 <toolkit>/bin/verdict_schema.py validate \
-  --result-file <codex-result> \
-  --expected-review-id <review-id> \
+python3 "<toolkit>/bin/verdict_schema.py" validate \
+  --result-file "<codex-result>" \
+  --expected-review-id "<review-id>" \
   --expected-family codex \
-  --expected-content-digest <digest>
+  --expected-content-digest "<digest>"
 ```
 
 The no-edit contract is prompt-controlled unless runtime metadata proves a
