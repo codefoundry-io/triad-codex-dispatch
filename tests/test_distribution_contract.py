@@ -225,6 +225,12 @@ def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
     assert "start again from preparation with a fresh review ID" in skill
     assert "Never reuse an earlier review ID" in skill
     assert "Never manually rebuild or alter a packet to bypass the defect" in skill
+    assert (
+        "When `prepare` fails before returning a review root, record the failure and "
+        "restart from preparation with a fresh review ID; no root exists to clean up"
+        in skill
+    )
+    assert "Otherwise clean up the returned root" in skill
 
 
 def test_cross_family_skill_uses_current_task_authority_before_preparing() -> None:

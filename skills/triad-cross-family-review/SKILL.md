@@ -95,10 +95,11 @@ the round.
    only in one canonical `Review metadata: ` JSON record.
 5. **Repair workflow defects before redispatch.** A packet workflow defect
    invalidates the round, including a shell invocation that fails before Python starts. Stop after the failed process;
-   never retry a corrected command under the same ID. Clean up that round, fix the skill or tool and its
-   regression test before another dispatch, then start again from preparation
-   with a fresh review ID. Never manually rebuild or alter a packet to bypass
-   the defect.
+   never retry a corrected command under the same ID. When `prepare` fails before returning a review root, record the failure and
+   restart from preparation with a fresh review ID; no root exists to clean up.
+   Otherwise clean up the returned root. In either case, fix the skill or tool and its regression test before another dispatch,
+   then start again from preparation with a fresh review ID. Never manually
+   rebuild or alter a packet to bypass the defect.
 6. **Dispatch the round.** Read
    [reviewer routing](references/reviewer-routing.md), then start all three independent
    legs before consuming a verdict. Reviewers may read and search only; they do
