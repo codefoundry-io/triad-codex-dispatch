@@ -67,6 +67,9 @@ Return exactly one JSON object matching `verdict_schema:LegVerdict`:
 A finding contains `severity` (`Critical`, `Major`, or `Minor`), prepared-
 directory-relative `path`, optional positive `line`, concrete `trigger`,
 source-grounded `evidence`, and bounded `correction` direction.
+`findings[].path` and each `affected_surfaces_inspected` entry are prepared-
+directory-relative. Prose in `open_questions` may carry a suspected normalized
+worktree-relative path under the omitted-surface convention below.
 
 `SAFE` allows Minor findings but no Critical/Major finding or open question.
 `NOT-SAFE` requires a Critical/Major finding or open question.
@@ -79,13 +82,14 @@ or operational context needed to decide current correctness belongs in
 `open_questions` and therefore requires `NOT-SAFE`. Never suppress genuine
 uncertainty to produce `SAFE`.
 
-If a potentially relevant surface is absent from the prepared directory, do
-not cite it as a finding or list it in `affected_surfaces_inspected`. Put its
-suspected normalized worktree-relative path and the required check in
-`open_questions`, which requires `NOT-SAFE`. The leader reproduces the
-suspicion against the canonical worktree. If the surface is relevant, the
-leader prepares a new complete directory containing it and restarts every
-required family under a fresh review ID.
+If a potentially relevant surface needed to decide current correctness is
+absent from the prepared directory and is not expressly excluded by
+`metadata.approved_boundary`, do not cite it as a finding or list it in
+`affected_surfaces_inspected`. Put its suspected normalized worktree-relative
+path and the required check in `open_questions`, which requires `NOT-SAFE`.
+The leader reproduces the suspicion against the canonical worktree. If the
+surface is relevant, the leader prepares a new complete directory containing
+it and restarts every required family under a fresh review ID.
 
 Do not ask how to proceed, omit the verdict, wrap JSON in prose, or implement a
 proposed design change.

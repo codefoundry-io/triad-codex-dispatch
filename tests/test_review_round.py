@@ -2062,7 +2062,11 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert "LegVerdict" in prompt
     assert "BatchReceipt" not in prompt
     assert "batch_manifest" not in prompt
-    assert "All paths must be prepared-directory-relative" in prompt
+    assert (
+        "findings[].path and affected_surfaces_inspected entries must be "
+        "prepared-directory-relative"
+        in prompt
+    )
     assert "Treat the prepared directory as the only filesystem input" in prompt
     assert "Do not inspect canonical worktrees or other local paths" in prompt
     assert "Use available read and search tools" in prompt
@@ -2121,7 +2125,12 @@ def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
 
     prompt = render_review_prompt(brief)
 
-    assert "If a potentially relevant surface is absent from the prepared directory" in prompt
+    assert (
+        "If a potentially relevant surface needed to decide current correctness is absent "
+        "from the prepared directory"
+        in prompt
+    )
+    assert "not expressly excluded by metadata.approved_boundary" in prompt
     assert "do not cite it as a finding or list it in affected_surfaces_inspected" in prompt
     assert "suspected normalized worktree-relative path and required check in open_questions" in prompt
     assert "which requires NOT-SAFE" in prompt
