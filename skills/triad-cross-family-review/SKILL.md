@@ -67,7 +67,8 @@ the round.
    The member-list file is the only source-copy IPC: every listed member maps to
    `shared/source/product/<member>`, and no unlisted source member is copied.
    The tool records that canonical source root in the managed review root; `capture` and `verify`
-   reject a different worktree or changed source-root record.
+   reject a different worktree or changed source-root record. `capture` also compares every selected
+   prepared source member with that worktree before and after worktree fingerprinting.
    Record the review ID and returned root in the active `TASK.md` or plan.
 3. **Finish current packet bytes.** Add current `TASK.md`, `REVIEW.diff`, and
    optional `EVIDENCE.md` only. Run

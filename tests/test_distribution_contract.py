@@ -343,6 +343,11 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "member-list file is the only source-copy IPC" in skill
     assert "`shared/source/product/<member>`" in skill
     assert "no unlisted source member is copied" in skill
+    assert (
+        "`capture` also compares every selected prepared source member with that worktree "
+        "before and after worktree fingerprinting"
+        in skill
+    )
     assert "Never copy an earlier prepared packet" in skill
     for prior_round_artifact in (
         "task",

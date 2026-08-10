@@ -325,6 +325,75 @@ def _copy_source_member(
             os.close(directory_fd)
 
 
+def _source_member_digest(
+    source_root: Path,
+    member: str,
+    expected: tuple[os.stat_result, ...],
+) -> str:
+    parts = PurePosixPath(member).parts
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    directory_fd = -1
+    file_fd = -1
+    try:
+        try:
+            directory_fd = os.open(source_root, directory_flags)
+            opened_root = os.fstat(directory_fd)
+            if not os.path.samestat(opened_root, expected[0]) or not stat.S_ISDIR(opened_root.st_mode):
+                raise RoundIntegrityError(f"source member changed or is unsafe: {member}")
+            for index, part in enumerate(parts[:-1], start=1):
+                next_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+                opened = os.fstat(next_fd)
+                if not os.path.samestat(opened, expected[index]) or not stat.S_ISDIR(opened.st_mode):
+                    os.close(next_fd)
+                    raise RoundIntegrityError(f"source member changed or is unsafe: {member}")
+                os.close(directory_fd)
+                directory_fd = next_fd
+            file_fd = os.open(parts[-1], file_flags, dir_fd=directory_fd)
+            opened_file = os.fstat(file_fd)
+            expected_file = expected[-1]
+            if (
+                not os.path.samestat(opened_file, expected_file)
+                or not stat.S_ISREG(opened_file.st_mode)
+                or (opened_file.st_size, opened_file.st_mtime_ns)
+                != (expected_file.st_size, expected_file.st_mtime_ns)
+            ):
+                raise RoundIntegrityError(f"source member changed or is unsafe: {member}")
+        except RoundIntegrityError:
+            raise
+        except OSError:
+            raise RoundIntegrityError(f"source member changed or is unsafe: {member}") from None
+
+        digest = hashlib.sha256()
+        while True:
+            try:
+                chunk = os.read(file_fd, 1024 * 1024)
+            except OSError:
+                raise RoundIntegrityError(f"source member changed or is unsafe: {member}") from None
+            if not chunk:
+                break
+            digest.update(chunk)
+        try:
+            after = os.fstat(file_fd)
+        except OSError:
+            raise RoundIntegrityError(
+                f"source member changed or is unsafe: {member}"
+            ) from None
+        if (
+            opened_file.st_dev,
+            opened_file.st_ino,
+            opened_file.st_size,
+            opened_file.st_mtime_ns,
+        ) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+            raise RoundIntegrityError(f"source member changed while reading: {member}")
+        return digest.hexdigest()
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if directory_fd >= 0:
+            os.close(directory_fd)
+
+
 def _remove_tree(path: Path, label: str) -> None:
     try:
         shutil.rmtree(path)
@@ -607,11 +676,14 @@ def _prepared_source_root(prepared: Path) -> Path | None:
     state = lifecycle_root / "source-root.json"
     try:
         metadata = state.lstat()
-        payload = state.read_bytes()
     except OSError:
         raise RoundIntegrityError("prepared source root metadata is missing or unreadable") from None
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise RoundIntegrityError("prepared source root metadata must be a regular file")
+    try:
+        payload = state.read_bytes()
+    except OSError:
+        raise RoundIntegrityError("prepared source root metadata is missing or unreadable") from None
     try:
         decoded = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -624,6 +696,23 @@ def _prepared_source_root(prepared: Path) -> Path | None:
     ):
         raise RoundIntegrityError("prepared source root metadata is invalid")
     return _canonical_directory(Path(decoded["source_root"]), "prepared source_root")
+
+
+def _validate_prepared_source_members(prepared: Path, source_root: Path) -> None:
+    lifecycle_root = _lifecycle_root(prepared)
+    if lifecycle_root is None:
+        return
+    members = _parse_member_list(lifecycle_root / "member-list.txt")
+    product = prepared / "source" / "product"
+    for member in members:
+        _source_path, expected = _source_member(source_root, member)
+        source_digest = _source_member_digest(source_root, member, expected)
+        prepared_path = product.joinpath(*PurePosixPath(member).parts)
+        prepared_digest = hashlib.sha256(_regular_file_bytes(prepared_path)).hexdigest()
+        if source_digest != prepared_digest:
+            raise RoundIntegrityError(
+                f"prepared source member does not match worktree: {member}"
+            )
 
 
 def _prepared_files(prepared: Path) -> dict[str, Path]:
@@ -828,7 +917,11 @@ def capture_round(prepared_dir: Path, worktree: Path) -> RoundSnapshot:
     source_root = _prepared_source_root(prepared)
     if source_root is not None and source_root != root:
         raise RoundIntegrityError("worktree does not match prepared source root")
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     fingerprint = _worktree_fingerprint(root)
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     after = _prepared_digest(prepared)
     if before != after:
         raise RoundIntegrityError("prepared directory changed during capture")

@@ -7,8 +7,8 @@
   predates those bytes.
 - Publishes the unique-ID system-temporary review lifecycle, exact member-list
   copying, canonical `SOURCE_SHA256SUMS` manifests, metadata-bound prompts and
-  verdicts, prepared-directory plus prepare-source-bound canonical-worktree
-  integrity verification, exact-root cleanup, current-root wrapper logs, and
+  verdicts, prepared-directory plus prepare-source-bound and member-rechecked
+  canonical-worktree integrity verification, exact-root cleanup, current-root wrapper logs, and
   the documented packaged AGY headless selection without changing user settings.
 - Qualifies the focused-review benchmark so its preregistered 3/3 recall is
   distinct from the amended checked-in 4/4 aggregate.

@@ -1238,6 +1238,67 @@ def test_capture_and_verify_bind_prepare_source_root_to_worktree(
         verify_round(snapshot, shared, worktree)
 
 
+def test_capture_rejects_source_member_changed_after_prepare(
+    tmp_path: Path, worktree: Path, monkeypatch
+) -> None:
+    _root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, "source-member-change", source_root=worktree
+    )
+    (worktree / "source.py").write_text("VALUE = 9\n", encoding="utf-8")
+
+    with pytest.raises(
+        RoundIntegrityError, match="prepared source member does not match worktree"
+    ):
+        capture_round(shared, worktree)
+
+
+def test_capture_rechecks_source_members_after_worktree_fingerprinting(
+    tmp_path: Path, worktree: Path, monkeypatch
+) -> None:
+    _root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, "source-member-race", source_root=worktree
+    )
+    original_fingerprint = review_round._worktree_fingerprint
+
+    def mutate_after_fingerprinting(root: Path) -> str:
+        fingerprint = original_fingerprint(root)
+        (root / "source.py").write_text("VALUE = 10\n", encoding="utf-8")
+        return fingerprint
+
+    monkeypatch.setattr(review_round, "_worktree_fingerprint", mutate_after_fingerprinting)
+    with pytest.raises(
+        RoundIntegrityError, match="prepared source member does not match worktree"
+    ):
+        capture_round(shared, worktree)
+
+
+def test_capture_rejects_source_root_symlink_before_reading_it(
+    tmp_path: Path, worktree: Path, monkeypatch
+) -> None:
+    root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, "source-root-symlink", source_root=worktree
+    )
+    state = root / "source-root.json"
+    target = tmp_path / "external-source-root.json"
+    target.write_bytes(_canonical_json_bytes({"source_root": str(worktree)}))
+    state.unlink()
+    state.symlink_to(target)
+    original_read_bytes = Path.read_bytes
+    read_paths: list[Path] = []
+
+    def observe_read(path: Path) -> bytes:
+        read_paths.append(path)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", observe_read)
+    with pytest.raises(
+        RoundIntegrityError, match="prepared source root metadata must be a regular file"
+    ):
+        capture_round(shared, worktree)
+
+    assert state not in read_paths
+
+
 def test_manifest_cli_json_round_trips_special_paths_and_rejects_invalid_packet(
     tmp_path: Path,
 ) -> None:
@@ -1552,6 +1613,8 @@ def test_capture_and_verify_reject_lifecycle_manifest_inventory_or_syntax_error(
         assert "Traceback" not in captured.err
         assert not output.exists()
 
+    unicode_source = worktree / "line\u2028break.txt"
+    unicode_source.write_text("content\n", encoding="utf-8")
     unicode_member = shared / "source" / "product" / "line\u2028break.txt"
     unicode_member.write_text("content\n", encoding="utf-8")
     member_list = root / "member-list.txt"
