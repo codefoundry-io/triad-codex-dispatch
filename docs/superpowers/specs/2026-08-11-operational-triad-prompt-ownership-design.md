@@ -99,6 +99,10 @@ Add a typed worktree brief containing only leader inputs:
 The objective, criteria, and review points must be non-empty. Validation checks shape and custody;
 it does not judge whether the selected review points are good.
 
+Capture the worktree fingerprint once before rendering and once after all legs terminate. The
+renderer consumes the captured value without rehashing the worktree separately for each family;
+this preserves one shared boundary and avoids repeated reads of large untracked files.
+
 ### Worktree prompt renderer
 
 Add a separate `render-worktree` lifecycle command rather than weakening or overloading the current

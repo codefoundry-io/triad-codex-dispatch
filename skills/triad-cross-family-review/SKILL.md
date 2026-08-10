@@ -7,13 +7,13 @@ description: Use when an owner requests independent cross-family review or when 
 
 ## Overview
 
-Run independent Claude, Google-family, and fresh Codex review over one focused
-immutable directory. The Codex leader owns scope, writes fixes, reproduces every
+Run independent Claude, Google-family, and fresh Codex review over one guarded
+current source view. The Codex leader owns scope, writes fixes, reproduces every
 claim, and repeats complete rounds until the evidence converges.
 
 ## Supported execution shape
 
-One round is exactly:
+The default prepared-directory round is exactly:
 
 ```text
 one prepared directory
@@ -23,14 +23,25 @@ one prepared directory
   -> leader reproduction and classification
 ```
 
-A candidate change creates a new directory/digest and a new complete round.
-Old and new leg results are never mixed.
+A candidate change creates a new prepared directory/digest or guarded worktree
+fingerprint/digest and a new complete round. Old and new leg results are never mixed.
+
+When current owner or project instructions explicitly select worktree-first review, use the
+guarded existing Git worktree plus one current-round task/status/diff set instead of copying source.
+The leader writes the situation-specific objective, criteria, and review points; tooling never
+generates or broadens them. Capture the pre/post fingerprint with packaged `python3
+bin/review_round.py fingerprint-worktree --worktree "$review_worktree"` exactly once at each boundary.
+Invoke packaged `python3 bin/review_round.py render-worktree` once per family to validate custody
+and wrap that exact brief. One successful deterministic render pass
+proceeds directly to provider dispatch. Do not invoke `skill-prompt-review` before or during an
+operational round. Prompt or skill review is a separate maintenance task only when the owner
+explicitly requests it.
 
 Batching is removed from the supported architecture. Do not retain review
 batches, shards, family-by-batch matrices, or batch receipts as a default,
 optional, compatibility, or complete-coverage mode. Complete coverage means
-that each of the three families reviews the same complete focused directory in
-the round.
+that each of the three families reviews the same complete focused source view
+in the round.
 
 ## Flow
 
@@ -43,7 +54,8 @@ the round.
    external data boundary, and exact test-source rule. Exclude
    credentials, authentication files, environment dumps, provider logs, and unrelated
    data. Never reuse an earlier review ID.
-2. **Prepare once.** Write an exact member list from the canonical source root.
+2. **Prepare once.** For the default prepared-directory route, write an exact member list
+   from the canonical source root.
    The member-list file is a sorted JSON array of non-empty normalized POSIX relative paths.
    Select the non-empty owner-required current path set and pass it as a sorted JSON array of unique paths.
    Resolve the canonical toolkit root from the canonical realpath of this `SKILL.md`: it is the
@@ -119,11 +131,14 @@ the round.
    `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
    the packaged validator. A missing, refused, malformed, route-mismatched, or
    incomplete required leg invalidates the round.
-8. **Verify integrity.** For review rounds, after all required legs terminate, run
+8. **Verify integrity.** For prepared-directory review rounds, after all required legs terminate, run
    `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`;
-   the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch. Do not modify the canonical worktree until every
-   required leg has terminated and verify prints `ROUND_INTEGRITY_OK`. A
-   prepared-directory or worktree fingerprint mismatch invalidates the round.
+   the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch.
+   Do not modify the canonical worktree until every required leg has terminated. The prepared-directory
+   route requires `ROUND_INTEGRITY_OK`. An explicitly selected worktree-first round instead performs
+   the exact project-required post-review fingerprint check after every required leg terminates.
+   Any prepared-directory or worktree fingerprint mismatch invalidates the round; equality is required
+   before result admission.
 9. **Reproduce and converge.** Read
    [convergence](references/convergence.md). Verify every finding against the
    canonical worktree. Apply only the smallest correction inside the approved
@@ -138,17 +153,20 @@ the round.
    the owner. There is no arbitrary round cap and no unchanged redispatch to
    seek a preferred label. For review rounds: Normal cleanup occurs only after final integrity verification and adjudication;
    the task-authorized zero-provider characterization uses the Flow step 4 verify-and-exact-cleanup branch.
-   Then run `python3 bin/review_round.py cleanup --review-id "$review_id" --expected-root
+   For the prepared-directory route, then run `python3 bin/review_round.py cleanup --review-id "$review_id" --expected-root
    "$review_root"`, compare the expected root, and require that the first cleanup result reports
    `removed: true`. After successful cleanup, confirm that exact root is absent and
    other managed sibling roots remain untouched. A later `prepare` removes managed interrupted roots only
    after strictly more than 30 days without activity. Prepare a durable handoff
-   directly at its owner-approved destination instead of retaining a temp root.
+   directly at its owner-approved destination instead of retaining a temp root. The worktree-first
+   route cleans up only its exact project-managed current-round temporary root after final fingerprint
+   verification and adjudication.
 
 ## Result contract
 
-Read [review prompt contract](references/review-prompt-contract.md) before
-rendering a round. `SAFE` permits Minor findings but no Critical/Major finding
+For a prepared-directory round, read [review prompt contract](references/review-prompt-contract.md)
+before rendering. The worktree renderer embeds its complete worktree-relative result contract.
+`SAFE` permits Minor findings but no Critical/Major finding
 or open question. `NOT-SAFE` requires a Critical/Major finding or open question.
 Provider prose, confidence, or policy disclaimers never substitute for the
 structured result.

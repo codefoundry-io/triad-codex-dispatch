@@ -25,12 +25,13 @@ Google leg and cannot be replaced inside that round.
 
 ## Admission and convergence
 
-Every family reviews the same complete focused directory and returns one
+Every family reviews the same complete focused source view and returns one
 validated `LegVerdict` for the same review ID and digest. No batch, shard, or
 receipt compatibility mode is supported. Provider permissions do not prove a
 no-edit boundary; prompt controls and integrity verification decide admission
-within their stated scopes. Round integrity verification binds prepared-directory
-and canonical worktree bytes only. External-state change through a configured
+within their stated scopes. Round integrity verification binds the selected
+prepared-directory bytes or worktree review digest plus canonical worktree fingerprint.
+External-state change through a configured
 MCP tool is prompt-controlled and reviewer-disclosed; it is not mechanically
 observed by round integrity.
 
