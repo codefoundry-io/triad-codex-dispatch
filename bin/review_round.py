@@ -871,6 +871,11 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         '"open_questions":[]}. All paths must be prepared-directory-relative. '
         "SAFE permits Minor findings but no Critical/Major finding and no open question. "
         "NOT-SAFE requires at least one Critical/Major finding or one open question. "
+        "A Minor finding may carry a non-blocking hardening suggestion only when packet evidence "
+        "establishes current correctness and rules out its scenario for this decision; state why it "
+        "is non-blocking in trigger and evidence. Missing deployment or operational context needed "
+        "to decide current correctness belongs in open_questions and therefore requires NOT-SAFE. "
+        "Never suppress genuine uncertainty to produce SAFE. "
         "Report proposed design/specification changes as findings or open questions; do not implement them."
     )
 

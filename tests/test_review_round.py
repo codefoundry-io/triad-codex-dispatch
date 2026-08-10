@@ -2078,6 +2078,35 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert "NOT-SAFE requires at least one Critical/Major finding or one open question" in prompt
 
 
+def test_rendered_prompt_distinguishes_suggestions_from_unknown_context(prepared):
+    brief = ReviewBrief(
+        review_id="suggestion-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Check current deployment correctness.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("src/source.py",),
+    )
+
+    prompt = render_review_prompt(brief)
+
+    assert (
+        "A Minor finding may carry a non-blocking hardening suggestion only when"
+        in prompt
+    )
+    assert (
+        "packet evidence establishes current correctness and rules out its scenario"
+        in prompt
+    )
+    assert (
+        "Missing deployment or operational context needed to decide current correctness"
+        in prompt
+    )
+    assert "Never suppress genuine uncertainty to produce SAFE" in prompt
+
+
 def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_interpolation(
     tmp_path: Path,
 ) -> None:

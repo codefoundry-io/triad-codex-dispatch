@@ -69,6 +69,15 @@ directory-relative `path`, optional positive `line`, concrete `trigger`,
 source-grounded `evidence`, and bounded `correction` direction.
 
 `SAFE` allows Minor findings but no Critical/Major finding or open question.
-`NOT-SAFE` requires a Critical/Major finding or open question. Do not ask how
-to proceed, omit the verdict, wrap JSON in prose, or implement a proposed
-design change.
+`NOT-SAFE` requires a Critical/Major finding or open question.
+
+A `Minor` finding may carry a non-blocking hardening suggestion only when
+packet evidence establishes current correctness and rules out its scenario for
+the current decision. State why it is non-blocking in the finding's trigger and
+evidence; do not disguise a current defect as optional work. Missing deployment
+or operational context needed to decide current correctness belongs in
+`open_questions` and therefore requires `NOT-SAFE`. Never suppress genuine
+uncertainty to produce `SAFE`.
+
+Do not ask how to proceed, omit the verdict, wrap JSON in prose, or implement a
+proposed design change.
