@@ -62,7 +62,7 @@ Return exactly one JSON object matching `verdict_schema:LegVerdict`:
   "verdict": "SAFE",
   "criteria_checked": ["correctness", "compatibility"],
   "findings": [],
-  "affected_surfaces_inspected": ["src/parser.py", "docs/contract.md"],
+  "affected_surfaces_inspected": ["source/product/bin/review_round.py", "source/product/skills/triad-cross-family-review/SKILL.md"],
   "open_questions": []
 }
 ```

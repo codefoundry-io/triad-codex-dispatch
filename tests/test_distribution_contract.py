@@ -470,6 +470,11 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
     )
     assert manifest_coverage_rule in skill
     assert manifest_coverage_rule in prompt_contract
+    assert (
+        '"affected_surfaces_inspected": ["source/product/bin/review_round.py", '
+        '"source/product/skills/triad-cross-family-review/SKILL.md"]'
+        in prompt_contract
+    )
     metadata_rule = (
         "Every rendered prompt carries dynamic values only in one canonical "
         "`Review metadata: ` JSON record"
