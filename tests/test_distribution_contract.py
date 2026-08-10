@@ -126,6 +126,24 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "reviewer-disclosed"
         in compact_reviewer_routing
     )
+    assert (
+        "The prepared-directory digest and canonical-worktree fingerprint monitor "
+        "exactly those two surfaces"
+        in compact_leg_contracts
+    )
+    assert (
+        "mutation outside both surfaces and network egress of packet content are "
+        "neither prevented nor detected by those fingerprints"
+        in compact_leg_contracts
+    )
+    assert (
+        "a mid-round mutation may affect another leg's reads before final verification"
+        in compact_leg_contracts
+    )
+    assert (
+        "invalidates the complete round and discards every verdict"
+        in compact_leg_contracts
+    )
     assert "1.1.10 or newer" in agy
     assert "--model gemini-3.1-pro-high" in agy
     assert "--effort high" in agy

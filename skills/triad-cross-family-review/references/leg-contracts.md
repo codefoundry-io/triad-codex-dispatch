@@ -139,3 +139,10 @@ python3 <toolkit>/bin/verdict_schema.py validate \
 
 The no-edit contract is prompt-controlled unless runtime metadata proves a
 stronger boundary. Mutation detection, not a sandbox claim, decides admission.
+The prepared-directory digest and canonical-worktree fingerprint monitor exactly
+those two surfaces. Because legs retain native tools, mutation outside both
+surfaces and network egress of packet content are neither prevented nor detected
+by those fingerprints. Legs run in parallel against the same prepared directory,
+so a mid-round mutation may affect another leg's reads before final verification.
+A mismatch invalidates the complete round and discards every verdict; verification
+does not retroactively prevent the mutation.
