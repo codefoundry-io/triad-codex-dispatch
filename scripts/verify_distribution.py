@@ -17,6 +17,18 @@ from typing import Any, Iterable
 HASH_TARGETS = (
     ".codex-plugin/plugin.json",
     "skills/triad-cross-family-review/SKILL.md",
+    "skills/triad-cross-family-review/agents/openai.yaml",
+    "skills/triad-cross-family-review/references/convergence.md",
+    "skills/triad-cross-family-review/references/leg-contracts.md",
+    "skills/triad-cross-family-review/references/review-prompt-contract.md",
+    "skills/triad-cross-family-review/references/reviewer-routing.md",
+    "bin/_common.py",
+    "bin/antigravity_wrapper.py",
+    "bin/claude_wrapper.py",
+    "bin/gemini_wrapper.py",
+    "bin/review_round.py",
+    "bin/verdict_schema.py",
+    "requirements.txt",
 )
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 

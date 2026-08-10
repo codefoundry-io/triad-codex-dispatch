@@ -13,6 +13,7 @@ BIN = ROOT / "bin"
 sys.path.insert(0, str(BIN))
 
 import _common  # noqa: E402
+import antigravity_wrapper  # noqa: E402
 import claude_wrapper  # noqa: E402
 import gemini_wrapper  # noqa: E402
 
@@ -78,16 +79,22 @@ def test_hardened_wrapper_requires_opt_in_for_arbitrary_schema(monkeypatch) -> N
 def test_provider_wrappers_reject_retired_review_and_permission_flags(
     module, monkeypatch
 ) -> None:
-    for retired in (
-        "--sandbox",
-        "--sealed-packet-root",
-        "--expected-packet-sha256",
-        "--dangerously-skip-permissions",
-    ):
-        monkeypatch.setattr(sys, "argv", [module.__file__, "--prompt", "x", retired, "x"])
-        with pytest.raises(SystemExit) as caught:
-            module.main()
-        assert caught.value.code == 2
+    modules = (antigravity_wrapper, module) if module is claude_wrapper else (module,)
+    for current_module in modules:
+        for retired in (
+            "--sandbox",
+            "--sealed-packet-root",
+            "--expected-packet-sha256",
+            "--dangerously-skip-permissions",
+        ):
+            monkeypatch.setattr(
+                sys,
+                "argv",
+                [current_module.__file__, "--prompt", "x", retired, "x"],
+            )
+            with pytest.raises(SystemExit) as caught:
+                current_module.main()
+            assert caught.value.code == 2
 
 
 def test_claude_route_forwards_model_effort_and_native_json(monkeypatch, capsys) -> None:
@@ -174,8 +181,46 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
     assert claude_wrapper.main() == 0
     assert capsys.readouterr().out == '{"ok": true}\n'
     assert len(calls) == 1
+    assert "--tools" not in calls[0]
+    for forbidden in (
+        "--safe-mode",
+        "--strict-mcp-config",
+        "--mcp-config",
+        "--allowedTools",
+        "--disallowedTools",
+    ):
+        assert not any(
+            arg == forbidden or arg.startswith(f"{forbidden}=")
+            for arg in calls[0]
+        )
     assert "--json-schema" in calls[0]
     assert pruned == ["claude"]
+
+
+def test_claude_wrapper_rejects_removed_formal_read_tools_flag(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        claude_wrapper,
+        "require_binary",
+        lambda _name: (_ for _ in ()).throw(AssertionError("provider resolved")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "fake:Answer",
+            "--formal-read-tools",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        claude_wrapper.main()
+
+    assert exc.value.code == 2
+    assert "unrecognized arguments: --formal-read-tools" in capsys.readouterr().err
 
 
 def test_claude_structured_route_rejects_result_text_fallback(

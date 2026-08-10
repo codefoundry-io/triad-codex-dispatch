@@ -81,9 +81,9 @@ def map_classification_to_exit(cls: str) -> int:
         "fanout-spawn-error": EXIT_TERMINAL,
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
-        "vendor-error": EXIT_TERMINAL,  # agy: rc!=0 but a non-empty answer — surface, NOT repair
-        "truncated-answer": EXIT_TERMINAL,  # agy: rc=0 own-line truncation marker — surface, NOT repair
-        "permission-unavailable": EXIT_TERMINAL,  # agy: native headless denial — surface, NOT repair
+        "vendor-error": EXIT_TERMINAL,  # current AGY stream driver emission; surface, never classifier-patched
+        "truncated-answer": EXIT_TERMINAL,  # inert legacy exit-map compatibility alias; current stream driver never emits it
+        "permission-unavailable": EXIT_TERMINAL,  # inert legacy exit-map compatibility alias; current stream driver never emits it
         "unknown": EXIT_CLI_FAIL,
     }.get(cls, EXIT_CLI_FAIL)
 
@@ -1643,6 +1643,7 @@ def run_cli_with_retry(
 # markdown dir is separate). Default = wrapper-adjacent _logs/. Consumers/tests point it
 # at a temp dir so an installed plugin dir is never mutated (plugin roots are
 # ephemeral per the Claude Code plugin docs).
+_LOG_DIR_CONFIGURED = bool(os.environ.get("TRIAD_DISPATCH_LOG_DIR"))
 _LOG_DIR = Path(os.environ.get("TRIAD_DISPATCH_LOG_DIR")
                 or Path(__file__).resolve().parent / "_logs")
 _DEBUG_DIR = Path(__file__).resolve().parent / "_debug"
@@ -1782,7 +1783,7 @@ def _write_all(fd: int, data: bytes) -> None:
         written += count
 
 
-def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
+def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | None:
     """Append one JSONL record per invocation to _logs/<cli>/audit.jsonl.
 
     A per-CLI lock file serializes append + rotation across processes.
@@ -1793,7 +1794,9 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
     be trusted and cooperative. Descriptor attestation rejects observed swaps,
     but portable Python/POSIX has no atomic unlink-if-same-inode operation.
     Persistence is best-effort audit evidence, not a power-loss durability
-    protocol; audit failure never changes the provider result.
+    protocol; audit failure never changes the provider result. Return True when
+    the record was appended, None for advisory contention/attestation skips, and
+    False for an actual storage exception.
     """
     ok = result.exit_code == EXIT_OK
     redact = _audit_redact_enabled()
@@ -1860,14 +1863,14 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> None:
         rec["stdout"] = result.stdout
     try:
         payload = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
-        _persist_audit_record(cli, payload)
+        return _persist_audit_record(cli, payload)
     except Exception:
         # Audit evidence is advisory. Provider output, normalized exit, and
         # classification are already authoritative and must remain untouched.
-        return
+        return False
 
 
-def _persist_audit_record(cli: str, payload: bytes) -> None:
+def _persist_audit_record(cli: str, payload: bytes) -> bool | None:
     """Persist one record through descriptor-bound, no-follow operations."""
     if not cli or cli in (".", "..") or os.sep in cli:
         raise OSError(errno.EINVAL, "unsafe audit CLI name")
@@ -1884,7 +1887,7 @@ def _persist_audit_record(cli: str, payload: bytes) -> None:
         if not locked or not _regular_fd_matches_name(
             log_dir_fd, ".audit.lock", lock_fd
         ):
-            return
+            return None
         audit_fd = _open_regular_nofollow(
             log_dir_fd,
             "audit.jsonl",
@@ -1892,7 +1895,13 @@ def _persist_audit_record(cli: str, payload: bytes) -> None:
         )
         try:
             _write_all(audit_fd, payload)
-            _rotate_audit_fd_if_needed(log_dir_fd, audit_fd, cli)
+            try:
+                _rotate_audit_fd_if_needed(log_dir_fd, audit_fd, cli)
+            except Exception:
+                # The record is already complete in the active audit file.
+                # Rotation cleanup is advisory and cannot undo that append.
+                pass
+            return True
         finally:
             os.close(audit_fd)
     finally:
@@ -2063,9 +2072,9 @@ def _prune_audit_archives(log_dir: Path) -> None:
 #     map_classification_to_exit dict — the single source of truth).
 #     EXCEPTION (deliberate, P4 2026-07-11 and native permissions 2026-08-03):
 #     `vendor-error`, `truncated-answer`, and `permission-unavailable` are in
-#     the exit map but NOT here — they are emitted directly by the agy driver
-#     for conditions a classifier patch cannot express, so they must never be
-#     proposable repair targets.
+#     the exit map but NOT here: the current AGY stream driver emits
+#     `vendor-error`; the other two are inert legacy exit-map compatibility
+#     aliases it never emits. None is a classifier-patch target.
 #   PATTERN_LIST_NAMES    = the built-in pattern-list constant names an
 #     extension may extend (a proposal's pattern_list must be one of these).
 
@@ -2588,12 +2597,14 @@ def emit_run_log(
     try:
         path = write_under(runs_dir)
     except Exception:
-        # File IPC is the repair handoff. If the configured audit root is full,
-        # read-only, or occupied by a non-directory, retain the normalized
-        # provider result in a unique stdlib-created private temp directory.
+        if _LOG_DIR_CONFIGURED:
+            return None
+        # File IPC is the repair handoff. Only an unconfigured primary log root
+        # may retain the normalized provider result in a unique stdlib-created
+        # private temp directory. An explicit configured-root failure returns
+        # None above without fallback.
         # macOS may spell its trusted temp root through `/var`, a system
-        # symlink. Canonicalize only this stdlib-created private directory; a
-        # configured primary root remains deliberately unresolved.
+        # symlink. Canonicalize only this stdlib-created private directory.
         fallback_root = Path(
             tempfile.mkdtemp(prefix=f"triad-{cli}-run-log-")
         ).resolve(strict=True)
@@ -2613,15 +2624,20 @@ def persist_result_artifacts(
 ) -> Optional[Path]:
     """Persist best-effort evidence without changing the provider result.
 
-    Audit/debug storage is advisory. A failure run-log is repair IPC, so
-    `emit_run_log` first falls back to a unique private temporary directory.
-    If every storage route fails, this helper emits a fixed diagnostic and
-    returns None; callers still write the provider answer and return its
-    normalized exit code.
+    Audit/debug storage is advisory. A failure run-log is repair IPC.
+    `emit_run_log` uses a unique private temporary fallback only when the log
+    root was unconfigured at import time; an explicit configured-root failure
+    returns None without fallback. This helper emits a fixed run-log diagnostic
+    when a failure run-log cannot be stored, or when a successful call cannot
+    store audit evidence under an explicit configured root. Callers still write
+    the provider answer and return its normalized exit code.
     """
+    audit_exception = False
     try:
-        audit(cli, vendor_cmd, prompt, result)
+        audit_persisted = audit(cli, vendor_cmd, prompt, result)
     except Exception:
+        audit_persisted = False
+        audit_exception = True
         log("audit-unavailable: storage-failure")
     if debug:
         try:
@@ -2634,7 +2650,15 @@ def persist_result_artifacts(
         path = None
     if path is not None:
         log(f"run-log: {path}")
-    elif result.exit_code != EXIT_OK:
+        if (
+            _LOG_DIR_CONFIGURED
+            and audit_persisted is False
+            and not audit_exception
+        ):
+            log("audit-unavailable: storage-failure")
+    elif result.exit_code != EXIT_OK or (
+        _LOG_DIR_CONFIGURED and audit_persisted is False
+    ):
         log("run-log-unavailable: storage-failure")
     return path
 
@@ -2730,9 +2754,10 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     never deleted while still awaiting consumption. Best-effort + per-file
     tolerant — a vanishing entry never aborts the sweep.
     """
-    # `emit_run_log` uses a unique private temp directory only when the primary
-    # configured root is unusable. Sweep those prior fallback IPC directories
-    # on the same age-floor contract as normal run logs.
+    # `emit_run_log` uses a unique private temp directory only when the
+    # import-time log root is unconfigured and its primary root is unusable.
+    # Explicit configured-root failure has no fallback. Sweep prior unconfigured
+    # fallback IPC directories on the same age-floor contract as normal run logs.
     prune_stale_tmp_dirs(f"triad-{cli}-run-log-", age_floor_s=age_floor_s)
     runs_dir = _LOG_DIR / cli / "runs"
     cutoff = time.time() - max(0, age_floor_s)

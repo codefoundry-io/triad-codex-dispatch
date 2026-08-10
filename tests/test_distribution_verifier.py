@@ -14,6 +14,22 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "verify_distribution.py"
+EXPECTED_HASH_TARGETS = (
+    ".codex-plugin/plugin.json",
+    "skills/triad-cross-family-review/SKILL.md",
+    "skills/triad-cross-family-review/agents/openai.yaml",
+    "skills/triad-cross-family-review/references/convergence.md",
+    "skills/triad-cross-family-review/references/leg-contracts.md",
+    "skills/triad-cross-family-review/references/review-prompt-contract.md",
+    "skills/triad-cross-family-review/references/reviewer-routing.md",
+    "bin/_common.py",
+    "bin/antigravity_wrapper.py",
+    "bin/claude_wrapper.py",
+    "bin/gemini_wrapper.py",
+    "bin/review_round.py",
+    "bin/verdict_schema.py",
+    "requirements.txt",
+)
 
 
 def _load_verifier():
@@ -38,17 +54,25 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def fixture_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "source"
     (repo / ".codex-plugin").mkdir(parents=True)
-    (repo / "skills" / "triad-cross-family-review").mkdir(parents=True)
+    skill_root = repo / "skills" / "triad-cross-family-review"
+    (skill_root / "agents").mkdir(parents=True)
+    (skill_root / "references").mkdir(parents=True)
+    (repo / "bin").mkdir()
     (repo / "tests").mkdir()
     (repo / ".gitignore").write_text("_runs/\n", encoding="utf-8")
     (repo / ".codex-plugin" / "plugin.json").write_text(
         json.dumps({"name": "triad-codex-dispatch", "version": "0.2.533"}) + "\n",
         encoding="utf-8",
     )
-    (repo / "skills" / "triad-cross-family-review" / "SKILL.md").write_text(
+    (skill_root / "SKILL.md").write_text(
         "---\nname: triad-cross-family-review\n---\n",
         encoding="utf-8",
     )
+    for relative in EXPECTED_HASH_TARGETS:
+        target = repo / relative
+        if target.exists():
+            continue
+        target.write_text(f"fixture for {relative}\n", encoding="utf-8")
     (repo / "tests" / "test_packaged.py").write_text(
         "def test_packaged_bytes():\n    assert True\n",
         encoding="utf-8",
@@ -133,6 +157,11 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
         "match": True,
     }
     assert report["hashes"][skill]["match"] is True
+    assert sorted(report["hashes"]) == sorted(EXPECTED_HASH_TARGETS)
+    assert all(
+        hashes["source"] == hashes["archive"] and hashes["match"] is True
+        for hashes in report["hashes"].values()
+    )
     assert Path(report["archive"]).is_file()
     assert Path(report["extracted_root"]).is_dir()
     assert json.loads(

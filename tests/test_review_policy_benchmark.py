@@ -15,10 +15,49 @@ import review_policy_benchmark as benchmark  # noqa: E402
 
 
 FIXTURES = ROOT / "benchmarks" / "review-policy"
+EXPECTED_BENCHMARK_FILES = frozenset(
+    {
+        "baseline-batched.json",
+        "cases.json",
+        "fixtures/round-1/REVIEW.diff",
+        "fixtures/round-1/TASK.md",
+        "fixtures/round-1/clean/contract.md",
+        "fixtures/round-1/clean/profile.py",
+        "fixtures/round-1/config_doc/deployment.md",
+        "fixtures/round-1/config_doc/settings.json",
+        "fixtures/round-1/cross_file/caller.py",
+        "fixtures/round-1/cross_file/parser.py",
+        "fixtures/round-1/local_defect/validator.py",
+        "fixtures/round-2/REVIEW.diff",
+        "fixtures/round-2/TASK.md",
+        "fixtures/round-2/clean/contract.md",
+        "fixtures/round-2/clean/profile.py",
+        "fixtures/round-2/config_doc/deployment.md",
+        "fixtures/round-2/config_doc/settings.json",
+        "fixtures/round-2/cross_file/caller.py",
+        "fixtures/round-2/cross_file/parser.py",
+        "fixtures/round-2/local_defect/validator.py",
+        "focused-convergent-report.json",
+        "focused-convergent-runtime.json",
+        "focused-convergent-skill.json",
+    }
+)
 
 
 def _load(name: str):
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def test_benchmark_evidence_filesystem_inventory_is_exact() -> None:
+    # Stray untracked files intentionally fail because the complete distributed
+    # evidence directory is contract-bound.
+    actual = {
+        path.relative_to(FIXTURES).as_posix()
+        for path in FIXTURES.rglob("*")
+        if path.is_file()
+    }
+
+    assert actual == EXPECTED_BENCHMARK_FILES
 
 
 def test_focused_policy_replaces_captured_batch_fanout_without_losing_recall():

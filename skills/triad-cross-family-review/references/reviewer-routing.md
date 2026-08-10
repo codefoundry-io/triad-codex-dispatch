@@ -2,12 +2,14 @@
 
 This is an owner routing policy, not a provider capability claim. The owner
 authorizes the exact providers, objective, and external data boundary before a
-round. Native provider and project permissions remain in force.
+round. Except for the documented packaged AGY child `always-proceed` selection,
+native provider and project permissions remain in force.
 
 ## Required routes
 
-- Claude: `opus`, `xhigh`.
-- Google: AGY 1.1.10 or newer, `gemini-3.1-pro-high`, `high`.
+- Claude: `opus`, `xhigh`, retained 1,800-second end-to-end wrapper deadline.
+- Google: AGY 1.1.10 or newer, `gemini-3.1-pro-high`, `high`, 1,800-second
+  end-to-end wrapper deadline.
 - Fresh Codex: `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, no registered
   reviewer agent.
 
@@ -26,7 +28,11 @@ Google leg and cannot be replaced inside that round.
 Every family reviews the same complete focused directory and returns one
 validated `LegVerdict` for the same review ID and digest. No batch, shard, or
 receipt compatibility mode is supported. Provider permissions do not prove a
-no-edit boundary; prompt controls and integrity verification decide admission.
+no-edit boundary; prompt controls and integrity verification decide admission
+within their stated scopes. Round integrity verification binds prepared-directory
+and canonical worktree bytes only. External-state change through a configured
+MCP tool is prompt-controlled and reviewer-disclosed; it is not mechanically
+observed by round integrity.
 
 Use [convergence](convergence.md) after all legs terminate. The leader may fix
 only a reproduced bounded defect inside approved design. Design,

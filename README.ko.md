@@ -23,9 +23,14 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 - `skills/` 아래의 Codex 플러그인 skill.
 - bootstrap은 새로 Claude, agy, Gemini 세 provider wrapper command만 publish합니다.
   `triad-setup` 및 `triad-doctor`는 remove-only legacy cleanup 이름입니다.
-- Native provider permission을 그대로 상속합니다. provider, user, project가
-  permission 선택을 소유하며 TRIAD는 permission mode를 선택하거나 override하지
-  않습니다. plugin-owned permission profile이나 command rule도 설치하지 않습니다.
+- Provider, user, project setting이 stored/global permission state와 project
+  trust를 소유합니다. Packaged AGY call은 승인된 내부
+  `--dangerously-skip-permissions` flag를 통해 해당 child의 `request-review`를
+  대체하고 AGY native headless auto-approval `always-proceed`를 의도적으로
+  선택합니다. 이 flag는 caller-supplied가 아닙니다. stored/global user 또는 project
+  setting을 변경하지 않고, permission profile이나 command rule을 설치하지 않으며,
+  sandbox를 선택하지 않고, project-trust configuration을 변경하지 않으며,
+  installed CLI, MCP, read, search tool을 제한하지 않습니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
   인증된 로그인 터미널에서 bootstrap이 출력한
   `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
@@ -102,8 +107,9 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 
    일반 `codex`는 동일한 인증된 로그인 터미널의 실제 project/worktree root에서
    시작하세요. provider permission과 provider-owned workspace trust를 먼저 선택합니다.
-   TRIAD는 provider native permission을 상속하고 별도 permission/trust bypass를
-   넣지 않습니다. Trusted Python과 `PATH`가 prerequisite이며 trusted launcher와
+   Packaged AGY call은 위에서 설명한 child-only `always-proceed` 선택을 사용하며,
+   다른 provider permission 결정과 모든 project-trust configuration은 native 상태를
+   유지합니다. Trusted Python과 `PATH`가 prerequisite이며 trusted launcher와
    interpreter가 시작된 뒤 wrapper child-process scrubbing은 유지됩니다.
 
    설치 후 대상 workspace 에서 일반 Codex session 을 새로 시작합니다:
@@ -181,8 +187,9 @@ review runtime은 하나의 complete focused directory, required family별 하�
 `LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
 receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.10 이상을
 요구하고 native `stream-json`과 `json-schema`를 사용합니다. formal route는
-`gemini-3.1-pro-high`와 `high` effort를 전달합니다. provider permission과 project
-trust policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
+`gemini-3.1-pro-high`와 `high` effort를 전달합니다. 문서화된 packaged AGY child
+선택만 permission-mode 예외이며, 다른 provider permission과 모든 project-trust
+policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
 
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
@@ -279,7 +286,6 @@ immutable-directory digest, leader mutation check에 의존합니다.
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| Provider가 `permission-unavailable`을 반환 | native user/project permission 또는 trust가 headless action을 허용하지 않음 | 동일한 인증된 로그인 터미널에서 좁은 provider/user/project 결정을 한 뒤 fresh round를 시작하세요. TRIAD는 bypass를 넣지 않습니다. |
 | Gemini가 project worktree를 untrusted로 거부 | `--skip-trust` 제거 후 Gemini가 workspace trust를 소유 | 해당 worktree에 provider-native trust 결정을 하거나 중단하세요. TRIAD에는 trust bypass나 speculative detector가 없습니다. |
 | 디스패치가 `oauth-env`로 실패 | 워커 CLI 로그인이 만료됐거나 없음 | 해당 vendor의 native login 재실행(`claude` / `agy` OAuth, 또는 `codex login`). toolkit은 대신 재인증하지 않습니다 — 신호만 surface 하니 직접 로그인하세요. |
 | gemini leg이 `IneligibleTier`로 실패 | Gemini CLI *개인* tier 폐지 | `agy`(Antigravity) leg을 쓰세요 — 개인 사용자의 Google-family leg입니다. `gemini`는 business / Vertex / API-key 계정 전용. |
@@ -294,7 +300,7 @@ immutable-directory digest, leader mutation check에 의존합니다.
 | `0` | 성공 — 이어서 답변 | 없음. |
 | `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | 해당 binary를 고치세요. AGY route에 한해서만 wrapper 소유 진단이 이 제출 전 실패를 함께 입증할 때 Gemini Enterprise fallback 대상입니다. |
 | `64` | 재시도 후에도 server capacity 소진 | 일시적 vendor 과부하; 기다렸다 재시도. |
-| `65` | 인증 / config / quota / native permission 또는 손실된 AGY 응답(예: `oauth-env`, `cli-subscription-cap`, `permission-unavailable`, `truncated-answer`) | `permission-unavailable`은 authentication, quota, truncated-answer와 구별되는 provider/user/project 결정입니다. `truncated-answer`는 repair하거나 Gemini fallback으로 전환하지 말고 새 bounded, compact result를 요청하세요. |
+| `65` | 인증, config, quota 또는 다른 terminal provider failure(예: `oauth-env`, `cli-subscription-cap`, `token-limit`) | 표시된 provider state를 해결한 뒤 explicit new invocation을 만드세요. |
 | `66` | 구조화 출력(`--pydantic`) 스키마 검증 실패 | `schema-fail is terminal for that invocation`; leader가 판단한 뒤 explicit new invocation을 만들 수 있습니다. shared-directory formal path는 legacy packet-bound schema를 요구하지 않습니다. |
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |
 | `1` | Wrapper가 답변을 추출하지 못했거나(`extraction-error`) 분류가 `unknown`임 | 최종 wrapper 분류와 provider 진단을 확인한 뒤 적절히 재시도하거나 escalation하세요. |
@@ -321,8 +327,12 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   `TRIAD_CLASSIFIER_EXTENSION`을 바꾸면 bootstrap을 다시 실행해야 합니다.
 - **wrapper containment은 프로세스 수준이지 OS 수준 confinement이 아닙니다.**
   wrapper-containment env는 wrapper 프로세스의 path/pydantic 처리를 gate할 뿐, OS
-  수준 격리 주장이 아닙니다. 경계는 provider/user/project가 선택한 permission,
-  `--cwd` worktree, digest/mutation check, 커밋 전 사용자 검토에 의존합니다.
+  수준 격리 주장이 아닙니다. 경계에는 문서화된 packaged AGY child
+  `always-proceed` 선택과, 그 밖의 operation에서는 provider/user/project가 선택한
+  permission, `--cwd` worktree, digest/mutation check, 커밋 전 사용자 검토가 포함됩니다.
+  Formal review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
+  system-temp root 아래에 있습니다. `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정했다면 hardened
+  mode를 포함해 canonical system temp base를 포함해야 합니다.
 
 ## 업데이트
 
@@ -434,6 +444,12 @@ fingerprint, family별 하나의 strict `LegVerdict`를 사용합니다. 리더�
 snapshot을 reviewed evidence 밖에 두며 bounded correction 뒤에는 fresh complete
 round를 시작합니다.
 
+Formal review는 canonical system temp root 아래의 `triad-review-` namespace를
+예약합니다. 각 round는 `results/_logs`를 포함한 returned root를 소유하며, 다음
+prepare는 activity가 strictly more than 30 days 동안 없었던 managed interrupted
+root만 정리합니다. 정상 cleanup은 완료된 exact root만 제거하고 다른 managed
+sibling root는 건드리지 않습니다.
+
 Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocation은 provider
 실행 전에 3,600 seconds보다 오래된 managed UUID/file-IPC entry를 best-effort
 cleanup합니다. Antigravity는 `--preflight-only` 전에도 cleanup합니다. Cleanup error는
@@ -443,8 +459,8 @@ dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니
 
 지속적인 control은 explicit data authorization, pinned executable,
 digest/mutation check, strict result custody, native proposal-only repair child와
-deterministic owner apply입니다. Permission 선택은 provider/user/project에 남습니다.
-전체 threat model:
+deterministic owner apply입니다. 문서화된 packaged AGY child 예외 밖의 permission
+선택은 provider/user/project setting에 남습니다. 전체 threat model:
 [SECURITY.md](SECURITY.md).
 
 ## Support
@@ -455,8 +471,9 @@ deterministic owner apply입니다. Permission 선택은 provider/user/project�
 
 ## 참고
 
-- TRIAD는 yolo, bypass, skip-trust, accept-edits 또는 동등한 permission control을
-  주입하지 않습니다.
+- 위에서 공개한 승인된 내부 AGY flag 외에는 TRIAD가 caller-supplied yolo, bypass,
+  skip-trust, accept-edits 또는 동등한 permission control을 받지 않으며 user setting을
+  변경하지 않습니다.
 - Native permission decision은 commit, push, install, release, publication에 대한 owner workflow
   authorization을 제공하지 않습니다.
 - Fresh repair child는 proposal 또는 escalation만 반환하고 classifier change를

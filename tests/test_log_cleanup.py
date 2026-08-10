@@ -33,7 +33,7 @@ import _common  # noqa: E402
 # Module attrs each test may override; the runner snapshots + restores them so
 # tests stay isolated within the single process (the pytest-monkeypatch role).
 _PATCHED_ATTRS = (
-    "_LOG_DIR", "AUDIT_ROTATE_BYTES", "AUDIT_MAX_ARCHIVES", "AUDIT_ARCHIVE_MAX_BYTES",
+    "_LOG_DIR", "_LOG_DIR_CONFIGURED", "AUDIT_ROTATE_BYTES", "AUDIT_MAX_ARCHIVES", "AUDIT_ARCHIVE_MAX_BYTES",
     "_RUN_LOG_MAX_FILES", "_RUN_LOG_MAX_BYTES",
 )
 _IMPORTED_ATTRS = {attr: getattr(_common, attr) for attr in _PATCHED_ATTRS}
@@ -478,6 +478,7 @@ def test_failed_result_uses_unique_file_ipc_when_primary_log_root_fails(
     tmp_path: Path,
 ) -> None:
     _common._LOG_DIR = tmp_path / "not-a-directory"
+    _common._LOG_DIR_CONFIGURED = False
     _common._LOG_DIR.write_text("occupied", encoding="utf-8")
     result = _result(stdout="hostile '$()' `bytes`\n한글")
 
@@ -512,6 +513,7 @@ def _assert_symlinked_run_log_ancestor_falls_back(
             foreign_root, target_is_directory=True
         )
     _common._LOG_DIR = managed_root
+    _common._LOG_DIR_CONFIGURED = False
     result = _result(stdout="hostile '$()' `bytes`\n한글")
 
     path = _common.emit_run_log(
@@ -542,6 +544,147 @@ def test_emit_run_log_symlinked_runs_falls_back_without_foreign_write(
     tmp_path: Path,
 ) -> None:
     _assert_symlinked_run_log_ancestor_falls_back(tmp_path, "runs")
+
+
+def test_configured_log_root_failure_does_not_fallback(tmp_path: Path) -> None:
+    temp_root = (tmp_path / "system-temp").resolve()
+    temp_root.mkdir()
+    configured_root = (tmp_path / "configured-log-root").resolve()
+    configured_root.write_text("occupied\n", encoding="utf-8")
+    healthy_root = (tmp_path / "healthy-configured-log-root").resolve()
+    script = r"""
+import json
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[1])
+import _common
+
+result = _common.RunResult(
+    exit_code=_common.EXIT_CLI_FAIL,
+    stdout="provider stdout",
+    stderr="provider stderr",
+    elapsed_s=0.1,
+    classification="unknown",
+    final_answer="",
+    vendor_exit_code=1,
+)
+emitted = _common.emit_run_log(
+    "gemini", ["wrapper"], ["gemini"], "prompt", result
+)
+persisted = _common.persist_result_artifacts(
+    "gemini", ["wrapper"], ["gemini"], "prompt", result, debug=False
+)
+success = _common.RunResult(
+    exit_code=_common.EXIT_OK,
+    stdout="provider success",
+    stderr="",
+    elapsed_s=0.1,
+    classification="ok",
+    final_answer="answer",
+    vendor_exit_code=0,
+)
+success_persisted = _common.persist_result_artifacts(
+    "gemini", ["wrapper"], ["gemini"], "prompt", success, debug=False
+)
+_common._LOG_DIR = Path(sys.argv[2])
+healthy_success_persisted = _common.persist_result_artifacts(
+    "gemini", ["wrapper"], ["gemini"], "prompt", success, debug=False
+)
+
+def fail_rotation(*_args):
+    raise OSError("injected post-append rotation failure")
+
+_common._rotate_audit_fd_if_needed = fail_rotation
+rotation_failure_success_persisted = _common.persist_result_artifacts(
+    "gemini", ["wrapper"], ["gemini"], "prompt", success, debug=False
+)
+_common._bounded_flock = lambda _fd: False
+contention_success_persisted = _common.persist_result_artifacts(
+    "gemini", ["wrapper"], ["gemini"], "prompt", success, debug=False
+)
+
+def fail_audit_record(*_args):
+    raise OSError("injected audit storage failure")
+
+_common._persist_audit_record = fail_audit_record
+audit_failure_persisted = _common.persist_result_artifacts(
+    "gemini", ["wrapper"], ["gemini"], "prompt", result, debug=False
+)
+print(json.dumps({
+    "emitted": str(emitted) if emitted is not None else None,
+    "persisted": str(persisted) if persisted is not None else None,
+    "stdout": result.stdout,
+    "stderr": result.stderr,
+    "exit_code": result.exit_code,
+    "classification": result.classification,
+    "vendor_exit_code": result.vendor_exit_code,
+    "success_persisted": (
+        str(success_persisted) if success_persisted is not None else None
+    ),
+    "healthy_success_persisted": (
+        str(healthy_success_persisted)
+        if healthy_success_persisted is not None
+        else None
+    ),
+    "rotation_failure_success_persisted": (
+        str(rotation_failure_success_persisted)
+        if rotation_failure_success_persisted is not None
+        else None
+    ),
+    "contention_success_persisted": (
+        str(contention_success_persisted)
+        if contention_success_persisted is not None
+        else None
+    ),
+    "audit_failure_persisted": (
+        str(audit_failure_persisted)
+        if audit_failure_persisted is not None
+        else None
+    ),
+}))
+"""
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script, str(_BIN), str(healthy_root)],
+        env={
+            **os.environ,
+            "TMPDIR": str(temp_root),
+            "TRIAD_DISPATCH_LOG_DIR": str(configured_root),
+        },
+        text=True,
+        capture_output=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    observed = json.loads(completed.stdout)
+    audit_failure_path = Path(observed.pop("audit_failure_persisted"))
+    assert audit_failure_path.is_file()
+    assert audit_failure_path.parent == healthy_root / "gemini" / "runs"
+    assert observed == {
+        "emitted": None,
+        "persisted": None,
+        "stdout": "provider stdout",
+        "stderr": "provider stderr",
+        "exit_code": _common.EXIT_CLI_FAIL,
+        "classification": "unknown",
+        "vendor_exit_code": 1,
+        "success_persisted": None,
+        "healthy_success_persisted": None,
+        "rotation_failure_success_persisted": None,
+        "contention_success_persisted": None,
+    }
+    assert completed.stderr.count("run-log-unavailable: storage-failure") == 2
+    assert f"run-log: {audit_failure_path}" in completed.stderr
+    assert completed.stderr.count("audit-unavailable: storage-failure") == 1
+    audit_log = healthy_root / "gemini" / "audit.jsonl"
+    assert audit_log.is_file()
+    assert len(audit_log.read_text(encoding="utf-8").splitlines()) == 2
+    assert not any(
+        path.name.startswith("triad-gemini-run-log-")
+        for path in temp_root.iterdir()
+    )
 
 
 def test_run_log_cap_prune_skips_symlinked_runs_directory(tmp_path: Path) -> None:
@@ -978,6 +1121,7 @@ TESTS = [
     test_emit_run_log_symlinked_root_falls_back_without_foreign_write,
     test_emit_run_log_symlinked_cli_falls_back_without_foreign_write,
     test_emit_run_log_symlinked_runs_falls_back_without_foreign_write,
+    test_configured_log_root_failure_does_not_fallback,
     test_run_log_cap_prune_skips_symlinked_runs_directory,
     test_run_log_cap_prune_skips_symlink_and_hardlink_leaves,
     test_run_log_prune_failure_does_not_hide_written_ipc,

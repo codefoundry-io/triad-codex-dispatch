@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Constructed-launcher trust invariant: the launcher, its pinned Python runtime,
 # and the checkout wrapper it executes must remain outside the mutable project
-# worktree. Provider permissions are selected by the authenticated developer
-# environment; bootstrap does not install a second permission policy.
+# worktree. Bootstrap installs no persistent permission policy; the AGY wrapper
+# selects its approved native headless child mode internally at dispatch time.
 set -u
 
 usage() {
@@ -33,10 +33,13 @@ Vertex, or API-key routing, are already installed.
 
 Install targets must resolve outside the project worktree. Run TRIAD from the
 same authenticated login terminal and worktree used for development. TRIAD
-inherits provider permissions and does not install or inject a separate Codex
-profile, command rule, shell environment policy, shell entry, or permission
-requirement. Wrapper descendants remain scrubbed after trusted launcher and
-interpreter startup.
+does not install or inject a separate Codex profile, command rule, shell
+environment policy, shell entry, or permission requirement. The Codex-led AGY
+wrapper deliberately selects AGY native headless always-proceed for that child
+through its internal --dangerously-skip-permissions flag; callers do not pass
+the flag, and this does not change stored or global user/project settings.
+Wrapper descendants remain scrubbed after trusted launcher and interpreter
+startup.
 
 Start a fresh ordinary Codex session after installation so the updated native
 repair protocol loads.
@@ -1367,7 +1370,7 @@ if [ "$errors" -ne 0 ]; then
 fi
 if [ "$errors" -eq 0 ]; then
   warn "launcher Python is installer-selected: credential-compatible user-site mode requires a trusted HOME because sitecustomize/usercustomize can run before launcher scrubbing; alternatively select a trusted isolated Python only if it preserves provider login."
-  printf 'native permissions: TRIAD inherits the authenticated developer terminal and provider project settings without installing Codex permission state.\n'
+  printf 'native permissions: TRIAD installs no Codex permission state; its AGY wrapper selects approved child-only native headless always-proceed without changing stored user/project settings.\n'
   print_owner_apply_argv
   printf 'next step: start a fresh Codex session so the updated native repair protocol loads.\n'
   ok "bootstrap install passed"

@@ -478,7 +478,9 @@ def test_bootstrap_help_describes_google_route_fallback() -> None:
     help_text = " ".join(result.stderr.split())
     assert "agy, or configured Gemini Enterprise/Business" in help_text
     assert "same authenticated login terminal" in help_text
-    assert "inherits provider permissions" in help_text
+    assert "deliberately selects AGY native headless always-proceed for that child" in help_text
+    assert "internal --dangerously-skip-permissions flag" in help_text
+    assert "does not change stored or global user/project settings" in help_text
     assert "does not install or inject a separate Codex profile" in help_text
     assert "Agent Review" not in help_text
     assert "granular.rules" not in help_text

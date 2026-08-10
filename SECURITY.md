@@ -7,11 +7,15 @@ strict result custody, and deterministic owner apply.
 
 ## Native permission boundary
 
-Provider, user, and project settings own permission selection and workspace
-trust. TRIAD does not select or override a permission mode, strengthen or
-weaken native authority, or insert yolo, bypass, accept-edits, dont-ask,
-`--skip-trust`, or equivalent controls. Bootstrap does not install permission
-profiles, command rules, or a pre-spawn `shell_environment_policy`.
+Provider, user, and project settings own stored/global permission state and
+workspace trust. Packaged AGY calls deliberately select AGY's native headless
+auto-approval mode `always-proceed`, replacing `request-review` for that child,
+through the approved internal `--dangerously-skip-permissions` flag. It is not
+caller-supplied; it does not change stored or global user/project settings; it
+does not install permission profiles or command rules; it does not select a
+sandbox; it does not change project-trust configuration; and it does not
+restrict installed CLI, MCP, read, or search tools. Bootstrap does not install
+permission profiles, command rules, or a pre-spawn `shell_environment_policy`.
 
 Run TRIAD from the same authenticated login terminal and project worktree used
 for development. Trusted Python and `PATH` values are prerequisites. Wrapper
@@ -27,11 +31,9 @@ credential-compatible/user-site mode requires a trusted `HOME` because
 trusted isolated Python environment is acceptable only when it preserves the
 provider login workflow.
 
-Native AGY headless permission denial is terminal `permission-unavailable`. It
-is distinct from authentication, quota, capacity, extraction, and
-`truncated-answer`; it neither triggers a broader retry nor activates Gemini in
-the same round. Gemini owns its workspace-trust decision after removal of
-`--skip-trust`; TRIAD has no trust bypass or speculative detector.
+Packaged AGY calls use the documented child-only native headless auto-approval
+mode. Gemini owns its workspace-trust decision after removal of `--skip-trust`;
+TRIAD has no trust bypass or speculative detector.
 
 ## Provider data and executable boundary
 
@@ -79,6 +81,14 @@ exclusions; absent that exact boundary, dispatch stops for owner input. Normal
 SDD implementation review includes
 relevant test source; other advisory review uses its separately owner-approved
 data scope.
+
+The prepared directory and round-owned `results/_logs` live in a mode-0700 root
+under the reserved `triad-review-` system-temp namespace; normal cleanup removes
+completed roots exactly, while an interrupted root can persist until a later
+prepare removes it after strictly more than 30 days.
+Formal wrapper `--cwd` and `--prompt-file` paths therefore live under that root.
+When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured, it must include the canonical
+system temp base, including when hardened mode requires the setting.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
 body. Record one simple content digest before dispatch and compare it after every
