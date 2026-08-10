@@ -49,6 +49,7 @@ class RoundSnapshot:
     prepared_digest: str
     worktree: str
     worktree_fingerprint: str
+    source_root: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class PreparedWorkspace:
     root: str
     shared_dir: str
     source_dir: str
+    source_root: str
     prompts_dir: str
     results_dir: str
     member_list: str
@@ -323,6 +325,75 @@ def _copy_source_member(
             os.close(directory_fd)
 
 
+def _source_member_digest(
+    source_root: Path,
+    member: str,
+    expected: tuple[os.stat_result, ...],
+) -> str:
+    parts = PurePosixPath(member).parts
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    directory_fd = -1
+    file_fd = -1
+    try:
+        try:
+            directory_fd = os.open(source_root, directory_flags)
+            opened_root = os.fstat(directory_fd)
+            if not os.path.samestat(opened_root, expected[0]) or not stat.S_ISDIR(opened_root.st_mode):
+                raise RoundIntegrityError(f"source member changed or is unsafe: {member}")
+            for index, part in enumerate(parts[:-1], start=1):
+                next_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+                opened = os.fstat(next_fd)
+                if not os.path.samestat(opened, expected[index]) or not stat.S_ISDIR(opened.st_mode):
+                    os.close(next_fd)
+                    raise RoundIntegrityError(f"source member changed or is unsafe: {member}")
+                os.close(directory_fd)
+                directory_fd = next_fd
+            file_fd = os.open(parts[-1], file_flags, dir_fd=directory_fd)
+            opened_file = os.fstat(file_fd)
+            expected_file = expected[-1]
+            if (
+                not os.path.samestat(opened_file, expected_file)
+                or not stat.S_ISREG(opened_file.st_mode)
+                or (opened_file.st_size, opened_file.st_mtime_ns)
+                != (expected_file.st_size, expected_file.st_mtime_ns)
+            ):
+                raise RoundIntegrityError(f"source member changed or is unsafe: {member}")
+        except RoundIntegrityError:
+            raise
+        except OSError:
+            raise RoundIntegrityError(f"source member changed or is unsafe: {member}") from None
+
+        digest = hashlib.sha256()
+        while True:
+            try:
+                chunk = os.read(file_fd, 1024 * 1024)
+            except OSError:
+                raise RoundIntegrityError(f"source member changed or is unsafe: {member}") from None
+            if not chunk:
+                break
+            digest.update(chunk)
+        try:
+            after = os.fstat(file_fd)
+        except OSError:
+            raise RoundIntegrityError(
+                f"source member changed or is unsafe: {member}"
+            ) from None
+        if (
+            opened_file.st_dev,
+            opened_file.st_ino,
+            opened_file.st_size,
+            opened_file.st_mtime_ns,
+        ) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+            raise RoundIntegrityError(f"source member changed while reading: {member}")
+        return digest.hexdigest()
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if directory_fd >= 0:
+            os.close(directory_fd)
+
+
 def _remove_tree(path: Path, label: str) -> None:
     try:
         shutil.rmtree(path)
@@ -414,12 +485,16 @@ def prepare_review_workspace(
     prompts = root / "prompts"
     results = root / "results"
     stored_members = root / "member-list.txt"
+    stored_source_root = root / "source-root.json"
     marker = root / ".last_activity"
     try:
         destination_root.mkdir(parents=True)
         prompts.mkdir()
         results.mkdir()
         stored_members.write_bytes(_canonical_json_bytes(list(members)))
+        stored_source_root.write_bytes(
+            _canonical_json_bytes({"source_root": str(source)})
+        )
         for member, (_source_path, expected) in source_members:
             destination = destination_root.joinpath(*PurePosixPath(member).parts)
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -440,6 +515,7 @@ def prepare_review_workspace(
         root=str(root),
         shared_dir=str(shared),
         source_dir=str(destination_root),
+        source_root=str(source),
         prompts_dir=str(prompts),
         results_dir=str(results),
         member_list=str(stored_members),
@@ -591,6 +667,52 @@ def _lifecycle_root(prepared: Path) -> Path | None:
     raise RoundIntegrityError(
         "lifecycle operations require the exact shared directory"
     )
+
+
+def _prepared_source_root(prepared: Path) -> Path | None:
+    lifecycle_root = _lifecycle_root(prepared)
+    if lifecycle_root is None:
+        return None
+    state = lifecycle_root / "source-root.json"
+    try:
+        metadata = state.lstat()
+    except OSError:
+        raise RoundIntegrityError("prepared source root metadata is missing or unreadable") from None
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise RoundIntegrityError("prepared source root metadata must be a regular file")
+    try:
+        payload = state.read_bytes()
+    except OSError:
+        raise RoundIntegrityError("prepared source root metadata is missing or unreadable") from None
+    try:
+        decoded = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise RoundIntegrityError("prepared source root metadata is invalid") from None
+    if (
+        not isinstance(decoded, dict)
+        or set(decoded) != {"source_root"}
+        or not isinstance(decoded["source_root"], str)
+        or payload != _canonical_json_bytes(decoded)
+    ):
+        raise RoundIntegrityError("prepared source root metadata is invalid")
+    return _canonical_directory(Path(decoded["source_root"]), "prepared source_root")
+
+
+def _validate_prepared_source_members(prepared: Path, source_root: Path) -> None:
+    lifecycle_root = _lifecycle_root(prepared)
+    if lifecycle_root is None:
+        return
+    members = _parse_member_list(lifecycle_root / "member-list.txt")
+    product = prepared / "source" / "product"
+    for member in members:
+        _source_path, expected = _source_member(source_root, member)
+        source_digest = _source_member_digest(source_root, member, expected)
+        prepared_path = product.joinpath(*PurePosixPath(member).parts)
+        prepared_digest = hashlib.sha256(_regular_file_bytes(prepared_path)).hexdigest()
+        if source_digest != prepared_digest:
+            raise RoundIntegrityError(
+                f"prepared source member does not match worktree: {member}"
+            )
 
 
 def _prepared_files(prepared: Path) -> dict[str, Path]:
@@ -792,11 +914,24 @@ def capture_round(prepared_dir: Path, worktree: Path) -> RoundSnapshot:
     root = _canonical_directory(worktree, "worktree")
     before = _prepared_digest(prepared)
     _validate_lifecycle_packet(prepared)
+    source_root = _prepared_source_root(prepared)
+    if source_root is not None and source_root != root:
+        raise RoundIntegrityError("worktree does not match prepared source root")
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     fingerprint = _worktree_fingerprint(root)
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     after = _prepared_digest(prepared)
     if before != after:
         raise RoundIntegrityError("prepared directory changed during capture")
-    return RoundSnapshot(str(prepared), before, str(root), fingerprint)
+    return RoundSnapshot(
+        str(prepared),
+        before,
+        str(root),
+        fingerprint,
+        str(source_root) if source_root is not None else None,
+    )
 
 
 def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) -> None:
@@ -805,9 +940,20 @@ def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) ->
     if str(prepared) != snapshot.prepared_dir or str(root) != snapshot.worktree:
         raise RoundIntegrityError("round path mismatch")
     _validate_lifecycle_packet(prepared)
+    source_root = _prepared_source_root(prepared)
+    if source_root is not None and str(source_root) != snapshot.source_root:
+        raise RoundIntegrityError("prepared source root changed")
+    if source_root is None and snapshot.source_root is not None:
+        raise RoundIntegrityError("prepared source root changed")
+    if source_root is not None and source_root != root:
+        raise RoundIntegrityError("worktree does not match prepared source root")
     if _prepared_digest(prepared) != snapshot.prepared_digest:
         raise RoundIntegrityError("prepared directory digest mismatch")
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     fingerprint = _worktree_fingerprint(root)
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     if _prepared_digest(prepared) != snapshot.prepared_digest:
         raise RoundIntegrityError("prepared directory changed during verification")
     if fingerprint != snapshot.worktree_fingerprint:
@@ -868,10 +1014,25 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         '"criteria_checked":["criterion"],"findings":[{"severity":"Critical|Major|Minor",'
         '"path":"relative/path","line":1,"trigger":"condition","evidence":"specific evidence",'
         '"correction":"bounded correction"}],"affected_surfaces_inspected":["relative/path"],'
-        '"open_questions":[]}. All paths must be prepared-directory-relative. '
+        '"open_questions":[]}. findings[].path and affected_surfaces_inspected entries must be '
+        "prepared-directory-relative. "
         "SAFE permits Minor findings but no Critical/Major finding and no open question. "
         "NOT-SAFE requires at least one Critical/Major finding or one open question. "
-        "Report proposed design/specification changes as findings or open questions; do not implement them."
+        "A Minor finding may carry a non-blocking hardening suggestion only when packet evidence "
+        "establishes current correctness and rules out its scenario for this decision; state why it "
+        "is non-blocking in trigger and evidence. Missing deployment or operational context needed "
+        "to decide current correctness belongs in open_questions and therefore requires NOT-SAFE. "
+        "Never suppress genuine uncertainty to produce SAFE. "
+        "If a potentially relevant surface needed to decide current correctness is absent from the "
+        "prepared directory and is not expressly excluded by metadata.approved_boundary, do not cite "
+        "it as a finding or list it in affected_surfaces_inspected. Put its suspected normalized "
+        "worktree-relative path and required check in open_questions, which requires NOT-SAFE. "
+        "This workflow prepares source/product from the canonical worktree root, so prepared "
+        "product paths map to worktree-relative paths by removing their leading source/product/ "
+        "prefix; state any other suspected omitted path directly as a normalized "
+        "worktree-relative POSIX path. "
+        "Report proposed design/specification changes as findings or open questions; do not implement them. "
+        "Do not ask how to proceed or wrap the JSON in prose."
     )
 
 

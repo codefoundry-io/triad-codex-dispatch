@@ -5,6 +5,7 @@
   "round_count": 2,
   "total_calls": 6,
   "batch_artifacts": 0,
+  "methodology_caveat": "LOCAL-2 was added to expected_finding_ids after reviewer output. The preregistered defect set was detected 3/3; the checked-in 4/4 and zero-false-finding aggregate uses amended ground truth. Calls-per-round and batch-artifact counts are unaffected.",
   "prompt_bytes_total": 9408,
   "routes": {
     "claude": {

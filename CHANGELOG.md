@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.534 — 2026-08-11
+
+- This is the first immutable release tag containing the post-`v0.2.533`
+  review-lifecycle revision already merged to `main`; the public `v0.2.533` tag
+  predates those bytes.
+- Publishes the unique-ID system-temporary review lifecycle, exact member-list
+  copying, canonical `SOURCE_SHA256SUMS` manifests, metadata-bound prompts and
+  verdicts, prepared-directory plus prepare-source-bound and member-rechecked
+  canonical-worktree integrity verification, exact-root cleanup, current-root wrapper logs, and
+  the documented packaged AGY headless selection without changing user settings.
+- Qualifies the focused-review benchmark so its preregistered 3/3 recall is
+  distinct from the amended checked-in 4/4 aggregate.
+- Defines how non-blocking hardening suggestions, missing correctness context,
+  and correctness-relevant surfaces omitted from a prepared directory travel
+  through the existing `Minor` and `open_questions` carriers without expanding
+  the verdict schema or path-root protocol.
+- States the exact native-tool containment residual: the prepared-directory and
+  canonical-worktree fingerprints do not prevent or detect mutations in
+  Git-ignored worktree paths not selected as packet members or elsewhere, or
+  network egress; final verification discards rather than prevents verdicts
+  produced from mid-round tampered bytes.
+- Tightens the review skill instructions with shell-safe path arguments,
+  explicit metadata binding, exact manifest coverage, pre-root failure cleanup,
+  and direct leg-contract navigation.
+
 ## 0.2.533 — 2026-08-05
 
 - Replaces batched review evidence with one focused directory and one strict
@@ -104,9 +129,12 @@
 - Rejects benchmark inputs with zero cases or zero planted findings, and adds a
   clean-HEAD distribution verifier that stages exact archive bytes, compares
   load-bearing hashes, and runs tests from the extracted package.
-- Records a two-round runtime benchmark: six total provider calls, 4/4
-  adjudicated defect recall, 3/3 confirmation `SAFE`, zero admitted mutations,
-  and an 87.5% call reduction against the captured 24-call batch plan.
+- Records a two-round runtime benchmark: six total provider calls, 3/3
+  preregistered defect recall, 3/3 confirmation `SAFE`, zero admitted mutations,
+  and an 87.5% call reduction against the captured 24-call batch plan. `LOCAL-2`
+  was added to the expected IDs after reviewer output, so the checked-in 4/4 and
+  zero-false-finding aggregate uses amended ground truth; the call and artifact
+  measurements are unaffected.
 
 ## 0.2.532 — 2026-08-03
 

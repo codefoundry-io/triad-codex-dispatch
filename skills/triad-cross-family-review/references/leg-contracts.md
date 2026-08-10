@@ -1,8 +1,17 @@
 # Review leg contracts
 
+## Contents
+
+- [Claude](#claude)
+- [Google family](#google-family)
+- [Fresh Codex](#fresh-codex)
+- [Shared containment boundary](#shared-containment-boundary)
+
 Resolve one absolute toolkit root and one prepared directory. Render one shared
 prompt from `review-prompt-contract.md`; only the reviewer perspective and
 authorized provider route differ. Start every leg before collecting results.
+Bind each dynamic path, review ID, digest, and fallback model to the task-specific
+shell variables shown below, then use only double-quoted expansions.
 Each provider command writes wrapper stdout to its result path inside the command
 itself. If a workspace requires a launcher shell, keep that redirection inside
 that launcher command so launcher-startup stdout cannot contaminate the result
@@ -14,15 +23,15 @@ invocation contract, and restart every required family under a fresh ID.
 Use the packaged wrapper with the formal-quality route:
 
 ```text
-TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs \
-python3 <toolkit>/bin/claude_wrapper.py \
-  --prompt-file <leader-owned-prompt> \
-  --cwd <prepared-directory> \
+TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
+python3 "$toolkit_root/bin/claude_wrapper.py" \
+  --prompt-file "$review_prompt_file" \
+  --cwd "$review_shared" \
   --model opus \
   --effort xhigh \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
-  > <returned-root>/results/claude.json
+  > "$claude_result_file"
 ```
 
 Claude receives no implementation task. Its terminal validated JSON is the
@@ -39,11 +48,11 @@ or execute candidate code, tests, builds, hooks, or scripts.
 Validate the Claude result with:
 
 ```text
-python3 <toolkit>/bin/verdict_schema.py validate \
-  --result-file <claude-result> \
-  --expected-review-id <review-id> \
+python3 "$toolkit_root/bin/verdict_schema.py" validate \
+  --result-file "$claude_result_file" \
+  --expected-review-id "$review_id" \
   --expected-family claude \
-  --expected-content-digest <digest>
+  --expected-content-digest "$review_digest"
 ```
 
 ## Google family
@@ -52,15 +61,15 @@ Before the round, prove `agy --version` is at least 1.1.10 and `agy models`
 advertises `gemini-3.1-pro-high`. Use:
 
 ```text
-TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs \
-python3 <toolkit>/bin/antigravity_wrapper.py \
-  --prompt-file <leader-owned-prompt> \
-  --cwd <prepared-directory> \
+TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
+python3 "$toolkit_root/bin/antigravity_wrapper.py" \
+  --prompt-file "$review_prompt_file" \
+  --cwd "$review_shared" \
   --model gemini-3.1-pro-high \
   --effort high \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
-  > <returned-root>/results/google.json
+  > "$google_result_file"
 ```
 
 The wrapper uses AGY native `stream-json` plus `json-schema` and validates the
@@ -83,13 +92,13 @@ For a separately authorized pre-submission Gemini fallback, use the packaged
 wrapper and the exact owner-authorized Gemini model:
 
 ```text
-TRIAD_DISPATCH_LOG_DIR=<returned-root>/results/_logs \
-python3 <toolkit>/bin/gemini_wrapper.py \
-  --prompt-file <leader-owned-prompt> \
-  --cwd <prepared-directory> \
-  --model <owner-authorized-gemini-model> \
+TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
+python3 "$toolkit_root/bin/gemini_wrapper.py" \
+  --prompt-file "$review_prompt_file" \
+  --cwd "$review_shared" \
+  --model "$review_gemini_model" \
   --pydantic verdict_schema:LegVerdict \
-  > <returned-root>/results/google.json
+  > "$google_result_file"
 ```
 
 The owner-approved 1,800-second correction applies to the selected AGY route
@@ -104,11 +113,11 @@ no capacity retry or schema-repair provider call.
 Validate the Google result with:
 
 ```text
-python3 <toolkit>/bin/verdict_schema.py validate \
-  --result-file <google-result> \
-  --expected-review-id <review-id> \
+python3 "$toolkit_root/bin/verdict_schema.py" validate \
+  --result-file "$google_result_file" \
+  --expected-review-id "$review_id" \
   --expected-family google \
-  --expected-content-digest <digest>
+  --expected-content-digest "$review_digest"
 ```
 
 ## Fresh Codex
@@ -130,12 +139,24 @@ tests, builds, hooks, or scripts. Save its terminal JSON outside the prepared
 directory and validate it with:
 
 ```text
-python3 <toolkit>/bin/verdict_schema.py validate \
-  --result-file <codex-result> \
-  --expected-review-id <review-id> \
+python3 "$toolkit_root/bin/verdict_schema.py" validate \
+  --result-file "$codex_result_file" \
+  --expected-review-id "$review_id" \
   --expected-family codex \
-  --expected-content-digest <digest>
+  --expected-content-digest "$review_digest"
 ```
+
+## Shared containment boundary
 
 The no-edit contract is prompt-controlled unless runtime metadata proves a
 stronger boundary. Mutation detection, not a sandbox claim, decides admission.
+The prepared-directory digest monitors every prepared regular file; the
+canonical-worktree fingerprint monitors Git HEAD, staged and unstaged tracked
+changes, and non-ignored untracked entries. Because legs retain native tools,
+separate selected-member comparisons cover listed source members even when
+Git-ignored. Mutations in other Git-ignored worktree paths, paths outside both
+directories, and network egress of packet content are neither prevented nor
+detected. Legs run in parallel against the same prepared directory,
+so a mid-round mutation may affect another leg's reads before final verification.
+A mismatch invalidates the complete round and discards every verdict; verification
+does not retroactively prevent the mutation.

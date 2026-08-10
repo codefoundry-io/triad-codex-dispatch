@@ -27,6 +27,11 @@ No reviewer mutation was admitted.
 | Clean-control false findings | unavailable | 0 |
 | Confirmation verdicts | round did not finish | 3/3 `SAFE` |
 
+`LOCAL-2` was added to `expected_finding_ids` after reviewer output. The
+preregistered defect set was detected 3/3; the checked-in 4/4 and
+zero-false-finding aggregate therefore uses amended ground truth. The
+calls-per-round and batch-artifact measurements are unaffected.
+
 The batched figures are a captured planned round, not a completed quality
 result. The focused figures are observed runtime results. Fresh Codex elapsed
 time and normalized provider token usage were not exposed by the result
