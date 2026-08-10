@@ -49,6 +49,7 @@ class RoundSnapshot:
     prepared_digest: str
     worktree: str
     worktree_fingerprint: str
+    source_root: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class PreparedWorkspace:
     root: str
     shared_dir: str
     source_dir: str
+    source_root: str
     prompts_dir: str
     results_dir: str
     member_list: str
@@ -414,12 +416,16 @@ def prepare_review_workspace(
     prompts = root / "prompts"
     results = root / "results"
     stored_members = root / "member-list.txt"
+    stored_source_root = root / "source-root.json"
     marker = root / ".last_activity"
     try:
         destination_root.mkdir(parents=True)
         prompts.mkdir()
         results.mkdir()
         stored_members.write_bytes(_canonical_json_bytes(list(members)))
+        stored_source_root.write_bytes(
+            _canonical_json_bytes({"source_root": str(source)})
+        )
         for member, (_source_path, expected) in source_members:
             destination = destination_root.joinpath(*PurePosixPath(member).parts)
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -440,6 +446,7 @@ def prepare_review_workspace(
         root=str(root),
         shared_dir=str(shared),
         source_dir=str(destination_root),
+        source_root=str(source),
         prompts_dir=str(prompts),
         results_dir=str(results),
         member_list=str(stored_members),
@@ -591,6 +598,32 @@ def _lifecycle_root(prepared: Path) -> Path | None:
     raise RoundIntegrityError(
         "lifecycle operations require the exact shared directory"
     )
+
+
+def _prepared_source_root(prepared: Path) -> Path | None:
+    lifecycle_root = _lifecycle_root(prepared)
+    if lifecycle_root is None:
+        return None
+    state = lifecycle_root / "source-root.json"
+    try:
+        metadata = state.lstat()
+        payload = state.read_bytes()
+    except OSError:
+        raise RoundIntegrityError("prepared source root metadata is missing or unreadable") from None
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise RoundIntegrityError("prepared source root metadata must be a regular file")
+    try:
+        decoded = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise RoundIntegrityError("prepared source root metadata is invalid") from None
+    if (
+        not isinstance(decoded, dict)
+        or set(decoded) != {"source_root"}
+        or not isinstance(decoded["source_root"], str)
+        or payload != _canonical_json_bytes(decoded)
+    ):
+        raise RoundIntegrityError("prepared source root metadata is invalid")
+    return _canonical_directory(Path(decoded["source_root"]), "prepared source_root")
 
 
 def _prepared_files(prepared: Path) -> dict[str, Path]:
@@ -792,11 +825,20 @@ def capture_round(prepared_dir: Path, worktree: Path) -> RoundSnapshot:
     root = _canonical_directory(worktree, "worktree")
     before = _prepared_digest(prepared)
     _validate_lifecycle_packet(prepared)
+    source_root = _prepared_source_root(prepared)
+    if source_root is not None and source_root != root:
+        raise RoundIntegrityError("worktree does not match prepared source root")
     fingerprint = _worktree_fingerprint(root)
     after = _prepared_digest(prepared)
     if before != after:
         raise RoundIntegrityError("prepared directory changed during capture")
-    return RoundSnapshot(str(prepared), before, str(root), fingerprint)
+    return RoundSnapshot(
+        str(prepared),
+        before,
+        str(root),
+        fingerprint,
+        str(source_root) if source_root is not None else None,
+    )
 
 
 def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) -> None:
@@ -805,6 +847,13 @@ def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) ->
     if str(prepared) != snapshot.prepared_dir or str(root) != snapshot.worktree:
         raise RoundIntegrityError("round path mismatch")
     _validate_lifecycle_packet(prepared)
+    source_root = _prepared_source_root(prepared)
+    if source_root is not None and str(source_root) != snapshot.source_root:
+        raise RoundIntegrityError("prepared source root changed")
+    if source_root is None and snapshot.source_root is not None:
+        raise RoundIntegrityError("prepared source root changed")
+    if source_root is not None and source_root != root:
+        raise RoundIntegrityError("worktree does not match prepared source root")
     if _prepared_digest(prepared) != snapshot.prepared_digest:
         raise RoundIntegrityError("prepared directory digest mismatch")
     fingerprint = _worktree_fingerprint(root)

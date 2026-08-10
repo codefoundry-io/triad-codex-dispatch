@@ -81,14 +81,22 @@ def _lifecycle_packet(
     tmp_path: Path,
     monkeypatch,
     review_id: str,
+    *,
+    source_root: Path | None = None,
 ) -> tuple[Path, Path]:
     temp_root = tmp_path.resolve()
     monkeypatch.setattr(review_round.tempfile, "gettempdir", lambda: str(temp_root))
-    source = (tmp_path / f"source-{review_id}").resolve()
-    source.mkdir()
-    (source / "a.txt").write_text("a\n", encoding="utf-8")
+    if source_root is None:
+        source = (tmp_path / f"source-{review_id}").resolve()
+        source.mkdir()
+        member = "a.txt"
+        (source / member).write_text("a\n", encoding="utf-8")
+    else:
+        source = source_root
+        member = "source.py"
+        assert (source / member).is_file()
     members = (tmp_path / f"members-{review_id}.txt").resolve()
-    _write_member_list(members, ["a.txt"])
+    _write_member_list(members, [member])
     result = review_round.prepare_review_workspace(
         review_id, source, members, temp_root=temp_root, now=4_000_000.0
     )
@@ -100,11 +108,13 @@ def _lifecycle_packet(
 
 
 def _matching_snapshot(prepared: Path, worktree: Path) -> RoundSnapshot:
+    source_root = review_round._prepared_source_root(prepared)
     return RoundSnapshot(
         str(prepared),
         _prepared_digest(prepared),
         str(worktree),
         review_round._worktree_fingerprint(worktree),
+        str(source_root) if source_root is not None else None,
     )
 
 
@@ -273,10 +283,14 @@ def test_prepare_creates_complete_layout_and_metadata(
     assert Path(result.prompts_dir).is_dir()
     assert Path(result.results_dir).is_dir()
     assert result.member_list == str(root / "member-list.txt")
+    assert result.source_root == str(source)
     assert result.copied_count == 1
     assert result.swept_roots == ()
     assert result.skipped_roots == ()
     assert (root / ".last_activity").is_file()
+    assert (root / "source-root.json").read_bytes() == _canonical_json_bytes(
+        {"source_root": str(source)}
+    )
     assert Path(result.member_list).read_bytes() == _canonical_json_bytes(["a.txt"])
     assert (Path(result.source_dir) / "a.txt").read_bytes() == b"alpha\n"
 
@@ -1181,11 +1195,9 @@ def test_capture_accepts_exact_lifecycle_packet(
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
     monkeypatch.setattr(review_round.tempfile, "gettempdir", lambda: str(temp_root))
-    source = (tmp_path / "source").resolve()
-    source.mkdir()
-    (source / "a.txt").write_text("a\n", encoding="utf-8")
+    source = worktree
     members = (tmp_path / "members.txt").resolve()
-    _write_member_list(members, ["a.txt"])
+    _write_member_list(members, ["source.py"])
     result = review_round.prepare_review_workspace(
         "packet-ok", source, members, temp_root=temp_root, now=4_000_000.0
     )
@@ -1197,6 +1209,33 @@ def test_capture_accepts_exact_lifecycle_packet(
     snapshot = capture_round(shared, worktree)
 
     assert snapshot.prepared_dir == str(shared)
+    assert snapshot.source_root == str(worktree)
+
+
+def test_capture_and_verify_bind_prepare_source_root_to_worktree(
+    tmp_path: Path, worktree: Path, monkeypatch
+) -> None:
+    root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, "source-binding", source_root=worktree
+    )
+    other = (tmp_path / "other-repo").resolve()
+    other.mkdir()
+    _git(other, "init", "-q", "-b", "main")
+    (other / "other.py").write_text("VALUE = 2\n", encoding="utf-8")
+    _git(other, "add", "other.py")
+    _git(other, "commit", "-q", "-m", "other")
+
+    with pytest.raises(
+        RoundIntegrityError, match="worktree does not match prepared source root"
+    ):
+        capture_round(shared, other)
+
+    snapshot = capture_round(shared, worktree)
+    (root / "source-root.json").write_bytes(
+        _canonical_json_bytes({"source_root": str(other)})
+    )
+    with pytest.raises(RoundIntegrityError, match="prepared source root changed"):
+        verify_round(snapshot, shared, worktree)
 
 
 def test_manifest_cli_json_round_trips_special_paths_and_rejects_invalid_packet(
@@ -1447,7 +1486,9 @@ def test_capture_rejects_missing_lifecycle_source_member(
 def test_capture_and_verify_reject_lifecycle_manifest_inventory_or_syntax_error(
     tmp_path: Path, worktree: Path, monkeypatch, capsys
 ) -> None:
-    root, shared = _lifecycle_packet(tmp_path, monkeypatch, "manifest-errors")
+    root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, "manifest-errors", source_root=worktree
+    )
     manifest = shared / "SOURCE_SHA256SUMS"
     valid_entries = json.loads(manifest.read_text(encoding="utf-8"))
     first = valid_entries[0]
@@ -1783,11 +1824,13 @@ def test_cli_lifecycle_sequence(tmp_path: Path, worktree: Path) -> None:
     sibling.mkdir()
     sibling_sentinel = sibling / "preserve.txt"
     sibling_sentinel.write_text("preserve\n", encoding="utf-8")
-    source = (tmp_path / "source").resolve()
+    source = worktree
     (source / "nested").mkdir(parents=True)
     (source / "a.txt").write_text("a\n", encoding="utf-8")
     (source / "nested" / "b.txt").write_text("b\n", encoding="utf-8")
     (source / "omitted.txt").write_text("omit\n", encoding="utf-8")
+    _git(source, "add", "a.txt", "nested/b.txt", "omitted.txt")
+    _git(source, "commit", "-q", "-m", "lifecycle source")
     members = (tmp_path / "members.txt").resolve()
     _write_member_list(members, ["a.txt", "nested/b.txt"])
     env = {**os.environ, "TMPDIR": str(temp_root)}
@@ -2396,7 +2439,9 @@ def test_cli_lifecycle_activity_success_paths(
     operation: str,
 ) -> None:
     review_id = f"activity-{operation}"
-    root, shared = _lifecycle_packet(tmp_path, monkeypatch, review_id)
+    root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, review_id, source_root=worktree
+    )
     manifest_packet: tuple[Path, Path] | None = None
     if operation == "capture":
         manifest_packet = _lifecycle_packet(
@@ -2576,7 +2621,9 @@ def test_cli_lifecycle_activity_does_not_refresh_after_failure(
     operation: str,
 ) -> None:
     review_id = f"failed-activity-{operation}"
-    root, shared = _lifecycle_packet(tmp_path, monkeypatch, review_id)
+    root, shared = _lifecycle_packet(
+        tmp_path, monkeypatch, review_id, source_root=worktree
+    )
     marker = root / ".last_activity"
     fixed_ns = 1_000_000_000_000_000
     arguments = _cli_operation_args(
