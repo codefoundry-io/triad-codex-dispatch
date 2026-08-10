@@ -280,6 +280,10 @@ def test_cross_family_skill_owns_operational_prompts_without_meta_review() -> No
     assert "render-worktree" in compact
     assert "project instructions explicitly select worktree-first review" in compact
     assert (
+        "task, status, and diff as canonical regular files inside that worktree"
+        in compact
+    )
+    assert (
         "Do not invoke `skill-prompt-review` before or during an operational round"
         in compact
     )

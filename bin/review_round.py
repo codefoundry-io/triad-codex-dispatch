@@ -1129,6 +1129,12 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         ("status", brief.status_file),
         ("diff", brief.diff_file),
     ):
+        try:
+            path.relative_to(worktree)
+        except ValueError:
+            raise RoundIntegrityError(
+                f"{label}_file must be inside the canonical worktree"
+            ) from None
         payload = _canonical_regular_file_bytes(path, f"{label}_file")
         custody[f"{label}_file"] = str(path)
         custody[f"{label}_sha256"] = hashlib.sha256(payload).hexdigest()

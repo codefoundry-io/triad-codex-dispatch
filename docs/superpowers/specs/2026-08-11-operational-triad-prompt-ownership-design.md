@@ -94,12 +94,16 @@ Add a typed worktree brief containing only leader inputs:
 - exact situation-specific review points;
 - approved data and test-source boundary;
 - canonical worktree and guarded fingerprint; and
-- canonical current-round task, status, and diff files plus their content digests.
+- canonical current-round task, status, and diff files inside that worktree plus their content
+  digests.
 
 The objective, criteria, and review points must be non-empty. Validation checks shape and custody;
 it does not judge whether the selected review points are good.
 
-Capture the worktree fingerprint once before rendering and once after all legs terminate. The
+Complete those custody files before the pre-review fingerprint; the renderer rejects a custody file
+outside the canonical worktree so every reviewer running with that worktree as its read boundary can
+open it. Keep prompts, provider logs, and results in the exact current-round temporary root outside
+the worktree. Capture the worktree fingerprint once before rendering and once after all legs terminate. The
 renderer consumes the captured value without rehashing the worktree separately for each family;
 this preserves one shared boundary and avoids repeated reads of large untracked files.
 
@@ -154,6 +158,7 @@ No prompt-review agent or prompt-review round exists in this flow.
 ## Failure handling
 
 - Missing or empty leader review points: stop before dispatch and complete the brief.
+- Task, status, or diff outside the canonical worktree: fail mechanically before dispatch.
 - Invalid path, digest, family, review ID, or fingerprint shape: fail mechanically before dispatch.
 - Renderer or contract-validation failure: invalidate the attempted setup and use a fresh review ID
   after the bounded workflow correction.
@@ -169,6 +174,7 @@ TDD adds focused tests proving:
 - a worktree prompt preserves leader-authored objective, criteria, and review points exactly;
 - changing the leader review points changes only the corresponding metadata value;
 - empty review points fail before output;
+- a custody file outside the canonical worktree fails before output;
 - all three family prompts carry the same task values and family-specific identity;
 - the complete `LegVerdict` shape and custody-versus-authority wording are present;
 - prepared-directory rendering remains byte-for-byte unchanged; and

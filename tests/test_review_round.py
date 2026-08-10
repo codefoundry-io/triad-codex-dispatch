@@ -2178,9 +2178,9 @@ def test_untracked_file_content_changes_fingerprint(prepared, worktree):
 def test_worktree_prompt_preserves_leader_authored_review_points(
     worktree: Path, tmp_path: Path
 ) -> None:
-    task = (tmp_path / "TASK.md").resolve()
-    status = (tmp_path / "STATUS.txt").resolve()
-    diff = (tmp_path / "REVIEW.diff").resolve()
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
     task.write_text("task\n", encoding="utf-8")
     status.write_text("status\n", encoding="utf-8")
     diff.write_text("diff\n", encoding="utf-8")
@@ -2240,12 +2240,42 @@ def test_worktree_prompt_rejects_empty_review_points(
         render_worktree_review_prompt(brief)
 
 
+def test_worktree_prompt_rejects_custody_outside_canonical_worktree(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (tmp_path / "outside-TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-outside-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    with pytest.raises(
+        RoundIntegrityError,
+        match="task_file must be inside the canonical worktree",
+    ):
+        render_worktree_review_prompt(brief)
+
+
 def test_worktree_prompts_share_common_digest_across_families(
     worktree: Path, tmp_path: Path
 ) -> None:
-    task = (tmp_path / "TASK.md").resolve()
-    status = (tmp_path / "STATUS.txt").resolve()
-    diff = (tmp_path / "REVIEW.diff").resolve()
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
     for path in (task, status, diff):
         path.write_text(f"{path.name}\n", encoding="utf-8")
 
@@ -2280,9 +2310,9 @@ def test_worktree_prompts_share_common_digest_across_families(
 def test_worktree_review_digest_binds_leader_authored_review_points(
     worktree: Path, tmp_path: Path
 ) -> None:
-    task = (tmp_path / "TASK.md").resolve()
-    status = (tmp_path / "STATUS.txt").resolve()
-    diff = (tmp_path / "REVIEW.diff").resolve()
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
     for path in (task, status, diff):
         path.write_text(f"{path.name}\n", encoding="utf-8")
     first = WorktreeReviewBrief(
@@ -2316,9 +2346,9 @@ def test_worktree_review_digest_binds_leader_authored_review_points(
 def test_worktree_prompt_uses_captured_fingerprint_without_rehashing(
     worktree: Path, tmp_path: Path, monkeypatch
 ) -> None:
-    task = (tmp_path / "TASK.md").resolve()
-    status = (tmp_path / "STATUS.txt").resolve()
-    diff = (tmp_path / "REVIEW.diff").resolve()
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
     for path in (task, status, diff):
         path.write_text(f"{path.name}\n", encoding="utf-8")
     fingerprint = review_round._worktree_fingerprint(worktree)
@@ -2716,9 +2746,9 @@ def test_cli_renders_family_bound_prompt(prepared, tmp_path):
 def test_cli_renders_leader_authored_worktree_prompt(
     worktree: Path, tmp_path: Path
 ) -> None:
-    task = (tmp_path / "TASK.md").resolve()
-    status = (tmp_path / "STATUS.txt").resolve()
-    diff = (tmp_path / "REVIEW.diff").resolve()
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
     prompt_file = (tmp_path / "worktree-prompt.txt").resolve()
     for path in (task, status, diff):
         path.write_text(f"{path.name}\n", encoding="utf-8")

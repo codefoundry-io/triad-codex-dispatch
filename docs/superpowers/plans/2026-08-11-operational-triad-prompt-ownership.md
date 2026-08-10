@@ -95,9 +95,9 @@ Add imports for `WorktreeReviewBrief` and `render_worktree_review_prompt`, then 
 
 ```python
 def test_worktree_prompt_preserves_leader_authored_review_points(worktree, tmp_path):
-    task = (tmp_path / "TASK.md").resolve()
-    status = (tmp_path / "STATUS.txt").resolve()
-    diff = (tmp_path / "REVIEW.diff").resolve()
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
     task.write_text("task\n", encoding="utf-8")
     status.write_text("status\n", encoding="utf-8")
     diff.write_text("diff\n", encoding="utf-8")
@@ -163,7 +163,7 @@ class WorktreeReviewBrief:
     approved_boundary: tuple[str, ...]
 ```
 
-Implement canonical regular-file validation, per-file SHA-256, a canonical common-input digest, and `render_worktree_review_prompt`. Reuse the exact existing `LegVerdict` shape and verdict semantics. Keep all dynamic values in one `Review metadata: ` JSON record. The fixed prose must direct reviewers to inspect the worktree independently and must state that task/status/diff paths establish custody, not truth.
+Implement canonical regular-file validation, require every task/status/diff file to be inside the canonical worktree, compute per-file SHA-256 and a canonical common-input digest, and add `render_worktree_review_prompt`. Reuse the exact existing `LegVerdict` shape and verdict semantics. Keep all dynamic values in one `Review metadata: ` JSON record. The fixed prose must direct reviewers to inspect the worktree independently and must state that task/status/diff paths establish custody, not truth.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -276,8 +276,9 @@ The Argus guide was already modified before this implementation. Do not stage or
 ### Task 5: Run the fresh operational Argus three-family review
 
 **Files:**
-- Read only: current Argus worktree and a fresh workspace-managed temporary review root.
-- Create temporarily: current-round task/status/diff, rendered prompts, snapshots, logs, and verdicts.
+- Read: current Argus worktree and a fresh workspace-managed temporary review root.
+- Create inside the worktree before fingerprinting: current-round task/status/diff.
+- Create in the temporary review root: rendered prompts, logs, and verdicts.
 
 **Interfaces:**
 - Consumes: verified `render-worktree`, leader-authored Task 4 review brief, Argus route rules.
@@ -289,7 +290,7 @@ Write situation-specific objective, acceptance criteria, and review points from 
 
 - [ ] **Step 2: Capture fingerprint and render once**
 
-Capture one pre-review fingerprint and trusted task/status/diff. Render all three prompts with `render-worktree`. Run only deterministic contract/schema checks; do not invoke `skill-prompt-review` or any prompt-review child.
+Create the trusted task/status/diff as canonical regular files inside the worktree, capture one pre-review fingerprint, and render all three prompts with `render-worktree`. Run only deterministic contract/schema checks; do not invoke `skill-prompt-review` or any prompt-review child.
 
 - [ ] **Step 3: Start all three actual legs**
 

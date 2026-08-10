@@ -28,6 +28,9 @@ fingerprint/digest and a new complete round. Old and new leg results are never m
 
 When current owner or project instructions explicitly select worktree-first review, use the
 guarded existing Git worktree plus one current-round task/status/diff set instead of copying source.
+Create the task, status, and diff as canonical regular files inside that worktree before the
+pre-review fingerprint; keep prompts, provider logs, and results in the exact current-round
+temporary root outside the worktree. `render-worktree` rejects an external custody file.
 The leader writes the situation-specific objective, criteria, and review points; tooling never
 generates or broadens them. Capture the pre/post fingerprint with packaged `python3
 bin/review_round.py fingerprint-worktree --worktree "$review_worktree"` exactly once at each boundary.
