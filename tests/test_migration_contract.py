@@ -29,12 +29,14 @@ def test_release_headers_are_in_descending_order() -> None:
     assert changelog.index("## 0.2.528") < changelog.index("## 0.2.527")
 
 
-def test_current_migration_guidance_is_permission_neutral() -> None:
+def test_current_migration_guidance_discloses_child_permission_selection_without_persistence() -> None:
     guidance = " ".join(_text(GUIDANCE).split())
 
     assert "same authenticated login terminal" in guidance
     assert "repository worktree used for development" in guidance
-    assert "inherits provider permissions without changing them" in guidance
+    assert "deliberately selects AGY native headless `always-proceed` for that child" in guidance
+    assert "internal `--dangerously-skip-permissions` flag" in guidance
+    assert "does not change stored or global user/project settings" in guidance
     assert "does not install a separate Codex profile, rule, permission" in guidance
     assert "pre-spawn `shell_environment_policy`" in guidance
     assert "danger-full-access" not in guidance

@@ -26,9 +26,14 @@ reaches out to the other families for you.
 - Bootstrap newly publishes only three provider wrapper commands: Claude, agy,
   and Gemini. `triad-setup` and `triad-doctor` are remove-only legacy cleanup
   names.
-- Native provider permissions: provider, user, and project own permission
-  selection. TRIAD does not select or override a permission mode, install
-  plugin-owned permission profiles or command rules, or replace project trust.
+- Provider, user, and project settings own stored/global permission state and
+  project trust. Packaged AGY calls deliberately select AGY's native headless
+  auto-approval mode `always-proceed`, replacing `request-review` for that child,
+  through the approved internal `--dangerously-skip-permissions` flag. It is not
+  caller-supplied; it does not change stored or global user/project settings; it
+  does not install permission profiles or command rules; it does not select a
+  sandbox; it does not change project-trust configuration; and it does not
+  restrict installed CLI, MCP, read, or search tools.
 - Classifier gaps use a fresh native proposal-only child. The owner applies an
   accepted proposal locally from the same authenticated login terminal with the
   bootstrap-printed `python3 bin/apply_patch.py ... --classifier-file ...`
@@ -88,8 +93,9 @@ section is optional.
    all-or-nothing command group. It does not install a Codex permission profile,
    command rule, repair-agent registration, or pre-spawn
    `[shell_environment_policy]`. It preserves owner-authored `config.toml`,
-   rules, permission settings, credentials, and unrelated files. Provider,
-   user, and project settings decide whether a native operation is allowed,
+   rules, permission settings, credentials, and unrelated files. Outside the
+   documented packaged AGY child `always-proceed` selection, provider, user,
+   and project settings decide whether other native operations are allowed,
    denied, or interactive.
 
    Bootstrap pins the install-resolved classifier path in every provider
@@ -113,9 +119,10 @@ section is optional.
 
    Start ordinary `codex` from the same authenticated login terminal and actual
    project worktree. Select provider permissions and provider-owned workspace
-   trust there before dispatch. TRIAD inherits those native decisions and does
-   not inject a separate permission or trust bypass. Trusted Python and `PATH`
-   are prerequisites; wrapper child-process scrubbing remains after the trusted
+   trust there before dispatch. Packaged AGY calls use the documented child-only
+   `always-proceed` selection above; other provider permission decisions and all
+   project-trust configuration remain native. Trusted Python and `PATH` are
+   prerequisites; wrapper child-process scrubbing remains after the trusted
    launcher and interpreter start.
 
    Then start a fresh ordinary Codex session from the target workspace:
@@ -170,10 +177,10 @@ support. The installer does not install OS packages.
 *Do this ONLY if you want the full threat model before relying on the toolkit.*
 See [SECURITY.md](SECURITY.md) — the durable boundaries are explicit data
 authorization, pinned executables, digest/mutation checks, strict result custody,
-and deterministic owner apply. Permission selection remains with the
-provider/user/project, and no-edit/no-execution containment is prompt-controlled
-unless a provider actually enforces it (summarized under [Security](#security)
-below).
+and deterministic owner apply. Provider/user/project settings retain all
+permission choices outside the documented packaged AGY child selection, and
+no-edit/no-execution containment is prompt-controlled unless a provider actually
+enforces it (summarized under [Security](#security) below).
 
 ### Notes on re-running bootstrap
 
@@ -199,8 +206,10 @@ The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
 packet, receipt, PTY, and sentinel review transports are removed. AGY requires
 1.1.10 or newer and uses native `stream-json` plus `json-schema`; the formal
-route passes `gemini-3.1-pro-high` with `high` effort. Provider permission and
-project-trust policy remain native. Ordinary `codex` remains the normal path.
+route passes `gemini-3.1-pro-high` with `high` effort. The documented packaged
+AGY child selection is the sole permission-mode exception; other provider
+permission and all project-trust policy remain native. Ordinary `codex` remains
+the normal path.
 
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
@@ -296,7 +305,6 @@ immutable-directory digests, and leader mutation checks.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| A provider returns `permission-unavailable` | Native user/project permission or trust does not permit the headless action | Make the narrow provider/user/project permission decision in the same authenticated login terminal, then start a fresh round. TRIAD does not insert a bypass. |
 | Gemini rejects the project worktree as untrusted | Gemini owns workspace trust after removal of `--skip-trust` | Make the provider-native trust decision for that worktree, or stop. TRIAD has no trust bypass or speculative detector. |
 | A dispatch fails with `oauth-env` | The worker CLI's login expired or is missing | Re-run that vendor's native login (`claude` / `agy` OAuth, or `codex login`). The toolkit never re-authenticates for you — it surfaces the signal so you log in. |
 | The gemini leg fails with `IneligibleTier` | The Gemini CLI *individual* tier is deprecated | Use the `agy` (Antigravity) leg — it is the Google-family leg for individual users. `gemini` is only for business / Vertex / API-key accounts. |
@@ -311,7 +319,7 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `0` | Success — the answer follows | Nothing. |
 | `4` | The configured provider binary was missing or not executable before submission | Fix that binary. For the AGY route only, Gemini Enterprise fallback is eligible when the wrapper-owned diagnostic also proves this pre-submit failure. |
 | `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
-| `65` | Auth / config / quota / native permission, or a lossy AGY answer (for example `oauth-env`, `cli-subscription-cap`, `permission-unavailable`, or `truncated-answer`) | `permission-unavailable` requires a provider/user/project decision and is distinct from authentication, quota, and truncated-answer. For `truncated-answer`, do not repair it or switch to Gemini; request a new bounded, compact result. |
+| `65` | Authentication, configuration, quota, or another terminal provider failure (for example `oauth-env`, `cli-subscription-cap`, or `token-limit`) | Resolve the cited provider state, then make an explicit new invocation. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
@@ -342,9 +350,13 @@ Honest boundaries, so you know where the toolkit stops:
   after changing `TRIAD_CLASSIFIER_EXTENSION`.
 - **Wrapper containment is process-level, not OS-level confinement.**
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
-  they are not a claim of OS-level isolation. The boundary rests on process
-  permissions selected by the provider/user/project, the `--cwd` worktree,
+  they are not a claim of OS-level isolation. The boundary includes the documented
+  packaged AGY child `always-proceed` selection and, for other operations, process
+  permissions selected by the provider/user/project, plus the `--cwd` worktree,
   digest and mutation checks, and your review before commit.
+  Formal review places wrapper `--cwd` and `--prompt-file` paths under the reserved
+  `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
+  it must include the canonical system temp base, including in hardened mode.
 
 ## Update
 
@@ -462,6 +474,12 @@ worktree fingerprint, and one strict `LegVerdict` per family. The leader keeps
 results and snapshots outside reviewed evidence and starts a fresh complete
 round after any bounded correction.
 
+Formal review reserves the `triad-review-` namespace under the canonical system
+temp root. Each round owns its returned root, including `results/_logs`; a later
+prepare removes only managed interrupted roots without activity for strictly
+more than 30 days. Normal cleanup removes the exact completed root and leaves
+other managed sibling roots untouched.
+
 Every normal non-`--repair-mode` wrapper invocation that reaches its dispatch
 driver performs best-effort cleanup of managed UUID/file-IPC entries older than
 3,600 seconds before provider execution; Antigravity performs it before
@@ -472,8 +490,9 @@ a perfect garbage collector.
 
 The durable controls are explicit data authorization, pinned executables,
 digest/mutation checks, strict result custody, and a native proposal-only repair
-child followed by deterministic owner apply. Permission selection remains with
-the provider/user/project. Full threat model: [SECURITY.md](SECURITY.md).
+child followed by deterministic owner apply. Provider/user/project settings
+retain permission selection outside the documented packaged AGY child exception.
+Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Support
 
@@ -483,8 +502,9 @@ the provider/user/project. Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Notes
 
-- TRIAD does not inject yolo, bypass, skip-trust, accept-edits, or equivalent
-  permission controls.
+- Apart from the approved internal AGY flag disclosed above, TRIAD accepts no
+  caller-supplied yolo, bypass, skip-trust, accept-edits, or equivalent permission
+  controls and makes no user-setting change.
 - Native permission decisions never supply owner workflow authorization for commit,
   push, install, release, or publication.
 - The fresh repair child returns a proposal or escalation and never applies a

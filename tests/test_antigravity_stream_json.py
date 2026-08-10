@@ -54,6 +54,7 @@ def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
 
     assert cmd == [
         "/opt/bin/agy",
+        "--dangerously-skip-permissions",
         "-p",
         "review the directory",
         "--output-format",
@@ -68,7 +69,7 @@ def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
         "high",
     ]
     assert "--sandbox" not in cmd
-    assert "--dangerously-skip-permissions" not in cmd
+    assert cmd.count("--dangerously-skip-permissions") == 1
 
 
 def test_schema_argv_is_redacted_from_logs() -> None:

@@ -3,8 +3,8 @@
 
 The wrapper forwards one prompt through ``stream-json``, optionally supplies a
 native JSON schema, admits only the terminal ``result`` event, and validates a
-structured result locally. Provider permissions and project trust remain
-native AGY policy; this transport adds no sandbox or bypass flag.
+structured result locally. Headless calls use AGY's native auto-approve flag;
+the review prompt remains responsible for the no-mutation boundary.
 """
 from __future__ import annotations
 
@@ -69,6 +69,7 @@ def _build_cmd(
     print_timeout = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = [
         agy_bin,
+        "--dangerously-skip-permissions",
         "-p",
         prompt,
         "--output-format",
@@ -256,7 +257,6 @@ def main() -> int:
     if not prompt.strip() or args.timeout <= 0:
         _common.log("prompt must be non-empty and timeout must be positive")
         return _common.EXIT_ARG_ERROR
-
     _common.prune_stale_run_logs("antigravity")
 
     pydantic_cls = None

@@ -25,11 +25,14 @@ directly:
 - `$triad-cross-family-review` before risky merges.
 
 Select provider permissions and project trust in that authenticated developer
-environment before dispatch. TRIAD inherits provider permissions without
-changing them and does not install a separate Codex profile, rule, permission
-mode, or pre-spawn `shell_environment_policy`. Trusted Python and `PATH` values
-are prerequisites. After trusted launcher and interpreter startup, wrapper
-descendants remain scrubbed of loader and interpreter injection variables.
+environment before dispatch. TRIAD does not install a separate Codex profile,
+rule, permission mode, or pre-spawn `shell_environment_policy`. The Codex-led
+AGY wrapper deliberately selects AGY native headless `always-proceed` for that
+child through its internal `--dangerously-skip-permissions` flag; callers do not
+pass the flag, and this does not change stored or global user/project settings.
+Trusted Python and `PATH` values are prerequisites. After trusted launcher and
+interpreter startup, wrapper descendants remain scrubbed of loader and
+interpreter injection variables.
 
 Repair analysis uses a fresh native proposal-only child with prompt-controlled
 no-edit behavior. The child reads an untrusted absolute run-log path and the
