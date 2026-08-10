@@ -28,6 +28,11 @@ The 2026-08-11 owner clarification is therefore a restoration constraint, not a 
 - `skill-prompt-review` is never a prerequisite, child phase, or recursive gate of an operational
   three-family review.
 
+The owner separately approved an explicit-only discovery boundary for the personal
+`skill-prompt-review` installation. Its frontmatter description may trigger only when the user
+directly invokes that skill or explicitly requests a prompt/skill best-practices review. Merely
+authoring, editing, or dispatching a prompt or skill is not a trigger.
+
 ## Failure to correct
 
 Argus explicitly selects worktree-first review while the current packaged renderer describes an
@@ -67,6 +72,18 @@ owner-approved behavioral decision, and would improperly move review judgment fr
 the transport layer.
 
 ## Components
+
+### Explicit-only prompt-review activation
+
+Change only the `description` field in
+`/Users/chaniri/.codex/skills/skill-prompt-review/SKILL.md`. Keep the skill name, body, references,
+scripts, and user-global settings unchanged. The description must state both positive explicit
+triggers and the negative non-trigger for ordinary authoring, editing, and dispatch.
+
+This is a separately testable configuration slice. It precedes the operational TRIAD correction
+so later work does not re-enter prompt meta-review automatically. Because the owner named the exact
+outside-workspace target, delta, and impact in the current conversation, this one frontmatter edit
+is within the approved hard user-environment boundary.
 
 ### Worktree review brief
 
@@ -157,7 +174,15 @@ No provider call is part of the unit-test phase.
 
 ## Slice-size budget
 
-Classification: S/M.
+Classification: two sequential review units.
+
+Explicit-only activation slice:
+
+- Forecast production net delta: zero lines; one frontmatter configuration line changes.
+- Forecast novel algorithmic core: zero lines.
+- Behavioral-claim count: one — prompt review triggers only on an explicit user request.
+
+Operational TRIAD correction slice: S/M.
 
 - Forecast production net delta: approximately 150–250 lines, below the 500-line default and
   800-line ceiling.
@@ -168,6 +193,9 @@ Classification: S/M.
 
 ## Acceptance criteria
 
+- The installed `skill-prompt-review` description selects only explicit user invocation or an
+  explicit prompt/skill review request and rejects incidental authoring/editing/dispatch as a
+  trigger.
 - The leader, not the renderer, selects every substantive review point.
 - Rendered prompts preserve the exact leader brief and contain a complete result contract.
 - Operational TRIAD review never invokes `skill-prompt-review`.
