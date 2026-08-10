@@ -49,13 +49,15 @@ approved boundary. Enumerate the criteria actually checked.
 
 ## Result
 
+Set `review_id`, `family`, and `content_digest` exactly to
+`metadata.review_id`, `metadata.family`, and `metadata.content_digest`.
 Return exactly one JSON object matching `verdict_schema:LegVerdict`:
 
 ```json
 {
-  "review_id": "review-r1",
-  "family": "claude",
-  "content_digest": "64-lowercase-hex",
+  "review_id": "<metadata.review_id>",
+  "family": "<metadata.family>",
+  "content_digest": "<metadata.content_digest>",
   "verdict": "SAFE",
   "criteria_checked": ["correctness", "compatibility"],
   "findings": [],

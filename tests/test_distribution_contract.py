@@ -419,7 +419,7 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
     assert fixed_members in release_plan
     member_rule = "sorted JSON array of non-empty normalized POSIX relative paths"
     assert member_rule in skill
-    assert "python3 bin/review_round.py manifest --prepared-dir <shared>" in skill
+    assert 'python3 bin/review_round.py manifest --prepared-dir "<shared>"' in skill
     inventory_rule = "sorted JSON array of exact decoded `{path, sha256}` objects"
     assert inventory_rule in skill
     assert inventory_rule in prompt_contract
@@ -433,6 +433,17 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
     assert metadata_rule in prompt_contract
     assert metadata_rule in release_plan
     assert metadata_rule in changelog
+    binding_rule = (
+        "Set `review_id`, `family`, and `content_digest` exactly to "
+        "`metadata.review_id`, `metadata.family`, and `metadata.content_digest`"
+    )
+    assert binding_rule in prompt_contract
+    for placeholder in (
+        '"review_id": "<metadata.review_id>"',
+        '"family": "<metadata.family>"',
+        '"content_digest": "<metadata.content_digest>"',
+    ):
+        assert placeholder in prompt_contract
 
 
 def test_retired_review_runtime_is_absent() -> None:
