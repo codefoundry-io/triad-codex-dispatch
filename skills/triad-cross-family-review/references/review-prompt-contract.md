@@ -18,7 +18,7 @@ and governing documentation under `source/product/`. The only current-round
 files outside that tree are `TASK.md`, `REVIEW.diff`, optional `EVIDENCE.md`, and
 `SOURCE_SHA256SUMS`. The manifest is a sorted JSON array of exact decoded
 `{path, sha256}` objects. The manifest covers every regular file in the prepared
-directory except `SOURCE_SHA256SUMS` itself.
+directory except the root `SOURCE_SHA256SUMS` manifest itself.
 The diff is a navigation entry
 point, not an inline prompt payload.
 

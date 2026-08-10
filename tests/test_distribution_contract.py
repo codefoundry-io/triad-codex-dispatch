@@ -462,7 +462,7 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
     assert inventory_rule in changelog
     manifest_coverage_rule = (
         "The manifest covers every regular file in the prepared directory except "
-        "`SOURCE_SHA256SUMS` itself"
+        "the root `SOURCE_SHA256SUMS` manifest itself"
     )
     assert manifest_coverage_rule in skill
     assert manifest_coverage_rule in prompt_contract
