@@ -153,9 +153,10 @@ stronger boundary. Mutation detection, not a sandbox claim, decides admission.
 The prepared-directory digest monitors every prepared regular file; the
 canonical-worktree fingerprint monitors Git HEAD, staged and unstaged tracked
 changes, and non-ignored untracked entries. Because legs retain native tools,
-mutations in Git-ignored worktree paths, paths outside both directories, and
-network egress of packet content are neither prevented nor detected by those
-fingerprints. Legs run in parallel against the same prepared directory,
+separate selected-member comparisons cover listed source members even when
+Git-ignored. Mutations in other Git-ignored worktree paths, paths outside both
+directories, and network egress of packet content are neither prevented nor
+detected. Legs run in parallel against the same prepared directory,
 so a mid-round mutation may affect another leg's reads before final verification.
 A mismatch invalidates the complete round and discards every verdict; verification
 does not retroactively prevent the mutation.

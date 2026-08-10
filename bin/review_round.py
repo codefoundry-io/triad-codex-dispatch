@@ -949,7 +949,11 @@ def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) ->
         raise RoundIntegrityError("worktree does not match prepared source root")
     if _prepared_digest(prepared) != snapshot.prepared_digest:
         raise RoundIntegrityError("prepared directory digest mismatch")
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     fingerprint = _worktree_fingerprint(root)
+    if source_root is not None:
+        _validate_prepared_source_members(prepared, source_root)
     if _prepared_digest(prepared) != snapshot.prepared_digest:
         raise RoundIntegrityError("prepared directory changed during verification")
     if fingerprint != snapshot.worktree_fingerprint:

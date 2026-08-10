@@ -1299,6 +1299,50 @@ def test_capture_rejects_source_root_symlink_before_reading_it(
     assert state not in read_paths
 
 
+def test_verify_rejects_changed_ignored_selected_source_member(
+    tmp_path: Path, worktree: Path, monkeypatch
+) -> None:
+    (worktree / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+    _git(worktree, "add", ".gitignore")
+    _git(worktree, "commit", "-q", "-m", "ignore selected member")
+    ignored = worktree / "ignored.txt"
+    ignored.write_text("reviewed\n", encoding="utf-8")
+    temp_root = tmp_path.resolve()
+    monkeypatch.setattr(review_round.tempfile, "gettempdir", lambda: str(temp_root))
+    members = (tmp_path / "members-ignored.txt").resolve()
+    _write_member_list(members, ["ignored.txt"])
+    result = review_round.prepare_review_workspace(
+        "ignored-selected", worktree, members, temp_root=temp_root, now=4_000_000.0
+    )
+    shared = Path(result.shared_dir)
+    (shared / "TASK.md").write_text("current task\n", encoding="utf-8")
+    (shared / "REVIEW.diff").write_text("current diff\n", encoding="utf-8")
+    _write_source_manifest(shared)
+    snapshot = capture_round(shared, worktree)
+
+    ignored.write_text("changed after capture\n", encoding="utf-8")
+
+    with pytest.raises(
+        RoundIntegrityError, match="prepared source member does not match worktree"
+    ):
+        verify_round(snapshot, shared, worktree)
+
+    ignored.write_text("reviewed\n", encoding="utf-8")
+    snapshot = capture_round(shared, worktree)
+    original_fingerprint = review_round._worktree_fingerprint
+
+    def mutate_after_fingerprinting(root: Path) -> str:
+        fingerprint = original_fingerprint(root)
+        ignored.write_text("changed during verify\n", encoding="utf-8")
+        return fingerprint
+
+    monkeypatch.setattr(review_round, "_worktree_fingerprint", mutate_after_fingerprinting)
+    with pytest.raises(
+        RoundIntegrityError, match="prepared source member does not match worktree"
+    ):
+        verify_round(snapshot, shared, worktree)
+
+
 def test_manifest_cli_json_round_trips_special_paths_and_rejects_invalid_packet(
     tmp_path: Path,
 ) -> None:

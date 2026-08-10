@@ -18,8 +18,9 @@
   the verdict schema or path-root protocol.
 - States the exact native-tool containment residual: the prepared-directory and
   canonical-worktree fingerprints do not prevent or detect mutations in
-  Git-ignored worktree paths or elsewhere, or network egress; final verification
-  discards rather than prevents verdicts produced from mid-round tampered bytes.
+  Git-ignored worktree paths not selected as packet members or elsewhere, or
+  network egress; final verification discards rather than prevents verdicts
+  produced from mid-round tampered bytes.
 - Tightens the review skill instructions with shell-safe path arguments,
   explicit metadata binding, exact manifest coverage, pre-root failure cleanup,
   and direct leg-contract navigation.

@@ -145,9 +145,13 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         in compact_leg_contracts
     )
     assert (
-        "Git-ignored worktree paths, paths outside both directories, and network "
-        "egress of packet content are "
-        "neither prevented nor detected by those fingerprints"
+        "separate selected-member comparisons cover listed source members even when "
+        "Git-ignored"
+        in compact_leg_contracts
+    )
+    assert (
+        "Mutations in other Git-ignored worktree paths, paths outside both directories, "
+        "and network egress of packet content are neither prevented nor detected"
         in compact_leg_contracts
     )
     assert (
@@ -344,8 +348,8 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "`shared/source/product/<member>`" in skill
     assert "no unlisted source member is copied" in skill
     assert (
-        "`capture` also compares every selected prepared source member with that worktree "
-        "before and after worktree fingerprinting"
+        "`capture` and `verify` also compare every selected prepared source member with "
+        "that worktree before and after worktree fingerprinting"
         in skill
     )
     assert "Never copy an earlier prepared packet" in skill
