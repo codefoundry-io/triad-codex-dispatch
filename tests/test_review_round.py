@@ -2183,6 +2183,7 @@ def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
     )
     assert "suspected normalized worktree-relative path and required check in open_questions" in prompt
     assert "which requires NOT-SAFE" in prompt
+    assert "Do not ask how to proceed or wrap the JSON in prose" in prompt
 
 
 def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_interpolation(

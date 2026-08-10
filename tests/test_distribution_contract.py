@@ -171,43 +171,43 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         assert "command-specific allowlist" in compact
         assert "--expected-permission-mode" not in compact
         assert "--init-preflight" not in compact
-    log_assignment = 'TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs"'
+    log_assignment = 'TRIAD_DISPATCH_LOG_DIR="$review_log_dir"'
     assert leg_contracts.count(log_assignment) == 3
     provider_commands = (
         (
             "bin/claude_wrapper.py",
-            '  --prompt-file "<leader-owned-prompt>" \\',
-            '  --cwd "<prepared-directory>" \\',
+            '  --prompt-file "$review_prompt_file" \\',
+            '  --cwd "$review_shared" \\',
             "  --model opus \\",
             "  --effort xhigh \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
-            '  > "<returned-root>/results/claude.json"',
+            '  > "$claude_result_file"',
         ),
         (
             "bin/antigravity_wrapper.py",
-            '  --prompt-file "<leader-owned-prompt>" \\',
-            '  --cwd "<prepared-directory>" \\',
+            '  --prompt-file "$review_prompt_file" \\',
+            '  --cwd "$review_shared" \\',
             "  --model gemini-3.1-pro-high \\",
             "  --effort high \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
-            '  > "<returned-root>/results/google.json"',
+            '  > "$google_result_file"',
         ),
         (
             "bin/gemini_wrapper.py",
-            '  --prompt-file "<leader-owned-prompt>" \\',
-            '  --cwd "<prepared-directory>" \\',
-            '  --model "<owner-authorized-gemini-model>" \\',
+            '  --prompt-file "$review_prompt_file" \\',
+            '  --cwd "$review_shared" \\',
+            '  --model "$review_gemini_model" \\',
             "  --pydantic verdict_schema:LegVerdict \\",
-            '  > "<returned-root>/results/google.json"',
+            '  > "$google_result_file"',
         ),
     )
     for wrapper, *options in provider_commands:
         expected = "\n".join(
             (
                 f"{log_assignment} \\",
-                f'python3 "<toolkit>/{wrapper}" \\',
+                f'python3 "$toolkit_root/{wrapper}" \\',
                 *options,
             )
         )
@@ -217,11 +217,11 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     for family in ("claude", "google", "codex"):
         assert "\n".join(
             (
-                'python3 "<toolkit>/bin/verdict_schema.py" validate \\',
-                f'  --result-file "<{family}-result>" \\',
-                '  --expected-review-id "<review-id>" \\',
+                'python3 "$toolkit_root/bin/verdict_schema.py" validate \\',
+                f'  --result-file "${family}_result_file" \\',
+                '  --expected-review-id "$review_id" \\',
                 f"  --expected-family {family} \\",
-                '  --expected-content-digest "<digest>"',
+                '  --expected-content-digest "$review_digest"',
             )
         ) in leg_contracts
     assert "reviews only" in claude
@@ -300,16 +300,15 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         in skill
     )
     assert (
-        'python3 bin/review_round.py capture --prepared-dir "<shared>" '
-        '--worktree "<canonical-worktree>" '
-        '--output "<returned-root>/results/snapshot.json"'
+        'python3 bin/review_round.py capture --prepared-dir "$review_shared" '
+        '--worktree "$review_worktree" --output "$review_snapshot"'
     ) in skill
     assert "bin/review_round.py prepare" in skill
-    assert '--source-root "<root>"' in skill
-    assert '--member-list "<file>"' in skill
+    assert '--source-root "$review_source_root"' in skill
+    assert '--member-list "$review_member_list"' in skill
     assert '--required-members-json "$review_members_json"' in skill
-    assert 'manifest --prepared-dir "<shared>"' in skill
-    assert '--expected-root "<returned-root>"' in skill
+    assert 'manifest --prepared-dir "$review_shared"' in skill
+    assert '--expected-root "$review_root"' in skill
     assert canonical_prepare_inputs in skill
     assert (
         "For every JSON-valued lifecycle option, pass the serialized JSON as one "
@@ -322,6 +321,11 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     )
     assert (
         "Assign `$1` to a task-specific variable and expand that variable double-quoted"
+        in skill
+    )
+    assert (
+        "Bind every dynamic path, review ID, and model value to a task-specific shell "
+        "variable before invocation"
         in skill
     )
     assert "never splice nested quote fragments or leave JSON exposed to glob expansion" in skill
@@ -365,7 +369,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     )
     assert "results and prompts under the returned review root" in skill
     assert "snapshots and verdicts under that same current root" in skill
-    assert '`TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs"`' in skill
+    assert '`TRIAD_DISPATCH_LOG_DIR="$review_log_dir"`' in skill
     assert "bin/review_round.py cleanup" in skill
     assert "Normal cleanup occurs only after final integrity verification and adjudication" in skill
     assert "compare the expected root" in skill
@@ -394,9 +398,8 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "use supported exact cleanup, and return without entering provider dispatch" in skill
     assert (
         "For review rounds, after all required legs terminate, run "
-        "`python3 bin/review_round.py verify --prepared-dir \"<shared>\" "
-        "--worktree \"<canonical-worktree>\" "
-        "--snapshot \"<returned-root>/results/snapshot.json\"`"
+        "`python3 bin/review_round.py verify --prepared-dir \"$review_shared\" "
+        "--worktree \"$review_worktree\" --snapshot \"$review_snapshot\"`"
     ) in skill
     assert (
         "the task-authorized zero-provider characterization runs "
@@ -446,7 +449,7 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
     assert fixed_members in release_plan
     member_rule = "sorted JSON array of non-empty normalized POSIX relative paths"
     assert member_rule in skill
-    assert 'python3 bin/review_round.py manifest --prepared-dir "<shared>"' in skill
+    assert 'python3 bin/review_round.py manifest --prepared-dir "$review_shared"' in skill
     inventory_rule = "sorted JSON array of exact decoded `{path, sha256}` objects"
     assert inventory_rule in skill
     assert inventory_rule in prompt_contract
@@ -471,6 +474,11 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
         "`metadata.review_id`, `metadata.family`, and `metadata.content_digest`"
     )
     assert binding_rule in prompt_contract
+    assert (
+        "This workflow prepares `source/product/` from the canonical worktree root"
+        in prompt_contract
+    )
+    assert "Do not ask how to proceed, omit the verdict, wrap JSON in prose" in prompt_contract
     for placeholder in (
         '"review_id": "<metadata.review_id>"',
         '"family": "<metadata.family>"',

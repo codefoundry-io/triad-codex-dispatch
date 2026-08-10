@@ -7,9 +7,9 @@
   predates those bytes.
 - Publishes the unique-ID system-temporary review lifecycle, exact member-list
   copying, canonical `SOURCE_SHA256SUMS` manifests, metadata-bound prompts and
-  verdicts, prepared-directory plus canonical-worktree integrity verification,
-  exact-root cleanup, current-root wrapper logs, and the documented packaged
-  AGY headless selection without changing user settings.
+  verdicts, prepared-directory plus prepare-source-bound canonical-worktree
+  integrity verification, exact-root cleanup, current-root wrapper logs, and
+  the documented packaged AGY headless selection without changing user settings.
 - Qualifies the focused-review benchmark so its preregistered 3/3 recall is
   distinct from the amended checked-in 4/4 aggregate.
 - Defines how non-blocking hardening suggestions, missing correctness context,
@@ -17,9 +17,9 @@
   through the existing `Minor` and `open_questions` carriers without expanding
   the verdict schema or path-root protocol.
 - States the exact native-tool containment residual: the prepared-directory and
-  canonical-worktree fingerprints do not prevent or detect mutation elsewhere
-  or network egress, and final verification discards rather than prevents
-  verdicts produced from mid-round tampered bytes.
+  canonical-worktree fingerprints do not prevent or detect mutations in
+  Git-ignored worktree paths or elsewhere, or network egress; final verification
+  discards rather than prevents verdicts produced from mid-round tampered bytes.
 - Tightens the review skill instructions with shell-safe path arguments,
   explicit metadata binding, exact manifest coverage, pre-root failure cleanup,
   and direct leg-contract navigation.

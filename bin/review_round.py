@@ -934,7 +934,8 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         "product paths map to worktree-relative paths by removing their leading source/product/ "
         "prefix; state any other suspected omitted path directly as a normalized "
         "worktree-relative POSIX path. "
-        "Report proposed design/specification changes as findings or open questions; do not implement them."
+        "Report proposed design/specification changes as findings or open questions; do not implement them. "
+        "Do not ask how to proceed or wrap the JSON in prose."
     )
 
 

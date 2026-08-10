@@ -50,9 +50,11 @@ the round.
    repository root containing `skills/triad-cross-family-review/SKILL.md`. Execute every displayed
    `bin/review_round.py` path from that root or as its absolute resolved path; never search for or
    substitute another checkout or installed-cache copy.
+   Bind every dynamic path, review ID, and model value to a task-specific shell variable before invocation;
+   expand only the double-quoted variable. Angle-bracket names in explanatory prose are not shell substitutions.
    Invoke every packaged lifecycle subcommand as `python3 bin/review_round.py ...`; never execute
-   `bin/review_round.py` directly. Both `--source-root` and `--member-list` inputs must be absolute canonical no-symlink paths, and `--member-list` must name an existing regular file; any violation is a workflow failure that invalidates the round and requires a fresh review ID. Then run `python3 bin/review_round.py prepare --review-id "<id>" --source-root "<root>"
-   --member-list "<file>" --required-members-json "$review_members_json"`. Use the canonical Git worktree root as `--source-root`; it must be the same canonical worktree root passed to `capture` and `verify`.
+   `bin/review_round.py` directly. Both `--source-root` and `--member-list` inputs must be absolute canonical no-symlink paths, and `--member-list` must name an existing regular file; any violation is a workflow failure that invalidates the round and requires a fresh review ID. Then run `python3 bin/review_round.py prepare --review-id "$review_id" --source-root "$review_source_root"
+   --member-list "$review_member_list" --required-members-json "$review_members_json"`. Use the canonical Git worktree root as `--source-root`; it must be the same canonical worktree root passed to `capture` and `verify`.
    For every JSON-valued lifecycle option, pass the serialized JSON as one
    shell argument. With `/bin/zsh -lic`, pass a placeholder command name before the serialized JSON so zsh assigns
    that name to `$0` and the JSON to `$1`. Assign `$1` to a task-specific variable and expand that variable double-quoted; never splice nested quote fragments or leave JSON exposed to glob expansion.
@@ -64,10 +66,12 @@ the round.
    fails on a same-ID collision, and ensures different review IDs remain isolated.
    The member-list file is the only source-copy IPC: every listed member maps to
    `shared/source/product/<member>`, and no unlisted source member is copied.
+   The tool records that canonical source root in the managed review root; `capture` and `verify`
+   reject a different worktree or changed source-root record.
    Record the review ID and returned root in the active `TASK.md` or plan.
 3. **Finish current packet bytes.** Add current `TASK.md`, `REVIEW.diff`, and
    optional `EVIDENCE.md` only. Run
-   `python3 bin/review_round.py manifest --prepared-dir "<shared>"` last. The generated root manifest is a
+   `python3 bin/review_round.py manifest --prepared-dir "$review_shared"` last. The generated root manifest is a
    sorted JSON array of exact decoded `{path, sha256}` objects. The manifest covers every regular file in the prepared directory except
    `SOURCE_SHA256SUMS` itself. Prompts name the directory; they do not inline
    file bodies. Never include a prior-round task, prior-round diff, prior-round manifest,
@@ -75,7 +79,7 @@ the round.
    Outside `shared/source/product/`, the prepared `shared/` inventory is exactly
    `TASK.md`, `REVIEW.diff`, `SOURCE_SHA256SUMS`, and optional `EVIDENCE.md`.
 4. **Capture integrity.** Use the packaged `python3 bin/review_round.py capture --prepared-dir
-   "<shared>" --worktree "<canonical-worktree>" --output "<returned-root>/results/snapshot.json"` before
+   "$review_shared" --worktree "$review_worktree" --output "$review_snapshot"` before
    dispatch. Keep results and prompts under the returned review root, outside
    its prepared `shared/` directory, and route snapshots and verdicts under that
    same current root. Use the exact digest printed by `capture` for every rendered prompt and
@@ -92,7 +96,7 @@ the round.
    This branch is not a review round or gate: make no review-admission, convergence, adjudication, or gate-passage claim.
    Only when the governing current task satisfies that selector, render the requested prompts with
    packaged `python3 bin/review_round.py render`, run
-   `python3 bin/review_round.py verify --prepared-dir "<shared>" --worktree "<canonical-worktree>" --snapshot "<returned-root>/results/snapshot.json"`,
+   `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`,
    use supported exact cleanup, and return without entering provider dispatch.
    Otherwise continue through the normal three-family flow. Every rendered prompt carries dynamic values
    only in one canonical `Review metadata: ` JSON record.
@@ -109,13 +113,13 @@ the round.
    legs before consuming a verdict. Reviewers may read and search only; they do
    not edit or execute candidate code, tests, builds, hooks, or scripts. For every
    Claude, AGY, and authorized Gemini fallback wrapper invocation, set
-   `TRIAD_DISPATCH_LOG_DIR="<returned-root>/results/_logs"` exactly.
+   `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
 7. **Admit results.** Each family returns one JSON object matching
    `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
    the packaged validator. A missing, refused, malformed, route-mismatched, or
    incomplete required leg invalidates the round.
 8. **Verify integrity.** For review rounds, after all required legs terminate, run
-   `python3 bin/review_round.py verify --prepared-dir "<shared>" --worktree "<canonical-worktree>" --snapshot "<returned-root>/results/snapshot.json"`;
+   `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`;
    the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch. Do not modify the canonical worktree until every
    required leg has terminated and verify prints `ROUND_INTEGRITY_OK`. A
    prepared-directory or worktree fingerprint mismatch invalidates the round.
@@ -133,8 +137,8 @@ the round.
    the owner. There is no arbitrary round cap and no unchanged redispatch to
    seek a preferred label. For review rounds: Normal cleanup occurs only after final integrity verification and adjudication;
    the task-authorized zero-provider characterization uses the Flow step 4 verify-and-exact-cleanup branch.
-   Then run `python3 bin/review_round.py cleanup --review-id "<id>" --expected-root
-   "<returned-root>"`, compare the expected root, and require that the first cleanup result reports
+   Then run `python3 bin/review_round.py cleanup --review-id "$review_id" --expected-root
+   "$review_root"`, compare the expected root, and require that the first cleanup result reports
    `removed: true`. After successful cleanup, confirm that exact root is absent and
    other managed sibling roots remain untouched. A later `prepare` removes managed interrupted roots only
    after strictly more than 30 days without activity. Prepare a durable handoff
