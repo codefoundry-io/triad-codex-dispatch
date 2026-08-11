@@ -1,10 +1,10 @@
-# Fingerprint Diff Hermeticity Implementation Plan
+# Fingerprint Diff Presentation Pinning Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make staged and unstaged worktree fingerprint diff bytes invariant to repository-local Git diff configuration and prevent textconv execution.
+**Goal:** Pin the tested staged and unstaged Git diff presentation axes and prevent textconv execution during worktree fingerprinting.
 
-**Architecture:** Keep the existing four fingerprint records. Add one immutable argument tuple for both `git diff` arms so the byte representation is selected by product code, not repository configuration. The root leader authors tests and production edits; fresh `triad-skill-executor` instances exclusively execute RED and GREEN.
+**Architecture:** Keep the existing four fingerprint records. Add one immutable argument tuple for both `git diff` arms so the tested presentation choices are selected by product code rather than the corresponding repository configuration. The root leader authors tests and production edits; fresh `triad-skill-executor` instances exclusively execute RED and GREEN.
 
 **Tech Stack:** Python 3.12 standard library, Git CLI, pytest 9.
 
@@ -14,6 +14,21 @@
 - Canonical SOT: `workspace/triad-codex-dispatch-reliability`; do not test a copy or installed cache.
 - The root leader must not execute Python tests or behavior fixtures.
 - No `skill-prompt-review` and no provider dispatch by the test agent.
+
+## Known residuals and disposition
+
+This slice does not claim independence from every Git diff configuration key.
+The [dedicated residual probe](../../status/2026-08-11-fingerprint-diff-residuals.md)
+reproduced `diff.orderFile`, `diff.suppressBlankEmpty`, and a `.gitattributes`
+`diff=<driver>` selection combined with `diff.<driver>.xfuncname` changing patch
+bytes. They change ordering or presentation, not whether a tracked mutation is
+represented. When one of these settings affects rendered bytes and changes
+between capture and verification, the fingerprint fails closed with a mismatch;
+an invalid setting that makes `git diff` fail stops fingerprinting instead. The
+owner selected the same bounded patch-diff model used by the vetted
+Claude-hosted TRIAD skill and rejected a canonical-index/full-file hash redesign
+as over-engineering. These residual false-mismatch paths remain disclosed rather
+than expanding this slice.
 
 ---
 
@@ -68,6 +83,6 @@
 
 ### Task 5: Commit and run the operational gate
 
-- [ ] Stage only `bin/review_round.py` and `tests/test_review_round.py`; commit as `fix: make review fingerprint diffs hermetic`.
-- [ ] The root leader runs a fresh-ID Claude/Google/fresh-Codex implementation review over this slice only, with review points selected for Git configuration invariance, executable textconv prevention, and cross-platform Git flag compatibility.
+- [ ] Stage only `bin/review_round.py` and `tests/test_review_round.py`; commit as `fix: pin review fingerprint diff presentation`.
+- [ ] The root leader runs a fresh-ID Claude/Google/fresh-Codex implementation review over this slice only, with review points selected for the explicitly pinned Git presentation axes, executable textconv prevention, disclosed residuals, and cross-platform Git flag compatibility.
 - [ ] Reproduce every finding against the canonical worktree. A bounded defect restarts RED/GREEN and all three review legs; an out-of-scope proposal returns to the owner.

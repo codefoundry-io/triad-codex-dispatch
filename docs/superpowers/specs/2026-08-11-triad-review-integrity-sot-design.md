@@ -62,10 +62,10 @@ Each slice is an independent merge-gate unit with one behavioral claim. The
 slices accumulate on one isolated feature branch, but each receives its own
 test cycle, commit, and three-family review over the exact slice delta.
 
-### Slice 1: Deterministic, non-executing Git diff fingerprint
+### Slice 1: Bounded, non-executing Git diff fingerprint
 
-**Behavioral claim:** Fingerprinting is hermetic to repository-local Git diff
-configuration.
+**Behavioral claim:** Fingerprinting pins the listed tested Git diff
+presentation axes and does not execute textconv.
 
 Add one canonical fingerprint diff-flag tuple in `bin/review_round.py` and use
 it for both staged and unstaged diff arms. Retain the existing binary,
@@ -87,6 +87,17 @@ stable byte representation, not semantic rename presentation, and disabling
 rename detection also avoids configuration-dependent rename limits. Explicit
 source and destination prefixes close the independently reproduced
 `diff.noprefix` gap left by the proposed flag set.
+
+This is intentionally not a claim of independence from every Git diff
+configuration key. The [dedicated residual probe](../../status/2026-08-11-fingerprint-diff-residuals.md)
+reproduced `diff.orderFile`, `diff.suppressBlankEmpty`, and a `.gitattributes`
+`diff=<driver>` selection combined with `diff.<driver>.xfuncname` as disclosed
+presentation residuals. They do not hide whether the tracked mutation is
+present. When a residual setting affects rendered bytes and changes during a
+round, it causes a fail-closed fingerprint mismatch; an invalid setting that
+makes `git diff` fail stops fingerprinting instead. The owner selected the same
+bounded patch-diff model used by the vetted Claude-hosted TRIAD skill; a
+canonical-index/full-file hashing redesign is out of scope.
 
 The RED test must prove that current bytes either change under a raw
 configuration-sensitive fixture or execute a configured textconv sentinel.
