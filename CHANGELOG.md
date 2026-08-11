@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.535 — 2026-08-12
+
+- Keeps operational three-family review prompts under the Codex leader and
+  makes skill/prompt best-practices review an explicit-only workflow rather
+  than an automatic attachment to ordinary review rounds.
+- Makes staged and unstaged worktree fingerprints independent of mutable Git
+  diff presentation settings and external textconv filters.
+- Refuses `assume-unchanged`, `skip-worktree`, and sparse-checkout states that
+  can hide tracked mutations from both status and diff fingerprinting.
+- Opens selected regular-file leaves without following a raced-in symlink,
+  rejects a raced-in FIFO without blocking, and streams digest-only reads in
+  fixed-size chunks while preserving the existing digest and symlink-record
+  formats.
+- Defines the reviewer deployment-context and untrusted-input boundary contract
+  in both prepared-directory and worktree prompts without changing the verdict
+  schema, provider routes, or review-root protocol.
+
 ## 0.2.534 — 2026-08-11
 
 - This is the first immutable release tag containing the post-`v0.2.533`

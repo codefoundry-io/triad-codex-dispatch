@@ -193,11 +193,13 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.534
+### Upgrading to 0.2.535
 
-0.2.534 retains the 0.2.533 focused-review runtime and adds bounded review-
-contract and benchmark-provenance corrections. It does not add a new verdict
-severity, path root, permission mode, or provider route.
+0.2.535 keeps operational review prompts under the Codex leader and hardens
+worktree integrity against mutable Git diff presentation, hidden index flags,
+leaf substitution, and blocking FIFO races. It also makes the reviewer context
+boundary explicit without adding a verdict severity, path root, permission
+mode, or provider route.
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -218,7 +220,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.534-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.535-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
