@@ -25,6 +25,7 @@ _MAX_REVIEW_ID_LENGTH = 200
 _STALE_AFTER_SECONDS = 30 * 24 * 60 * 60
 _MANIFEST_INPUT_PACKET_FILES = frozenset({"TASK.md", "REVIEW.diff"})
 _OPTIONAL_PACKET_FILES = frozenset({"EVIDENCE.md"})
+_FILE_READ_CHUNK_SIZE = 1024 * 1024
 _FINGERPRINT_DIFF_ARGS = (
     "--binary",
     "--full-index",
@@ -632,23 +633,49 @@ def cleanup_review_workspace(
     return CleanupResult(review_id, str(root), True)
 
 
+def _open_regular_file(path: Path, label: str) -> int:
+    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise RoundIntegrityError(f"{label} could not be read: {error}") from None
+    try:
+        metadata = os.fstat(descriptor)
+    except OSError as error:
+        os.close(descriptor)
+        raise RoundIntegrityError(f"{label} could not be read: {error}") from None
+    if not stat.S_ISREG(metadata.st_mode):
+        os.close(descriptor)
+        raise RoundIntegrityError(f"{label} is not a regular file: {path}")
+    return descriptor
+
+
 def _regular_file_bytes(path: Path) -> bytes:
+    descriptor = _open_regular_file(path, "prepared directory file")
+    chunks: list[bytes] = []
     try:
-        before = path.lstat()
+        while chunk := os.read(descriptor, _FILE_READ_CHUNK_SIZE):
+            chunks.append(chunk)
     except OSError as error:
         raise RoundIntegrityError(
             f"prepared directory file could not be read: {error}"
         ) from None
-    if stat.S_ISLNK(before.st_mode):
-        raise RoundIntegrityError(f"prepared directory contains symlink: {path}")
-    if not stat.S_ISREG(before.st_mode):
-        raise RoundIntegrityError(f"prepared directory contains unsupported entry: {path}")
+    finally:
+        os.close(descriptor)
+    return b"".join(chunks)
+
+
+def _regular_file_digest(path: Path, label: str = "prepared directory file") -> str:
+    descriptor = _open_regular_file(path, label)
+    digest = hashlib.sha256()
     try:
-        return path.read_bytes()
+        while chunk := os.read(descriptor, _FILE_READ_CHUNK_SIZE):
+            digest.update(chunk)
     except OSError as error:
-        raise RoundIntegrityError(
-            f"prepared directory file could not be read: {error}"
-        ) from None
+        raise RoundIntegrityError(f"{label} could not be read: {error}") from None
+    finally:
+        os.close(descriptor)
+    return digest.hexdigest()
 
 
 def _prepared_digest(prepared_dir: Path) -> str:
@@ -668,7 +695,7 @@ def _prepared_digest(prepared_dir: Path) -> str:
             if entry.is_dir(follow_symlinks=False):
                 visit(path)
             elif entry.is_file(follow_symlinks=False):
-                digest = hashlib.sha256(_regular_file_bytes(path)).hexdigest().encode("ascii")
+                digest = _regular_file_digest(path).encode("ascii")
                 records.append((b"FILE", relative + b"\0" + digest))
             else:
                 raise RoundIntegrityError(f"prepared directory contains unsupported entry: {path}")
@@ -785,13 +812,16 @@ def _worktree_fingerprint(worktree: Path) -> str:
         metadata = path.lstat()
         if stat.S_ISREG(metadata.st_mode):
             kind = b"file"
-            content = path.read_bytes()
+            content_digest = _regular_file_digest(path, "untracked file").encode(
+                "ascii"
+            )
         elif stat.S_ISLNK(metadata.st_mode):
             kind = b"symlink"
             content = os.fsencode(os.readlink(path))
+            content_digest = hashlib.sha256(content).hexdigest().encode("ascii")
         else:
             raise RoundIntegrityError(f"unsupported untracked entry: {relative}")
-        payload = kind + b"\0" + raw_path + b"\0" + hashlib.sha256(content).hexdigest().encode("ascii")
+        payload = kind + b"\0" + raw_path + b"\0" + content_digest
         _record(hasher, b"UNTRACKED", payload)
     return hasher.hexdigest()
 
@@ -857,7 +887,7 @@ def _validate_prepared_source_members(prepared: Path, source_root: Path) -> None
         _source_path, expected = _source_member(source_root, member)
         source_digest = _source_member_digest(source_root, member, expected)
         prepared_path = product.joinpath(*PurePosixPath(member).parts)
-        prepared_digest = hashlib.sha256(_regular_file_bytes(prepared_path)).hexdigest()
+        prepared_digest = _regular_file_digest(prepared_path)
         if source_digest != prepared_digest:
             raise RoundIntegrityError(
                 f"prepared source member does not match worktree: {member}"
@@ -962,7 +992,7 @@ def _validate_source_manifest(prepared: Path, actual: set[str]) -> None:
         raise RoundIntegrityError("SOURCE_SHA256SUMS path inventory mismatch")
     for relative, digest in digests.items():
         path = prepared.joinpath(*PurePosixPath(relative).parts)
-        if hashlib.sha256(_regular_file_bytes(path)).hexdigest() != digest:
+        if _regular_file_digest(path) != digest:
             raise RoundIntegrityError(f"SOURCE_SHA256SUMS digest mismatch: {relative}")
 
 
@@ -995,7 +1025,7 @@ def create_source_manifest(prepared_dir: Path) -> ManifestResult:
     entries = [
         {
             "path": relative,
-            "sha256": hashlib.sha256(_regular_file_bytes(files[relative])).hexdigest(),
+            "sha256": _regular_file_digest(files[relative]),
         }
         for relative in sorted(files)
     ]

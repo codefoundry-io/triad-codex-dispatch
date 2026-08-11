@@ -128,29 +128,27 @@ sparse-checkout messaging, an ordinary index, capture, verify, and the direct
 Forecast: 40-80 production lines, 30-50 novel-core lines, one behavioral claim;
 S-class.
 
-### Slice 3: Root-anchored no-follow file hashing
+### Slice 3: Leaf no-follow streaming file reads
 
-**Behavioral claim:** Round integrity reads never follow a symlink substituted
-for a selected regular file or one of its path components.
+**Behavioral claim:** A selected regular-file leaf is never followed after
+symlink substitution, and digest-only reads do not buffer the whole file.
 
-Replace lstat-then-path-read sequences used for prepared-file and untracked-file
-hashing with root-anchored descriptor traversal. Open every directory component
-relative to an already opened directory descriptor with no-follow semantics,
-open the leaf with `O_NOFOLLOW`, verify it with `fstat`, and stream digest-only
-content directly into SHA-256. Keep a bounded descriptor-based byte reader only
-where callers require the actual payload.
+Follow the proven Claude-hosted shape. Open prepared and untracked regular-file
+leaves with `O_NOFOLLOW`, validate the opened descriptor with `fstat`, and feed
+fixed-size chunks directly into SHA-256 where callers require only a digest.
+Keep a chunked byte-returning helper only for callers that require the payload.
 
-Leaf-only `O_NOFOLLOW` is insufficient because an intermediate directory can be
-swapped. The implementation must remain Python-standard-library code supported
-on the documented macOS and Linux/WSL2 environments and fail closed when the
-required no-follow primitives are unavailable.
+This slice does not add root-anchored intermediate-component traversal, replace
+unrelated lifecycle readers, or introduce a generalized filesystem abstraction.
+Those changes exceed the reproduced leaf race and the owner-approved
+Claude-parity scope. Existing source-member copying and source rechecks retain
+their descriptor-relative component validation.
 
-RED and GREEN fixtures cover leaf replacement, intermediate-directory
-replacement, non-regular entries, multi-chunk digest equivalence, and bounded
-memory behavior through the streaming interface.
+RED and GREEN fixtures cover prepared and untracked leaf substitution,
+multi-chunk digest equivalence, bounded read size, and unchanged digest formats.
 
-Forecast: 80-150 production lines, 70-120 novel-core lines, one behavioral
-claim; S-class.
+Forecast: 35-70 production lines, 25-50 novel-core lines, one behavioral claim;
+S-class.
 
 ### Slice 4: Explicit reviewer context and boundary contract
 

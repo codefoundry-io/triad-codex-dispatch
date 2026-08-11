@@ -60,6 +60,49 @@ def _write_source_manifest(shared: Path) -> None:
     manifest.write_bytes(_canonical_json_bytes(entries))
 
 
+def _inject_leaf_symlink_swap(
+    monkeypatch, victim: Path, target: Path
+) -> dict[str, bool]:
+    original_lstat = Path.lstat
+    original_open = os.open
+    original_read_bytes = Path.read_bytes
+    state = {"swapped": False, "followed": False}
+
+    def matches(path: object) -> bool:
+        try:
+            return Path(path) == victim
+        except TypeError:
+            return False
+
+    def swap() -> None:
+        if state["swapped"]:
+            return
+        victim.unlink()
+        victim.symlink_to(target)
+        state["swapped"] = True
+
+    def racing_lstat(path: Path):
+        metadata = original_lstat(path)
+        if path == victim:
+            swap()
+        return metadata
+
+    def racing_open(path, flags, *args, **kwargs):
+        if matches(path):
+            swap()
+        return original_open(path, flags, *args, **kwargs)
+
+    def racing_read_bytes(path: Path) -> bytes:
+        if path == victim and state["swapped"]:
+            state["followed"] = True
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "lstat", racing_lstat)
+    monkeypatch.setattr(Path, "read_bytes", racing_read_bytes)
+    monkeypatch.setattr(os, "open", racing_open)
+    return state
+
+
 def _review_metadata(prompt: str) -> dict[str, object]:
     prefix = "Review metadata: "
     records = [line for line in prompt.splitlines() if line.startswith(prefix)]
@@ -2153,18 +2196,112 @@ def test_capture_round_rejects_symlinked_prepared_entry(
 
     escape.unlink()
     unreadable = prepared / "src/source.py"
-    original_read_bytes = Path.read_bytes
+    original_open = os.open
 
-    def fail_prepared_read(path: Path) -> bytes:
-        if path == unreadable:
+    def fail_prepared_open(path, flags, *args, **kwargs):
+        if Path(path) == unreadable:
             raise OSError("injected prepared-file read failure")
-        return original_read_bytes(path)
+        return original_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_bytes", fail_prepared_read)
+    monkeypatch.setattr(os, "open", fail_prepared_open)
     with pytest.raises(
         RoundIntegrityError, match="prepared directory file could not be read"
     ):
         capture_round(prepared, worktree)
+
+
+def test_prepared_digest_refuses_regular_leaf_symlink_swap(
+    prepared: Path, tmp_path: Path, monkeypatch
+) -> None:
+    victim = prepared / "src/source.py"
+    target = tmp_path / "outside.py"
+    target.write_text("ESCAPED = True\n", encoding="utf-8")
+    state = _inject_leaf_symlink_swap(monkeypatch, victim, target)
+
+    caught = None
+    try:
+        _prepared_digest(prepared)
+    except RoundIntegrityError as error:
+        caught = error
+
+    assert state["swapped"]
+    assert not state["followed"], "legacy path read followed the swapped symlink"
+    assert caught is not None
+    assert "prepared directory file could not be read" in str(caught)
+    assert victim.is_symlink()
+
+
+def test_worktree_fingerprint_refuses_untracked_leaf_symlink_swap(
+    worktree: Path, tmp_path: Path, monkeypatch
+) -> None:
+    victim = worktree / "untracked.txt"
+    target = tmp_path / "outside.txt"
+    victim.write_text("inside\n", encoding="utf-8")
+    target.write_text("outside\n", encoding="utf-8")
+    state = _inject_leaf_symlink_swap(monkeypatch, victim, target)
+
+    caught = None
+    try:
+        review_round._worktree_fingerprint(worktree)
+    except RoundIntegrityError as error:
+        caught = error
+
+    assert state["swapped"]
+    assert not state["followed"], "legacy path read followed the swapped symlink"
+    assert caught is not None
+    assert "untracked file could not be read" in str(caught)
+    assert victim.is_symlink()
+
+
+def test_worktree_fingerprint_binds_untracked_symlink_payload_without_following(
+    worktree: Path, tmp_path: Path
+) -> None:
+    first_target = tmp_path / "first-target.txt"
+    second_target = tmp_path / "second-target.txt"
+    first_target.write_text("first\n", encoding="utf-8")
+    second_target.write_text("second\n", encoding="utf-8")
+    link = worktree / "untracked-link"
+    link.symlink_to(first_target)
+
+    first = review_round._worktree_fingerprint(worktree)
+    first_target.write_text("changed target content\n", encoding="utf-8")
+    assert review_round._worktree_fingerprint(worktree) == first
+
+    link.unlink()
+    link.symlink_to(second_target)
+    assert review_round._worktree_fingerprint(worktree) != first
+
+
+def test_regular_file_digest_streams_fixed_size_chunks(
+    prepared: Path, monkeypatch
+) -> None:
+    payload = b"a" * (2 * 1024 * 1024 + 17)
+    path = prepared / "large.bin"
+    path.write_bytes(payload)
+    expected = path.stat()
+    original_read = os.read
+    original_read_bytes = Path.read_bytes
+    requested_sizes: list[int] = []
+    whole_file_reads: list[Path] = []
+
+    def observe_whole_file_read(candidate: Path) -> bytes:
+        if candidate == path:
+            whole_file_reads.append(candidate)
+        return original_read_bytes(candidate)
+
+    def observe_read(descriptor: int, size: int) -> bytes:
+        if os.path.samestat(os.fstat(descriptor), expected):
+            requested_sizes.append(size)
+        return original_read(descriptor, size)
+
+    monkeypatch.setattr(Path, "read_bytes", observe_whole_file_read)
+    monkeypatch.setattr(os, "read", observe_read)
+
+    assert len(_prepared_digest(prepared)) == 64
+    assert review_round._regular_file_digest(path) == hashlib.sha256(payload).hexdigest()
+    assert whole_file_reads == []
+    assert len(requested_sizes) >= 3
+    assert set(requested_sizes) == {review_round._FILE_READ_CHUNK_SIZE}
 
 
 def test_untracked_file_content_changes_fingerprint(prepared, worktree):
