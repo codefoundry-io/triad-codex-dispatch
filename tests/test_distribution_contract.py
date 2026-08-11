@@ -127,7 +127,8 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         assert "Approved official-web reads through read-only MCP tools remain available" in compact
         assert "Do not edit files, change external state, or execute candidate code" in compact
     assert (
-        "Round integrity verification binds prepared-directory and canonical worktree bytes only"
+        "Round integrity verification binds the selected prepared-directory bytes or "
+        "worktree review digest plus canonical worktree fingerprint"
         in compact_reviewer_routing
     )
     assert (
@@ -272,6 +273,23 @@ def test_cross_family_skill_uses_current_task_authority_before_preparing() -> No
     assert skill.index(authority_rule) < skill.index("Record a fresh review ID")
 
 
+def test_cross_family_skill_owns_operational_prompts_without_meta_review() -> None:
+    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    compact = " ".join(skill.split())
+
+    assert "render-worktree" in compact
+    assert "project instructions explicitly select worktree-first review" in compact
+    assert (
+        "task, status, and diff as canonical regular files inside that worktree"
+        in compact
+    )
+    assert (
+        "Do not invoke `skill-prompt-review` before or during an operational round"
+        in compact
+    )
+    assert "proceeds directly to provider dispatch" in compact
+
+
 def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     raw_skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
     skill = " ".join(raw_skill.split())
@@ -406,7 +424,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "make no review-admission, convergence, adjudication, or gate-passage claim" in skill
     assert "use supported exact cleanup, and return without entering provider dispatch" in skill
     assert (
-        "For review rounds, after all required legs terminate, run "
+        "For prepared-directory review rounds, after all required legs terminate, run "
         "`python3 bin/review_round.py verify --prepared-dir \"$review_shared\" "
         "--worktree \"$review_worktree\" --snapshot \"$review_snapshot\"`"
     ) in skill
@@ -421,8 +439,12 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         "verify-and-exact-cleanup branch"
     ) in skill
     assert (
-        "Do not modify the canonical worktree until every required leg has terminated and "
-        "verify prints `ROUND_INTEGRITY_OK`"
+        "Do not modify the canonical worktree until every required leg has terminated"
+    ) in skill
+    assert "The prepared-directory route requires `ROUND_INTEGRITY_OK`" in skill
+    assert (
+        "An explicitly selected worktree-first round instead performs the exact "
+        "project-required post-review fingerprint check"
     ) in skill
 
 

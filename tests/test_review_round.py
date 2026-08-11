@@ -5,6 +5,7 @@ import hashlib
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,9 +20,11 @@ from review_round import (  # noqa: E402
     ReviewBrief,
     RoundIntegrityError,
     RoundSnapshot,
+    WorktreeReviewBrief,
     _prepared_digest,
     capture_round,
     render_review_prompt,
+    render_worktree_review_prompt,
     verify_round,
 )
 
@@ -2172,6 +2175,208 @@ def test_untracked_file_content_changes_fingerprint(prepared, worktree):
     assert first.worktree_fingerprint != second.worktree_fingerprint
 
 
+def test_worktree_prompt_preserves_leader_authored_review_points(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    task.write_text("task\n", encoding="utf-8")
+    status.write_text("status\n", encoding="utf-8")
+    diff.write_text("diff\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Decide whether Task 4 matches its approved contract.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness", "compatibility"),
+        review_points=(
+            "Trace the Task 4 state transition into every unchanged consumer.",
+        ),
+        approved_boundary=("sanitized Argus worktree", "relevant tests"),
+    )
+
+    prompt = render_worktree_review_prompt(brief)
+    metadata = _review_metadata(prompt)
+
+    assert metadata["review_points"] == list(brief.review_points)
+    assert metadata["objective"] == brief.objective
+    assert metadata["worktree"] == str(worktree)
+    assert metadata["family"] == "google"
+    assert metadata["content_digest"] == metadata["worktree_review_digest"]
+    assert "authenticated custody locations only" in prompt
+    assert "Return exactly one JSON object matching verdict_schema:LegVerdict" in prompt
+
+
+def test_worktree_prompt_rejects_empty_review_points(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (tmp_path / "TASK.md").resolve()
+    status = (tmp_path / "STATUS.txt").resolve()
+    diff = (tmp_path / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-empty-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=(),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    with pytest.raises(RoundIntegrityError, match="review points"):
+        render_worktree_review_prompt(brief)
+
+
+def test_worktree_prompt_rejects_custody_outside_canonical_worktree(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (tmp_path / "outside-TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-outside-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    with pytest.raises(
+        RoundIntegrityError,
+        match="task_file must be inside the canonical worktree",
+    ):
+        render_worktree_review_prompt(brief)
+
+
+def test_worktree_prompts_share_common_digest_across_families(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+
+    metadata_by_family = {}
+    for family in ("claude", "google", "codex"):
+        brief = WorktreeReviewBrief(
+            review_id="argus-shared-r1",
+            review_kind="pre-merge",
+            family=family,
+            objective="Review the current decision.",
+            worktree=worktree,
+            worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+            task_file=task,
+            status_file=status,
+            diff_file=diff,
+            criteria=("correctness",),
+            review_points=("Trace the decision into unchanged consumers.",),
+            approved_boundary=("sanitized Argus worktree",),
+        )
+        metadata_by_family[family] = _review_metadata(
+            render_worktree_review_prompt(brief)
+        )
+
+    assert {
+        metadata["content_digest"] for metadata in metadata_by_family.values()
+    } == {metadata_by_family["claude"]["content_digest"]}
+    assert {
+        family: metadata["family"] for family, metadata in metadata_by_family.items()
+    } == {"claude": "claude", "google": "google", "codex": "codex"}
+
+
+def test_worktree_review_digest_binds_leader_authored_review_points(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    first = WorktreeReviewBrief(
+        review_id="argus-points-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+    second = replace(first, review_points=("Trace the compatibility boundary.",))
+
+    first_metadata = _review_metadata(render_worktree_review_prompt(first))
+    second_metadata = _review_metadata(render_worktree_review_prompt(second))
+
+    assert first_metadata["content_digest"] != second_metadata["content_digest"]
+    excluded = {"content_digest", "review_points", "worktree_review_digest"}
+    assert {
+        key: value for key, value in first_metadata.items() if key not in excluded
+    } == {
+        key: value for key, value in second_metadata.items() if key not in excluded
+    }
+
+
+def test_worktree_prompt_uses_captured_fingerprint_without_rehashing(
+    worktree: Path, tmp_path: Path, monkeypatch
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    fingerprint = review_round._worktree_fingerprint(worktree)
+    brief = WorktreeReviewBrief(
+        review_id="argus-captured-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=fingerprint,
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    def unexpected_rehash(_worktree: Path) -> str:
+        raise AssertionError("renderer rehashed the worktree")
+
+    monkeypatch.setattr(review_round, "_worktree_fingerprint", unexpected_rehash)
+
+    metadata = _review_metadata(render_worktree_review_prompt(brief))
+
+    assert metadata["worktree_fingerprint"] == fingerprint
+
+
 def test_rendered_prompt_binds_focused_round_once(prepared):
     digest = _prepared_digest(prepared)
     brief = ReviewBrief(
@@ -2536,6 +2741,80 @@ def test_cli_renders_family_bound_prompt(prepared, tmp_path):
     metadata = _review_metadata(prompt)
     assert metadata["family"] == "claude"
     assert "metadata.family, and metadata.content_digest" in prompt
+
+
+def test_cli_renders_leader_authored_worktree_prompt(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    prompt_file = (tmp_path / "worktree-prompt.txt").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render-worktree",
+            "--review-id",
+            "argus-cli-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "codex",
+            "--objective",
+            "Review the current Task 4 decision.",
+            "--worktree",
+            str(worktree),
+            "--worktree-fingerprint",
+            review_round._worktree_fingerprint(worktree),
+            "--task-file",
+            str(task),
+            "--status-file",
+            str(status),
+            "--diff-file",
+            str(diff),
+            "--criterion",
+            "correctness",
+            "--review-point",
+            "Trace the state transition into unchanged consumers.",
+            "--approved-boundary",
+            "sanitized Argus worktree",
+            "--output",
+            str(prompt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 0, rendered.stderr
+    metadata = _review_metadata(prompt_file.read_text(encoding="utf-8"))
+    assert metadata["family"] == "codex"
+    assert metadata["review_points"] == [
+        "Trace the state transition into unchanged consumers."
+    ]
+    assert metadata["content_digest"] == metadata["worktree_review_digest"]
+
+
+def test_cli_prints_one_worktree_fingerprint(worktree: Path) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "fingerprint-worktree",
+            "--worktree",
+            str(worktree),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == review_round._worktree_fingerprint(worktree)
 
 
 @pytest.mark.parametrize("operation", ("capture", "render", "verify"))
