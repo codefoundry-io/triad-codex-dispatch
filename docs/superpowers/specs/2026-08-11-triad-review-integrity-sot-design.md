@@ -1,6 +1,6 @@
 # TRIAD Review Integrity SOT Design
 
-**Status:** Owner-approved direction; exact written-spec review pending.
+**Status:** Owner-approved design.
 
 **Date:** 2026-08-11
 
