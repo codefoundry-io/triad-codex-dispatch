@@ -80,10 +80,24 @@ worktree-relative path under the omitted-surface convention below.
 A `Minor` finding may carry a non-blocking hardening suggestion only when
 packet evidence establishes current correctness and rules out its scenario for
 the current decision. State why it is non-blocking in the finding's trigger and
-evidence; do not disguise a current defect as optional work. Missing deployment
-or operational context needed to decide current correctness belongs in
-`open_questions` and therefore requires `NOT-SAFE`. Never suppress genuine
-uncertainty to produce `SAFE`.
+evidence; do not disguise a current defect as optional work.
+
+<!-- REVIEWER_CONTEXT_CONTRACT_START -->
+Apply the governing deployment context when judging required defenses. Do not
+demand validation, fallback behavior, or error handling for scenarios that the
+governing deployment context expressly rules out or that an evidenced framework
+guarantee makes impossible; trust internal code and evidenced framework
+guarantees, and require validation at system boundaries only. Only an exclusion
+carrying its evidence pointer qualifies. System boundaries include user input,
+external APIs, and declared untrusted inputs such as vendor stdout, run logs,
+transcripts, and review packets; validation remains in scope there. Challenge a
+deployment-context or framework-guarantee claim when concrete review evidence
+contradicts it. If context required to decide current correctness is unknown,
+state the affected impact and required evidence in open_questions rather than
+guessing; any open question requires NOT-SAFE.
+<!-- REVIEWER_CONTEXT_CONTRACT_END -->
+
+Never suppress genuine uncertainty to produce `SAFE`.
 
 If a potentially relevant surface needed to decide current correctness is
 absent from the prepared directory and is not expressly excluded by

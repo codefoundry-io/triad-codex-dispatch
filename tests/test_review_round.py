@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import shlex
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,9 +21,11 @@ from review_round import (  # noqa: E402
     ReviewBrief,
     RoundIntegrityError,
     RoundSnapshot,
+    WorktreeReviewBrief,
     _prepared_digest,
     capture_round,
     render_review_prompt,
+    render_worktree_review_prompt,
     verify_round,
 )
 
@@ -54,6 +58,72 @@ def _write_source_manifest(shared: Path) -> None:
             {"path": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
         )
     manifest.write_bytes(_canonical_json_bytes(entries))
+
+
+def _inject_leaf_symlink_swap(
+    monkeypatch, victim: Path, target: Path
+) -> dict[str, bool]:
+    original_lstat = Path.lstat
+    original_open = os.open
+    original_read_bytes = Path.read_bytes
+    state = {"swapped": False, "followed": False}
+
+    def matches(path: object) -> bool:
+        try:
+            return Path(path) == victim
+        except TypeError:
+            return False
+
+    def swap() -> None:
+        if state["swapped"]:
+            return
+        victim.unlink()
+        victim.symlink_to(target)
+        state["swapped"] = True
+
+    def racing_lstat(path: Path):
+        metadata = original_lstat(path)
+        if path == victim:
+            swap()
+        return metadata
+
+    def racing_open(path, flags, *args, **kwargs):
+        if matches(path):
+            swap()
+        return original_open(path, flags, *args, **kwargs)
+
+    def racing_read_bytes(path: Path) -> bytes:
+        if path == victim and state["swapped"]:
+            state["followed"] = True
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "lstat", racing_lstat)
+    monkeypatch.setattr(Path, "read_bytes", racing_read_bytes)
+    monkeypatch.setattr(os, "open", racing_open)
+    return state
+
+
+def _inject_leaf_fifo_swap(monkeypatch, victim: Path) -> dict[str, int | bool]:
+    original_open = os.open
+    state: dict[str, int | bool] = {"swapped": False, "flags": 0}
+
+    def matches(path: object) -> bool:
+        try:
+            return Path(path) == victim
+        except TypeError:
+            return False
+
+    def racing_open(path, flags, *args, **kwargs):
+        if matches(path) and not state["swapped"]:
+            victim.unlink()
+            os.mkfifo(victim)
+            state["swapped"] = True
+            state["flags"] = flags
+            assert flags & os.O_NONBLOCK, "FIFO leaf open omitted O_NONBLOCK"
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", racing_open)
+    return state
 
 
 def _review_metadata(prompt: str) -> dict[str, object]:
@@ -2149,18 +2219,141 @@ def test_capture_round_rejects_symlinked_prepared_entry(
 
     escape.unlink()
     unreadable = prepared / "src/source.py"
-    original_read_bytes = Path.read_bytes
+    original_open = os.open
 
-    def fail_prepared_read(path: Path) -> bytes:
-        if path == unreadable:
+    def fail_prepared_open(path, flags, *args, **kwargs):
+        if Path(path) == unreadable:
             raise OSError("injected prepared-file read failure")
-        return original_read_bytes(path)
+        return original_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_bytes", fail_prepared_read)
+    monkeypatch.setattr(os, "open", fail_prepared_open)
     with pytest.raises(
         RoundIntegrityError, match="prepared directory file could not be read"
     ):
         capture_round(prepared, worktree)
+
+
+def test_prepared_digest_refuses_regular_leaf_symlink_swap(
+    prepared: Path, tmp_path: Path, monkeypatch
+) -> None:
+    victim = prepared / "src/source.py"
+    target = tmp_path / "outside.py"
+    target.write_text("ESCAPED = True\n", encoding="utf-8")
+    state = _inject_leaf_symlink_swap(monkeypatch, victim, target)
+
+    caught = None
+    try:
+        _prepared_digest(prepared)
+    except RoundIntegrityError as error:
+        caught = error
+
+    assert state["swapped"]
+    assert not state["followed"], "legacy path read followed the swapped symlink"
+    assert caught is not None
+    assert "prepared directory file could not be read" in str(caught)
+    assert victim.is_symlink()
+
+
+def test_worktree_fingerprint_refuses_untracked_leaf_symlink_swap(
+    worktree: Path, tmp_path: Path, monkeypatch
+) -> None:
+    victim = worktree / "untracked.txt"
+    target = tmp_path / "outside.txt"
+    victim.write_text("inside\n", encoding="utf-8")
+    target.write_text("outside\n", encoding="utf-8")
+    state = _inject_leaf_symlink_swap(monkeypatch, victim, target)
+
+    caught = None
+    try:
+        review_round._worktree_fingerprint(worktree)
+    except RoundIntegrityError as error:
+        caught = error
+
+    assert state["swapped"]
+    assert not state["followed"], "legacy path read followed the swapped symlink"
+    assert caught is not None
+    assert "untracked file could not be read" in str(caught)
+    assert victim.is_symlink()
+
+
+def test_prepared_digest_rejects_fifo_swapped_at_open(
+    prepared: Path, monkeypatch
+) -> None:
+    victim = prepared / "src/source.py"
+    state = _inject_leaf_fifo_swap(monkeypatch, victim)
+
+    with pytest.raises(RoundIntegrityError, match="is not a regular file"):
+        _prepared_digest(prepared)
+
+    assert state["swapped"]
+    assert int(state["flags"]) & os.O_NONBLOCK
+    assert victim.is_fifo()
+
+
+def test_worktree_fingerprint_rejects_untracked_fifo_swapped_at_open(
+    worktree: Path, monkeypatch
+) -> None:
+    victim = worktree / "untracked.txt"
+    victim.write_text("inside\n", encoding="utf-8")
+    state = _inject_leaf_fifo_swap(monkeypatch, victim)
+
+    with pytest.raises(RoundIntegrityError, match="untracked file is not a regular file"):
+        review_round._worktree_fingerprint(worktree)
+
+    assert state["swapped"]
+    assert int(state["flags"]) & os.O_NONBLOCK
+    assert victim.is_fifo()
+
+
+def test_worktree_fingerprint_binds_untracked_symlink_payload_without_following(
+    worktree: Path, tmp_path: Path
+) -> None:
+    first_target = tmp_path / "first-target.txt"
+    second_target = tmp_path / "second-target.txt"
+    first_target.write_text("first\n", encoding="utf-8")
+    second_target.write_text("second\n", encoding="utf-8")
+    link = worktree / "untracked-link"
+    link.symlink_to(first_target)
+
+    first = review_round._worktree_fingerprint(worktree)
+    first_target.write_text("changed target content\n", encoding="utf-8")
+    assert review_round._worktree_fingerprint(worktree) == first
+
+    link.unlink()
+    link.symlink_to(second_target)
+    assert review_round._worktree_fingerprint(worktree) != first
+
+
+def test_regular_file_digest_streams_fixed_size_chunks(
+    prepared: Path, monkeypatch
+) -> None:
+    payload = b"a" * (2 * 1024 * 1024 + 17)
+    path = prepared / "large.bin"
+    path.write_bytes(payload)
+    expected = path.stat()
+    original_read = os.read
+    original_read_bytes = Path.read_bytes
+    requested_sizes: list[int] = []
+    whole_file_reads: list[Path] = []
+
+    def observe_whole_file_read(candidate: Path) -> bytes:
+        if candidate == path:
+            whole_file_reads.append(candidate)
+        return original_read_bytes(candidate)
+
+    def observe_read(descriptor: int, size: int) -> bytes:
+        if os.path.samestat(os.fstat(descriptor), expected):
+            requested_sizes.append(size)
+        return original_read(descriptor, size)
+
+    monkeypatch.setattr(Path, "read_bytes", observe_whole_file_read)
+    monkeypatch.setattr(os, "read", observe_read)
+
+    assert len(_prepared_digest(prepared)) == 64
+    assert review_round._regular_file_digest(path) == hashlib.sha256(payload).hexdigest()
+    assert whole_file_reads == []
+    assert len(requested_sizes) >= 3
+    assert set(requested_sizes) == {review_round._FILE_READ_CHUNK_SIZE}
 
 
 def test_untracked_file_content_changes_fingerprint(prepared, worktree):
@@ -2170,6 +2363,501 @@ def test_untracked_file_content_changes_fingerprint(prepared, worktree):
     extra.write_text("second\n", encoding="utf-8")
     second = capture_round(prepared, worktree)
     assert first.worktree_fingerprint != second.worktree_fingerprint
+
+
+@pytest.mark.parametrize("cached", [False, True], ids=["unstaged", "staged"])
+def test_worktree_fingerprint_is_hermetic_to_local_diff_configuration(
+    worktree: Path, cached: bool
+) -> None:
+    source = worktree / "source.py"
+    original = [f"VALUE_{index} = {index}\n" for index in range(24)]
+    source.write_text("".join(original), encoding="utf-8")
+    _git(worktree, "add", "source.py")
+    _git(worktree, "commit", "-q", "-m", "expand source")
+
+    changed = original.copy()
+    changed[2] = "VALUE_2 = 200\n"
+    changed[18] = "VALUE_18 = 1800\n"
+    source.write_text("".join(changed), encoding="utf-8")
+    if cached:
+        _git(worktree, "add", "source.py")
+
+    diff_arguments = ("diff", "--cached") if cached else ("diff",)
+    first_config = {
+        "diff.algorithm": "myers",
+        "diff.context": "0",
+        "diff.indentHeuristic": "false",
+        "diff.interHunkContext": "0",
+        "diff.noprefix": "false",
+        "diff.renames": "false",
+    }
+    second_config = {
+        "diff.algorithm": "histogram",
+        "diff.context": "8",
+        "diff.indentHeuristic": "true",
+        "diff.interHunkContext": "4",
+        "diff.noprefix": "true",
+        "diff.renames": "true",
+    }
+
+    for key, value in first_config.items():
+        _git(worktree, "config", key, value)
+    first_raw_diff = _git(worktree, *diff_arguments)
+    first_fingerprint = review_round._worktree_fingerprint(worktree)
+
+    for key, value in second_config.items():
+        _git(worktree, "config", key, value)
+    second_raw_diff = _git(worktree, *diff_arguments)
+    second_fingerprint = review_round._worktree_fingerprint(worktree)
+
+    assert first_raw_diff != second_raw_diff, "fixture must perturb raw Git diff bytes"
+    assert first_fingerprint == second_fingerprint
+
+
+@pytest.mark.parametrize("cached", [False, True], ids=["unstaged", "staged"])
+def test_worktree_fingerprint_does_not_execute_textconv(
+    worktree: Path, tmp_path: Path, cached: bool
+) -> None:
+    attributes = worktree / ".gitattributes"
+    attributes.write_text("source.py diff=triad-sentinel\n", encoding="utf-8")
+    _git(worktree, "add", ".gitattributes")
+    _git(worktree, "commit", "-q", "-m", "select textconv")
+
+    sentinel = tmp_path / "textconv-ran"
+    driver = tmp_path / "textconv_driver.py"
+    driver.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "Path(sys.argv[1]).write_text('ran\\n', encoding='utf-8')\n"
+        "sys.stdout.buffer.write(Path(sys.argv[2]).read_bytes())\n",
+        encoding="utf-8",
+    )
+    command = " ".join(
+        shlex.quote(value) for value in (sys.executable, str(driver), str(sentinel))
+    )
+    _git(worktree, "config", "diff.triad-sentinel.textconv", command)
+
+    (worktree / "source.py").write_text("VALUE = 2\n", encoding="utf-8")
+    if cached:
+        _git(worktree, "add", "source.py")
+
+    review_round._worktree_fingerprint(worktree)
+
+    assert not sentinel.exists()
+
+
+def test_worktree_fingerprint_pins_both_diff_arms(
+    worktree: Path, monkeypatch
+) -> None:
+    expected = (
+        "--binary",
+        "--full-index",
+        "--no-color",
+        "--no-ext-diff",
+        "--unified=3",
+        "--inter-hunk-context=0",
+        "--diff-algorithm=myers",
+        "--no-indent-heuristic",
+        "--no-renames",
+        "--no-textconv",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+    )
+    original_git = review_round._git
+    diff_calls: list[tuple[str, ...]] = []
+
+    def record_git(root: Path, *arguments: str) -> bytes:
+        if arguments and arguments[0] == "diff":
+            diff_calls.append(arguments)
+        return original_git(root, *arguments)
+
+    monkeypatch.setattr(review_round, "_git", record_git)
+    review_round._worktree_fingerprint(worktree)
+
+    assert diff_calls == [
+        ("diff", "--cached", *expected),
+        ("diff", *expected),
+    ]
+
+
+def _visible_tracked_fingerprint_arms(worktree: Path) -> tuple[bytes, ...]:
+    return (
+        review_round._git(worktree, "rev-parse", "HEAD"),
+        review_round._git(
+            worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"
+        ),
+        review_round._git(
+            worktree, "diff", "--cached", *review_round._FINGERPRINT_DIFF_ARGS
+        ),
+        review_round._git(worktree, "diff", *review_round._FINGERPRINT_DIFF_ARGS),
+    )
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected_tag", "expected_labels", "expected_guidance", "absent_guidance"),
+    [
+        (
+            ("--assume-unchanged",),
+            b"h",
+            ("assume-unchanged",),
+            ("--no-assume-unchanged",),
+            ("--no-skip-worktree",),
+        ),
+        (
+            ("--skip-worktree",),
+            b"S",
+            ("skip-worktree",),
+            ("--no-skip-worktree",),
+            ("--no-assume-unchanged",),
+        ),
+        (
+            ("--assume-unchanged", "--skip-worktree"),
+            b"s",
+            ("assume-unchanged", "skip-worktree"),
+            ("--no-assume-unchanged", "--no-skip-worktree"),
+            (),
+        ),
+    ],
+    ids=("assume-unchanged", "skip-worktree", "both"),
+)
+def test_worktree_fingerprint_refuses_hidden_index_flags(
+    worktree: Path,
+    flags: tuple[str, ...],
+    expected_tag: bytes,
+    expected_labels: tuple[str, ...],
+    expected_guidance: tuple[str, ...],
+    absent_guidance: tuple[str, ...],
+) -> None:
+    before = _visible_tracked_fingerprint_arms(worktree)
+    for flag in flags:
+        _git(worktree, "update-index", flag, "source.py")
+    (worktree / "source.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+    inventory = review_round._git(worktree, "ls-files", "-v", "-z")
+    assert inventory == expected_tag + b" source.py\0"
+    assert _visible_tracked_fingerprint_arms(worktree) == before
+
+    with pytest.raises(RoundIntegrityError) as caught:
+        review_round._worktree_fingerprint(worktree)
+
+    message = str(caught.value)
+    assert repr("source.py") in message
+    for label in expected_labels:
+        assert label in message
+    for guidance in expected_guidance:
+        assert guidance in message
+    for guidance in absent_guidance:
+        assert guidance not in message
+
+
+def test_worktree_fingerprint_refuses_sparse_checkout_without_materializing_advice(
+    tmp_path: Path,
+) -> None:
+    repo = (tmp_path / "sparse-repo").resolve()
+    (repo / "keep").mkdir(parents=True)
+    (repo / "drop").mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "keep/a.txt").write_text("in cone\n", encoding="utf-8")
+    (repo / "drop/b.txt").write_text("out of cone\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "sparse fixture")
+    sparse = subprocess.run(
+        ["git", "sparse-checkout", "set", "keep"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if sparse.returncode:
+        pytest.skip(f"git sparse-checkout unavailable: {sparse.stderr.strip()}")
+    assert b"S drop/b.txt\0" in review_round._git(repo, "ls-files", "-v", "-z")
+
+    with pytest.raises(RoundIntegrityError) as caught:
+        review_round._worktree_fingerprint(repo)
+
+    message = str(caught.value)
+    assert "sparse checkout" in message
+    assert "--no-skip-worktree" not in message
+
+
+def test_worktree_fingerprint_escapes_flagged_control_character_path(
+    worktree: Path,
+) -> None:
+    relative = "line\nbreak.txt"
+    (worktree / relative).write_text("tracked\n", encoding="utf-8")
+    _git(worktree, "add", "--", relative)
+    _git(worktree, "commit", "-q", "-m", "track control path")
+    _git(worktree, "update-index", "--assume-unchanged", "--", relative)
+
+    with pytest.raises(RoundIntegrityError) as caught:
+        review_round._worktree_fingerprint(worktree)
+
+    message = str(caught.value)
+    assert repr(relative) in message
+    assert "\n" not in message
+
+
+@pytest.mark.parametrize(
+    "inventory",
+    (b"malformed\0", b"H source.py", b"H source.py\0\0"),
+    ids=("missing-separator", "missing-terminator", "empty-record"),
+)
+def test_worktree_fingerprint_rejects_malformed_index_inventory(
+    worktree: Path, monkeypatch, inventory: bytes
+) -> None:
+    original_git = review_round._git
+
+    def malformed_inventory(root: Path, *arguments: str) -> bytes:
+        if arguments == ("ls-files", "-v", "-z"):
+            return inventory
+        return original_git(root, *arguments)
+
+    monkeypatch.setattr(review_round, "_git", malformed_inventory)
+
+    with pytest.raises(RoundIntegrityError, match="unparsable"):
+        review_round._worktree_fingerprint(worktree)
+
+
+def test_worktree_fingerprint_binds_accepted_index_inventory(
+    worktree: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        review_round, "_index_flag_state", lambda root: b"H source.py\0"
+    )
+    first = review_round._worktree_fingerprint(worktree)
+    monkeypatch.setattr(
+        review_round,
+        "_index_flag_state",
+        lambda root: b"H source.py\0H synthetic.py\0",
+    )
+
+    assert review_round._worktree_fingerprint(worktree) != first
+
+
+def test_ordinary_index_supports_fingerprint_capture_verify_and_cli(
+    prepared: Path, worktree: Path
+) -> None:
+    fingerprint = review_round._worktree_fingerprint(worktree)
+    snapshot = capture_round(prepared, worktree)
+    verify_round(snapshot, prepared, worktree)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "fingerprint-worktree",
+            "--worktree",
+            str(worktree),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert snapshot.worktree_fingerprint == fingerprint
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == fingerprint
+
+
+def test_worktree_prompt_preserves_leader_authored_review_points(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    task.write_text("task\n", encoding="utf-8")
+    status.write_text("status\n", encoding="utf-8")
+    diff.write_text("diff\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Decide whether Task 4 matches its approved contract.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness", "compatibility"),
+        review_points=(
+            "Trace the Task 4 state transition into every unchanged consumer.",
+        ),
+        approved_boundary=("sanitized Argus worktree", "relevant tests"),
+    )
+
+    prompt = render_worktree_review_prompt(brief)
+    metadata = _review_metadata(prompt)
+
+    assert metadata["review_points"] == list(brief.review_points)
+    assert metadata["objective"] == brief.objective
+    assert metadata["worktree"] == str(worktree)
+    assert metadata["family"] == "google"
+    assert metadata["content_digest"] == metadata["worktree_review_digest"]
+    assert "authenticated custody locations only" in prompt
+    assert "Return exactly one JSON object matching verdict_schema:LegVerdict" in prompt
+
+
+def test_worktree_prompt_rejects_empty_review_points(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (tmp_path / "TASK.md").resolve()
+    status = (tmp_path / "STATUS.txt").resolve()
+    diff = (tmp_path / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-empty-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=(),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    with pytest.raises(RoundIntegrityError, match="review points"):
+        render_worktree_review_prompt(brief)
+
+
+def test_worktree_prompt_rejects_custody_outside_canonical_worktree(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (tmp_path / "outside-TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="argus-outside-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    with pytest.raises(
+        RoundIntegrityError,
+        match="task_file must be inside the canonical worktree",
+    ):
+        render_worktree_review_prompt(brief)
+
+
+def test_worktree_prompts_share_common_digest_across_families(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+
+    metadata_by_family = {}
+    for family in ("claude", "google", "codex"):
+        brief = WorktreeReviewBrief(
+            review_id="argus-shared-r1",
+            review_kind="pre-merge",
+            family=family,
+            objective="Review the current decision.",
+            worktree=worktree,
+            worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+            task_file=task,
+            status_file=status,
+            diff_file=diff,
+            criteria=("correctness",),
+            review_points=("Trace the decision into unchanged consumers.",),
+            approved_boundary=("sanitized Argus worktree",),
+        )
+        metadata_by_family[family] = _review_metadata(
+            render_worktree_review_prompt(brief)
+        )
+
+    assert {
+        metadata["content_digest"] for metadata in metadata_by_family.values()
+    } == {metadata_by_family["claude"]["content_digest"]}
+    assert {
+        family: metadata["family"] for family, metadata in metadata_by_family.items()
+    } == {"claude": "claude", "google": "google", "codex": "codex"}
+
+
+def test_worktree_review_digest_binds_leader_authored_review_points(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    first = WorktreeReviewBrief(
+        review_id="argus-points-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+    second = replace(first, review_points=("Trace the compatibility boundary.",))
+
+    first_metadata = _review_metadata(render_worktree_review_prompt(first))
+    second_metadata = _review_metadata(render_worktree_review_prompt(second))
+
+    assert first_metadata["content_digest"] != second_metadata["content_digest"]
+    excluded = {"content_digest", "review_points", "worktree_review_digest"}
+    assert {
+        key: value for key, value in first_metadata.items() if key not in excluded
+    } == {
+        key: value for key, value in second_metadata.items() if key not in excluded
+    }
+
+
+def test_worktree_prompt_uses_captured_fingerprint_without_rehashing(
+    worktree: Path, tmp_path: Path, monkeypatch
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    fingerprint = review_round._worktree_fingerprint(worktree)
+    brief = WorktreeReviewBrief(
+        review_id="argus-captured-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Review the current decision.",
+        worktree=worktree,
+        worktree_fingerprint=fingerprint,
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the state transition.",),
+        approved_boundary=("sanitized Argus worktree",),
+    )
+
+    def unexpected_rehash(_worktree: Path) -> str:
+        raise AssertionError("renderer rehashed the worktree")
+
+    monkeypatch.setattr(review_round, "_worktree_fingerprint", unexpected_rehash)
+
+    metadata = _review_metadata(render_worktree_review_prompt(brief))
+
+    assert metadata["worktree_fingerprint"] == fingerprint
 
 
 def test_rendered_prompt_binds_focused_round_once(prepared):
@@ -2232,7 +2920,7 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert "NOT-SAFE requires at least one Critical/Major finding or one open question" in prompt
 
 
-def test_rendered_prompt_distinguishes_suggestions_from_unknown_context(prepared):
+def test_rendered_prompt_distinguishes_nonblocking_suggestions(prepared):
     brief = ReviewBrief(
         review_id="suggestion-r1",
         review_kind="pre-merge",
@@ -2254,11 +2942,82 @@ def test_rendered_prompt_distinguishes_suggestions_from_unknown_context(prepared
         "packet evidence establishes current correctness and rules out its scenario"
         in prompt
     )
-    assert (
-        "Missing deployment or operational context needed to decide current correctness"
-        in prompt
-    )
     assert "Never suppress genuine uncertainty to produce SAFE" in prompt
+
+
+def test_review_prompts_and_reference_share_reviewer_context_contract(
+    prepared: Path, worktree: Path
+) -> None:
+    expected = (
+        "Apply the governing deployment context when judging required defenses. "
+        "Do not demand validation, fallback behavior, or error handling for scenarios that "
+        "the governing deployment context expressly rules out or that an evidenced framework "
+        "guarantee makes impossible; trust internal code and evidenced framework guarantees, "
+        "and require validation at system boundaries only. Only an exclusion carrying its "
+        "evidence pointer qualifies. System boundaries include user input, external APIs, and "
+        "declared untrusted inputs such as vendor stdout, run logs, transcripts, and review "
+        "packets; validation remains in scope there. Challenge a deployment-context or "
+        "framework-guarantee claim when concrete review evidence contradicts it. If context "
+        "required to decide current correctness is unknown, state the affected impact and "
+        "required evidence in open_questions rather than guessing; any open question requires "
+        "NOT-SAFE."
+    )
+    prepared_brief = ReviewBrief(
+        review_id="context-contract-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Check the approved deployment behavior.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("src/source.py",),
+    )
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    task.write_text("task\n", encoding="utf-8")
+    status.write_text("status\n", encoding="utf-8")
+    diff.write_text("diff\n", encoding="utf-8")
+    worktree_brief = WorktreeReviewBrief(
+        review_id="context-contract-worktree-r1",
+        review_kind="pre-merge",
+        family="codex",
+        objective="Check the approved deployment behavior.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Check the declared trust boundary.",),
+        approved_boundary=("sanitized worktree",),
+    )
+
+    prepared_prompt_raw = render_review_prompt(prepared_brief)
+    worktree_prompt_raw = render_worktree_review_prompt(worktree_brief)
+    prepared_prompt = " ".join(prepared_prompt_raw.split())
+    worktree_prompt = " ".join(worktree_prompt_raw.split())
+    expected_normalized = " ".join(expected.split())
+    reference = (
+        ROOT
+        / "skills/triad-cross-family-review/references/review-prompt-contract.md"
+    ).read_text(encoding="utf-8")
+    start = "<!-- REVIEWER_CONTEXT_CONTRACT_START -->"
+    end = "<!-- REVIEWER_CONTEXT_CONTRACT_END -->"
+    assert reference.count(start) == 1
+    assert reference.count(end) == 1
+    assert reference.index(start) < reference.index(end)
+    reference_contract = reference.partition(start)[2].partition(end)[0]
+
+    assert prepared_prompt.count(expected_normalized) == 1
+    assert worktree_prompt.count(expected_normalized) == 1
+    assert " ".join(reference_contract.split()) == expected_normalized
+    assert "Never suppress genuine uncertainty to produce SAFE" in worktree_prompt
+    assert _review_metadata(worktree_prompt_raw)["review_points"] == list(
+        worktree_brief.review_points
+    )
+    assert "skill-prompt-review" not in prepared_prompt
+    assert "skill-prompt-review" not in worktree_prompt
 
 
 def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
@@ -2536,6 +3295,80 @@ def test_cli_renders_family_bound_prompt(prepared, tmp_path):
     metadata = _review_metadata(prompt)
     assert metadata["family"] == "claude"
     assert "metadata.family, and metadata.content_digest" in prompt
+
+
+def test_cli_renders_leader_authored_worktree_prompt(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    prompt_file = (tmp_path / "worktree-prompt.txt").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render-worktree",
+            "--review-id",
+            "argus-cli-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "codex",
+            "--objective",
+            "Review the current Task 4 decision.",
+            "--worktree",
+            str(worktree),
+            "--worktree-fingerprint",
+            review_round._worktree_fingerprint(worktree),
+            "--task-file",
+            str(task),
+            "--status-file",
+            str(status),
+            "--diff-file",
+            str(diff),
+            "--criterion",
+            "correctness",
+            "--review-point",
+            "Trace the state transition into unchanged consumers.",
+            "--approved-boundary",
+            "sanitized Argus worktree",
+            "--output",
+            str(prompt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 0, rendered.stderr
+    metadata = _review_metadata(prompt_file.read_text(encoding="utf-8"))
+    assert metadata["family"] == "codex"
+    assert metadata["review_points"] == [
+        "Trace the state transition into unchanged consumers."
+    ]
+    assert metadata["content_digest"] == metadata["worktree_review_digest"]
+
+
+def test_cli_prints_one_worktree_fingerprint(worktree: Path) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "fingerprint-worktree",
+            "--worktree",
+            str(worktree),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == review_round._worktree_fingerprint(worktree)
 
 
 @pytest.mark.parametrize("operation", ("capture", "render", "verify"))
