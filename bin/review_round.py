@@ -696,6 +696,67 @@ def _git(worktree: Path, *arguments: str) -> bytes:
     return process.stdout
 
 
+def _sparse_checkout_enabled(worktree: Path) -> bool:
+    env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "LC_ALL": "C", "LANG": "C"}
+    try:
+        process = subprocess.run(
+            ["git", "config", "--bool", "--get", "core.sparseCheckout"],
+            cwd=worktree,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError:
+        return False
+    if process.returncode:
+        return False
+    return process.stdout.strip() == b"true"
+
+
+def _index_flag_state(worktree: Path) -> bytes:
+    inventory = _git(worktree, "ls-files", "-v", "-z")
+    if inventory and not inventory.endswith(b"\0"):
+        raise RoundIntegrityError(
+            f"git ls-files -v emitted an unparsable inventory: {inventory!r}"
+        )
+    records = inventory.split(b"\0")[:-1] if inventory else ()
+    for record in records:
+        if len(record) < 3 or record[1:2] != b" " or not record[2:]:
+            raise RoundIntegrityError(
+                f"git ls-files -v emitted an unparsable record: {record!r}"
+            )
+        tag = record[:1]
+        assume_unchanged = tag.islower()
+        skip_worktree = tag in {b"S", b"s"}
+        if not assume_unchanged and not skip_worktree:
+            continue
+
+        path = repr(os.fsdecode(record[2:]))
+        tag_text = tag.decode("ascii", "replace")
+        if _sparse_checkout_enabled(worktree):
+            raise RoundIntegrityError(
+                "worktree uses sparse checkout, whose out-of-cone entries are marked "
+                f"skip-worktree; fingerprinting requires a fully checked-out worktree "
+                f"(git ls-files -v tag {tag_text!r} on {path})"
+            )
+
+        labels: list[str] = []
+        guidance: list[str] = []
+        if assume_unchanged:
+            labels.append("assume-unchanged")
+            guidance.append("--no-assume-unchanged")
+        if skip_worktree:
+            labels.append("skip-worktree")
+            guidance.append("--no-skip-worktree")
+        raise RoundIntegrityError(
+            f"worktree index flag refused: {path} is marked {' and '.join(labels)} "
+            f"(git ls-files -v tag {tag_text!r}); clear it with git update-index "
+            f"{' '.join(guidance)} -- <path> and retry"
+        )
+    return inventory
+
+
 def _canonical_git_worktree(worktree: Path) -> Path:
     root = _canonical_directory(worktree, "worktree")
     discovered = Path(_git(root, "rev-parse", "--show-toplevel").decode().strip()).resolve()
@@ -712,6 +773,7 @@ def _worktree_fingerprint(worktree: Path) -> str:
     _record(hasher, b"STATUS", _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all"))
     _record(hasher, b"STAGED", _git(root, "diff", "--cached", *_FINGERPRINT_DIFF_ARGS))
     _record(hasher, b"UNSTAGED", _git(root, "diff", *_FINGERPRINT_DIFF_ARGS))
+    _record(hasher, b"INDEXFLAGS", _index_flag_state(root))
 
     untracked = [value for value in _git(root, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0") if value]
     for raw_path in sorted(untracked):

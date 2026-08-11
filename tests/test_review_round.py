@@ -2291,6 +2291,184 @@ def test_worktree_fingerprint_pins_both_diff_arms(
     ]
 
 
+def _visible_tracked_fingerprint_arms(worktree: Path) -> tuple[bytes, ...]:
+    return (
+        review_round._git(worktree, "rev-parse", "HEAD"),
+        review_round._git(
+            worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"
+        ),
+        review_round._git(
+            worktree, "diff", "--cached", *review_round._FINGERPRINT_DIFF_ARGS
+        ),
+        review_round._git(worktree, "diff", *review_round._FINGERPRINT_DIFF_ARGS),
+    )
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected_tag", "expected_labels", "expected_guidance", "absent_guidance"),
+    [
+        (
+            ("--assume-unchanged",),
+            b"h",
+            ("assume-unchanged",),
+            ("--no-assume-unchanged",),
+            ("--no-skip-worktree",),
+        ),
+        (
+            ("--skip-worktree",),
+            b"S",
+            ("skip-worktree",),
+            ("--no-skip-worktree",),
+            ("--no-assume-unchanged",),
+        ),
+        (
+            ("--assume-unchanged", "--skip-worktree"),
+            b"s",
+            ("assume-unchanged", "skip-worktree"),
+            ("--no-assume-unchanged", "--no-skip-worktree"),
+            (),
+        ),
+    ],
+    ids=("assume-unchanged", "skip-worktree", "both"),
+)
+def test_worktree_fingerprint_refuses_hidden_index_flags(
+    worktree: Path,
+    flags: tuple[str, ...],
+    expected_tag: bytes,
+    expected_labels: tuple[str, ...],
+    expected_guidance: tuple[str, ...],
+    absent_guidance: tuple[str, ...],
+) -> None:
+    before = _visible_tracked_fingerprint_arms(worktree)
+    for flag in flags:
+        _git(worktree, "update-index", flag, "source.py")
+    (worktree / "source.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+    inventory = review_round._git(worktree, "ls-files", "-v", "-z")
+    assert inventory == expected_tag + b" source.py\0"
+    assert _visible_tracked_fingerprint_arms(worktree) == before
+
+    with pytest.raises(RoundIntegrityError) as caught:
+        review_round._worktree_fingerprint(worktree)
+
+    message = str(caught.value)
+    assert repr("source.py") in message
+    for label in expected_labels:
+        assert label in message
+    for guidance in expected_guidance:
+        assert guidance in message
+    for guidance in absent_guidance:
+        assert guidance not in message
+
+
+def test_worktree_fingerprint_refuses_sparse_checkout_without_materializing_advice(
+    tmp_path: Path,
+) -> None:
+    repo = (tmp_path / "sparse-repo").resolve()
+    (repo / "keep").mkdir(parents=True)
+    (repo / "drop").mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "keep/a.txt").write_text("in cone\n", encoding="utf-8")
+    (repo / "drop/b.txt").write_text("out of cone\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "sparse fixture")
+    sparse = subprocess.run(
+        ["git", "sparse-checkout", "set", "keep"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if sparse.returncode:
+        pytest.skip(f"git sparse-checkout unavailable: {sparse.stderr.strip()}")
+    assert b"S drop/b.txt\0" in review_round._git(repo, "ls-files", "-v", "-z")
+
+    with pytest.raises(RoundIntegrityError) as caught:
+        review_round._worktree_fingerprint(repo)
+
+    message = str(caught.value)
+    assert "sparse checkout" in message
+    assert "--no-skip-worktree" not in message
+
+
+def test_worktree_fingerprint_escapes_flagged_control_character_path(
+    worktree: Path,
+) -> None:
+    relative = "line\nbreak.txt"
+    (worktree / relative).write_text("tracked\n", encoding="utf-8")
+    _git(worktree, "add", "--", relative)
+    _git(worktree, "commit", "-q", "-m", "track control path")
+    _git(worktree, "update-index", "--assume-unchanged", "--", relative)
+
+    with pytest.raises(RoundIntegrityError) as caught:
+        review_round._worktree_fingerprint(worktree)
+
+    message = str(caught.value)
+    assert repr(relative) in message
+    assert "\n" not in message
+
+
+@pytest.mark.parametrize(
+    "inventory",
+    (b"malformed\0", b"H source.py", b"H source.py\0\0"),
+    ids=("missing-separator", "missing-terminator", "empty-record"),
+)
+def test_worktree_fingerprint_rejects_malformed_index_inventory(
+    worktree: Path, monkeypatch, inventory: bytes
+) -> None:
+    original_git = review_round._git
+
+    def malformed_inventory(root: Path, *arguments: str) -> bytes:
+        if arguments == ("ls-files", "-v", "-z"):
+            return inventory
+        return original_git(root, *arguments)
+
+    monkeypatch.setattr(review_round, "_git", malformed_inventory)
+
+    with pytest.raises(RoundIntegrityError, match="unparsable"):
+        review_round._worktree_fingerprint(worktree)
+
+
+def test_worktree_fingerprint_binds_accepted_index_inventory(
+    worktree: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        review_round, "_index_flag_state", lambda root: b"H source.py\0"
+    )
+    first = review_round._worktree_fingerprint(worktree)
+    monkeypatch.setattr(
+        review_round,
+        "_index_flag_state",
+        lambda root: b"H source.py\0H synthetic.py\0",
+    )
+
+    assert review_round._worktree_fingerprint(worktree) != first
+
+
+def test_ordinary_index_supports_fingerprint_capture_verify_and_cli(
+    prepared: Path, worktree: Path
+) -> None:
+    fingerprint = review_round._worktree_fingerprint(worktree)
+    snapshot = capture_round(prepared, worktree)
+    verify_round(snapshot, prepared, worktree)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "fingerprint-worktree",
+            "--worktree",
+            str(worktree),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert snapshot.worktree_fingerprint == fingerprint
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == fingerprint
+
+
 def test_worktree_prompt_preserves_leader_authored_review_points(
     worktree: Path, tmp_path: Path
 ) -> None:
