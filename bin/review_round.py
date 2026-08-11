@@ -39,6 +39,20 @@ _FINGERPRINT_DIFF_ARGS = (
     "--src-prefix=a/",
     "--dst-prefix=b/",
 )
+_REVIEWER_CONTEXT_CONTRACT = (
+    "Apply the governing deployment context when judging required defenses. "
+    "Do not demand validation, fallback behavior, or error handling for scenarios that "
+    "the governing deployment context expressly rules out or that an evidenced framework "
+    "guarantee makes impossible; trust internal code and evidenced framework guarantees, "
+    "and require validation at system boundaries only. Only an exclusion carrying its "
+    "evidence pointer qualifies. System boundaries include user input, external APIs, and "
+    "declared untrusted inputs such as vendor stdout, run logs, transcripts, and review "
+    "packets; validation remains in scope there. Challenge a deployment-context or "
+    "framework-guarantee claim when concrete review evidence contradicts it. If context "
+    "required to decide current correctness is unknown, state the affected impact and "
+    "required evidence in open_questions rather than guessing; any open question requires "
+    "NOT-SAFE."
+)
 
 
 class RoundIntegrityError(ValueError):
@@ -1093,9 +1107,9 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         "NOT-SAFE requires at least one Critical/Major finding or one open question. "
         "A Minor finding may carry a non-blocking hardening suggestion only when packet evidence "
         "establishes current correctness and rules out its scenario for this decision; state why it "
-        "is non-blocking in trigger and evidence. Missing deployment or operational context needed "
-        "to decide current correctness belongs in open_questions and therefore requires NOT-SAFE. "
-        "Never suppress genuine uncertainty to produce SAFE. "
+        "is non-blocking in trigger and evidence. "
+        + _REVIEWER_CONTEXT_CONTRACT
+        + " Never suppress genuine uncertainty to produce SAFE. "
         "If a potentially relevant surface needed to decide current correctness is absent from the "
         "prepared directory and is not expressly excluded by metadata.approved_boundary, do not cite "
         "it as a finding or list it in affected_surfaces_inspected. Put its suspected normalized "
@@ -1203,9 +1217,10 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         "question. NOT-SAFE requires at least one Critical/Major finding or one open question. "
         "A Minor finding may carry a non-blocking hardening suggestion only when worktree evidence "
         "establishes current correctness and rules out its scenario for this decision; state why "
-        "it is non-blocking in trigger and evidence. Missing context needed to decide current "
-        "correctness belongs in open_questions and therefore requires NOT-SAFE. Never suppress "
-        "genuine uncertainty to produce SAFE. Report proposed design or specification changes as "
+        "it is non-blocking in trigger and evidence. "
+        + _REVIEWER_CONTEXT_CONTRACT
+        + " Never suppress genuine uncertainty to produce SAFE. Report proposed design or "
+        "specification changes as "
         "findings or open questions; do not implement them. Do not ask how to proceed or wrap the "
         "JSON in prose."
     )

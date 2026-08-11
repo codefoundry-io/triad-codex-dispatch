@@ -2553,7 +2553,7 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert "NOT-SAFE requires at least one Critical/Major finding or one open question" in prompt
 
 
-def test_rendered_prompt_distinguishes_suggestions_from_unknown_context(prepared):
+def test_rendered_prompt_distinguishes_nonblocking_suggestions(prepared):
     brief = ReviewBrief(
         review_id="suggestion-r1",
         review_kind="pre-merge",
@@ -2575,11 +2575,82 @@ def test_rendered_prompt_distinguishes_suggestions_from_unknown_context(prepared
         "packet evidence establishes current correctness and rules out its scenario"
         in prompt
     )
-    assert (
-        "Missing deployment or operational context needed to decide current correctness"
-        in prompt
-    )
     assert "Never suppress genuine uncertainty to produce SAFE" in prompt
+
+
+def test_review_prompts_and_reference_share_reviewer_context_contract(
+    prepared: Path, worktree: Path
+) -> None:
+    expected = (
+        "Apply the governing deployment context when judging required defenses. "
+        "Do not demand validation, fallback behavior, or error handling for scenarios that "
+        "the governing deployment context expressly rules out or that an evidenced framework "
+        "guarantee makes impossible; trust internal code and evidenced framework guarantees, "
+        "and require validation at system boundaries only. Only an exclusion carrying its "
+        "evidence pointer qualifies. System boundaries include user input, external APIs, and "
+        "declared untrusted inputs such as vendor stdout, run logs, transcripts, and review "
+        "packets; validation remains in scope there. Challenge a deployment-context or "
+        "framework-guarantee claim when concrete review evidence contradicts it. If context "
+        "required to decide current correctness is unknown, state the affected impact and "
+        "required evidence in open_questions rather than guessing; any open question requires "
+        "NOT-SAFE."
+    )
+    prepared_brief = ReviewBrief(
+        review_id="context-contract-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Check the approved deployment behavior.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("src/source.py",),
+    )
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    task.write_text("task\n", encoding="utf-8")
+    status.write_text("status\n", encoding="utf-8")
+    diff.write_text("diff\n", encoding="utf-8")
+    worktree_brief = WorktreeReviewBrief(
+        review_id="context-contract-worktree-r1",
+        review_kind="pre-merge",
+        family="codex",
+        objective="Check the approved deployment behavior.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Check the declared trust boundary.",),
+        approved_boundary=("sanitized worktree",),
+    )
+
+    prepared_prompt_raw = render_review_prompt(prepared_brief)
+    worktree_prompt_raw = render_worktree_review_prompt(worktree_brief)
+    prepared_prompt = " ".join(prepared_prompt_raw.split())
+    worktree_prompt = " ".join(worktree_prompt_raw.split())
+    expected_normalized = " ".join(expected.split())
+    reference = (
+        ROOT
+        / "skills/triad-cross-family-review/references/review-prompt-contract.md"
+    ).read_text(encoding="utf-8")
+    start = "<!-- REVIEWER_CONTEXT_CONTRACT_START -->"
+    end = "<!-- REVIEWER_CONTEXT_CONTRACT_END -->"
+    assert reference.count(start) == 1
+    assert reference.count(end) == 1
+    assert reference.index(start) < reference.index(end)
+    reference_contract = reference.partition(start)[2].partition(end)[0]
+
+    assert prepared_prompt.count(expected_normalized) == 1
+    assert worktree_prompt.count(expected_normalized) == 1
+    assert " ".join(reference_contract.split()) == expected_normalized
+    assert "Never suppress genuine uncertainty to produce SAFE" in worktree_prompt
+    assert _review_metadata(worktree_prompt_raw)["review_points"] == list(
+        worktree_brief.review_points
+    )
+    assert "skill-prompt-review" not in prepared_prompt
+    assert "skill-prompt-review" not in worktree_prompt
 
 
 def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):

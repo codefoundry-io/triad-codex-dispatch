@@ -149,13 +149,14 @@ context challenges, and genuinely unknown context.
 
 Add one shared fixed context contract to both prepared-directory and worktree
 renderers. It must state that reviewers do not demand validation, fallback, or
-error handling for scenarios expressly ruled out by the governing deployment
-context or an evidenced framework guarantee; declared untrusted inputs such as
-vendor stdout, run logs, and review packets remain system boundaries where
-validation is in scope; reviewers may challenge a context claim with concrete
-review evidence; and context required to decide current correctness must be
-reported in `open_questions`, preserving the existing `NOT-SAFE` rule rather
-than guessing a severity.
+error handling for scenarios expressly ruled out by an evidence-linked
+deployment context or an evidenced framework guarantee. Only exclusions with
+an evidence pointer qualify. System boundaries include user input, external
+APIs, and declared untrusted inputs such as vendor stdout, run logs,
+transcripts, and review packets, where validation remains in scope. Reviewers
+may challenge a context claim with concrete review evidence; context required
+to decide current correctness must be reported in `open_questions`, preserving
+the existing `NOT-SAFE` rule rather than guessing a severity.
 
 Document the same fixed contract in the prompt-contract reference. Add a
 whitespace-normalized exact drift test so renderer and documentation wording
