@@ -634,7 +634,12 @@ def cleanup_review_workspace(
 
 
 def _open_regular_file(path: Path, label: str) -> int:
-    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    flags = (
+        os.O_RDONLY
+        | os.O_NONBLOCK
+        | os.O_NOFOLLOW
+        | getattr(os, "O_CLOEXEC", 0)
+    )
     try:
         descriptor = os.open(path, flags)
     except OSError as error:

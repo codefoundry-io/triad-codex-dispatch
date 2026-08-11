@@ -103,6 +103,29 @@ def _inject_leaf_symlink_swap(
     return state
 
 
+def _inject_leaf_fifo_swap(monkeypatch, victim: Path) -> dict[str, int | bool]:
+    original_open = os.open
+    state: dict[str, int | bool] = {"swapped": False, "flags": 0}
+
+    def matches(path: object) -> bool:
+        try:
+            return Path(path) == victim
+        except TypeError:
+            return False
+
+    def racing_open(path, flags, *args, **kwargs):
+        if matches(path) and not state["swapped"]:
+            victim.unlink()
+            os.mkfifo(victim)
+            state["swapped"] = True
+            state["flags"] = flags
+            assert flags & os.O_NONBLOCK, "FIFO leaf open omitted O_NONBLOCK"
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", racing_open)
+    return state
+
+
 def _review_metadata(prompt: str) -> dict[str, object]:
     prefix = "Review metadata: "
     records = [line for line in prompt.splitlines() if line.startswith(prefix)]
@@ -2251,6 +2274,35 @@ def test_worktree_fingerprint_refuses_untracked_leaf_symlink_swap(
     assert caught is not None
     assert "untracked file could not be read" in str(caught)
     assert victim.is_symlink()
+
+
+def test_prepared_digest_rejects_fifo_swapped_at_open(
+    prepared: Path, monkeypatch
+) -> None:
+    victim = prepared / "src/source.py"
+    state = _inject_leaf_fifo_swap(monkeypatch, victim)
+
+    with pytest.raises(RoundIntegrityError, match="is not a regular file"):
+        _prepared_digest(prepared)
+
+    assert state["swapped"]
+    assert int(state["flags"]) & os.O_NONBLOCK
+    assert victim.is_fifo()
+
+
+def test_worktree_fingerprint_rejects_untracked_fifo_swapped_at_open(
+    worktree: Path, monkeypatch
+) -> None:
+    victim = worktree / "untracked.txt"
+    victim.write_text("inside\n", encoding="utf-8")
+    state = _inject_leaf_fifo_swap(monkeypatch, victim)
+
+    with pytest.raises(RoundIntegrityError, match="untracked file is not a regular file"):
+        review_round._worktree_fingerprint(worktree)
+
+    assert state["swapped"]
+    assert int(state["flags"]) & os.O_NONBLOCK
+    assert victim.is_fifo()
 
 
 def test_worktree_fingerprint_binds_untracked_symlink_payload_without_following(

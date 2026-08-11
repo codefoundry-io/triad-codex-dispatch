@@ -4,7 +4,7 @@
 
 **Goal:** Ensure selected regular-file leaves are never followed after symlink substitution, while digest-only paths stream bytes without whole-file buffering.
 
-**Architecture:** Follow the proven Claude-hosted shape: open each selected leaf with `O_RDONLY | O_NOFOLLOW`, validate the descriptor with `fstat`, and read fixed-size chunks. Keep a byte-returning helper only where callers need payload bytes; use a digest-only helper for prepared-file and untracked-file hashing. Do not introduce root-anchored component traversal or a generalized filesystem abstraction in this slice.
+**Architecture:** Follow the proven Claude-hosted leaf-reader shape, with one reproduced correction: open each selected leaf with `O_RDONLY | O_NONBLOCK | O_NOFOLLOW`, validate the descriptor with `fstat`, and read fixed-size chunks. `O_NONBLOCK` lets a raced-in FIFO reach the non-regular rejection instead of blocking before `fstat`. Keep a byte-returning helper only where callers need payload bytes; use a digest-only helper for prepared-file and untracked-file hashing. Do not introduce root-anchored component traversal or a generalized filesystem abstraction in this slice.
 
 **Tech Stack:** Python 3.12 standard library (`os.open`, `O_NOFOLLOW`, `fstat`, `os.read`), pytest 9, macOS and Linux/WSL2.
 
@@ -24,6 +24,7 @@
 
 - [ ] Add a deterministic prepared-file race that swaps the regular leaf to a symlink at the read boundary and proves the current path read follows the escape target.
 - [ ] Add the same leaf substitution through the untracked fingerprint arm and require fail-closed behavior.
+- [ ] Add prepared and untracked FIFO substitutions that require `O_NONBLOCK` and reach the `fstat` non-regular rejection without hanging.
 - [ ] Add a multi-chunk digest case that matches `hashlib.sha256`, never calls `Path.read_bytes()` for the digest-only path, and never requests more than the fixed chunk size.
 - [ ] Preserve existing rejection of non-regular prepared entries and existing untracked symlink representation.
 
@@ -39,7 +40,7 @@
 - Modify: `bin/review_round.py`
 
 - [ ] Add one fixed chunk-size constant.
-- [ ] Replace `_regular_file_bytes()` with `os.open(... O_NOFOLLOW ...)`, `fstat()` regular-file validation, and chunked reads that return bytes only for payload callers.
+- [ ] Replace `_regular_file_bytes()` with `os.open(... O_NONBLOCK | O_NOFOLLOW ...)`, `fstat()` regular-file validation, and chunked reads that return bytes only for payload callers.
 - [ ] Add a digest-only regular-file helper using the same open/fstat contract and streaming directly into SHA-256.
 - [ ] Route prepared-directory digest, prepared-source comparison, source-manifest creation/verification, and the untracked regular-file arm through the digest helper.
 - [ ] Keep symlink payload hashing, record framing, and digest output bytes unchanged.

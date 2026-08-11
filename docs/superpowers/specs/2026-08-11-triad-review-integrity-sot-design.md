@@ -133,10 +133,13 @@ S-class.
 **Behavioral claim:** A selected regular-file leaf is never followed after
 symlink substitution, and digest-only reads do not buffer the whole file.
 
-Follow the proven Claude-hosted shape. Open prepared and untracked regular-file
-leaves with `O_NOFOLLOW`, validate the opened descriptor with `fstat`, and feed
-fixed-size chunks directly into SHA-256 where callers require only a digest.
-Keep a chunked byte-returning helper only for callers that require the payload.
+Follow the proven Claude-hosted leaf-reader shape, with one reproduced
+correction. Open prepared and untracked regular-file leaves with `O_NONBLOCK |
+O_NOFOLLOW`, validate the opened descriptor with `fstat`, and feed fixed-size
+chunks directly into SHA-256 where callers require only a digest. `O_NONBLOCK`
+lets a raced-in FIFO reach the non-regular rejection rather than blocking in
+`open()`. Keep a chunked byte-returning helper only for callers that require the
+payload.
 
 This slice does not add root-anchored intermediate-component traversal, replace
 unrelated lifecycle readers, or introduce a generalized filesystem abstraction.
@@ -144,7 +147,7 @@ Those changes exceed the reproduced leaf race and the owner-approved
 Claude-parity scope. Existing source-member copying and source rechecks retain
 their descriptor-relative component validation.
 
-RED and GREEN fixtures cover prepared and untracked leaf substitution,
+RED and GREEN fixtures cover prepared and untracked symlink/FIFO substitution,
 multi-chunk digest equivalence, bounded read size, and unchanged digest formats.
 
 Forecast: 35-70 production lines, 25-50 novel-core lines, one behavioral claim;
