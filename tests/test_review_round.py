@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import shlex
 import subprocess
 import sys
 from dataclasses import replace
@@ -2173,6 +2174,121 @@ def test_untracked_file_content_changes_fingerprint(prepared, worktree):
     extra.write_text("second\n", encoding="utf-8")
     second = capture_round(prepared, worktree)
     assert first.worktree_fingerprint != second.worktree_fingerprint
+
+
+@pytest.mark.parametrize("cached", [False, True], ids=["unstaged", "staged"])
+def test_worktree_fingerprint_is_hermetic_to_local_diff_configuration(
+    worktree: Path, cached: bool
+) -> None:
+    source = worktree / "source.py"
+    original = [f"VALUE_{index} = {index}\n" for index in range(24)]
+    source.write_text("".join(original), encoding="utf-8")
+    _git(worktree, "add", "source.py")
+    _git(worktree, "commit", "-q", "-m", "expand source")
+
+    changed = original.copy()
+    changed[2] = "VALUE_2 = 200\n"
+    changed[18] = "VALUE_18 = 1800\n"
+    source.write_text("".join(changed), encoding="utf-8")
+    if cached:
+        _git(worktree, "add", "source.py")
+
+    diff_arguments = ("diff", "--cached") if cached else ("diff",)
+    first_config = {
+        "diff.algorithm": "myers",
+        "diff.context": "0",
+        "diff.indentHeuristic": "false",
+        "diff.interHunkContext": "0",
+        "diff.noprefix": "false",
+        "diff.renames": "false",
+    }
+    second_config = {
+        "diff.algorithm": "histogram",
+        "diff.context": "8",
+        "diff.indentHeuristic": "true",
+        "diff.interHunkContext": "4",
+        "diff.noprefix": "true",
+        "diff.renames": "true",
+    }
+
+    for key, value in first_config.items():
+        _git(worktree, "config", key, value)
+    first_raw_diff = _git(worktree, *diff_arguments)
+    first_fingerprint = review_round._worktree_fingerprint(worktree)
+
+    for key, value in second_config.items():
+        _git(worktree, "config", key, value)
+    second_raw_diff = _git(worktree, *diff_arguments)
+    second_fingerprint = review_round._worktree_fingerprint(worktree)
+
+    assert first_raw_diff != second_raw_diff, "fixture must perturb raw Git diff bytes"
+    assert first_fingerprint == second_fingerprint
+
+
+@pytest.mark.parametrize("cached", [False, True], ids=["unstaged", "staged"])
+def test_worktree_fingerprint_does_not_execute_textconv(
+    worktree: Path, tmp_path: Path, cached: bool
+) -> None:
+    attributes = worktree / ".gitattributes"
+    attributes.write_text("source.py diff=triad-sentinel\n", encoding="utf-8")
+    _git(worktree, "add", ".gitattributes")
+    _git(worktree, "commit", "-q", "-m", "select textconv")
+
+    sentinel = tmp_path / "textconv-ran"
+    driver = tmp_path / "textconv_driver.py"
+    driver.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "Path(sys.argv[1]).write_text('ran\\n', encoding='utf-8')\n"
+        "sys.stdout.buffer.write(Path(sys.argv[2]).read_bytes())\n",
+        encoding="utf-8",
+    )
+    command = " ".join(
+        shlex.quote(value) for value in (sys.executable, str(driver), str(sentinel))
+    )
+    _git(worktree, "config", "diff.triad-sentinel.textconv", command)
+
+    (worktree / "source.py").write_text("VALUE = 2\n", encoding="utf-8")
+    if cached:
+        _git(worktree, "add", "source.py")
+
+    review_round._worktree_fingerprint(worktree)
+
+    assert not sentinel.exists()
+
+
+def test_worktree_fingerprint_pins_both_diff_arms(
+    worktree: Path, monkeypatch
+) -> None:
+    expected = (
+        "--binary",
+        "--full-index",
+        "--no-color",
+        "--no-ext-diff",
+        "--unified=3",
+        "--inter-hunk-context=0",
+        "--diff-algorithm=myers",
+        "--no-indent-heuristic",
+        "--no-renames",
+        "--no-textconv",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+    )
+    original_git = review_round._git
+    diff_calls: list[tuple[str, ...]] = []
+
+    def record_git(root: Path, *arguments: str) -> bytes:
+        if arguments and arguments[0] == "diff":
+            diff_calls.append(arguments)
+        return original_git(root, *arguments)
+
+    monkeypatch.setattr(review_round, "_git", record_git)
+    review_round._worktree_fingerprint(worktree)
+
+    assert diff_calls == [
+        ("diff", "--cached", *expected),
+        ("diff", *expected),
+    ]
 
 
 def test_worktree_prompt_preserves_leader_authored_review_points(

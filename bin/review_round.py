@@ -25,6 +25,20 @@ _MAX_REVIEW_ID_LENGTH = 200
 _STALE_AFTER_SECONDS = 30 * 24 * 60 * 60
 _MANIFEST_INPUT_PACKET_FILES = frozenset({"TASK.md", "REVIEW.diff"})
 _OPTIONAL_PACKET_FILES = frozenset({"EVIDENCE.md"})
+_FINGERPRINT_DIFF_ARGS = (
+    "--binary",
+    "--full-index",
+    "--no-color",
+    "--no-ext-diff",
+    "--unified=3",
+    "--inter-hunk-context=0",
+    "--diff-algorithm=myers",
+    "--no-indent-heuristic",
+    "--no-renames",
+    "--no-textconv",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+)
 
 
 class RoundIntegrityError(ValueError):
@@ -682,8 +696,8 @@ def _worktree_fingerprint(worktree: Path) -> str:
     hasher = hashlib.sha256()
     _record(hasher, b"HEAD", _git(root, "rev-parse", "HEAD"))
     _record(hasher, b"STATUS", _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all"))
-    _record(hasher, b"STAGED", _git(root, "diff", "--cached", "--binary", "--full-index", "--no-color", "--no-ext-diff"))
-    _record(hasher, b"UNSTAGED", _git(root, "diff", "--binary", "--full-index", "--no-color", "--no-ext-diff"))
+    _record(hasher, b"STAGED", _git(root, "diff", "--cached", *_FINGERPRINT_DIFF_ARGS))
+    _record(hasher, b"UNSTAGED", _git(root, "diff", *_FINGERPRINT_DIFF_ARGS))
 
     untracked = [value for value in _git(root, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0") if value]
     for raw_path in sorted(untracked):
