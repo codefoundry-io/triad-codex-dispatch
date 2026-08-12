@@ -193,13 +193,13 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.536
+### Upgrading to 0.2.537
 
-0.2.536 binds the formal AGY verdict at native schema-generation time to the
-current review ID, Google family, content digest, and repository-relative path
-shape. A required-leg infrastructure failure now cancels and reaps every live
-sibling provider process group immediately, discards the whole round, and
-requires a repaired fresh-ID rerun.
+0.2.537 requires every reviewer to copy the complete review ID, family, and
+content digest directly from the single canonical metadata record and compare
+all three values character-for-character before returning its verdict. It
+retains 0.2.536's native AGY schema binding and immediate whole-round
+fail-fast cancellation.
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -220,7 +220,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.536-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.537-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

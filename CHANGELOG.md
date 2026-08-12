@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.537 — 2026-08-12
+
+- Requires every reviewer to copy the complete review ID, family, and content
+  digest directly from the single canonical metadata record and compare all
+  three values character-for-character before returning its verdict.
+
 ## 0.2.536 — 2026-08-12
 
 - Binds the formal Antigravity verdict schema to the exact review ID, Google
