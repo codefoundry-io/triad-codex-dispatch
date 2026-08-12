@@ -132,7 +132,7 @@ in the round.
    `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
 7. **Admit results.** Each family returns one JSON object matching
    `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
-   the packaged validator. A missing, refused, malformed, route-mismatched, or
+   the packaged validator. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical. A missing, refused, malformed, route-mismatched, or
    incomplete required leg invalidates the round. At the first required-leg failure, immediately
    terminate every still-running leg and its exact provider process group. Wait and confirm that every exact
    provider process tree is gone before integrity verification, then discard every current-round

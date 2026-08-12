@@ -3020,6 +3020,55 @@ def test_review_prompts_and_reference_share_reviewer_context_contract(
     assert "skill-prompt-review" not in worktree_prompt
 
 
+def test_review_prompts_require_character_exact_metadata_copy(
+    prepared: Path, worktree: Path
+) -> None:
+    expected = (
+        "Construct review_id, family, and content_digest by copying their complete string values "
+        "directly from the single Review metadata JSON record. Before returning, compare each "
+        "copied value character-for-character with that record; the three pairs must be identical."
+    )
+    prepared_brief = ReviewBrief(
+        review_id="metadata-copy-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Check the metadata binding.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("src/source.py",),
+    )
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    task.write_text("task\n", encoding="utf-8")
+    status.write_text("status\n", encoding="utf-8")
+    diff.write_text("diff\n", encoding="utf-8")
+    worktree_brief = WorktreeReviewBrief(
+        review_id="metadata-copy-worktree-r1",
+        review_kind="formal-plan",
+        family="codex",
+        objective="Check the metadata binding.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Check the bound result envelope.",),
+        approved_boundary=("sanitized worktree",),
+    )
+
+    assert expected in render_review_prompt(prepared_brief)
+    assert expected in render_worktree_review_prompt(worktree_brief)
+    for relative in (
+        "skills/triad-cross-family-review/SKILL.md",
+        "skills/triad-cross-family-review/references/review-prompt-contract.md",
+        "skills/triad-cross-family-review/references/leg-contracts.md",
+    ):
+        assert expected in (ROOT / relative).read_text(encoding="utf-8")
+
+
 def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
     brief = ReviewBrief(
         review_id="omitted-surface-r1",

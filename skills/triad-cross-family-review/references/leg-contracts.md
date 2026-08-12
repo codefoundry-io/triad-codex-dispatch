@@ -145,7 +145,7 @@ Give it the same absolute prepared directory, objective, criteria, digest, and
 MCP tools remain available for reads and searches inside the authorized review
 boundary. Do not edit files, change external state, or execute candidate code,
 tests, builds, hooks, or scripts. Save its terminal JSON outside the prepared
-directory and validate it with:
+directory. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical. Validate it with:
 
 ```text
 python3 "$toolkit_root/bin/verdict_schema.py" validate \
