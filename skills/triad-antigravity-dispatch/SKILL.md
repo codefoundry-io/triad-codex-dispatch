@@ -33,11 +33,16 @@ formal wrapper arguments are:
   --effort high
   --timeout 1800
   --pydantic verdict_schema:LegVerdict
+  --expected-review-id "$review_id"
+  --expected-family google
+  --expected-content-digest "$review_digest"
 ```
 
 The wrapper calls AGY print mode with native `--output-format stream-json` and
 `--json-schema`, admits only the terminal result event, and validates it
-locally. The formal leg uses this explicit 1,800-second end-to-end deadline;
+locally. The formal route binds the exact review ID, Google family, content
+digest, and review-relative path shape in the native schema and repeats those
+binding checks locally. The formal leg uses this explicit 1,800-second end-to-end deadline;
 shorter leader polling waits do not terminate it. Installed CLI commands, configured MCP tools, and provider-native
 read/search tools stay available. AGY reviews only; the review prompt forbids
 editing, external-state changes, and candidate execution.

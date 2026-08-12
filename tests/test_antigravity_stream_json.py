@@ -13,6 +13,7 @@ sys.path.insert(0, str(BIN))
 
 import _common  # noqa: E402
 import antigravity_wrapper as wrapper  # noqa: E402
+from verdict_schema import LegVerdict  # noqa: E402
 
 
 class _Answer(BaseModel):
@@ -124,6 +125,42 @@ def test_structured_result_uses_native_payload_then_local_validation() -> None:
     assert admitted.validated == {"ok": True}
     assert admitted.final_answer == '{"ok": true}'
     assert admitted.runtime_identity == "gemini-3.1-pro-high"
+
+
+def test_bound_formal_result_rejects_wrong_family_after_local_validation() -> None:
+    payload = {
+        "review_id": "review-r1",
+        "family": "codex",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": json.dumps(payload),
+                "structured_output": payload,
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(
+        raw,
+        LegVerdict,
+        "gemini-3.1-pro-high",
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+    )
+
+    assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
+    assert admitted.classification == "schema-fail"
+    assert admitted.final_answer == ""
+    assert "family mismatch" in (admitted.validation_error or "")
 
 
 def test_exposed_model_conflict_invalidates_successful_result() -> None:
@@ -300,6 +337,68 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     assert "--output-format" in calls[0]
     assert "--json-schema" in calls[0]
     assert calls[0][calls[0].index("--effort") + 1] == "high"
+
+
+def test_main_binds_formal_leg_in_native_schema(monkeypatch, capsys) -> None:
+    calls: list[list[str]] = []
+    payload = {
+        "review_id": "review-r1",
+        "family": "google",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+
+    def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+        calls.append(cmd)
+        schema = json.loads(cmd[cmd.index("--json-schema") + 1])
+        properties = schema["properties"]
+        assert properties["review_id"]["const"] == "review-r1"
+        assert properties["family"]["const"] == "google"
+        assert properties["content_digest"]["const"] == "a" * 64
+        return _run_result(
+            _stream(
+                {
+                    "status": "SUCCESS",
+                    "response": json.dumps(payload),
+                    "structured_output": payload,
+                }
+            )
+        )
+
+    monkeypatch.setattr(wrapper._common, "_run_once", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            "review",
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "google",
+            "--expected-content-digest",
+            "a" * 64,
+        ],
+    )
+
+    assert wrapper.main() == 0
+    assert json.loads(capsys.readouterr().out) == payload
+    assert len(calls) == 1
 
 
 def test_preflight_proves_version_and_route_without_provider_submission(

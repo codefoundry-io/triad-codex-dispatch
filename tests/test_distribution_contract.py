@@ -197,6 +197,9 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             "  --effort high \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
+            '  --expected-review-id "$review_id" \\',
+            "  --expected-family google \\",
+            '  --expected-content-digest "$review_digest" \\',
             '  > "$google_result_file"',
         ),
         (

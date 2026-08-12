@@ -69,11 +69,16 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --effort high \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
+  --expected-review-id "$review_id" \
+  --expected-family google \
+  --expected-content-digest "$review_digest" \
   > "$google_result_file"
 ```
 
 The wrapper uses AGY native `stream-json` plus `json-schema` and validates the
-terminal result locally. The selected formal AGY leg uses the explicit 1,800-second
+terminal result locally. Its native schema and local admission bind the exact
+review ID, Google family, content digest, and review-relative path shape before
+the result file is written. The selected formal AGY leg uses the explicit 1,800-second
 end-to-end wrapper deadline; shorter polling waits are wake-up boundaries, not
 provider failures. The wrapper internally inserts
 `--dangerously-skip-permissions`. Callers do not pass this flag. The wrapper

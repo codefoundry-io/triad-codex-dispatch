@@ -121,6 +121,10 @@ def _interpret_run(
     run: _common.RunResult,
     pydantic_cls: Any,
     expected_model: str | None = None,
+    *,
+    expected_review_id: str | None = None,
+    expected_family: str | None = None,
+    expected_content_digest: str | None = None,
 ) -> _common.RunResult:
     """Admit one terminal AGY result and ignore intermediate step text."""
     run.runtime_identity = "unexposed"
@@ -208,6 +212,19 @@ def _interpret_run(
                 _common.EXIT_SCHEMA_FAIL,
                 f"local schema validation failed: {payload}",
             )
+        for field, expected in (
+            ("review_id", expected_review_id),
+            ("family", expected_family),
+            ("content_digest", expected_content_digest),
+        ):
+            if expected is not None and payload.get(field) != expected:
+                run.validation_error = f"{field.replace('_', ' ')} mismatch"
+                return _fail(
+                    run,
+                    "schema-fail",
+                    _common.EXIT_SCHEMA_FAIL,
+                    run.validation_error,
+                )
         run.validated = payload
         run.final_answer = json.dumps(payload, ensure_ascii=False)
     else:
@@ -244,6 +261,13 @@ def main() -> int:
     parser.add_argument("--effort", choices=("low", "medium", "high"), default=None)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--pydantic", default=None, help="module:Class schema contract")
+    parser.add_argument("--expected-review-id", default=None)
+    parser.add_argument(
+        "--expected-family",
+        choices=("claude", "google", "codex"),
+        default=None,
+    )
+    parser.add_argument("--expected-content-digest", default=None)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
@@ -267,6 +291,27 @@ def main() -> int:
             _common.log(f"--pydantic load failed: {exc}")
             return _common.EXIT_ARG_ERROR
 
+    binding_values = (
+        args.expected_review_id,
+        args.expected_family,
+        args.expected_content_digest,
+    )
+    if any(value is not None for value in binding_values):
+        if not all(value is not None for value in binding_values):
+            _common.log("formal verdict bindings must be supplied together")
+            return _common.EXIT_ARG_ERROR
+        if args.pydantic != "verdict_schema:LegVerdict":
+            _common.log(
+                "formal verdict bindings require --pydantic verdict_schema:LegVerdict"
+            )
+            return _common.EXIT_ARG_ERROR
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.expected_review_id) is None:
+            _common.log("expected review ID has invalid syntax")
+            return _common.EXIT_ARG_ERROR
+        if re.fullmatch(r"[0-9a-f]{64}", args.expected_content_digest) is None:
+            _common.log("expected content digest must be 64 lowercase hexadecimal characters")
+            return _common.EXIT_ARG_ERROR
+
     agy_bin = _common.require_binary("agy")
     version = _probe_agy_version(agy_bin)
     if version is None or version < AGY_VERSION_FLOOR:
@@ -288,13 +333,15 @@ def main() -> int:
         return _common.EXIT_OK
 
     try:
+        schema_object = pydantic_cls.model_json_schema() if pydantic_cls is not None else None
+        if schema_object is not None and all(value is not None for value in binding_values):
+            properties = schema_object["properties"]
+            properties["review_id"]["const"] = args.expected_review_id
+            properties["family"]["const"] = args.expected_family
+            properties["content_digest"]["const"] = args.expected_content_digest
         schema = (
-            json.dumps(
-                pydantic_cls.model_json_schema(),
-                ensure_ascii=True,
-                separators=(",", ":"),
-            )
-            if pydantic_cls is not None
+            json.dumps(schema_object, ensure_ascii=True, separators=(",", ":"))
+            if schema_object is not None
             else None
         )
     except Exception as exc:
@@ -316,7 +363,14 @@ def main() -> int:
         args.timeout,
         classify_and_log=False,
     )
-    result = _interpret_run(raw, pydantic_cls, args.model)
+    result = _interpret_run(
+        raw,
+        pydantic_cls,
+        args.model,
+        expected_review_id=args.expected_review_id,
+        expected_family=args.expected_family,
+        expected_content_digest=args.expected_content_digest,
+    )
     _common.log(
         f"[wrapper] antigravity {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -83,6 +84,22 @@ def test_rejects_unbound_or_unsafe_contract_values(field, value):
 def test_rejects_unknown_result_fields():
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         LegVerdict.model_validate({**VALID, "batch_id": "batch-0001"})
+
+
+def test_native_schema_rejects_absolute_and_backslash_review_paths():
+    schema = LegVerdict.model_json_schema()
+    surface_pattern = schema["properties"]["affected_surfaces_inspected"]["items"][
+        "pattern"
+    ]
+    finding_pattern = schema["$defs"]["LegFinding"]["properties"]["path"][
+        "pattern"
+    ]
+
+    for pattern in (surface_pattern, finding_pattern):
+        assert re.search(pattern, "src/parser.py")
+        assert re.search(pattern, "docs/space name.md")
+        assert not re.search(pattern, "/absolute/path.py")
+        assert not re.search(pattern, r"src\windows.py")
 
 
 def test_file_validation_binds_review_family_and_digest(tmp_path):
