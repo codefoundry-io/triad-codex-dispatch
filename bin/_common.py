@@ -1223,6 +1223,33 @@ def _drain(stream, accum: list[str], passthrough) -> None:
         log(f"reader thread error: {e}")
 
 
+def _terminate_provider_process_group(proc, reason: str) -> None:
+    """Terminate and reap the exact provider process group for one wrapper."""
+    log(f"{reason}; sending SIGTERM")
+    try:
+        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:
+            proc.terminate()
+    except (ProcessLookupError, PermissionError) as error:
+        log(f"SIGTERM failed: {error}")
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        log("SIGTERM ignored; sending SIGKILL")
+        try:
+            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            log("zombie: SIGKILL also unresponsive")
+
+
 def _run_once(
     cli: str,
     cmd: list[str],
@@ -1304,29 +1331,12 @@ def _run_once(
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        log(f"timeout after {timeout}s; sending SIGTERM")
-        try:
-            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            else:
-                proc.terminate()
-        except (ProcessLookupError, PermissionError) as e:
-            log(f"SIGTERM failed: {e}")
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            log("SIGTERM ignored; sending SIGKILL")
-            try:
-                if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                else:
-                    proc.kill()
-            except (ProcessLookupError, PermissionError):
-                pass
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                log("zombie: SIGKILL also unresponsive")
+        _terminate_provider_process_group(proc, f"timeout after {timeout}s")
+    except BaseException:
+        _terminate_provider_process_group(proc, "wrapper interrupted")
+        t_out.join(timeout=2)
+        t_err.join(timeout=2)
+        raise
 
     t_out.join(timeout=2)
     t_err.join(timeout=2)

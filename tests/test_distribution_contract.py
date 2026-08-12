@@ -261,6 +261,47 @@ def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
     assert "After the first or third outcome" in skill
 
 
+def test_cross_family_skill_cancels_every_sibling_on_first_leg_failure() -> None:
+    skill = " ".join(
+        _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
+    )
+    leg_contracts = " ".join(
+        _text(
+            SKILLS
+            / "triad-cross-family-review"
+            / "references"
+            / "leg-contracts.md"
+        ).split()
+    )
+    routing = " ".join(
+        _text(
+            SKILLS
+            / "triad-cross-family-review"
+            / "references"
+            / "reviewer-routing.md"
+        ).split()
+    )
+    convergence = " ".join(
+        _text(
+            SKILLS
+            / "triad-cross-family-review"
+            / "references"
+            / "convergence.md"
+        ).split()
+    )
+
+    for text in (skill, leg_contracts, routing, convergence):
+        assert "first required-leg failure" in text
+        assert "terminate every still-running leg" in text
+        assert "discard every current-round verdict" in text
+        assert "never continue a sibling merely to collect advisory evidence" in text
+    assert (
+        "confirm that every exact provider process tree is gone before integrity verification"
+        in skill
+    )
+    assert "repair the infrastructure defect before preparing a fresh review ID" in skill
+
+
 def test_cross_family_skill_uses_current_task_authority_before_preparing() -> None:
     skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
 

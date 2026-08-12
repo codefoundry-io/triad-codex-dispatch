@@ -133,7 +133,11 @@ in the round.
 7. **Admit results.** Each family returns one JSON object matching
    `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
    the packaged validator. A missing, refused, malformed, route-mismatched, or
-   incomplete required leg invalidates the round.
+   incomplete required leg invalidates the round. At the first required-leg failure, immediately
+   terminate every still-running leg and its exact provider process group. Wait and confirm that every exact
+   provider process tree is gone before integrity verification, then discard every current-round
+   verdict; never continue a sibling merely to collect advisory evidence. After Step 8, clean the
+   exact managed root and repair the infrastructure defect before preparing a fresh review ID.
 8. **Verify integrity.** For prepared-directory review rounds, after all required legs terminate, run
    `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`;
    the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch.
@@ -193,4 +197,4 @@ imports, or an already-running session are not acceptance evidence.
 | Design/spec/capability/scope delta | Ask owner before editing |
 | Conflicting verified claims | Ask owner to adjudicate |
 | Alternating advice on unchanged bytes | Stop and ask owner |
-| Missing/invalid required leg | Invalidate the round |
+| Missing/invalid required leg | Cancel siblings, discard every verdict, verify and clean, then repair infrastructure |

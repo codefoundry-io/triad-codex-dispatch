@@ -17,6 +17,10 @@ itself. If a workspace requires a launcher shell, keep that redirection inside
 that launcher command so launcher-startup stdout cannot contaminate the result
 JSON. Never strip or filter a contaminated result; invalidate the round, fix the
 invocation contract, and restart every required family under a fresh ID.
+At the first required-leg failure, terminate every still-running leg and its
+exact provider process group, discard every current-round verdict, and never
+continue a sibling merely to collect advisory evidence. Confirm termination,
+verify integrity, clean the exact round, and repair the defect before a fresh ID.
 
 ## Claude
 

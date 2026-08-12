@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+import os
+import signal
 import sys
 import subprocess
 from pathlib import Path
@@ -33,6 +36,40 @@ def _ok() -> _common.RunResult:
         final_answer="ok",
         vendor_exit_code=0,
     )
+
+
+def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> None:
+    interruption = KeyboardInterrupt("cancel invalid round")
+    signals: list[tuple[int, int]] = []
+
+    class InterruptingProcess:
+        pid = 4242
+        stdin = None
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = None
+
+        def __init__(self) -> None:
+            self.wait_calls: list[int] = []
+
+        def wait(self, timeout: int) -> int:
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise interruption
+            self.returncode = -signal.SIGTERM
+            return self.returncode
+
+    process = InterruptingProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: process)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+
+    assert caught.value is interruption
+    assert signals == [(process.pid, signal.SIGTERM)]
+    assert process.wait_calls == [60, 5]
 
 
 def test_packaged_leg_verdict_loads_under_hardened_wrapper(monkeypatch) -> None:

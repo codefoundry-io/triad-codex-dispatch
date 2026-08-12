@@ -31,6 +31,10 @@ receipt compatibility mode is supported. Provider permissions do not prove a
 no-edit boundary; prompt controls and integrity verification decide admission
 within their stated scopes. Round integrity verification binds the selected
 prepared-directory bytes or worktree review digest plus canonical worktree fingerprint.
+At the first required-leg failure, terminate every still-running leg and its
+exact provider process group, discard every current-round verdict, and never
+continue a sibling merely to collect advisory evidence. Confirm termination,
+verify integrity, clean the exact round, and repair the defect before a fresh ID.
 External-state change through a configured
 MCP tool is prompt-controlled and reviewer-disclosed; it is not mechanically
 observed by round integrity.
