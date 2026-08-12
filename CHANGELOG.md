@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.536 — 2026-08-12
+
+- Binds the formal Antigravity verdict schema to the exact review ID, Google
+  family, content digest, and repository-relative inspected-surface shape before
+  generation, while retaining the local semantic checks after generation.
+- Makes any required-leg infrastructure failure invalidate the whole round
+  immediately: running sibling provider process groups are terminated and
+  reaped, every current-round verdict is discarded, and only a fresh review ID
+  may be used after the infrastructure defect is repaired.
+
 ## 0.2.535 — 2026-08-12
 
 - Keeps operational three-family review prompts under the Codex leader and
