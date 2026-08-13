@@ -54,6 +54,11 @@ _REVIEWER_CONTEXT_CONTRACT = (
     "required evidence in open_questions rather than guessing; any open question requires "
     "NOT-SAFE."
 )
+_RESULT_METADATA_COPY_CONTRACT = (
+    "Construct review_id, family, and content_digest by copying their complete string values "
+    "directly from the single Review metadata JSON record. Before returning, compare each "
+    "copied value character-for-character with that record; the three pairs must be identical."
+)
 
 
 class RoundIntegrityError(ValueError):
@@ -1192,6 +1197,8 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         "verdict_schema:LegVerdict. "
         "Bind the returned review_id, family, and content_digest to metadata.review_id, "
         "metadata.family, and metadata.content_digest. "
+        + _RESULT_METADATA_COPY_CONTRACT
+        + " "
         "Use exactly these keys and value shapes: "
         '{"review_id":"<bound review id>","family":"claude|google|codex",'
         '"content_digest":"<64 lowercase hex>","verdict":"SAFE|NOT-SAFE",'
@@ -1303,7 +1310,9 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         "read credentials, authentication files, environment dumps, provider logs, or unrelated "
         "paths. Return exactly one JSON object matching verdict_schema:LegVerdict. Bind the returned "
         "review_id, family, and content_digest to metadata.review_id, metadata.family, and "
-        "metadata.content_digest. Use exactly these keys and value shapes: "
+        "metadata.content_digest. "
+        + _RESULT_METADATA_COPY_CONTRACT
+        + " Use exactly these keys and value shapes: "
         '{"review_id":"<bound review id>","family":"claude|google|codex",'
         '"content_digest":"<64 lowercase hex>","verdict":"SAFE|NOT-SAFE",'
         '"criteria_checked":["criterion"],"findings":[{"severity":"Critical|Major|Minor",'

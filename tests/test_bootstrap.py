@@ -466,7 +466,7 @@ def test_bootstrap_source_contains_no_retired_permission_controller_names() -> N
     assert "install_codex_rules" not in text
 
 
-def test_bootstrap_help_describes_google_route_fallback() -> None:
+def test_bootstrap_help_describes_claude_parity_agy_native_auth_route() -> None:
     result = subprocess.run(
         ["bash", str(BOOTSTRAP), "--help"],
         text=True,
@@ -476,11 +476,13 @@ def test_bootstrap_help_describes_google_route_fallback() -> None:
 
     assert result.returncode == 2
     help_text = " ".join(result.stderr.split())
-    assert "agy, or configured Gemini Enterprise/Business" in help_text
+    assert "agy with either personal Google Sign-In or Gemini Enterprise Business Sign-In" in help_text
     assert "same authenticated login terminal" in help_text
-    assert "deliberately selects AGY native headless always-proceed for that child" in help_text
-    assert "internal --dangerously-skip-permissions flag" in help_text
-    assert "does not change stored or global user/project settings" in help_text
+    assert "transient global-settings transaction" in help_text
+    assert "restores the original bytes" in help_text
+    assert "Gemini Enterprise Business Sign-In" in help_text
+    assert "--dangerously-skip-permissions" in help_text
+    assert "does not install persistent global AGY permission policy" in help_text
     assert "does not install or inject a separate Codex profile" in help_text
     assert "Agent Review" not in help_text
     assert "granular.rules" not in help_text
@@ -2831,21 +2833,16 @@ def test_check_warns_when_gemini_binary_is_missing(tmp_path):
     assert "optional binary not found: gemini" in result.stdout
 
 
-def test_check_reports_gemini_fallback_candidate_when_agy_is_absent(tmp_path: Path) -> None:
+def test_check_rejects_gemini_without_agy_for_formal_enterprise_use(tmp_path: Path) -> None:
     result, _env, _launchers = _run_bootstrap(
         tmp_path, fake_names=("codex", "claude", "gemini")
     )
 
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert "Gemini fallback candidate" in result.stdout
-    assert "executable presence only" in result.stdout
-    assert "must be proven in the owner's authenticated terminal" in result.stdout
-    assert "using Gemini Enterprise/Business fallback" not in result.stdout
+    assert result.returncode != 0
+    assert "missing formal Google reviewer: agy" in result.stderr
+    assert "Gemini Enterprise Business Sign-In is provided by agy" in result.stderr
 
-
-
-
-def test_check_prefers_agy_and_requires_one_google_route(tmp_path: Path) -> None:
+def test_check_requires_agy_for_both_native_authentication_classes(tmp_path: Path) -> None:
     both, _env, _launchers = _run_bootstrap(
         tmp_path, fake_names=("codex", "claude", "agy", "gemini")
     )
@@ -2854,10 +2851,11 @@ def test_check_prefers_agy_and_requires_one_google_route(tmp_path: Path) -> None
     )
 
     assert both.returncode == 0, both.stderr + both.stdout
-    assert "found Google route: agy" in both.stdout
+    assert "found native Google reviewer: agy" in both.stdout
+    assert "personal Google Sign-In or Gemini Enterprise Business Sign-In" in both.stdout
     assert "fallback" not in both.stdout
     assert neither.returncode != 0
-    assert "missing Google route: agy or gemini" in neither.stderr
+    assert "missing formal Google reviewer: agy" in neither.stderr
 
 
 def test_check_fails_when_required_binary_is_missing(tmp_path):

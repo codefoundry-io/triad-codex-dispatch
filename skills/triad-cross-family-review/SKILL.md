@@ -124,16 +124,17 @@ in the round.
    clean up that returned root. After the first or third outcome, fix the skill or tool and its regression test before another dispatch,
    then start again from preparation with a fresh review ID. Never manually
    rebuild or alter a packet to bypass the defect.
-6. **Dispatch the round.** Read
-   [reviewer routing](references/reviewer-routing.md), then start all three independent
-   legs before consuming a verdict. Reviewers may read and search only; they do
-   not edit or execute candidate code, tests, builds, hooks, or scripts. For every
-   Claude, AGY, and authorized Gemini fallback wrapper invocation, set
-   `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
+6. **Preflight the Google leg, then dispatch the round.** Read [reviewer routing](references/reviewer-routing.md) and [leg contracts](references/leg-contracts.md). Before starting any family, record the owner-selected AGY authentication class: personal Google Sign-In or Business Sign-In for Gemini Enterprise. A missing binary, model, or settings transaction stops with zero provider legs started.
+   TRIAD never signs in, changes the active AGY account, or switches authentication classes after failure. Only after preflight succeeds, start all three independent legs before consuming a verdict. Reviewers may read and search only; they do not edit or execute candidate code, tests, builds, hooks, or scripts.
+   For every Claude and AGY wrapper invocation, set `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
 7. **Admit results.** Each family returns one JSON object matching
    `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
-   the packaged validator. A missing, refused, malformed, route-mismatched, or
-   incomplete required leg invalidates the round.
+   the packaged validator. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical. A missing, refused, malformed, route-mismatched, or
+   incomplete required leg invalidates the round. At the first required-leg failure, immediately
+   terminate every still-running leg and its exact provider process group. Wait and confirm that every exact
+   provider process tree is gone before integrity verification, then discard every current-round
+   verdict; never continue a sibling merely to collect advisory evidence. After Step 8, clean the
+   exact managed root and repair the infrastructure defect before preparing a fresh review ID.
 8. **Verify integrity.** For prepared-directory review rounds, after all required legs terminate, run
    `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`;
    the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch.
@@ -193,4 +194,4 @@ imports, or an already-running session are not acceptance evidence.
 | Design/spec/capability/scope delta | Ask owner before editing |
 | Conflicting verified claims | Ask owner to adjudicate |
 | Alternating advice on unchanged bytes | Stop and ask owner |
-| Missing/invalid required leg | Invalidate the round |
+| Missing/invalid required leg | Cancel siblings, discard every verdict, verify and clean, then repair infrastructure |

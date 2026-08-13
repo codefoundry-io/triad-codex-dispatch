@@ -17,6 +17,10 @@ itself. If a workspace requires a launcher shell, keep that redirection inside
 that launcher command so launcher-startup stdout cannot contaminate the result
 JSON. Never strip or filter a contaminated result; invalidate the round, fix the
 invocation contract, and restart every required family under a fresh ID.
+At the first required-leg failure, terminate every still-running leg and its
+exact provider process group, discard every current-round verdict, and never
+continue a sibling merely to collect advisory evidence. Confirm termination,
+verify integrity, clean the exact round, and repair the defect before a fresh ID.
 
 ## Claude
 
@@ -31,6 +35,9 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
   --effort xhigh \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
+  --expected-review-id "$review_id" \
+  --expected-family claude \
+  --expected-content-digest "$review_digest" \
   > "$claude_result_file"
 ```
 
@@ -58,53 +65,69 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
 ## Google family
 
 Before the round, prove `agy --version` is at least 1.1.10 and `agy models`
-advertises `gemini-3.1-pro-high`. Use:
+advertises `gemini-3.1-pro-high`. Before starting any family, run this
+non-model wrapper preflight to validate the same binary/version and route:
 
 ```text
 TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
 python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --prompt-file "$review_prompt_file" \
   --cwd "$review_shared" \
+  --sandbox read-only \
+  --model gemini-3.1-pro-high \
+  --effort high \
+  --preflight-only \
+  > "$google_preflight_file"
+```
+
+The receipt must report `"provider_started": false`. A preflight failure stops
+the round before Claude, Google, or Codex starts. After successful preflight,
+use:
+
+```text
+TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
+python3 "$toolkit_root/bin/antigravity_wrapper.py" \
+  --prompt-file "$review_prompt_file" \
+  --cwd "$review_shared" \
+  --sandbox read-only \
   --model gemini-3.1-pro-high \
   --effort high \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
+  --expected-review-id "$review_id" \
+  --expected-family google \
+  --expected-content-digest "$review_digest" \
   > "$google_result_file"
 ```
 
-The wrapper uses AGY native `stream-json` plus `json-schema` and validates the
-terminal result locally. The selected formal AGY leg uses the explicit 1,800-second
-end-to-end wrapper deadline; shorter polling waits are wake-up boundaries, not
-provider failures. The wrapper internally inserts
-`--dangerously-skip-permissions`. Callers do not pass this flag. The wrapper
-does not edit user settings, add a command-specific allowlist or sandbox, or
-suppress tools. Provider-native tools, installed CLI tools, and configured MCP
-tools remain available for reads and searches inside the authorized review
-boundary.
+The same packaged AGY wrapper supports either personal Google Sign-In or
+Business Sign-In for Gemini Enterprise with an owner-provisioned GE Standard
+or GE Plus seat. It uses `stream-json` and `json-schema`, then
+validates the terminal result locally. Matching the deployed Claude-led TRIAD,
+formal AGY passes `--sandbox`, brackets the call in a transient global-settings
+transaction that unions `write_file(*)`, `command(*)`, `unsandboxed(*)`,
+`execute_url(*)`, and `mcp(*)`, and restores the original bytes. AGY 1.1.3+
+also receives the wrapper-owned `--dangerously-skip-permissions` adaptation so
+headless read tools work, unless the operator sets
+`AGY_NO_HEADLESS_AUTOAPPROVE=1`. `--dangerously-skip-permissions` voids the deny
+transaction and AGY OS-ring;
+the formal Google leg is read-only by intent plus the round-integrity checks,
+not an enforced filesystem or network boundary. Callers never pass the flag. The
+formal child environment removes known API-key, ADC, Vertex, SDK-enterprise,
+cloud project/location/quota, and `AGY_ADC_AUTH` route selectors without reading
+their values. Native sign-in state remains provider-owned; TRIAD does not log
+in, switch accounts, or choose a billed API route.
+
+The selected formal AGY leg uses the explicit 1,800-second end-to-end wrapper
+deadline; shorter polling waits are wake-up boundaries, not provider failures.
 Do not edit files, change external state, or execute candidate code, tests,
-builds, hooks, or scripts. If AGY is unavailable before submission, the leader
-may select the documented Gemini route before starting a fresh round. A
-failure after submission invalidates the Google leg; clean it, correct the
-route, and restart every required family under a fresh review ID instead of
-substituting providers mid-round.
-
-For a separately authorized pre-submission Gemini fallback, use the packaged
-wrapper and the exact owner-authorized Gemini model:
-
-```text
-TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
-python3 "$toolkit_root/bin/gemini_wrapper.py" \
-  --prompt-file "$review_prompt_file" \
-  --cwd "$review_shared" \
-  --model "$review_gemini_model" \
-  --pydantic verdict_schema:LegVerdict \
-  > "$google_result_file"
-```
-
-The owner-approved 1,800-second correction applies to the selected AGY route
-that produced the observed post-submission timeout. It does not silently change
-this separately authorized fallback's deadline; any such change requires its
-own owner decision.
+builds, hooks, or scripts. If AGY, the model, or the settings transaction is
+unavailable, invalidate the round. Clean it and repair the same selected AGY
+authentication class before restarting every required family under a fresh
+review ID. Do not change from personal Google Sign-In to Business Sign-In for
+Gemini Enterprise, or the reverse, as recovery.
+If the operator opt-out makes headless review unavailable, preserve the opt-out
+and report that same-route blocker rather than overriding it.
 
 This exact formal schema route makes one provider call. Capacity failure or
 invalid structured output is terminal for that invocation; the wrapper makes
@@ -136,7 +159,7 @@ Give it the same absolute prepared directory, objective, criteria, digest, and
 MCP tools remain available for reads and searches inside the authorized review
 boundary. Do not edit files, change external state, or execute candidate code,
 tests, builds, hooks, or scripts. Save its terminal JSON outside the prepared
-directory and validate it with:
+directory. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical. Validate it with:
 
 ```text
 python3 "$toolkit_root/bin/verdict_schema.py" validate \

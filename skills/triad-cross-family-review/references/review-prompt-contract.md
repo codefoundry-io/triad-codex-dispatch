@@ -52,6 +52,7 @@ approved boundary. Enumerate the criteria actually checked.
 
 Set `review_id`, `family`, and `content_digest` exactly to
 `metadata.review_id`, `metadata.family`, and `metadata.content_digest`.
+Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical.
 Return exactly one JSON object matching `verdict_schema:LegVerdict`:
 
 ```json

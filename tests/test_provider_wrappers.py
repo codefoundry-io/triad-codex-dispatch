@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import io
+import json
+import os
+import signal
 import sys
 import subprocess
 from pathlib import Path
@@ -16,6 +20,7 @@ import _common  # noqa: E402
 import antigravity_wrapper  # noqa: E402
 import claude_wrapper  # noqa: E402
 import gemini_wrapper  # noqa: E402
+from verdict_schema import LegVerdict  # noqa: E402
 
 
 class _StructuredAnswer(BaseModel):
@@ -33,6 +38,40 @@ def _ok() -> _common.RunResult:
         final_answer="ok",
         vendor_exit_code=0,
     )
+
+
+def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> None:
+    interruption = KeyboardInterrupt("cancel invalid round")
+    signals: list[tuple[int, int]] = []
+
+    class InterruptingProcess:
+        pid = 4242
+        stdin = None
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = None
+
+        def __init__(self) -> None:
+            self.wait_calls: list[int] = []
+
+        def wait(self, timeout: int) -> int:
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise interruption
+            self.returncode = -signal.SIGTERM
+            return self.returncode
+
+    process = InterruptingProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: process)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+
+    assert caught.value is interruption
+    assert signals == [(process.pid, signal.SIGTERM)]
+    assert process.wait_calls == [60, 5]
 
 
 def test_packaged_leg_verdict_loads_under_hardened_wrapper(monkeypatch) -> None:
@@ -195,6 +234,182 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
         )
     assert "--json-schema" in calls[0]
     assert pruned == ["claude"]
+
+
+def test_claude_formal_leg_binds_native_schema_and_local_admission(
+    monkeypatch, capsys
+) -> None:
+    calls: list[list[str]] = []
+    payload = {
+        "review_id": "review-r1",
+        "family": "claude",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: "/opt/bin/claude")
+    monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
+
+    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+        calls.append(cmd)
+        schema = json.loads(cmd[cmd.index("--json-schema") + 1])
+        properties = schema["properties"]
+        assert properties["review_id"]["const"] == "review-r1"
+        assert properties["family"]["const"] == "claude"
+        assert properties["content_digest"]["const"] == "a" * 64
+        return _common.RunResult(
+            exit_code=0,
+            stdout=json.dumps(
+                {
+                    "is_error": False,
+                    "result": json.dumps(payload),
+                    "structured_output": payload,
+                }
+            ),
+            stderr="",
+            elapsed_s=0.2,
+            vendor_exit_code=0,
+        )
+
+    monkeypatch.setattr(_common, "_run_once", fake_once)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "claude",
+            "--expected-content-digest",
+            "a" * 64,
+        ],
+    )
+
+    assert claude_wrapper.main() == 0
+    assert json.loads(capsys.readouterr().out) == payload
+    assert len(calls) == 1
+
+
+def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
+    monkeypatch, capsys
+) -> None:
+    payload = {
+        "review_id": "review-r1",
+        "family": "claude",
+        "content_digest": "b" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: "/opt/bin/claude")
+    monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *_a, **_k: None)
+    monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        _common,
+        "_run_once",
+        lambda *_a, **_k: _common.RunResult(
+            exit_code=0,
+            stdout=json.dumps(
+                {
+                    "is_error": False,
+                    "result": json.dumps(payload),
+                    "structured_output": payload,
+                }
+            ),
+            stderr="",
+            elapsed_s=0.2,
+            vendor_exit_code=0,
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "claude",
+            "--expected-content-digest",
+            "a" * 64,
+        ],
+    )
+
+    assert claude_wrapper.main() == _common.EXIT_SCHEMA_FAIL
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    "binding_args",
+    (
+        ("--expected-review-id", "review-r1"),
+        (
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "claude",
+            "--expected-content-digest",
+            "a" * 64,
+            "--pydantic",
+            f"{__name__}:_StructuredAnswer",
+        ),
+        (
+            "--expected-review-id",
+            "invalid/review",
+            "--expected-family",
+            "claude",
+            "--expected-content-digest",
+            "a" * 64,
+        ),
+        (
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "claude",
+            "--expected-content-digest",
+            "A" * 64,
+        ),
+    ),
+)
+def test_claude_formal_leg_rejects_invalid_bindings_before_provider_resolution(
+    monkeypatch, binding_args
+) -> None:
+    monkeypatch.setattr(
+        claude_wrapper,
+        "require_binary",
+        lambda _name: (_ for _ in ()).throw(AssertionError("provider resolved")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            *binding_args,
+        ],
+    )
+
+    assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
 
 
 def test_claude_wrapper_rejects_removed_formal_read_tools_flag(monkeypatch, capsys) -> None:

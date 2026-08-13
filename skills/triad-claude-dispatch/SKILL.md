@@ -23,9 +23,11 @@ modify Claude authentication, permissions, or user configuration.
 
 Use `triad-cross-family-review` and read its
 `references/leg-contracts.md`. The formal Claude route is `--model opus
---effort xhigh --timeout 1800 --pydantic verdict_schema:LegVerdict`. Claude
-reviews only; it does not edit or execute candidate code. One validated result
-belongs to one review ID and content digest.
+--effort xhigh --timeout 1800 --pydantic verdict_schema:LegVerdict
+--expected-review-id "$review_id" --expected-family claude
+--expected-content-digest "$review_digest"`. Claude reviews only; it does not
+edit or execute candidate code. One validated result belongs to one review ID
+and content digest.
 
 ## Result handling
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 
 import _common
@@ -33,7 +34,14 @@ EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
 
 
 def _run_native_structured_once(
-    cmd: list[str], cwd: str, timeout: int, pydantic_cls
+    cmd: list[str],
+    cwd: str,
+    timeout: int,
+    pydantic_cls,
+    *,
+    expected_review_id: str | None = None,
+    expected_family: str | None = None,
+    expected_content_digest: str | None = None,
 ) -> _common.RunResult:
     """Run one Claude call and validate its native structured output."""
     _common.prune_stale_run_logs("claude")
@@ -84,11 +92,23 @@ def _run_native_structured_once(
             answer, pydantic_cls
         )
         if valid:
-            result.classification = "ok"
-            result.validated = validated_or_error
-            result.final_answer = json.dumps(
-                validated_or_error, ensure_ascii=False
-            )
+            for field, expected in (
+                ("review_id", expected_review_id),
+                ("family", expected_family),
+                ("content_digest", expected_content_digest),
+            ):
+                if expected is not None and validated_or_error.get(field) != expected:
+                    result.classification = "schema-fail"
+                    result.exit_code = _common.EXIT_SCHEMA_FAIL
+                    result.validation_error = f"{field.replace('_', ' ')} mismatch"
+                    result.final_answer = ""
+                    break
+            else:
+                result.classification = "ok"
+                result.validated = validated_or_error
+                result.final_answer = json.dumps(
+                    validated_or_error, ensure_ascii=False
+                )
         else:
             result.classification = "schema-fail"
             result.exit_code = _common.EXIT_SCHEMA_FAIL
@@ -143,6 +163,9 @@ def main() -> int:
         default=None,
         help="pydantic class spec (module.path:ClassName) for schema enforcement",
     )
+    p.add_argument("--expected-review-id", default=None)
+    p.add_argument("--expected-family", choices=("claude",), default=None)
+    p.add_argument("--expected-content-digest", default=None)
     p.add_argument(
         "--repair-mode",
         action="store_true",
@@ -186,6 +209,25 @@ def main() -> int:
         log("--repair-mode is unavailable with --pydantic structured output")
         return EXIT_ARG_ERROR
 
+    binding_values = (
+        args.expected_review_id,
+        args.expected_family,
+        args.expected_content_digest,
+    )
+    if any(value is not None for value in binding_values):
+        if not all(value is not None for value in binding_values):
+            log("formal verdict bindings must be supplied together")
+            return EXIT_ARG_ERROR
+        if args.pydantic != "verdict_schema:LegVerdict":
+            log("formal verdict bindings require --pydantic verdict_schema:LegVerdict")
+            return EXIT_ARG_ERROR
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.expected_review_id) is None:
+            log("expected review ID has invalid syntax")
+            return EXIT_ARG_ERROR
+        if re.fullmatch(r"[0-9a-f]{64}", args.expected_content_digest) is None:
+            log("expected content digest must be 64 lowercase hexadecimal characters")
+            return EXIT_ARG_ERROR
+
     claude_bin = require_binary("claude")
 
     def build_cmd(
@@ -208,8 +250,14 @@ def main() -> int:
 
     native_schema = None
     if pydantic_cls is not None:
+        schema_object = pydantic_cls.model_json_schema()
+        if all(value is not None for value in binding_values):
+            properties = schema_object["properties"]
+            properties["review_id"]["const"] = args.expected_review_id
+            properties["family"]["const"] = args.expected_family
+            properties["content_digest"]["const"] = args.expected_content_digest
         native_schema = json.dumps(
-            pydantic_cls.model_json_schema(),
+            schema_object,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -218,6 +266,9 @@ def main() -> int:
             args.cwd,
             args.timeout,
             pydantic_cls,
+            expected_review_id=args.expected_review_id,
+            expected_family=args.expected_family,
+            expected_content_digest=args.expected_content_digest,
         )
     else:
         result = run_cli_with_retry(

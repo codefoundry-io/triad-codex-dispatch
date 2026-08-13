@@ -33,6 +33,10 @@ work only when it cannot pre-decide or conflict with the owner's choice.
 One round ends after all three legs terminate and integrity is verified. A
 bounded fix, owner-approved design decision, corrected route, or material new
 evidence creates a new review basis and permits a fresh complete round.
+At the first required-leg failure, terminate every still-running leg and its
+exact provider process group, discard every current-round verdict, and never
+continue a sibling merely to collect advisory evidence. Confirm termination,
+verify integrity, clean the exact round, and repair the defect before a fresh ID.
 
 There is no fixed maximum round count. Stop only on unanimous admissible
 `SAFE`, an owner decision, `CONFLICTED`, `OSCILLATING`, or an invalid required

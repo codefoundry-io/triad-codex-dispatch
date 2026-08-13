@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.539 — 2026-08-14
+
+- Makes the formal Google leg use the deployed Claude-led AGY behavior: native
+  personal or Gemini Enterprise Business Sign-In, `--sandbox read-only`, the
+  transient five-deny global-settings transaction, and the wrapper-owned
+  headless adaptation with its operator opt-out and intent-only residual.
+- Removes API-key, ADC, Vertex, SDK-enterprise, cloud-project, location, and
+  quota route selectors from the formal AGY child without reading their values;
+  TRIAD never switches accounts or falls back to another provider.
+- Validates the settings transaction during provider-free preflight, preserves
+  the selected AGY authentication class on failure, and makes the standalone
+  Gemini wrapper explicitly ineligible as a formal Google-leg substitute.
+- Adds focused restoration, provider-failure, preflight-failure, bootstrap,
+  distribution, and skill behavior regressions while preserving the copied
+  Claude settings helper byte-for-byte.
+
+## 0.2.538 — 2026-08-13
+
+- Binds the formal Claude verdict schema to the exact review ID, Claude family,
+  and content digest before provider generation, then repeats those equality
+  checks during local admission.
+- Rejects partial, malformed, or non-formal binding arguments before provider
+  resolution while preserving generic structured-output compatibility.
+- Synchronizes the canonical and standalone published Claude review routes and
+  pins both surfaces with regression tests.
+
+## 0.2.537 — 2026-08-12
+
+- Requires every reviewer to copy the complete review ID, family, and content
+  digest directly from the single canonical metadata record and compare all
+  three values character-for-character before returning its verdict.
+
+## 0.2.536 — 2026-08-12
+
+- Binds the formal Antigravity verdict schema to the exact review ID, Google
+  family, content digest, and repository-relative inspected-surface shape before
+  generation, while retaining the local semantic checks after generation.
+- Makes any required-leg infrastructure failure invalidate the whole round
+  immediately: running sibling provider process groups are terminated and
+  reaped, every current-round verdict is discarded, and only a fresh review ID
+  may be used after the infrastructure defect is repaired.
+
 ## 0.2.535 — 2026-08-12
 
 - Keeps operational three-family review prompts under the Codex leader and

@@ -19,7 +19,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.535"
+    assert manifest["version"] == "0.2.539"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -78,10 +78,7 @@ def test_cross_family_skill_has_one_round_unit_and_owner_design_gate() -> None:
 def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     claude = _text(SKILLS / "triad-claude-dispatch" / "SKILL.md")
     leg_contracts = _text(
-        SKILLS
-        / "triad-cross-family-review"
-        / "references"
-        / "leg-contracts.md"
+        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
     )
     prompt_contract = _text(
         SKILLS
@@ -90,10 +87,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         / "review-prompt-contract.md"
     )
     reviewer_routing = _text(
-        SKILLS
-        / "triad-cross-family-review"
-        / "references"
-        / "reviewer-routing.md"
+        SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
     )
     agy = _text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md")
     gemini = _text(SKILLS / "triad-gemini-dispatch" / "SKILL.md")
@@ -112,6 +106,9 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
 
     assert "--model opus" in claude and "--effort xhigh" in claude
     assert "--timeout 1800" in claude
+    assert '--expected-review-id "$review_id"' in claude
+    assert "--expected-family claude" in claude
+    assert '--expected-content-digest "$review_digest"' in claude
     assert (
         "Claude: `opus`, `xhigh`, retained 1,800-second end-to-end wrapper deadline."
         in compact_reviewer_routing
@@ -123,9 +120,17 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     for compact in (compact_leg_contracts, compact_prompt_contract):
         assert "installed CLI tools" in compact
         assert "Configured MCP servers remain available" in compact
-        assert "Existing user permission settings continue to govern MCP calls" in compact
-        assert "Approved official-web reads through read-only MCP tools remain available" in compact
-        assert "Do not edit files, change external state, or execute candidate code" in compact
+        assert (
+            "Existing user permission settings continue to govern MCP calls" in compact
+        )
+        assert (
+            "Approved official-web reads through read-only MCP tools remain available"
+            in compact
+        )
+        assert (
+            "Do not edit files, change external state, or execute candidate code"
+            in compact
+        )
     assert (
         "Round integrity verification binds the selected prepared-directory bytes or "
         "worktree review digest plus canonical worktree fingerprint"
@@ -133,8 +138,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     )
     assert (
         "External-state change through a configured MCP tool is prompt-controlled and "
-        "reviewer-disclosed"
-        in compact_reviewer_routing
+        "reviewer-disclosed" in compact_reviewer_routing
     )
     assert (
         "The prepared-directory digest monitors every prepared regular file"
@@ -142,13 +146,11 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     )
     assert (
         "the canonical-worktree fingerprint monitors Git HEAD, staged and unstaged "
-        "tracked changes, and non-ignored untracked entries"
-        in compact_leg_contracts
+        "tracked changes, and non-ignored untracked entries" in compact_leg_contracts
     )
     assert (
         "separate selected-member comparisons cover listed source members even when "
-        "Git-ignored"
-        in compact_leg_contracts
+        "Git-ignored" in compact_leg_contracts
     )
     assert (
         "Mutations in other Git-ignored worktree paths, paths outside both directories, "
@@ -168,16 +170,54 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "--effort high" in agy
     assert "--timeout 1800" in agy
     assert "stream-json" in agy and "json-schema" in agy
-    for text in (agy, leg_contracts):
-        compact = " ".join(text.split())
-        assert "internally inserts `--dangerously-skip-permissions`" in compact
-        assert "Callers do not pass this flag" in compact
-        assert "does not edit user settings" in compact
-        assert "command-specific allowlist" in compact
+    compact_agy = " ".join(agy.split())
+    compact_leg_contracts = " ".join(leg_contracts.split())
+    assert "internally inserts `--dangerously-skip-permissions`" in compact_agy
+    assert "Callers do not pass this flag" in compact_agy
+    assert "`AGY_NO_HEADLESS_AUTOAPPROVE=1`" in compact_agy
+    assert "transient global-settings transaction" in compact_agy
+    assert "restores the original bytes" in compact_agy
+    assert "read-only by intent" in compact_agy
+    assert "does not edit user settings" not in compact_agy
+    assert "--sandbox read-only" in agy
+    assert "--sandbox read-only" in leg_contracts
+    assert "transient global-settings transaction" in compact_leg_contracts
+    assert "restores the original bytes" in compact_leg_contracts
+    assert "read-only by intent" in compact_leg_contracts
+    assert "Before starting any family" in leg_contracts
+    assert "--preflight-only" in leg_contracts
+    assert '"provider_started": false' in leg_contracts
+    assert "personal Google Sign-In" in compact_leg_contracts
+    assert "Business Sign-In for Gemini Enterprise" in compact_leg_contracts
+    assert "GE Standard or GE Plus" in compact_leg_contracts
+    assert "same packaged AGY wrapper" in compact_leg_contracts
+    assert "bin/gemini_wrapper.py" not in leg_contracts
+    cross_family_skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    assert (
+        "missing binary, model, or settings transaction stops with zero "
+        "provider legs started" in " ".join(cross_family_skill.split())
+    )
+    for compact in (compact_agy, compact_leg_contracts):
         assert "--expected-permission-mode" not in compact
         assert "--init-preflight" not in compact
     log_assignment = 'TRIAD_DISPATCH_LOG_DIR="$review_log_dir"'
     assert leg_contracts.count(log_assignment) == 3
+    assert (
+        "\n".join(
+            (
+                f"{log_assignment} \\",
+                'python3 "$toolkit_root/bin/antigravity_wrapper.py" \\',
+                '  --prompt-file "$review_prompt_file" \\',
+                '  --cwd "$review_shared" \\',
+                "  --sandbox read-only \\",
+                "  --model gemini-3.1-pro-high \\",
+                "  --effort high \\",
+                "  --preflight-only \\",
+                '  > "$google_preflight_file"',
+            )
+        )
+        in leg_contracts
+    )
     provider_commands = (
         (
             "bin/claude_wrapper.py",
@@ -187,24 +227,23 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             "  --effort xhigh \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
+            '  --expected-review-id "$review_id" \\',
+            "  --expected-family claude \\",
+            '  --expected-content-digest "$review_digest" \\',
             '  > "$claude_result_file"',
         ),
         (
             "bin/antigravity_wrapper.py",
             '  --prompt-file "$review_prompt_file" \\',
             '  --cwd "$review_shared" \\',
+            "  --sandbox read-only \\",
             "  --model gemini-3.1-pro-high \\",
             "  --effort high \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
-            '  > "$google_result_file"',
-        ),
-        (
-            "bin/gemini_wrapper.py",
-            '  --prompt-file "$review_prompt_file" \\',
-            '  --cwd "$review_shared" \\',
-            '  --model "$review_gemini_model" \\',
-            "  --pydantic verdict_schema:LegVerdict \\",
+            '  --expected-review-id "$review_id" \\',
+            "  --expected-family google \\",
+            '  --expected-content-digest "$review_digest" \\',
             '  > "$google_result_file"',
         ),
     )
@@ -220,42 +259,97 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "inside that launcher command" in compact_leg_contracts
     assert "Never strip or filter a contaminated result" in compact_leg_contracts
     for family in ("claude", "google", "codex"):
-        assert "\n".join(
-            (
-                'python3 "$toolkit_root/bin/verdict_schema.py" validate \\',
-                f'  --result-file "${family}_result_file" \\',
-                '  --expected-review-id "$review_id" \\',
-                f"  --expected-family {family} \\",
-                '  --expected-content-digest "$review_digest"',
+        assert (
+            "\n".join(
+                (
+                    'python3 "$toolkit_root/bin/verdict_schema.py" validate \\',
+                    f'  --result-file "${family}_result_file" \\',
+                    '  --expected-review-id "$review_id" \\',
+                    f"  --expected-family {family} \\",
+                    '  --expected-content-digest "$review_digest"',
+                )
             )
-        ) in leg_contracts
+            in leg_contracts
+        )
     assert "reviews only" in claude
     assert "reviews only" in agy
     assert "reviews only" in gemini
 
 
-def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
-    skill = " ".join(
-        _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
+def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+    gemini = " ".join(_text(SKILLS / "triad-gemini-dispatch" / "SKILL.md").split())
+    leg_contracts = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
     )
 
+    assert "makes no user-setting change" not in readme
+    assert "user setting을 변경하지 않습니다" not in readme_ko
+    assert "transient AGY global-settings transaction" in readme
+    assert "일시적 AGY global-settings transaction" in readme_ko
+    assert "Gemini is eligible only when AGY is proven unavailable" not in gemini
+    assert "standalone compatibility consult only" in gemini
+    assert (
+        "same packaged AGY wrapper supports either personal Google Sign-In"
+        in leg_contracts
+    )
+
+
+def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+
     assert "A packet workflow defect invalidates the round" in skill
-    assert "fix the skill or tool and its regression test before another dispatch" in skill
+    assert (
+        "fix the skill or tool and its regression test before another dispatch" in skill
+    )
     assert "start again from preparation with a fresh review ID" in skill
     assert "Never reuse an earlier review ID" in skill
     assert "Never manually rebuild or alter a packet to bypass the defect" in skill
     assert (
         "If it neither returned a review root nor named an undeletable partial root, "
-        "record the failure; there is no root to clean up"
-        in skill
+        "record the failure; there is no root to clean up" in skill
     )
     assert (
         "If it names a partial review root that could not be removed, stop and report "
-        "that exact path; do not retry deletion or redispatch"
-        in skill
+        "that exact path; do not retry deletion or redispatch" in skill
     )
     assert "If it returned a review root, clean up that returned root" in skill
     assert "After the first or third outcome" in skill
+
+
+def test_cross_family_skill_cancels_every_sibling_on_first_leg_failure() -> None:
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+    leg_contracts = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+    routing = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
+        ).split()
+    )
+    convergence = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "convergence.md"
+        ).split()
+    )
+
+    for text in (skill, leg_contracts, routing, convergence):
+        assert "first required-leg failure" in text
+        assert "terminate every still-running leg" in text
+        assert "discard every current-round verdict" in text
+        assert "never continue a sibling merely to collect advisory evidence" in text
+    assert (
+        "confirm that every exact provider process tree is gone before integrity verification"
+        in skill
+    )
+    assert (
+        "repair the infrastructure defect before preparing a fresh review ID" in skill
+    )
 
 
 def test_cross_family_skill_uses_current_task_authority_before_preparing() -> None:
@@ -338,8 +432,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     ) in skill
     assert (
         "pass a placeholder command name before the serialized JSON so zsh assigns "
-        "that name to `$0` and the JSON to `$1`"
-        in skill
+        "that name to `$0` and the JSON to `$1`" in skill
     )
     assert (
         "Assign `$1` to a task-specific variable and expand that variable double-quoted"
@@ -347,28 +440,30 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     )
     assert (
         "Bind every dynamic path, review ID, and model value to a task-specific shell "
-        "variable before invocation"
+        "variable before invocation" in skill
+    )
+    assert (
+        "never splice nested quote fragments or leave JSON exposed to glob expansion"
         in skill
     )
-    assert "never splice nested quote fragments or leave JSON exposed to glob expansion" in skill
     assert "Use the exact digest printed by `capture`" in skill
     assert "Do not parse the snapshot JSON to recover or recheck that digest" in skill
-    assert skill.index("Record a fresh review ID") < skill.index("bin/review_round.py prepare")
+    assert skill.index("Record a fresh review ID") < skill.index(
+        "bin/review_round.py prepare"
+    )
     assert "reserved `triad-review-<review-id>` system-temp namespace" in skill
     assert "creates the root exclusively" in skill
     assert "exact member list from the canonical source root" in skill
     assert (
         "Use the canonical Git worktree root as `--source-root`; it must be the same "
-        "canonical worktree root passed to `capture` and `verify`"
-        in skill
+        "canonical worktree root passed to `capture` and `verify`" in skill
     )
     assert "member-list file is the only source-copy IPC" in skill
     assert "`shared/source/product/<member>`" in skill
     assert "no unlisted source member is copied" in skill
     assert (
         "`capture` and `verify` also compare every selected prepared source member with "
-        "that worktree before and after worktree fingerprinting"
-        in skill
+        "that worktree before and after worktree fingerprinting" in skill
     )
     assert "Never copy an earlier prepared packet" in skill
     for prior_round_artifact in (
@@ -388,17 +483,22 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     )
     assert "same-ID collision" in skill
     assert "different review IDs remain isolated" in skill
-    assert "Record the review ID and returned root in the active `TASK.md` or plan" in skill
+    assert (
+        "Record the review ID and returned root in the active `TASK.md` or plan"
+        in skill
+    )
     assert (
         "Carry the printed digest mechanically through every rendered prompt and every admitted "
-        "result"
-        in skill
+        "result" in skill
     )
     assert "results and prompts under the returned review root" in skill
     assert "snapshots and verdicts under that same current root" in skill
     assert '`TRIAD_DISPATCH_LOG_DIR="$review_log_dir"`' in skill
     assert "bin/review_round.py cleanup" in skill
-    assert "Normal cleanup occurs only after final integrity verification and adjudication" in skill
+    assert (
+        "Normal cleanup occurs only after final integrity verification and adjudication"
+        in skill
+    )
     assert "compare the expected root" in skill
     assert "first cleanup result reports `removed: true`" in skill
     assert "including a shell invocation that fails before Python starts" in skill
@@ -406,7 +506,9 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert "confirm that exact root is absent" in skill
     assert "other managed sibling roots remain untouched" in skill
     assert "strictly more than 30 days" in skill
-    assert "Prepare a durable handoff directly at its owner-approved destination" in skill
+    assert (
+        "Prepare a durable handoff directly at its owner-approved destination" in skill
+    )
     assert prompt_contract in raw_skill
     assert leg_contracts in raw_skill
     assert reviewer_routing in raw_skill
@@ -421,19 +523,27 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         "`python3 bin/review_round.py render`"
     ) in skill
     assert "This branch is not a review round or gate" in skill
-    assert "make no review-admission, convergence, adjudication, or gate-passage claim" in skill
-    assert "use supported exact cleanup, and return without entering provider dispatch" in skill
+    assert (
+        "make no review-admission, convergence, adjudication, or gate-passage claim"
+        in skill
+    )
+    assert (
+        "use supported exact cleanup, and return without entering provider dispatch"
+        in skill
+    )
     assert (
         "For prepared-directory review rounds, after all required legs terminate, run "
-        "`python3 bin/review_round.py verify --prepared-dir \"$review_shared\" "
-        "--worktree \"$review_worktree\" --snapshot \"$review_snapshot\"`"
+        '`python3 bin/review_round.py verify --prepared-dir "$review_shared" '
+        '--worktree "$review_worktree" --snapshot "$review_snapshot"`'
     ) in skill
     assert (
         "the task-authorized zero-provider characterization runs "
         "that same command through the Flow step 4 branch"
     ) in skill
     assert "For review rounds, the gate passes only when all required families" in skill
-    assert "For review rounds: Normal cleanup occurs only after final integrity" in skill
+    assert (
+        "For review rounds: Normal cleanup occurs only after final integrity" in skill
+    )
     assert (
         "the task-authorized zero-provider characterization uses the Flow step 4 "
         "verify-and-exact-cleanup branch"
@@ -449,9 +559,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
 
 
 def test_cross_family_skill_requires_the_review_source_manifest() -> None:
-    skill = " ".join(
-        _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
-    )
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
     prompt_contract = " ".join(
         _text(
             SKILLS
@@ -473,14 +581,15 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
 
     assert "`TASK.md`, `REVIEW.diff`, and optional `EVIDENCE.md` only" in skill
     fixed_members = (
-        "`TASK.md`, `REVIEW.diff`, optional `EVIDENCE.md`, and "
-        "`SOURCE_SHA256SUMS`"
+        "`TASK.md`, `REVIEW.diff`, optional `EVIDENCE.md`, and `SOURCE_SHA256SUMS`"
     )
     assert fixed_members in prompt_contract
     assert fixed_members in release_plan
     member_rule = "sorted JSON array of non-empty normalized POSIX relative paths"
     assert member_rule in skill
-    assert 'python3 bin/review_round.py manifest --prepared-dir "$review_shared"' in skill
+    assert (
+        'python3 bin/review_round.py manifest --prepared-dir "$review_shared"' in skill
+    )
     inventory_rule = "sorted JSON array of exact decoded `{path, sha256}` objects"
     assert inventory_rule in skill
     assert inventory_rule in prompt_contract
@@ -494,8 +603,7 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
     assert manifest_coverage_rule in prompt_contract
     assert (
         '"affected_surfaces_inspected": ["source/product/bin/review_round.py", '
-        '"source/product/skills/triad-cross-family-review/SKILL.md"]'
-        in prompt_contract
+        '"source/product/skills/triad-cross-family-review/SKILL.md"]' in prompt_contract
     )
     metadata_rule = (
         "Every rendered prompt carries dynamic values only in one canonical "
@@ -514,7 +622,10 @@ def test_cross_family_skill_requires_the_review_source_manifest() -> None:
         "This workflow prepares `source/product/` from the canonical worktree root"
         in prompt_contract
     )
-    assert "Do not ask how to proceed, omit the verdict, wrap JSON in prose" in prompt_contract
+    assert (
+        "Do not ask how to proceed, omit the verdict, wrap JSON in prose"
+        in prompt_contract
+    )
     for placeholder in (
         '"review_id": "<metadata.review_id>"',
         '"family": "<metadata.family>"',
@@ -529,7 +640,11 @@ def test_retired_review_runtime_is_absent() -> None:
         ROOT / "bin" / "review_evidence.py",
         ROOT / "bin" / "review_coverage.py",
         ROOT / "bin" / "triad_formal_review_schema.py",
-        ROOT / "skills" / "triad-cross-family-review" / "references" / "fresh-codex-formal-review.md",
+        ROOT
+        / "skills"
+        / "triad-cross-family-review"
+        / "references"
+        / "fresh-codex-formal-review.md",
     ]
     assert not any(path.exists() for path in retired)
 
@@ -567,37 +682,22 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
         assert "strictly more than 30 days" in local_data
     permission_contracts = {
         "README.md": (
-            "deliberately select AGY's native headless auto-approval mode `always-proceed`",
-            "replacing `request-review` for that child",
-            "approved internal `--dangerously-skip-permissions` flag",
-            "not caller-supplied",
-            "does not change stored or global user/project settings",
-            "does not install permission profiles or command rules",
-            "does not select a sandbox",
-            "does not change project-trust configuration",
-            "does not restrict installed CLI, MCP, read, or search tools",
+            "native AGY CLI sign-in",
+            "`--sandbox read-only`",
+            "transient global-settings transaction",
+            "restores the original bytes",
         ),
         "README.ko.md": (
-            "승인된 내부 `--dangerously-skip-permissions` flag",
-            "`request-review`를 대체",
-            "AGY native headless auto-approval `always-proceed`를 의도적으로 선택",
-            "caller-supplied가 아닙니다",
-            "stored/global user 또는 project setting을 변경하지",
-            "permission profile이나 command rule을 설치하지",
-            "sandbox를 선택하지",
-            "project-trust configuration을 변경하지",
-            "installed CLI, MCP, read, search tool을 제한하지",
+            "native AGY CLI 로그인",
+            "`--sandbox read-only`",
+            "일시적 global-settings transaction",
+            "원래 바이트를 복원",
         ),
         "SECURITY.md": (
-            "deliberately select AGY's native headless auto-approval mode `always-proceed`",
-            "replacing `request-review` for that child",
-            "approved internal `--dangerously-skip-permissions` flag",
-            "not caller-supplied",
-            "does not change stored or global user/project settings",
-            "does not install permission profiles or command rules",
-            "does not select a sandbox",
-            "does not change project-trust configuration",
-            "does not restrict installed CLI, MCP, read, or search tools",
+            "native AGY CLI sign-in",
+            "`--sandbox read-only`",
+            "transient global-settings transaction",
+            "restores the original bytes",
         ),
     }
     for name, phrases in permission_contracts.items():
@@ -623,9 +723,7 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
             "TRIAD does not select or override a permission mode",
             "strengthen or weaken native authority",
         ),
-        "skills/triad-cross-family-review/references/reviewer-routing.md": (
-            "Native provider and project permissions remain in force.",
-        ),
+        "skills/triad-cross-family-review/references/reviewer-routing.md": (),
     }
     for name, claims in contradictory_claims.items():
         compact = " ".join(public_docs[name].split())
@@ -634,7 +732,14 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
     routing = public_docs[
         "skills/triad-cross-family-review/references/reviewer-routing.md"
     ]
-    assert "documented packaged AGY child `always-proceed` selection" in routing
+    compact_routing = " ".join(routing.split())
+    assert "native AGY CLI sign-in" in compact_routing
+    assert "personal Google Sign-In" in compact_routing
+    assert "Business Sign-In for Gemini Enterprise" in compact_routing
+    assert (
+        "never signs in, changes the active account, or falls back between "
+        "authentication classes" in compact_routing
+    )
     temp_root_contracts = {
         "README.md": "must include the canonical system temp base",
         "README.ko.md": "canonical system temp base를 포함해야",
@@ -662,7 +767,9 @@ def test_governing_agy_documents_match_the_current_formal_route() -> None:
         assert "one provider call" in text, path
 
 
-def test_current_release_docs_bind_superseded_agy_route_and_current_review_boundary() -> None:
+def test_current_release_docs_bind_superseded_agy_route_and_current_review_boundary() -> (
+    None
+):
     changelog = _text(ROOT / "CHANGELOG.md")
     handoff = _text(ROOT / "docs/status/2026-08-05-next-session-handoff.md")
     release_plan = _text(
@@ -675,12 +782,19 @@ def test_current_release_docs_bind_superseded_agy_route_and_current_review_bound
 
     assert "`gemini-3.1-pro-high --effort high`" in changelog
     assert "0.2.532 route is historical and superseded" in changelog
-    assert "Preserves the owner-approved prepared-directory digest algorithm" in changelog
+    assert (
+        "Preserves the owner-approved prepared-directory digest algorithm" in changelog
+    )
     assert "`git hash-object` replacement proposal is not adopted" in changelog
     assert "Implements the unique-ID system-temp lifecycle guarantee" in changelog
-    assert "the exact digest printed by `capture` the only supported digest handoff" in changelog
+    assert (
+        "the exact digest printed by `capture` the only supported digest handoff"
+        in changelog
+    )
     assert "rejects non-regular member-list nodes before reading" in changelog
-    assert "maps prepared-file I/O failures to the controlled lifecycle error" in changelog
+    assert (
+        "maps prepared-file I/O failures to the controlled lifecycle error" in changelog
+    )
     assert "real configured review-root storage error as unavailable" in changelog
     assert "does not fall back outside that root" in changelog
     assert "0.2.533 supersedes the configured-root fallback" in changelog
@@ -702,13 +816,14 @@ def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> Non
         for name in ("claude_wrapper.py", "gemini_wrapper.py")
     )
     for stale in (
-        "--sandbox",
         "--sealed-packet-root",
         "--expected-packet-sha256",
         "run_via_pty",
     ):
         assert stale not in antigravity
         assert stale not in other_wrappers
+    assert '"--sandbox"' in antigravity
+    assert '"--project"' not in antigravity
     assert antigravity.count('"--dangerously-skip-permissions"') == 1
     assert "--dangerously-skip-permissions" not in other_wrappers
 

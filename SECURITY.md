@@ -7,15 +7,16 @@ strict result custody, and deterministic owner apply.
 
 ## Native permission boundary
 
-Provider, user, and project settings own stored/global permission state and
-workspace trust. Packaged AGY calls deliberately select AGY's native headless
-auto-approval mode `always-proceed`, replacing `request-review` for that child,
-through the approved internal `--dangerously-skip-permissions` flag. It is not
-caller-supplied; it does not change stored or global user/project settings; it
-does not install permission profiles or command rules; it does not select a
-sandbox; it does not change project-trust configuration; and it does not
-restrict installed CLI, MCP, read, or search tools. Bootstrap does not install
-permission profiles, command rules, or a pre-spawn `shell_environment_policy`.
+Formal Google review uses native AGY CLI sign-in with either personal Google
+Sign-In or Gemini Enterprise Business Sign-In. Matching the deployed Claude-led
+TRIAD, the wrapper brackets `--sandbox read-only` in a transient global-settings
+transaction, unions the exact write/command/unsandboxed/URL/MCP deny set, and
+restores the original bytes. Unless the operator sets
+`AGY_NO_HEADLESS_AUTOAPPROVE=1`, AGY 1.1.3+ requires the wrapper-owned
+`--dangerously-skip-permissions` headless adaptation, which voids deny and OS-ring
+enforcement; formal review is therefore read-only by intent plus prepared-tree and
+worktree mutation detection. Bootstrap installs no persistent global permission
+policy, Enterprise authentication, or pre-spawn `shell_environment_policy`.
 
 Run TRIAD from the same authenticated login terminal and project worktree used
 for development. Trusted Python and `PATH` values are prerequisites. Wrapper
@@ -31,9 +32,9 @@ credential-compatible/user-site mode requires a trusted `HOME` because
 trusted isolated Python environment is acceptable only when it preserves the
 provider login workflow.
 
-Packaged AGY calls use the documented child-only native headless auto-approval
-mode. Gemini owns its workspace-trust decision after removal of `--skip-trust`;
-TRIAD has no trust bypass or speculative detector.
+Formal AGY calls use owner-provisioned personal or Gemini Enterprise native
+sign-in and the same transaction lifecycle. TRIAD does not change the active AGY
+account or workspace-trust decision.
 
 ## Provider data and executable boundary
 
@@ -105,22 +106,15 @@ validation, independent family review, and leader reproduction protect result
 integrity. They do not prove that a provider read every byte or choose runtime
 permissions.
 
-## Google fallback boundary
+## Formal Google boundary
 
-AGY is the primary Google route. Version, executable, and model-catalog checks
-happen before a formal round. If AGY is unavailable before submission, the
-leader may select a separately authorized Gemini route before starting a fresh
-round. Any result event, timeout, vendor failure, or schema failure is
-post-submission and cannot activate a replacement inside that round.
-
-Formal Gemini fallback requires separate owner authorization for the exact
-route, provider, data boundary, and objective. It uses the same immutable
-prepared directory, prompt-controlled no-edit/no-execution contract,
-digest/mutation invalidation, complete three-family round, and strict
-`LegVerdict` admission. The exact formal schema route makes one provider call;
-capacity failure or invalid structured output is terminal for that invocation,
-with no hidden capacity retry or schema-repair provider call. An
-unavailable required family leaves an invalid round. See the
+AGY is the formal Google reviewer for both personal Google Sign-In and Gemini
+Enterprise Business Sign-In. Record the selected authentication class before
+dispatch. AGY version, executable, model-catalog, and settings-transaction checks
+happen before submission; its child removes known API-key, ADC, Vertex,
+SDK-enterprise, cloud project/location/quota, and `AGY_ADC_AUTH` route selectors without reading
+their values. TRIAD never changes or falls back between authentication classes.
+Failure of the selected class invalidates the round. See the
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md).
 
 ## Installation, cleanup, and owner state

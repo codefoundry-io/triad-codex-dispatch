@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Constructed-launcher trust invariant: the launcher, its pinned Python runtime,
 # and the checkout wrapper it executes must remain outside the mutable project
-# worktree. Bootstrap installs no persistent permission policy; the AGY wrapper
-# selects its approved native headless child mode internally at dispatch time.
+# worktree. Bootstrap installs no persistent global permission policy. Formal
+# AGY review uses the deployed Claude-led settings-transaction lifecycle.
 set -u
 
 usage() {
@@ -28,18 +28,21 @@ also removes any bootstrap-managed (provenance-matched) legacy personal-scope
 repair-agent TOMLs left by an older install; a non-matching same-name file is
 preserved. Learned classifier patches are preserved.
 
-Assumes codex and claude, plus agy, or configured Gemini Enterprise/Business,
-Vertex, or API-key routing, are already installed.
+Assumes codex, claude, and agy with either personal Google Sign-In or Gemini
+Enterprise Business Sign-In are already installed.
 
 Install targets must resolve outside the project worktree. Run TRIAD from the
 same authenticated login terminal and worktree used for development. TRIAD
 does not install or inject a separate Codex profile, command rule, shell
-environment policy, shell entry, or permission requirement. The Codex-led AGY
-wrapper deliberately selects AGY native headless always-proceed for that child
-through its internal --dangerously-skip-permissions flag; callers do not pass
-the flag, and this does not change stored or global user/project settings.
-Wrapper descendants remain scrubbed after trusted launcher and interpreter
-startup.
+environment policy, shell entry, or persistent global permission requirement.
+Both native authentication classes use --sandbox read-only plus a transient
+global-settings transaction that restores the original bytes. Unless the
+operator sets AGY_NO_HEADLESS_AUTOAPPROVE=1, AGY 1.1.3+ receives the
+wrapper-owned --dangerously-skip-permissions headless adaptation,
+matching the deployed Claude-led TRIAD. Company use retains its AGY-managed
+Gemini Enterprise Business Sign-In and entitlement. Wrapper descendants remain
+scrubbed after trusted launcher and interpreter startup. Bootstrap does not
+install persistent global AGY permission policy.
 
 Start a fresh ordinary Codex session after installation so the updated native
 repair protocol loads.
@@ -383,12 +386,9 @@ GOOGLE_ROUTE=""
 check_google_route() {
   if command -v agy >/dev/null 2>&1; then
     GOOGLE_ROUTE="agy"
-    ok "found Google route: agy"
-  elif command -v gemini >/dev/null 2>&1; then
-    GOOGLE_ROUTE="gemini"
-    warn "found Gemini fallback candidate: executable presence only; configured route must be proven in the owner's authenticated terminal"
+    ok "found native Google reviewer: agy; use personal Google Sign-In or Gemini Enterprise Business Sign-In"
   else
-    fail "missing Google route: agy or gemini"
+    fail "missing formal Google reviewer: agy; Gemini Enterprise Business Sign-In is provided by agy"
   fi
 }
 
@@ -1370,7 +1370,7 @@ if [ "$errors" -ne 0 ]; then
 fi
 if [ "$errors" -eq 0 ]; then
   warn "launcher Python is installer-selected: credential-compatible user-site mode requires a trusted HOME because sitecustomize/usercustomize can run before launcher scrubbing; alternatively select a trusted isolated Python only if it preserves provider login."
-  printf 'native permissions: TRIAD installs no Codex permission state; its AGY wrapper selects approved child-only native headless always-proceed without changing stored user/project settings.\n'
+  printf 'native permissions: select personal Google Sign-In or Gemini Enterprise Business Sign-In in AGY before formal dispatch. AGY uses --sandbox read-only plus the transient Claude-parity settings transaction and restores original bytes; bootstrap installs no persistent global AGY policy and never switches accounts.\n'
   print_owner_apply_argv
   printf 'next step: start a fresh Codex session so the updated native repair protocol loads.\n'
   ok "bootstrap install passed"

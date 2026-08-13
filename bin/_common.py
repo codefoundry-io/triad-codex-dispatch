@@ -1196,12 +1196,13 @@ _CHILD_ENV_SCRUB = (
 )
 
 
-def scrubbed_child_env(base=None) -> dict:
+def scrubbed_child_env(base=None, *, remove=()) -> dict:
     """The single-source vendor-child env: `base` (default `os.environ`) minus the
     `_CHILD_ENV_SCRUB` injection vars. `_run_once` applies it at the single
     provider-child spawn site. Returns a fresh dict."""
     src = base if base is not None else os.environ
-    return {k: v for k, v in src.items() if k not in _CHILD_ENV_SCRUB}
+    omitted = set(_CHILD_ENV_SCRUB) | set(remove)
+    return {k: v for k, v in src.items() if k not in omitted}
 
 
 def _drain(stream, accum: list[str], passthrough) -> None:
@@ -1223,6 +1224,33 @@ def _drain(stream, accum: list[str], passthrough) -> None:
         log(f"reader thread error: {e}")
 
 
+def _terminate_provider_process_group(proc, reason: str) -> None:
+    """Terminate and reap the exact provider process group for one wrapper."""
+    log(f"{reason}; sending SIGTERM")
+    try:
+        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        else:
+            proc.terminate()
+    except (ProcessLookupError, PermissionError) as error:
+        log(f"SIGTERM failed: {error}")
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        log("SIGTERM ignored; sending SIGKILL")
+        try:
+            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            log("zombie: SIGKILL also unresponsive")
+
+
 def _run_once(
     cli: str,
     cmd: list[str],
@@ -1230,6 +1258,7 @@ def _run_once(
     timeout: int,
     stdin_text: Optional[str] = None,
     classify_and_log: bool = True,
+    remove_env=(),
 ) -> RunResult:
     """One Popen invocation.
 
@@ -1250,7 +1279,7 @@ def _run_once(
     # reach the vendor child (I-2/I-3). Explicit env= replaces the implicit
     # full-os.environ inheritance. scrubbed_child_env() is the shared
     # single-source scrub (the agy pty transport applies the same one).
-    child_env = scrubbed_child_env()
+    child_env = scrubbed_child_env(remove=remove_env)
 
     popen_kwargs: dict = dict(
         cwd=cwd,
@@ -1304,29 +1333,12 @@ def _run_once(
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        log(f"timeout after {timeout}s; sending SIGTERM")
-        try:
-            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            else:
-                proc.terminate()
-        except (ProcessLookupError, PermissionError) as e:
-            log(f"SIGTERM failed: {e}")
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            log("SIGTERM ignored; sending SIGKILL")
-            try:
-                if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                else:
-                    proc.kill()
-            except (ProcessLookupError, PermissionError):
-                pass
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                log("zombie: SIGKILL also unresponsive")
+        _terminate_provider_process_group(proc, f"timeout after {timeout}s")
+    except BaseException:
+        _terminate_provider_process_group(proc, "wrapper interrupted")
+        t_out.join(timeout=2)
+        t_err.join(timeout=2)
+        raise
 
     t_out.join(timeout=2)
     t_err.join(timeout=2)

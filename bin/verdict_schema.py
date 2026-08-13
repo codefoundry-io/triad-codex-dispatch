@@ -10,13 +10,25 @@ import re
 import stat
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 _REVIEW_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_NATIVE_REVIEW_PATH_PATTERN = r"^[^/\\][^\\]*$"
+ReviewRelativePath = Annotated[
+    str,
+    StringConstraints(pattern=_NATIVE_REVIEW_PATH_PATTERN),
+]
 
 
 def _nonempty(value: str, label: str) -> str:
@@ -41,7 +53,7 @@ class LegFinding(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     severity: Literal["Critical", "Major", "Minor"]
-    path: str
+    path: ReviewRelativePath
     line: int | None = Field(default=None, ge=1)
     trigger: str
     evidence: str
@@ -69,7 +81,7 @@ class LegVerdict(BaseModel):
     verdict: Literal["SAFE", "NOT-SAFE"]
     criteria_checked: list[str] = Field(min_length=1)
     findings: list[LegFinding]
-    affected_surfaces_inspected: list[str] = Field(min_length=1)
+    affected_surfaces_inspected: list[ReviewRelativePath] = Field(min_length=1)
     open_questions: list[str]
 
     @field_validator("review_id")
