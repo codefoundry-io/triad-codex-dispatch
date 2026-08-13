@@ -193,13 +193,13 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.537
+### Upgrading to 0.2.538
 
-0.2.537 requires every reviewer to copy the complete review ID, family, and
-content digest directly from the single canonical metadata record and compare
-all three values character-for-character before returning its verdict. It
-retains 0.2.536's native AGY schema binding and immediate whole-round
-fail-fast cancellation.
+0.2.538 binds the formal Claude result to the exact review ID, Claude family,
+and content digest in the provider-native schema and repeats the three equality
+checks during local admission. Invalid or partial binding arguments fail before
+provider resolution. It retains 0.2.537's canonical metadata-copy instruction,
+native AGY binding, and immediate whole-round fail-fast cancellation.
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -220,7 +220,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.537-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.538-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

@@ -19,7 +19,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.537"
+    assert manifest["version"] == "0.2.538"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -112,6 +112,9 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
 
     assert "--model opus" in claude and "--effort xhigh" in claude
     assert "--timeout 1800" in claude
+    assert '--expected-review-id "$review_id"' in claude
+    assert "--expected-family claude" in claude
+    assert '--expected-content-digest "$review_digest"' in claude
     assert (
         "Claude: `opus`, `xhigh`, retained 1,800-second end-to-end wrapper deadline."
         in compact_reviewer_routing
@@ -187,6 +190,9 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             "  --effort xhigh \\",
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
+            '  --expected-review-id "$review_id" \\',
+            "  --expected-family claude \\",
+            '  --expected-content-digest "$review_digest" \\',
             '  > "$claude_result_file"',
         ),
         (

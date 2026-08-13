@@ -175,12 +175,13 @@ family가 unavailable이면 invalid round입니다. 전체 계약은
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.537 업그레이드
+### 0.2.538 업그레이드
 
-0.2.537은 모든 reviewer가 단일 canonical metadata record에서 완전한 review ID,
-family, content digest를 직접 복사하고, verdict를 반환하기 전에 세 값을
-문자 단위로 비교하도록 요구합니다. 0.2.536의 native AGY schema binding과
-whole-round fail-fast cancellation은 그대로 유지합니다.
+0.2.538은 formal Claude 결과의 review ID, Claude family, content digest를
+provider-native schema에서 exact 값으로 고정하고 local admission에서도 세 값을 다시
+비교합니다. 잘못되거나 일부만 전달된 binding 인자는 provider 실행 전에 거부됩니다.
+0.2.537의 canonical metadata copy 지시, native AGY binding, whole-round fail-fast
+cancellation은 그대로 유지합니다.
 
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
@@ -199,7 +200,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.537-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.538-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

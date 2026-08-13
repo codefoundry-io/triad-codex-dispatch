@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.538 — 2026-08-13
+
+- Binds the formal Claude verdict schema to the exact review ID, Claude family,
+  and content digest before provider generation, then repeats those equality
+  checks during local admission.
+- Rejects partial, malformed, or non-formal binding arguments before provider
+  resolution while preserving generic structured-output compatibility.
+- Synchronizes the canonical and standalone published Claude review routes and
+  pins both surfaces with regression tests.
+
 ## 0.2.537 — 2026-08-12
 
 - Requires every reviewer to copy the complete review ID, family, and content

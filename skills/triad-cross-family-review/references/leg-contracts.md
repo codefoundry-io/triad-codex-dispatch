@@ -35,6 +35,9 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
   --effort xhigh \
   --timeout 1800 \
   --pydantic verdict_schema:LegVerdict \
+  --expected-review-id "$review_id" \
+  --expected-family claude \
+  --expected-content-digest "$review_digest" \
   > "$claude_result_file"
 ```
 
