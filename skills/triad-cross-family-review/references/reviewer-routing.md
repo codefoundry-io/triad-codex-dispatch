@@ -2,26 +2,30 @@
 
 This is an owner routing policy, not a provider capability claim. The owner
 authorizes the exact providers, objective, and external data boundary before a
-round. Except for the documented packaged AGY child `always-proceed` selection,
-native provider and project permissions remain in force.
+round. Native provider authentication remains in force. The formal Google leg
+uses native AGY CLI sign-in and the deployed Claude-led TRIAD settings
+transaction lifecycle.
 
 ## Required routes
 
 - Claude: `opus`, `xhigh`, retained 1,800-second end-to-end wrapper deadline.
-- Google: AGY 1.1.10 or newer, `gemini-3.1-pro-high`, `high`, 1,800-second
-  end-to-end wrapper deadline.
+- Google: AGY 1.1.10 or newer, `gemini-3.1-pro-high`, `high`, retained
+  1,800-second end-to-end wrapper deadline, and one owner-selected native
+  authentication class: personal Google Sign-In or Business Sign-In for
+  Gemini Enterprise with a GE Standard or GE Plus seat.
 - Fresh Codex: `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, no registered
   reviewer agent.
 
-Use [leg contracts](leg-contracts.md) for invocation details. Record requested
-route evidence and any runtime-exposed identity. Record an unexposed identity
+Use [leg contracts](leg-contracts.md) for invocation details. Record the
+owner-selected authentication class and any runtime-exposed identity. Record an unexposed identity
 as `unexposed`; do not infer it. A conflict with exposed identity invalidates
 the leg.
 
-AGY is the default Google route. If AGY is unavailable before provider
-submission, the leader may select the separately authorized Gemini route
-before starting a fresh round. A post-submission AGY failure invalidates the
-Google leg and cannot be replaced inside that round.
+Both authentication classes use the same AGY executable, packaged wrapper,
+model, settings transaction, and containment contract. TRIAD never signs in, changes the
+active account, or falls back between authentication classes. If the selected
+authentication, entitlement, model, or containment contract is unavailable,
+the formal round is invalid.
 
 ## Admission and convergence
 

@@ -3,25 +3,41 @@
 
 The wrapper forwards one prompt through ``stream-json``, optionally supplies a
 native JSON schema, admits only the terminal ``result`` event, and validates a
-structured result locally. Headless calls use AGY's native auto-approve flag;
-the review prompt remains responsible for the no-mutation boundary.
+structured result locally. Read-only calls use the same transient global-settings
+transaction and headless adaptation as the deployed Claude-led TRIAD wrapper.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from typing import Any
 
 import _common
+import _agy_settings
 from _common import load_pydantic_class, validate_response
 
 
 AGY_VERSION_FLOOR = (1, 1, 10)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
+HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
+FORMAL_AGY_ENV_REMOVE = (
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_GENAI_USE_VERTEXAI",
+    "GOOGLE_GENAI_USE_ENTERPRISE",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_LOCATION",
+    "GOOGLE_CLOUD_REGION",
+    "GOOGLE_CLOUD_QUOTA_PROJECT",
+    "AGY_ADC_AUTH",
+)
 
 
 def _parse_agy_version(text: str) -> tuple[int, int, int] | None:
@@ -57,6 +73,12 @@ def _route_args(model: str | None, effort: str | None) -> list[str]:
     return args
 
 
+def _agy_needs_skip_permissions(version: tuple[int, int, int] | None) -> bool:
+    if os.environ.get("AGY_NO_HEADLESS_AUTOAPPROVE") == "1":
+        return False
+    return version is not None and version >= HEADLESS_SOFTDENY_FLOOR
+
+
 def _build_cmd(
     agy_bin: str,
     prompt: str,
@@ -65,11 +87,14 @@ def _build_cmd(
     effort: str | None,
     timeout: int,
     json_schema: str | None,
+    sandbox: bool = False,
+    skip_permissions: bool = True,
 ) -> list[str]:
     print_timeout = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
-    cmd = [
-        agy_bin,
-        "--dangerously-skip-permissions",
+    cmd = [agy_bin]
+    if skip_permissions:
+        cmd.append("--dangerously-skip-permissions")
+    cmd += [
         "-p",
         prompt,
         "--output-format",
@@ -79,6 +104,8 @@ def _build_cmd(
     ]
     if json_schema is not None:
         cmd += ["--json-schema", json_schema]
+    if sandbox:
+        cmd.append("--sandbox")
     return cmd + _route_args(model, effort)
 
 
@@ -181,10 +208,7 @@ def _interpret_run(
             _common.EXIT_TERMINAL,
             f"terminal result status is {status!r}",
         )
-    if (
-        expected_model is not None
-        and route_conflict is not None
-    ):
+    if expected_model is not None and route_conflict is not None:
         return _fail(
             run,
             "route-mismatch",
@@ -257,6 +281,7 @@ def main() -> int:
     prompt_group.add_argument("--prompt", help="User prompt")
     prompt_group.add_argument("--prompt-file", help="Read a UTF-8 prompt file")
     parser.add_argument("--cwd", default=None)
+    parser.add_argument("--sandbox", choices=("read-only",), default=None)
     parser.add_argument("--model", default=None)
     parser.add_argument("--effort", choices=("low", "medium", "high"), default=None)
     parser.add_argument("--timeout", type=int, default=600)
@@ -309,19 +334,40 @@ def main() -> int:
             _common.log("expected review ID has invalid syntax")
             return _common.EXIT_ARG_ERROR
         if re.fullmatch(r"[0-9a-f]{64}", args.expected_content_digest) is None:
-            _common.log("expected content digest must be 64 lowercase hexadecimal characters")
+            _common.log(
+                "expected content digest must be 64 lowercase hexadecimal characters"
+            )
+            return _common.EXIT_ARG_ERROR
+        if args.sandbox != "read-only":
+            _common.log("formal verdict bindings require --sandbox read-only")
             return _common.EXIT_ARG_ERROR
 
     agy_bin = _common.require_binary("agy")
     version = _probe_agy_version(agy_bin)
     if version is None or version < AGY_VERSION_FLOOR:
         found = _version_text(version) if version is not None else "unprobeable"
-        _common.log(
-            f"agy {found} is below required {_version_text(AGY_VERSION_FLOOR)}"
-        )
+        _common.log(f"agy {found} is below required {_version_text(AGY_VERSION_FLOOR)}")
         return _common.EXIT_TERMINAL
 
+    deny_rules = (
+        _agy_settings.build_deny_rules(args.sandbox) if args.sandbox is not None else []
+    )
+    try:
+        lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
+    except ValueError:
+        _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
+        return _common.EXIT_ARG_ERROR
+
     if args.preflight_only:
+        try:
+            with _agy_settings.agy_settings_guard(
+                deny_rules,
+                lock_timeout=lock_timeout,
+            ):
+                pass
+        except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+            _common.log(f"AGY settings/config conflict: {exc}")
+            return _common.EXIT_TERMINAL
         receipt = {
             "agy_version": _version_text(version),
             "effort": args.effort,
@@ -333,8 +379,12 @@ def main() -> int:
         return _common.EXIT_OK
 
     try:
-        schema_object = pydantic_cls.model_json_schema() if pydantic_cls is not None else None
-        if schema_object is not None and all(value is not None for value in binding_values):
+        schema_object = (
+            pydantic_cls.model_json_schema() if pydantic_cls is not None else None
+        )
+        if schema_object is not None and all(
+            value is not None for value in binding_values
+        ):
             properties = schema_object["properties"]
             properties["review_id"]["const"] = args.expected_review_id
             properties["family"]["const"] = args.expected_family
@@ -355,14 +405,27 @@ def main() -> int:
         effort=args.effort,
         timeout=args.timeout,
         json_schema=schema,
+        sandbox=args.sandbox == "read-only",
+        skip_permissions=_agy_needs_skip_permissions(version),
     )
-    raw = _common._run_once(
-        "antigravity",
-        cmd,
-        cwd,
-        args.timeout,
-        classify_and_log=False,
-    )
+    run_options: dict[str, Any] = {"classify_and_log": False}
+    if all(value is not None for value in binding_values):
+        run_options["remove_env"] = FORMAL_AGY_ENV_REMOVE
+    try:
+        with _agy_settings.agy_settings_guard(
+            deny_rules,
+            lock_timeout=lock_timeout,
+        ):
+            raw = _common._run_once(
+                "antigravity",
+                cmd,
+                cwd,
+                args.timeout,
+                **run_options,
+            )
+    except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        _common.log(f"AGY settings/config conflict: {exc}")
+        return _common.EXIT_TERMINAL
     result = _interpret_run(
         raw,
         pydantic_cls,

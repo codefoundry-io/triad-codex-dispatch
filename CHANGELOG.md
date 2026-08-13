@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.539 — 2026-08-14
+
+- Makes the formal Google leg use the deployed Claude-led AGY behavior: native
+  personal or Gemini Enterprise Business Sign-In, `--sandbox read-only`, the
+  transient five-deny global-settings transaction, and the wrapper-owned
+  headless adaptation with its operator opt-out and intent-only residual.
+- Removes API-key, ADC, Vertex, SDK-enterprise, cloud-project, location, and
+  quota route selectors from the formal AGY child without reading their values;
+  TRIAD never switches accounts or falls back to another provider.
+- Validates the settings transaction during provider-free preflight, preserves
+  the selected AGY authentication class on failure, and makes the standalone
+  Gemini wrapper explicitly ineligible as a formal Google-leg substitute.
+- Adds focused restoration, provider-failure, preflight-failure, bootstrap,
+  distribution, and skill behavior regressions while preserving the copied
+  Claude settings helper byte-for-byte.
+
 ## 0.2.538 — 2026-08-13
 
 - Binds the formal Claude verdict schema to the exact review ID, Claude family,

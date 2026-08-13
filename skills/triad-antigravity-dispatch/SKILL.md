@@ -6,9 +6,13 @@ description: Use when a bounded task needs one authorized AGY Google-family answ
 # Antigravity Dispatch
 
 Use the packaged `bin/antigravity_wrapper.py`. The wrapper internally inserts
-`--dangerously-skip-permissions` for AGY headless calls. Callers do not pass
-this flag. The wrapper does not edit user settings, add a sandbox or a
-command-specific allowlist, or suppress installed tools.
+`--dangerously-skip-permissions` for AGY headless calls unless the operator
+sets `AGY_NO_HEADLESS_AUTOAPPROVE=1`. Callers do not pass this flag. Formal
+calls use `--sandbox read-only` and a transient global-settings transaction
+that unions the five write/command/unsandboxed/URL/MCP deny rules, then
+restores the original bytes. The headless flag voids both deny and sandbox
+enforcement, so that path is read-only by intent plus round-integrity checks,
+not enforced containment. The wrapper does not suppress installed tools.
 
 ## Route proof
 
@@ -29,6 +33,7 @@ Use `triad-cross-family-review` and its `references/leg-contracts.md`. The
 formal wrapper arguments are:
 
 ```text
+  --sandbox read-only
   --model gemini-3.1-pro-high
   --effort high
   --timeout 1800
@@ -49,10 +54,11 @@ editing, external-state changes, and candidate execution.
 
 ## Failure handling
 
-A failure before provider submission may permit the leader to select the
-documented Gemini route before starting the round. A failure after submission
-invalidates the Google leg and round. Do not switch providers mid-round or
-substitute a command-specific allowlist, sandbox, or tool suppression. Clean
-the invalid round, correct the route, and restart every required family under
-a fresh review ID. Return one validated result bound to one review ID and
-content digest.
+A failure before provider submission stops the round with zero provider legs.
+A failure after submission invalidates the Google leg and round. Do not switch
+providers or authentication classes, drop `--sandbox read-only`, or substitute
+a command-specific allowlist or tool suppression. If the operator opt-out makes
+headless review unavailable, preserve that opt-out and report the blocker.
+Clean the invalid round, correct the same route, and restart every required
+family under a fresh review ID. Return one validated result bound to one review
+ID and content digest.

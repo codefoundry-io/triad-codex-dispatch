@@ -1,88 +1,70 @@
-# Formal Google CLI OAuth-Only Design
+# Formal AGY Native-Sign-In Design
 
-**Owner decision:** Formal three-family review must use the subscription-backed
-Antigravity CLI (`agy`) OAuth session for its Google-family leg. It must never
-fall back to a Gemini API-key, Vertex, service-account, or other separately
-billed route.
+**Owner decision:** Formal three-family review keeps both owner environments
+through AGY 1.1.10 or newer: personal Google Sign-In and Business Sign-In for
+Gemini Enterprise with a GE Standard or GE Plus seat. TRIAD records the active
+class before a round and never changes the provider account or billing route.
 
 ## Behavioral claim
 
-A formal Google-family review leg is dispatched only through authenticated
-`agy` in an explicitly bound AGY Project whose project-scoped permissions deny
-write and execution tools; if that binding, the binary, required model, or
-OAuth session is unavailable before submission, or if the submitted AGY call
-fails, the complete round is invalid and stops without selecting `gemini`.
+A formal Google-family review leg uses the deployed Claude-led TRIAD AGY
+settings-transaction lifecycle while preserving the owner-selected personal or
+Gemini Enterprise native sign-in.
 
-## Design
+## Proven source contract
 
-- Keep `agy` 1.1.10 or newer and `gemini-3.1-pro-high` as the formal Google
-  route. The installed `agy` owns Google Sign-In and reads its existing system
-  keyring session; TRIAD does not create, copy, inject, or refresh credentials.
-- Remove known API-key, Vertex, ADC, and cloud-project route-selector variables
-  from the formal AGY child environment by variable name without reading or
-  logging their values. This prevents an ambient separately billed route from
-  overriding native Google Sign-In while leaving the owner session untouched.
-- Bind every formal call to an existing AGY Project with `--project`. The
-  Project must name the reviewed workspace as its sole resource and its
-  project-specific configuration must deny `write_file(*)`, `command(*)`,
-  `unsandboxed(*)`, `execute_url(*)`, and `mcp(*)`. AGY stores that configuration
-  in its project registry under `~/.gemini/config/projects/`; it is not the
-  global `~/.gemini/antigravity-cli/settings.json` policy and affects only the
-  selected Project.
-- Require `--sandbox` and remove `--dangerously-skip-permissions`. AGY 1.1.4
-  fixed headless print mode to honor persisted permissions; the supported
-  1.1.10+ floor is therefore entirely after that fix. A missing/malformed
-  Project binding or an incomplete deny set stops before provider submission.
-- Remove every active cross-family-review instruction that permits a formal
-  `gemini` fallback. The packaged Gemini wrapper and its standalone dispatch
-  skill may remain available for explicitly requested non-formal enterprise
-  work, but they are not a substitute family inside the formal gate.
-- Bootstrap formal readiness requires `agy`. A discovered `gemini` executable
-  remains optional and does not satisfy the Google-route prerequisite.
-- Before submission, a missing AGY binary, unsupported version, missing model,
-  or failed OAuth-backed preflight stops the round. After submission, every AGY
-  failure likewise invalidates the round. In both cases all required families
-  restart only after the AGY CLI OAuth route is repaired.
-- Documentation states the billing boundary directly: individual subscription
-  access uses AGY Google Sign-In; formal review does not invoke the separately
-  billed Gemini API/Vertex routes.
+- Source: `/Users/chaniri/triad` at local `main` containing remote `origin/main`.
+- Deployment: `/Users/chaniri/triad-dispatch` at remote `origin/main`.
+- The source and deployment `antigravity_wrapper.py` and `_agy_settings.py`
+  SHA-256 values agree.
+- AGY exposes no consumed per-call, per-workspace, or project permission file
+  for headless review. Its effective permission source is the global
+  `~/.gemini/antigravity-cli/settings.json`.
+- The wrapper holds an `flock`, snapshots the original settings, unions
+  `write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, and
+  `mcp(*)`, runs AGY, and restores the original bytes. A crash sentinel supports
+  recovery.
+- Formal calls pass `--sandbox read-only`. Unless the operator sets
+  `AGY_NO_HEADLESS_AUTOAPPROVE=1`, AGY 1.1.3+ also receives the wrapper-owned
+  `--dangerously-skip-permissions` headless adaptation. That flag
+  voids both the deny transaction and AGY OS-ring enforcement, so the admitted
+  boundary is read-only intent plus disposable review-directory and worktree
+  fingerprint verification.
 
-## Rejected alternatives
+## Authentication and billing boundary
 
-- Do not port Claude-host's Google-leg `ADVISORY` policy; the current product
-  requires all three families and weakening that gate is unrelated.
-- Do not port its global `~/.gemini/antigravity-cli/settings.json` transaction;
-  it directly controls user-global state and does not solve authentication.
-- Do not synthesize a repository-local AGY `settings.json`; AGY does not consume
-  that as its project permission source. Use its native Project registry and
-  explicit `--project` selection while keeping the policy project-scoped.
-- Do not add API-key value detection or secret inspection. Formal-child
-  environment scrubbing is name-based and does not expose credential material.
-- Do not build a new interactive PTY permission broker. That is a separate,
-  larger containment design.
+- AGY owns personal Google Sign-In and Gemini Enterprise Business Sign-In.
+- The formal child removes known API-key, ADC, Vertex, SDK-enterprise, and cloud
+  billing-route selector names without reading their values.
+- TRIAD does not sign in, refresh credentials, switch accounts, or fall back to
+  API-key, Vertex, ADC, service-account, or another authentication class.
+- `gemini_wrapper.py` remains a standalone compatibility consult and is not the
+  Enterprise formal leg.
 
-## Verification
+## Rejected Project-permission design
 
-1. A skill-executor baseline must show that the current SOT permits the Gemini
-   fallback when AGY OAuth is unavailable.
-2. Static contract tests must require AGY-only formal routing and reject active
-   fallback language, a bootstrap success based on `gemini` alone, a formal
-   command without `--project`/`--sandbox`, an incomplete Project deny set, or
-   any `--dangerously-skip-permissions` formal route.
-3. Focused bootstrap and distribution tests must pass.
-4. A fresh skill-executor scenario must stop the formal round without invoking
-   any provider when AGY OAuth is unavailable and an API key is available.
-5. A disposable-project OAuth spike must prove on the installed AGY version
-   that a file-view read succeeds while `write_file` and `command` are denied,
-   with no danger flag. It must use the native Google Sign-In route and no API
-   key, Vertex, service account, or Gemini CLI.
-6. Routine regression verification makes no live API-key, Vertex,
-   service-account, Gemini, or AGY model call; `agy --version` and `agy models`
-   are the only ordinary local route preflight commands.
+The superseded design required `--project` and a project JSON deny list. It was
+rejected by runtime evidence on AGY 1.1.12:
 
-## Slice size
+1. The provider-generated project record could contain all five deny entries,
+   yet a token-zero `/permissions` run reported an empty project scope.
+2. Adding the documented centralized workspace-to-project mapping did not make
+   the project deny entries effective.
+3. The interactive project permission editor wrote the deny entries to global
+   `settings.json`, not to an effective project-scoped headless policy.
+4. After removing that accidental global delta, the same token-zero probe again
+   showed no project denies.
 
-This is one S/M behavioral claim. Forecast: at most 260 production/script lines
-changed, at most 140 lines of novel project-binding/validation core, with
-documentation and tests outside the production-line budget. No L-class
-exception is required.
+No future divergence from Claude parity is allowed without a disposable runtime
+spike that demonstrates stronger containment while preserving native personal
+and Gemini Enterprise authentication and formal review executability.
+
+## Acceptance
+
+1. Unit tests prove the deny lease is live during the call and the original
+   settings bytes return after normal exit, provider failure, and body exception.
+2. Formal wrapper tests require `--sandbox read-only`, version-gated
+   auto-approve, native schema binding, and billed-route environment scrubbing.
+3. Skill-executor tests retain both authentication classes and stop before all
+   families when the settings transaction cannot be established.
+4. Formal three-family review runs only after all static and runtime gates pass.

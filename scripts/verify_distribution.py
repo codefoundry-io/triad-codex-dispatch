@@ -23,6 +23,7 @@ HASH_TARGETS = (
     "skills/triad-cross-family-review/references/review-prompt-contract.md",
     "skills/triad-cross-family-review/references/reviewer-routing.md",
     "bin/_common.py",
+    "bin/_agy_settings.py",
     "bin/antigravity_wrapper.py",
     "bin/claude_wrapper.py",
     "bin/gemini_wrapper.py",

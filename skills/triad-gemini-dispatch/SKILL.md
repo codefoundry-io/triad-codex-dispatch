@@ -1,6 +1,6 @@
 ---
 name: triad-gemini-dispatch
-description: Use when a bounded task needs one authorized Gemini CLI answer or when AGY is proven unavailable before a cross-family review round starts.
+description: Use when a bounded task needs one authorized standalone Gemini CLI compatibility answer. Do not use it as the formal Google-family review leg.
 ---
 
 # Gemini Dispatch
@@ -15,13 +15,13 @@ with `--prompt-file` for long input, `--cwd`, optional `--model`, and optional
 `--pydantic module:Class`. A nonzero exit or malformed result is a failed
 dispatch, not substantive evidence.
 
-## Cross-family Google leg
+## No formal Google-leg substitution
 
-AGY is the formal default. Gemini is eligible only when AGY is proven
-unavailable before submission and the leader selects Gemini before starting a
-fresh complete round. Give it the same prepared directory, prompt, digest,
-read/search-only contract, and `verdict_schema:LegVerdict`. Never replace a
-failed in-flight AGY leg with Gemini inside the same round.
+This skill is a standalone compatibility consult only. Formal Google review
+uses the packaged AGY route for both personal Google Sign-In and Gemini
+Enterprise Business Sign-In. If AGY is unavailable, invalidate the round and
+repair the same selected AGY authentication class; never substitute this
+Gemini wrapper in the current or a fresh formal round.
 
 The exact formal `verdict_schema:LegVerdict` route makes one provider call.
 Capacity failure or invalid structured output is terminal for that invocation;
