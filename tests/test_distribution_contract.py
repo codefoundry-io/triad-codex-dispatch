@@ -19,7 +19,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.539"
+    assert manifest["version"] == "0.2.540"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -165,7 +165,8 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "invalidates the complete round and discards every verdict"
         in compact_leg_contracts
     )
-    assert "1.1.10 or newer" in agy
+    assert "1.1.12 or newer" in agy
+    assert "AGY 1.1.12 or newer" in reviewer_routing
     assert "--model gemini-3.1-pro-high" in agy
     assert "--effort high" in agy
     assert "--timeout 1800" in agy
@@ -181,6 +182,8 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "does not edit user settings" not in compact_agy
     assert "--sandbox read-only" in agy
     assert "--sandbox read-only" in leg_contracts
+    assert "--mode plan" in agy
+    assert "--mode plan" in leg_contracts
     assert "transient global-settings transaction" in compact_leg_contracts
     assert "restores the original bytes" in compact_leg_contracts
     assert "read-only by intent" in compact_leg_contracts

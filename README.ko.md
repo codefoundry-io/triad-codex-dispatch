@@ -130,13 +130,13 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 
 ### Gemini Enterprise Business Sign-In
 
-*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.10 이상에서
+*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.12 이상에서
 조직 소유 Google Cloud project로 Business Sign-In을 선택하세요. 개인 환경과 같은
-정식 AGY wrapper, settings transaction, `--sandbox read-only` 수명주기를 사용합니다. TRIAD는 활성
+정식 AGY wrapper, settings transaction, `--sandbox read-only`, `--mode plan` 수명주기를 사용합니다. TRIAD는 활성
 계정을 변경하거나 개인 sign-in으로 fallback하지 않습니다. 별도
 `triad-gemini-dispatch` skill은 standalone 호환 consult이며 Gemini Enterprise 정식
 leg가 아닙니다.
-[공식 AGY 1.1.10 release](https://github.com/google-antigravity/antigravity-cli/releases/tag/1.1.10)를 참고하세요.
+[공식 AGY changelog](https://antigravity.google/changelog?plan=free)를 참고하세요.
 
 ### Linux / WSL2 sandbox 지원
 
@@ -160,13 +160,13 @@ leg가 아닙니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.539 업그레이드
+### 0.2.540 업그레이드
 
-0.2.539는 formal AGY를 배포된 Claude 주최 경로와 일치시킵니다. 개인 또는 Gemini
-Enterprise Business Sign-In, 일시적 global-settings transaction, `--sandbox
-read-only`, operator opt-out이 있는 wrapper-owned headless adaptation, 유료
-API/ADC/Vertex route-selector 제거를 사용합니다. 0.2.538의 native 결과 binding과
-whole-round fail-fast cancellation은 유지합니다.
+0.2.540은 formal AGY 경로에 native `--mode plan`을 추가하고 AGY 1.1.12 이상을
+요구해 headless review가 읽기 전용 search/file-view 도구를 사용하게 합니다. 개인
+또는 Gemini Enterprise Business Sign-In, 일시적 global-settings transaction,
+`--sandbox read-only`, operator opt-out, 유료 API/ADC/Vertex route-selector 제거,
+native 결과 binding, whole-round fail-fast cancellation은 유지합니다.
 
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
@@ -176,7 +176,7 @@ rule, permission profile, credential, 관련 없는 파일을 건드리지 않�
 
 review runtime은 하나의 complete focused directory, required family별 하나의
 `LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
-receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.10 이상을
+receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.12 이상을
 요구하고 native `stream-json`과 `json-schema`를 사용합니다. formal route는
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. 문서화된 packaged AGY child
 선택만 permission-mode 예외이며, 다른 provider permission과 모든 project-trust
@@ -185,7 +185,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.539-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.540-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

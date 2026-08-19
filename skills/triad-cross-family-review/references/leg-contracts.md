@@ -64,7 +64,7 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
 
 ## Google family
 
-Before the round, prove `agy --version` is at least 1.1.10 and `agy models`
+Before the round, prove `agy --version` is at least 1.1.12 and `agy models`
 advertises `gemini-3.1-pro-high`. Before starting any family, run this
 non-model wrapper preflight to validate the same binary/version and route:
 
@@ -104,15 +104,16 @@ The same packaged AGY wrapper supports either personal Google Sign-In or
 Business Sign-In for Gemini Enterprise with an owner-provisioned GE Standard
 or GE Plus seat. It uses `stream-json` and `json-schema`, then
 validates the terminal result locally. Matching the deployed Claude-led TRIAD,
-formal AGY passes `--sandbox`, brackets the call in a transient global-settings
+formal AGY passes `--sandbox` and native `--mode plan`, then brackets the call in a transient global-settings
 transaction that unions `write_file(*)`, `command(*)`, `unsandboxed(*)`,
 `execute_url(*)`, and `mcp(*)`, and restores the original bytes. AGY 1.1.3+
 also receives the wrapper-owned `--dangerously-skip-permissions` adaptation so
 headless read tools work, unless the operator sets
-`AGY_NO_HEADLESS_AUTOAPPROVE=1`. `--dangerously-skip-permissions` voids the deny
-transaction and AGY OS-ring;
-the formal Google leg is read-only by intent plus the round-integrity checks,
-not an enforced filesystem or network boundary. Callers never pass the flag. The
+`AGY_NO_HEADLESS_AUTOAPPROVE=1`. Plan mode directs the reviewer to native
+read-only search and file-view tools; the deny transaction still blocks the
+forbidden action namespaces, and a denied call invalidates the leg. The formal
+Google leg is read-only by intent plus deny and round-integrity checks. Callers
+never pass the flag. The
 formal child environment removes known API-key, ADC, Vertex, SDK-enterprise,
 cloud project/location/quota, and `AGY_ADC_AUTH` route selectors without reading
 their values. Native sign-in state remains provider-owned; TRIAD does not log

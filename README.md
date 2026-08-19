@@ -145,12 +145,12 @@ subsection only when its "do this ONLY if…" line applies to you.
 ### Gemini Enterprise Business Sign-In
 
 *Do this only in a company environment with a GE Standard or GE Plus seat.* Use
-AGY 1.1.10 or newer and select its Business Sign-In with the organization-owned
+AGY 1.1.12 or newer and select its Business Sign-In with the organization-owned
 Google Cloud project. The same formal AGY wrapper, settings transaction, and
-`--sandbox read-only` lifecycle apply. TRIAD never changes the active account or falls back
+`--sandbox read-only` plus `--mode plan` lifecycle apply. TRIAD never changes the active account or falls back
 to a personal sign-in. The separate `triad-gemini-dispatch` skill remains a
 standalone compatibility consult; it is not the Gemini Enterprise formal leg.
-See the official [AGY 1.1.10 release](https://github.com/google-antigravity/antigravity-cli/releases/tag/1.1.10).
+See the official [AGY changelog](https://antigravity.google/changelog?plan=free).
 
 ### Linux / WSL2 sandbox support
 
@@ -178,13 +178,14 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.539
+### Upgrading to 0.2.540
 
-0.2.539 makes formal AGY match the deployed Claude-led route: native personal
-or Gemini Enterprise Business Sign-In, a transient global-settings transaction,
-`--sandbox read-only`, the wrapper-owned headless adaptation with its operator
-opt-out, and billed API/ADC/Vertex route-selector removal. It retains 0.2.538's
-native result binding and immediate whole-round fail-fast cancellation.
+0.2.540 adds native `--mode plan` to the formal AGY route and requires AGY
+1.1.12 or newer, so headless review uses read-only search and file-view tools.
+It retains 0.2.539's personal or Gemini Enterprise Business Sign-In, transient
+global-settings transaction, `--sandbox read-only`, operator opt-out, billed
+API/ADC/Vertex route-selector removal, native result binding, and immediate
+whole-round fail-fast cancellation.
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -196,7 +197,7 @@ permission profiles, and credentials; unrelated files remain untouched.
 The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
 packet, receipt, PTY, and sentinel review transports are removed. AGY requires
-1.1.10 or newer and uses native `stream-json` plus `json-schema`; the formal
+1.1.12 or newer and uses native `stream-json` plus `json-schema`; the formal
 route passes `gemini-3.1-pro-high` with `high` effort. The documented packaged
 AGY child selection is the sole permission-mode exception; other provider
 permission and all project-trust policy remain native. Ordinary `codex` remains
@@ -205,7 +206,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.539-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.540-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

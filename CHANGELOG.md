@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.540 — 2026-08-19
+
+- Runs formal AGY review in native `--mode plan` so headless Google-family legs
+  use read-only search and file-view tools instead of requesting denied shell
+  commands after returning a verdict.
+- Raises the formal AGY floor to 1.1.12, the first release that applies
+  `--mode` in headless `-p` runs, while preserving personal and Gemini
+  Enterprise Business Sign-In and the five-deny settings transaction.
+- Adds RED/GREEN wrapper and distribution contracts plus a real authenticated
+  plan-mode spike that completes with a schema-bound terminal verdict.
+
 ## 0.2.539 — 2026-08-14
 
 - Makes the formal Google leg use the deployed Claude-led AGY behavior: native

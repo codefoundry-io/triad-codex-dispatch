@@ -8,18 +8,20 @@ description: Use when a bounded task needs one authorized AGY Google-family answ
 Use the packaged `bin/antigravity_wrapper.py`. The wrapper internally inserts
 `--dangerously-skip-permissions` for AGY headless calls unless the operator
 sets `AGY_NO_HEADLESS_AUTOAPPROVE=1`. Callers do not pass this flag. Formal
-calls use `--sandbox read-only` and a transient global-settings transaction
+calls use `--sandbox read-only`, native `--mode plan`, and a transient global-settings transaction
 that unions the five write/command/unsandboxed/URL/MCP deny rules, then
-restores the original bytes. The headless flag voids both deny and sandbox
-enforcement, so that path is read-only by intent plus round-integrity checks,
-not enforced containment. The wrapper does not suppress installed tools.
+restores the original bytes. Plan mode directs the headless reviewer to native
+read-only search and file-view tools; deny rules still stop forbidden action
+namespaces, and a denied tool call invalidates the leg. The route remains
+read-only by intent plus deny and round-integrity checks. The wrapper does not
+suppress installed tools.
 
 ## Route proof
 
 Before formal review, require authenticated output proving:
 
 ```text
-agy --version  -> 1.1.10 or newer
+agy --version  -> 1.1.12 or newer
 agy models     -> gemini-3.1-pro-high present
 ```
 

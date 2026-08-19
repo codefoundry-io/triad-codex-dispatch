@@ -90,6 +90,7 @@ def test_formal_route_matches_claude_sandbox_and_autoapprove_contract() -> None:
 
     assert cmd[0:3] == ["/opt/bin/agy", "--dangerously-skip-permissions", "-p"]
     assert "--sandbox" in cmd
+    assert cmd[cmd.index("--mode") : cmd.index("--mode") + 2] == ["--mode", "plan"]
     assert "--project" not in cmd
 
 
@@ -130,8 +131,8 @@ def test_schema_argv_is_redacted_from_logs() -> None:
     ]
 
 
-def test_version_floor_is_110() -> None:
-    assert wrapper.AGY_VERSION_FLOOR == (1, 1, 10)
+def test_version_floor_requires_headless_plan_mode_support() -> None:
+    assert wrapper.AGY_VERSION_FLOOR == (1, 1, 12)
     assert wrapper._parse_agy_version("1.1.10\n") == (1, 1, 10)
     assert wrapper._parse_agy_version("agy 2.0.1") == (2, 0, 1)
     assert wrapper._parse_agy_version("unknown") is None
@@ -348,7 +349,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     calls: list[list[str]] = []
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 10))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
@@ -560,7 +561,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     pruned: list[str] = []
     guarded: list[list[str]] = []
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 10))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
     @contextlib.contextmanager
@@ -595,7 +596,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert wrapper.main() == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt == {
-        "agy_version": "1.1.10",
+        "agy_version": "1.1.12",
         "effort": "high",
         "model": "gemini-3.1-pro-high",
         "provider_started": False,

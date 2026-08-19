@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single-shot AGY wrapper using the 1.1.10 native stream contract.
+"""Single-shot AGY wrapper using the 1.1.12 headless plan-mode contract.
 
 The wrapper forwards one prompt through ``stream-json``, optionally supplies a
 native JSON schema, admits only the terminal ``result`` event, and validates a
@@ -22,7 +22,7 @@ import _agy_settings
 from _common import load_pydantic_class, validate_response
 
 
-AGY_VERSION_FLOOR = (1, 1, 10)
+AGY_VERSION_FLOOR = (1, 1, 12)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
@@ -105,7 +105,7 @@ def _build_cmd(
     if json_schema is not None:
         cmd += ["--json-schema", json_schema]
     if sandbox:
-        cmd.append("--sandbox")
+        cmd += ["--mode", "plan", "--sandbox"]
     return cmd + _route_args(model, effort)
 
 

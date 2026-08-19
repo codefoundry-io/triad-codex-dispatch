@@ -9,7 +9,7 @@ transaction lifecycle.
 ## Required routes
 
 - Claude: `opus`, `xhigh`, retained 1,800-second end-to-end wrapper deadline.
-- Google: AGY 1.1.10 or newer, `gemini-3.1-pro-high`, `high`, retained
+- Google: AGY 1.1.12 or newer, `gemini-3.1-pro-high`, `high`, retained
   1,800-second end-to-end wrapper deadline, and one owner-selected native
   authentication class: personal Google Sign-In or Business Sign-In for
   Gemini Enterprise with a GE Standard or GE Plus seat.
