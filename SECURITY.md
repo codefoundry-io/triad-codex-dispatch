@@ -13,10 +13,13 @@ TRIAD, the wrapper brackets `--sandbox read-only` in a transient global-settings
 transaction, unions the exact write/command/unsandboxed/URL/MCP deny set, and
 restores the original bytes. Unless the operator sets
 `AGY_NO_HEADLESS_AUTOAPPROVE=1`, AGY 1.1.3+ requires the wrapper-owned
-`--dangerously-skip-permissions` headless adaptation, which voids deny and OS-ring
-enforcement; formal review is therefore read-only by intent plus prepared-tree and
-worktree mutation detection. Bootstrap installs no persistent global permission
-policy, Enterprise authentication, or pre-spawn `shell_environment_policy`.
+`--dangerously-skip-permissions` headless adaptation. Headless auto-approve
+removes interactive approval prompts but does not remove explicit deny entries.
+MCP calls are denied; conditionally authorized external evidence uses the AGY
+native official-web read path. The provider-managed sandbox is not OS-level
+confinement, and round-integrity mutation detection is a separate fail-closed
+check. Bootstrap installs no persistent global permission policy, Enterprise
+authentication, or pre-spawn `shell_environment_policy`.
 
 Run TRIAD from the same authenticated login terminal and project worktree used
 for development. Trusted Python and `PATH` values are prerequisites. Wrapper

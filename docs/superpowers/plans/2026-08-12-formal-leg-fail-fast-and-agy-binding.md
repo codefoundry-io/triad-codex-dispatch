@@ -1,5 +1,10 @@
 # Formal Leg Fail-Fast and AGY Binding Implementation Plan
 
+> **Historical, superseded, and non-executable.** This completed plan preserves
+> the former AGY 1.1.12 native route as history. TRIAD 0.2.541 is governed by
+> `skills/triad-antigravity-dispatch/SKILL.md` and the current cross-family leg
+> and prompt contracts; do not execute this plan as current instructions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` or `superpowers:executing-plans` to
 > implement this plan task-by-task. Use `superpowers:test-driven-development`
@@ -158,4 +163,3 @@ the operational SOT and specifies fail-fast sibling cancellation.
   the new fail-fast cancellation contract.**
 - [ ] **Step 4: Admit results only after all three succeed and final integrity
   verification passes.**
-

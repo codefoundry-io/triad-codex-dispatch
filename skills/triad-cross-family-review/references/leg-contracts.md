@@ -64,7 +64,7 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
 
 ## Google family
 
-Before the round, prove `agy --version` is at least 1.1.10 and `agy models`
+Before the round, prove `agy --version` is at least 1.1.17 and `agy models`
 advertises `gemini-3.1-pro-high`. Before starting any family, run this
 non-model wrapper preflight to validate the same binary/version and route:
 
@@ -102,17 +102,32 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
 
 The same packaged AGY wrapper supports either personal Google Sign-In or
 Business Sign-In for Gemini Enterprise with an owner-provisioned GE Standard
-or GE Plus seat. It uses `stream-json` and `json-schema`, then
-validates the terminal result locally. Matching the deployed Claude-led TRIAD,
-formal AGY passes `--sandbox`, brackets the call in a transient global-settings
+or GE Plus seat. It uses `stream-json`, then validates the terminal result
+locally. Matching the deployed Claude-led TRIAD,
+formal AGY passes `--sandbox`, uses native `--mode plan`, and brackets the call in a transient global-settings
 transaction that unions `write_file(*)`, `command(*)`, `unsandboxed(*)`,
 `execute_url(*)`, and `mcp(*)`, and restores the original bytes. AGY 1.1.3+
 also receives the wrapper-owned `--dangerously-skip-permissions` adaptation so
 headless read tools work, unless the operator sets
-`AGY_NO_HEADLESS_AUTOAPPROVE=1`. `--dangerously-skip-permissions` voids the deny
-transaction and AGY OS-ring;
-the formal Google leg is read-only by intent plus the round-integrity checks,
-not an enforced filesystem or network boundary. Callers never pass the flag. The
+`AGY_NO_HEADLESS_AUTOAPPROVE=1`. The formal route omits native `--json-schema` in plan mode because the
+selected Business Sign-In backend rejects a custom finish schema before model
+execution. It requires the terminal `response` to be one JSON object, then
+uses the shared local validator to remove AGY's optional single Markdown fence
+around that sole object. It then performs strict local `LegVerdict` validation
+and exact review-binding checks. Unmatched, nested, repeated, prose-bearing,
+and multiple-object responses are rejected locally.
+A missing, malformed, or schema-invalid response terminates the leg with no
+schema-repair provider call. The formal Google prompt authorizes only
+AGY native file-read/search tools for local inspection, and undecidable
+uncertainty goes to `open_questions`. The explicit deny rules remain the
+action-namespace enforcement backstop, and a denied call invalidates the leg.
+The formal Google settings transaction denies all MCP calls. Approved AGY
+native official-web reads remain available only when the review objective and
+authorized external data boundary expressly permit them.
+Headless auto-approve removes interactive approval prompts but does not remove
+those explicit deny entries. Round-integrity mutation detection is separate.
+The formal Google leg remains read-only by intent plus explicit deny and
+separate round-integrity checks. Callers never pass the flag. The
 formal child environment removes known API-key, ADC, Vertex, SDK-enterprise,
 cloud project/location/quota, and `AGY_ADC_AUTH` route selectors without reading
 their values. Native sign-in state remains provider-owned; TRIAD does not log
@@ -120,6 +135,25 @@ in, switch accounts, or choose a billed API route.
 
 The selected formal AGY leg uses the explicit 1,800-second end-to-end wrapper
 deadline; shorter polling waits are wake-up boundaries, not provider failures.
+Its rendered prompt permits AGY native file-read and search tools for local
+inspection but explicitly forbids `run_command`, terminal and shell tools,
+file-write/edit tools, notebook execution, subagents, browser actuation, and
+scratch-space tools. It also forbids creating or executing experiments; a fact
+that static inspection and expressly authorized read-only external evidence
+cannot decide belongs in `open_questions`. This prompt contract complements the
+deny transaction. Use `grep_search` with the required `SearchPath` and `Query`
+arguments to search inside the review target identified by Review metadata, and use `list_dir`,
+`find_by_name`, and `view_file` as needed. For every `view_file` call, provide the required
+`AbsolutePath` argument. For files larger than one native view, request explicit
+positive-integer `StartLine` and `EndLine` ranges. Never request `ContentOffset`
+or `IsSkillFile`, and do not rely on implicit another-page continuation. If
+native reads and searches are insufficient, report the limit in
+`open_questions`. The wrapper scans formal `step_update` telemetry, admits only
+the fixed native read/search tool set, and terminates the leg as
+`tool-contract-violation` for any other tool, non-object parameters, a missing
+or non-integer step index, or conflicting duplicate step telemetry. A tool
+attempt in a named denied namespace is also blocked by its matching deny entry;
+round-integrity mutation detection remains separate.
 Do not edit files, change external state, or execute candidate code, tests,
 builds, hooks, or scripts. If AGY, the model, or the settings transaction is
 unavailable, invalidate the round. Clean it and repair the same selected AGY
@@ -129,9 +163,9 @@ Gemini Enterprise, or the reverse, as recovery.
 If the operator opt-out makes headless review unavailable, preserve the opt-out
 and report that same-route blocker rather than overriding it.
 
-This exact formal schema route makes one provider call. Capacity failure or
-invalid structured output is terminal for that invocation; the wrapper makes
-no capacity retry or schema-repair provider call.
+This exact formal local-validation route makes one provider call. Capacity
+failure or invalid output is terminal for that invocation; the wrapper makes no
+capacity retry or schema-repair provider call.
 
 Validate the Google result with:
 

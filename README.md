@@ -32,8 +32,12 @@ reaches out to the other families for you.
   global-settings transaction that unions five deny rules and restores the
   original bytes. AGY 1.1.3+ also needs the wrapper-owned
   `--dangerously-skip-permissions` headless adaptation unless the operator sets
-  `AGY_NO_HEADLESS_AUTOAPPROVE=1`; with the flag, read-only is by intent and
-  round-integrity verification rather than enforced containment.
+  `AGY_NO_HEADLESS_AUTOAPPROVE=1`. The auto-approve removes interactive approval
+  prompts, while the transaction's explicit deny rules still block their named
+  action namespaces. MCP calls are denied in the formal Google transaction;
+  conditionally authorized external evidence uses AGY's native official-web read
+  path. This is not OS-level confinement; round-integrity mutation detection
+  remains a separate fail-closed check.
 - Classifier gaps use a fresh native proposal-only child. The owner applies an
   accepted proposal locally from the same authenticated login terminal with the
   bootstrap-printed `python3 bin/apply_patch.py ... --classifier-file ...`
@@ -145,12 +149,15 @@ subsection only when its "do this ONLY if…" line applies to you.
 ### Gemini Enterprise Business Sign-In
 
 *Do this only in a company environment with a GE Standard or GE Plus seat.* Use
-AGY 1.1.10 or newer and select its Business Sign-In with the organization-owned
+AGY 1.1.17 or newer and select its Business Sign-In with the organization-owned
 Google Cloud project. The same formal AGY wrapper, settings transaction, and
-`--sandbox read-only` lifecycle apply. TRIAD never changes the active account or falls back
-to a personal sign-in. The separate `triad-gemini-dispatch` skill remains a
+`--sandbox read-only` plus native `--mode plan` lifecycle apply. The wrapper
+parses the terminal response JSON and applies the strict local verdict and
+review-binding checks, accepting AGY's optional single Markdown fence around
+the sole JSON object. TRIAD never changes the active account or falls back to
+a personal sign-in. The separate `triad-gemini-dispatch` skill remains a
 standalone compatibility consult; it is not the Gemini Enterprise formal leg.
-See the official [AGY 1.1.10 release](https://github.com/google-antigravity/antigravity-cli/releases/tag/1.1.10).
+See the official [AGY changelog](https://antigravity.google/changelog?plan=free).
 
 ### Linux / WSL2 sandbox support
 
@@ -178,13 +185,26 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.539
+### Upgrading to 0.2.542
 
-0.2.539 makes formal AGY match the deployed Claude-led route: native personal
-or Gemini Enterprise Business Sign-In, a transient global-settings transaction,
-`--sandbox read-only`, the wrapper-owned headless adaptation with its operator
-opt-out, and billed API/ADC/Vertex route-selector removal. It retains 0.2.538's
-native result binding and immediate whole-round fail-fast cancellation.
+0.2.542 makes the formal Google-family prompt explicitly static-only: it permits
+native file read/search and conditionally authorized AGY native official-web
+reads, denies MCP calls, forbids command, write, experiment, notebook, subagent,
+browser-actuation, and scratch tools, and sends unresolved static uncertainty to
+`open_questions`. Inside the prepared directory it uses native `list_dir`,
+`find_by_name`, and `view_file` as needed, and uses native `grep_search` with the
+required `SearchPath` and `Query` arguments. Every view supplies the required `AbsolutePath` argument; large files use explicit
+positive-integer `StartLine` and `EndLine` ranges.
+`ContentOffset`, `IsSkillFile`, and implicit `another page` continuation remain
+forbidden.
+It corrects 0.2.540's plan-mode structured-output regression by omitting native
+`--json-schema` on the formal plan-mode route, requiring the terminal
+`response` to contain one JSON object, accepting AGY's optional single Markdown
+fence around that object, and applying strict local `LegVerdict` plus exact
+review-binding validation. It requires AGY 1.1.17 or newer, personal or
+Gemini Enterprise Business Sign-In, transient global-settings transaction, `--sandbox read-only`,
+operator opt-out, billed API/ADC/Vertex route-selector removal, local result
+binding, and immediate whole-round fail-fast cancellation.
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -196,8 +216,9 @@ permission profiles, and credentials; unrelated files remain untouched.
 The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
 packet, receipt, PTY, and sentinel review transports are removed. AGY requires
-1.1.10 or newer and uses native `stream-json` plus `json-schema`; the formal
-route passes `gemini-3.1-pro-high` with `high` effort. The documented packaged
+1.1.17 or newer and uses native `stream-json`; the formal plan-mode route
+deliberately omits native `--json-schema` and validates the terminal JSON
+locally. It passes `gemini-3.1-pro-high` with `high` effort. The documented packaged
 AGY child selection is the sole permission-mode exception; other provider
 permission and all project-trust policy remain native. Ordinary `codex` remains
 the normal path.
@@ -205,7 +226,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.539-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.542-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -343,9 +364,11 @@ Honest boundaries, so you know where the toolkit stops:
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
   they are not a claim of OS-level isolation. Formal AGY uses `--sandbox`, the
   transient deny lease, the disposable `--cwd` review directory, digest and
-  mutation checks, and your review before commit. On AGY 1.1.3+ the enabled
-  headless auto-approve flag voids deny and sandbox enforcement, so the
-  surviving boundary is prompt intent plus mutation detection.
+  mutation checks, and your review before commit. On AGY 1.1.3+ the headless
+  auto-approve removes interactive approval prompts, while the transaction's
+  explicit deny rules still block their named action namespaces. The sandbox
+  remains provider-managed rather than OS-level confinement; round-integrity
+  mutation detection is a separate fail-closed check.
   Formal review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.

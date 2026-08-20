@@ -1,5 +1,13 @@
 # Formal AGY Native-Sign-In Design
 
+> **Historical, superseded, and non-executable.** TRIAD 0.2.541 supersedes this
+> design. A bounded AGY 1.1.16 Business Sign-In runtime probe on 2026-08-20 ran
+> with `--dangerously-skip-permissions`, attempted `write_to_file`, and returned
+> `Matches user-configured deny rule`; the target remained absent. The current
+> authority is `skills/triad-antigravity-dispatch/SKILL.md` plus the current
+> cross-family leg and prompt contracts. The contrary historical claim below
+> that the flag voids the deny transaction is non-executable.
+
 **Owner decision:** Formal three-family review keeps both owner environments
 through AGY 1.1.10 or newer: personal Google Sign-In and Business Sign-In for
 Gemini Enterprise with a GE Standard or GE Plus seat. TRIAD records the active

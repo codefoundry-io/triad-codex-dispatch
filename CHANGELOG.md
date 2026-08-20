@@ -1,11 +1,64 @@
 # Changelog
 
+## 0.2.542 — 2026-08-21
+
+- Raises the formal AGY floor to 1.1.17 and restores native `grep_search` using
+  only its documented `SearchPath`, `Query`, and optional public arguments.
+- Keeps the three required family legs, native CLI sign-in, plan-mode static
+  boundary, local verdict admission, and fail-closed round lifecycle unchanged.
+
+## 0.2.541 — 2026-08-20
+
+- Makes the formal Google-family prompt explicitly forbid command, write,
+  experiment, notebook, subagent, browser-actuation, and scratch-space tools;
+  unresolved static uncertainty must be reported in `open_questions`.
+- Aligns the prompt with the deployed settings transaction: MCP calls are
+  denied, conditionally authorized external evidence uses AGY native
+  official-web reads, and headless auto-approve removes interactive prompts
+  without removing explicit deny entries.
+- Aligns Google source inspection with observed AGY 1.1.16 behavior: native
+  `list_dir`, `find_by_name`, and `view_file` may be used as needed inside the
+  prepared directory. Formal review excludes `grep_search` because AGY 1.1.16
+  intermittently rejects public-schema-valid calls before result admission.
+  Each view uses the required `AbsolutePath` argument, while large files use
+  explicit positive-integer `StartLine` and `EndLine` ranges. `ContentOffset`,
+  `IsSkillFile`, and implicit another-page continuation remain forbidden.
+- The wrapper scans formal `step_update` telemetry, admits only the fixed native
+  read/search tool set, and terminates the leg as `tool-contract-violation` for
+  any other tool, non-object parameters, a missing or non-integer step index, or
+  conflicting duplicate step telemetry.
+- Repairs the formal `--mode plan` structured-output regression by omitting the
+  unsupported native `--json-schema` finish contract, requiring the terminal
+  `response` to contain one JSON object, accepting AGY's optional single
+  Markdown fence around that object, and applying strict local `LegVerdict` and
+  exact review-binding validation. Native personal and Gemini Enterprise
+  Business Sign-In and the transient permission-deny transaction remain
+  unchanged.
+- Adds dedicated RED/GREEN route contracts and authenticated Business Sign-In
+  probes for the plan-mode local-validation path.
+- Marks superseded AGY plans as historical, records the 1.1.16 denied-write
+  runtime proof, and makes the one-view instruction worktree-path neutral.
+
+## 0.2.540 — 2026-08-19
+
+- Runs formal AGY review in native `--mode plan` so headless Google-family legs
+  use read-only search and file-view tools instead of requesting denied shell
+  commands after returning a verdict.
+- Raises the formal AGY floor to 1.1.12, the first release that applies
+  `--mode` in headless `-p` runs, while preserving personal and Gemini
+  Enterprise Business Sign-In and the five-deny settings transaction.
+- Adds RED/GREEN wrapper and distribution contracts plus a real authenticated
+  plan-mode spike that completes with a schema-bound terminal verdict.
+
 ## 0.2.539 — 2026-08-14
 
 - Makes the formal Google leg use the deployed Claude-led AGY behavior: native
   personal or Gemini Enterprise Business Sign-In, `--sandbox read-only`, the
   transient five-deny global-settings transaction, and the wrapper-owned
-  headless adaptation with its operator opt-out and intent-only residual.
+  headless adaptation with its operator opt-out and intent-only residual. This
+  0.2.539 permission statement is historical; 0.2.541 supersedes its intent-only
+  residual with explicit deny enforcement plus separate round-integrity
+  detection.
 - Removes API-key, ADC, Vertex, SDK-enterprise, cloud-project, location, and
   quota route selectors from the formal AGY child without reading their values;
   TRIAD never switches accounts or falls back to another provider.

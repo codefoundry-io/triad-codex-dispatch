@@ -1,7 +1,7 @@
 interface:
   display_name: "Triad Gemini Dispatch"
-  short_description: "Gemini business, Vertex, or API-key fallback"
-  default_prompt: "Use $triad-gemini-dispatch only after agy is proven unavailable before submission; it is not a direct-request route. State the objective, review target, approved data, exclusions, and result profile before dispatch."
+  short_description: "Standalone Gemini CLI compatibility consult"
+  default_prompt: "Use $triad-gemini-dispatch for one authorized standalone Gemini CLI compatibility consult; it is not a formal Google-family review leg or fallback. State the objective, review target, approved data, exclusions, and result profile before dispatch."
 
 policy:
   allow_implicit_invocation: false

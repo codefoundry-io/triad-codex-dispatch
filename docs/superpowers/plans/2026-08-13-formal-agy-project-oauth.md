@@ -1,5 +1,10 @@
 # Formal AGY Claude-Parity Native-Sign-In Implementation Plan
 
+> **Historical, superseded, and non-executable.** This completed implementation
+> plan preserves the former route and unfinished release checklist as history.
+> TRIAD 0.2.541 is governed by `skills/triad-antigravity-dispatch/SKILL.md` and
+> the current cross-family leg and prompt contracts; do not resume this plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development or superpowers:executing-plans.
 

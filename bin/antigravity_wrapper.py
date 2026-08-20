@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Single-shot AGY wrapper using the 1.1.10 native stream contract.
+"""Single-shot AGY wrapper using the 1.1.17 headless plan-mode contract.
 
-The wrapper forwards one prompt through ``stream-json``, optionally supplies a
-native JSON schema, admits only the terminal ``result`` event, and validates a
-structured result locally. Read-only calls use the same transient global-settings
-transaction and headless adaptation as the deployed Claude-led TRIAD wrapper.
+The wrapper forwards one prompt through ``stream-json``, admits only the
+terminal ``result`` event, and validates contracted output locally. Formal
+plan-mode calls omit the unsupported native finish schema. Read-only calls use
+the same transient global-settings transaction and headless adaptation as the
+deployed Claude-led TRIAD wrapper.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import _agy_settings
 from _common import load_pydantic_class, validate_response
 
 
-AGY_VERSION_FLOOR = (1, 1, 10)
+AGY_VERSION_FLOOR = (1, 1, 17)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
@@ -37,6 +38,17 @@ FORMAL_AGY_ENV_REMOVE = (
     "GOOGLE_CLOUD_REGION",
     "GOOGLE_CLOUD_QUOTA_PROJECT",
     "AGY_ADC_AUTH",
+)
+_FORMAL_PLAN_READ_TOOLS = frozenset(
+    {
+        "code_search",
+        "find_by_name",
+        "grep_search",
+        "list_dir",
+        "read_url_content",
+        "search_web",
+        "view_file",
+    }
 )
 
 
@@ -105,7 +117,7 @@ def _build_cmd(
     if json_schema is not None:
         cmd += ["--json-schema", json_schema]
     if sandbox:
-        cmd.append("--sandbox")
+        cmd += ["--mode", "plan", "--sandbox"]
     return cmd + _route_args(model, effort)
 
 
@@ -130,6 +142,69 @@ def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | 
     return events, terminal
 
 
+def _plan_tool_contract_error(events: list[dict[str, Any]]) -> str | None:
+    seen_steps: dict[int, tuple[object, object]] = {}
+    for event in events:
+        update = event.get("step_update")
+        if event.get("event") != "step_update" or not isinstance(update, dict):
+            continue
+        if update.get("step_type") != "tool":
+            continue
+        step_index = update.get("step_index")
+        if type(step_index) is not int:
+            return "formal plan tool has missing or non-integer step_index"
+        tool_name = update.get("tool_name")
+        tool_info = update.get("tool_info")
+        parameters = (
+            tool_info.get("parameters") if isinstance(tool_info, dict) else None
+        )
+        representation = (tool_name, parameters)
+        if step_index in seen_steps:
+            if seen_steps[step_index] != representation:
+                return f"formal plan tool step {step_index} has conflicting duplicate telemetry"
+            continue
+        seen_steps[step_index] = representation
+        if tool_name not in _FORMAL_PLAN_READ_TOOLS:
+            return f"formal plan attempted forbidden tool {tool_name!r}"
+        if not isinstance(parameters, dict):
+            return f"formal plan tool {tool_name!r} has invalid parameters"
+        if tool_name == "grep_search":
+            allowed = {
+                "SearchPath",
+                "Query",
+                "IsRegex",
+                "CaseInsensitive",
+                "Includes",
+                "MatchPerLine",
+            }
+            unexpected = sorted(set(parameters) - allowed)
+            if unexpected:
+                return f"formal plan grep_search has forbidden arguments {unexpected!r}"
+            for name in ("SearchPath", "Query"):
+                value = parameters.get(name)
+                if not isinstance(value, str) or not value:
+                    return f"formal plan grep_search has invalid {name}"
+        if tool_name == "view_file":
+            allowed = {"AbsolutePath", "StartLine", "EndLine"}
+            if "AbsolutePath" not in parameters or not set(parameters) <= allowed:
+                unexpected = sorted(set(parameters) - allowed)
+                return f"formal plan view_file has forbidden arguments {unexpected!r}"
+            view_path = parameters.get("AbsolutePath")
+            if not isinstance(view_path, str) or not view_path:
+                return "formal plan view_file has invalid AbsolutePath"
+            for name in ("StartLine", "EndLine"):
+                value = parameters.get(name)
+                if name in parameters and (type(value) is not int or value < 1):
+                    return f"formal plan view_file has invalid line range {name}"
+            if (
+                "StartLine" in parameters
+                and "EndLine" in parameters
+                and parameters["EndLine"] < parameters["StartLine"]
+            ):
+                return "formal plan view_file has invalid line range"
+    return None
+
+
 def _fail(
     run: _common.RunResult,
     classification: str,
@@ -152,8 +227,9 @@ def _interpret_run(
     expected_review_id: str | None = None,
     expected_family: str | None = None,
     expected_content_digest: str | None = None,
+    plan_mode: bool = False,
 ) -> _common.RunResult:
-    """Admit one terminal AGY result and ignore intermediate step text."""
+    """Admit one terminal AGY result after enforcing formal tool telemetry."""
     run.runtime_identity = "unexposed"
     events, result = parse_agy_stream(run.stdout)
     exposed_model = None
@@ -215,21 +291,49 @@ def _interpret_run(
             _common.EXIT_TERMINAL,
             f"requested model {expected_model!r} but AGY exposed {route_conflict!r}",
         )
+    if plan_mode and (tool_error := _plan_tool_contract_error(events)) is not None:
+        return _fail(
+            run,
+            "tool-contract-violation",
+            _common.EXIT_TERMINAL,
+            tool_error,
+        )
 
     if pydantic_cls is not None:
-        structured = result.get("structured_output")
-        if structured is None:
-            run.validation_error = "terminal result has no structured_output"
-            return _fail(
-                run,
-                "schema-fail",
-                _common.EXIT_SCHEMA_FAIL,
-                run.validation_error,
-            )
-        encoded = json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
+        if plan_mode:
+            response = result.get("response")
+            if not isinstance(response, str) or (
+                response.strip().startswith("```") != response.strip().endswith("```")
+            ):
+                run.validation_error = (
+                    "plan-mode terminal response is not a valid JSON object"
+                )
+                return _fail(
+                    run,
+                    "schema-fail",
+                    _common.EXIT_SCHEMA_FAIL,
+                    run.validation_error,
+                )
+            encoded = response
+        else:
+            structured = result.get("structured_output")
+            if structured is None:
+                run.validation_error = "terminal result has no structured_output"
+                return _fail(
+                    run,
+                    "schema-fail",
+                    _common.EXIT_SCHEMA_FAIL,
+                    run.validation_error,
+                )
+            encoded = json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
         valid, payload = validate_response(encoded, pydantic_cls)
         if not valid:
-            run.validation_error = str(payload)
+            run.validation_error = (
+                f"plan-mode terminal response is not a valid JSON object matching "
+                f"LegVerdict: {payload}"
+                if plan_mode
+                else str(payload)
+            )
             return _fail(
                 run,
                 "schema-fail",
@@ -378,17 +482,21 @@ def main() -> int:
         sys.stdout.write(json.dumps(receipt, ensure_ascii=False) + "\n")
         return _common.EXIT_OK
 
+    local_plan_response = args.sandbox == "read-only" and all(
+        value is not None for value in binding_values
+    )
     try:
         schema_object = (
-            pydantic_cls.model_json_schema() if pydantic_cls is not None else None
+            pydantic_cls.model_json_schema()
+            if pydantic_cls is not None and not local_plan_response
+            else None
         )
-        if schema_object is not None and all(
-            value is not None for value in binding_values
-        ):
+        if schema_object is not None:
             properties = schema_object["properties"]
-            properties["review_id"]["const"] = args.expected_review_id
-            properties["family"]["const"] = args.expected_family
-            properties["content_digest"]["const"] = args.expected_content_digest
+            if all(value is not None for value in binding_values):
+                properties["review_id"]["const"] = args.expected_review_id
+                properties["family"]["const"] = args.expected_family
+                properties["content_digest"]["const"] = args.expected_content_digest
         schema = (
             json.dumps(schema_object, ensure_ascii=True, separators=(",", ":"))
             if schema_object is not None
@@ -433,6 +541,7 @@ def main() -> int:
         expected_review_id=args.expected_review_id,
         expected_family=args.expected_family,
         expected_content_digest=args.expected_content_digest,
+        plan_mode=local_plan_response,
     )
     _common.log(
         f"[wrapper] antigravity {result.classification} "
