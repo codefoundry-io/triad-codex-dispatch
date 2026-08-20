@@ -1,5 +1,12 @@
 # Formal Leg Fail-Fast and AGY Binding Design
 
+> **Historical, superseded, and non-executable.** This design records the former
+> native schema binding route. TRIAD 0.2.541 instead uses plan-mode terminal
+> response admission and strict local validation. Current authority is
+> `skills/triad-antigravity-dispatch/SKILL.md` plus the current cross-family leg
+> and prompt contracts. The fail-fast round-control history below remains
+> descriptive, not executable instructions.
+
 **Owner decision:** A required-leg failure is an infrastructure failure for the
 round. The leader stops every still-running leg immediately and repairs that
 failure before any new review dispatch.
@@ -72,4 +79,3 @@ verification includes focused tests, the complete test suite, skill validation,
 distribution verification, source/package byte comparison, supported
 installation, and a fresh process exposure proof. Argus remains paused until
 both slices are deployed; it then resumes with a fresh three-family review ID.
-

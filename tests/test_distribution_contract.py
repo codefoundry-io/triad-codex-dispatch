@@ -19,12 +19,23 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.540"
+    assert manifest["version"] == "0.2.542"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
     assert "same complete focused directory" in prompts
     assert "batched-full-coverage" not in prompts
+
+
+def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
+    version = json.loads(_text(MANIFEST))["version"]
+    changelog = _text(ROOT / "CHANGELOG.md")
+
+    assert f"## {version} — 2026-08-21" in changelog
+    assert f"### Upgrading to {version}" in _text(ROOT / "README.md")
+    assert f"### {version} 업그레이드" in _text(ROOT / "README.ko.md")
+    assert "## 0.2.541 — 2026-08-20" in changelog
+    assert "Formal review excludes `grep_search` because AGY 1.1.16" in changelog
 
 
 def test_distribution_contains_only_the_four_public_skills() -> None:
@@ -40,6 +51,15 @@ def test_distribution_contains_only_the_four_public_skills() -> None:
         assert text.startswith("---\n")
         assert f"name: {path.parent.name}\n" in text.split("---", 2)[1]
         assert len(text.splitlines()) <= 200
+
+
+def test_gemini_agent_metadata_is_standalone_not_formal_fallback() -> None:
+    metadata = _text(SKILLS / "triad-gemini-dispatch" / "agents" / "openai.yaml")
+
+    assert "Standalone Gemini CLI compatibility consult" in metadata
+    assert "not a formal Google-family review leg or fallback" in metadata
+    assert "Vertex, or API-key fallback" not in metadata
+    assert "only after agy is proven unavailable" not in metadata
 
 
 def test_active_skill_links_resolve_inside_each_skill() -> None:
@@ -91,9 +111,23 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     )
     agy = _text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md")
     gemini = _text(SKILLS / "triad-gemini-dispatch" / "SKILL.md")
+    readme = _text(ROOT / "README.md")
+    readme_ko = _text(ROOT / "README.ko.md")
     compact_leg_contracts = " ".join(leg_contracts.split())
     compact_prompt_contract = " ".join(prompt_contract.split())
     compact_reviewer_routing = " ".join(reviewer_routing.split())
+    compact_antigravity = " ".join(agy.split())
+    compact_readme = " ".join(readme.split())
+    compact_readme_ko = " ".join(readme_ko.split())
+
+    for compact in (compact_readme, compact_readme_ko):
+        assert "`AbsolutePath`" in compact
+        assert "another page" in compact
+        assert "`ContentOffset`" in compact
+        assert "`StartLine`" in compact
+        assert "`EndLine`" in compact
+    assert "uses native `grep_search`" in compact_readme
+    assert "native `grep_search`를 사용합니다" in compact_readme_ko
 
     assert "## Contents" in leg_contracts
     for entry in (
@@ -131,6 +165,36 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             "Do not edit files, change external state, or execute candidate code"
             in compact
         )
+        assert "formal Google settings transaction denies all MCP calls" in compact
+        assert "Approved AGY native official-web reads remain available" in compact
+    assert "MCP calls are unavailable for the formal Google leg" in compact_antigravity
+    assert "AGY native official-web reads" in compact_antigravity
+    for compact in (
+        compact_leg_contracts,
+        compact_prompt_contract,
+        compact_antigravity,
+    ):
+        assert "Use `grep_search` with the required `SearchPath` and `Query`" in compact
+        assert "inside the review target identified by Review metadata" in compact
+        assert "use `list_dir`, `find_by_name`, and `view_file` as needed" in compact
+        assert "For every `view_file` call" in compact
+        assert "explicit positive-integer `StartLine` and `EndLine` ranges" in compact
+        assert "Never request `ContentOffset` or `IsSkillFile`" in compact
+    telemetry_contract = (
+        "The wrapper scans formal `step_update` telemetry, admits only the fixed "
+        "native read/search tool set, and terminates the leg as "
+        "`tool-contract-violation` for any other tool, non-object parameters, a "
+        "missing or non-integer step index, or conflicting duplicate step telemetry."
+    )
+    for compact in (
+        compact_leg_contracts,
+        compact_prompt_contract,
+        compact_antigravity,
+        " ".join(_text(ROOT / "CHANGELOG.md").split()),
+    ):
+        assert telemetry_contract in compact
+    assert "MCP calls are denied" in compact_readme
+    assert "MCP 호출은 차단" in compact_readme_ko
     assert (
         "Round integrity verification binds the selected prepared-directory bytes or "
         "worktree review digest plus canonical worktree fingerprint"
@@ -165,12 +229,13 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "invalidates the complete round and discards every verdict"
         in compact_leg_contracts
     )
-    assert "1.1.12 or newer" in agy
-    assert "AGY 1.1.12 or newer" in reviewer_routing
+    assert "1.1.17 or newer" in agy
+    assert "AGY 1.1.17 or newer" in reviewer_routing
     assert "--model gemini-3.1-pro-high" in agy
     assert "--effort high" in agy
     assert "--timeout 1800" in agy
-    assert "stream-json" in agy and "json-schema" in agy
+    assert "stream-json" in agy
+    assert "omits native `--json-schema` in plan mode" in agy
     compact_agy = " ".join(agy.split())
     compact_leg_contracts = " ".join(leg_contracts.split())
     assert "internally inserts `--dangerously-skip-permissions`" in compact_agy
@@ -182,11 +247,34 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "does not edit user settings" not in compact_agy
     assert "--sandbox read-only" in agy
     assert "--sandbox read-only" in leg_contracts
-    assert "--mode plan" in agy
-    assert "--mode plan" in leg_contracts
+    assert "uses native `--mode plan`" in compact_agy
+    assert "uses native `--mode plan`" in compact_leg_contracts
+    for compact in (compact_agy, compact_leg_contracts):
+        assert "omits native `--json-schema` in plan mode" in compact
+        assert "terminal `response` to be one JSON object" in compact
+        assert "optional single Markdown fence" in compact
+        assert "strict local `LegVerdict` validation" in compact
+        assert (
+            "Unmatched, nested, repeated, prose-bearing, and multiple-object "
+            "responses are rejected locally" in compact
+        )
+        assert "no schema-repair provider call" in compact
     assert "transient global-settings transaction" in compact_leg_contracts
     assert "restores the original bytes" in compact_leg_contracts
     assert "read-only by intent" in compact_leg_contracts
+    for compact in (compact_agy, compact_leg_contracts):
+        normalized = compact.lower()
+        assert (
+            "formal Google prompt authorizes only AGY native file-read/search tools "
+            "for local inspection".lower()
+            in normalized
+        )
+        assert "undecidable uncertainty goes to `open_questions`" in normalized
+        assert (
+            "explicit deny rules remain the action-namespace enforcement backstop"
+            in normalized
+        )
+        assert "round-integrity mutation detection is separate" in normalized
     assert "Before starting any family" in leg_contracts
     assert "--preflight-only" in leg_contracts
     assert '"provider_started": false' in leg_contracts
@@ -282,6 +370,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
 def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     readme = " ".join(_text(ROOT / "README.md").split())
     readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+    security = " ".join(_text(ROOT / "SECURITY.md").split())
     gemini = " ".join(_text(SKILLS / "triad-gemini-dispatch" / "SKILL.md").split())
     leg_contracts = " ".join(
         _text(
@@ -293,12 +382,58 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "user setting을 변경하지 않습니다" not in readme_ko
     assert "transient AGY global-settings transaction" in readme
     assert "일시적 AGY global-settings transaction" in readme_ko
+    assert (
+        "auto-approve removes interactive approval prompts, while the transaction's "
+        "explicit deny rules still block their named action namespaces" in readme
+    )
+    assert (
+        "auto-approve는 interactive approval prompt를 제거하지만 transaction의 "
+        "explicit deny rule은 지정된 action namespace를 계속 차단합니다" in readme_ko
+    )
+    assert (
+        "auto-approve removes interactive approval prompts but does not remove "
+        "explicit deny entries" in security
+    )
+    assert "MCP calls are denied" in security
+    assert "AGY native official-web read path" in security
+    assert "voids deny" not in security
     assert "Gemini is eligible only when AGY is proven unavailable" not in gemini
     assert "standalone compatibility consult only" in gemini
     assert (
         "same packaged AGY wrapper supports either personal Google Sign-In"
         in leg_contracts
     )
+
+
+def test_changelog_marks_the_superseded_google_permission_claim() -> None:
+    changelog = " ".join(_text(ROOT / "CHANGELOG.md").split())
+
+    assert (
+        "MCP calls are denied, conditionally authorized external evidence uses AGY "
+        "native official-web reads" in changelog
+    )
+    assert (
+        "This 0.2.539 permission statement is historical; 0.2.541 supersedes its "
+        "intent-only residual" in changelog
+    )
+
+
+def test_leg_contract_scopes_mechanical_denial_to_named_namespaces() -> None:
+    leg_contracts = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+
+    assert (
+        "A tool attempt in a named denied namespace is also blocked by its matching "
+        "deny entry" in leg_contracts
+    )
+    assert (
+        "Other prompt-forbidden actions remain contract obligations"
+        not in leg_contracts
+    )
+    assert "`tool-contract-violation`" in leg_contracts
 
 
 def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
@@ -770,6 +905,34 @@ def test_governing_agy_documents_match_the_current_formal_route() -> None:
         assert "one provider call" in text, path
 
 
+def test_superseded_agy_documents_point_to_the_current_formal_route() -> None:
+    superseded = {
+        "docs/superpowers/specs/2026-08-12-formal-leg-fail-fast-and-agy-binding-design.md": (
+            "native schema binding",
+            "skills/triad-antigravity-dispatch/SKILL.md",
+        ),
+        "docs/superpowers/plans/2026-08-12-formal-leg-fail-fast-and-agy-binding.md": (
+            "AGY 1.1.12 native",
+            "skills/triad-antigravity-dispatch/SKILL.md",
+        ),
+        "docs/superpowers/plans/2026-08-13-formal-agy-project-oauth.md": (
+            "Run a fresh operational three-family review",
+            "skills/triad-antigravity-dispatch/SKILL.md",
+        ),
+        "docs/superpowers/specs/2026-08-13-formal-google-cli-oauth-only-design.md": (
+            "voids both the deny transaction",
+            "Matches user-configured deny rule",
+        ),
+    }
+
+    for path, required_history in superseded.items():
+        text = _text(ROOT / path)
+        assert "Historical, superseded, and non-executable" in text, path
+        assert "0.2.541" in text, path
+        for phrase in required_history:
+            assert phrase in text, (path, phrase)
+
+
 def test_current_release_docs_bind_superseded_agy_route_and_current_review_boundary() -> (
     None
 ):
@@ -808,6 +971,9 @@ def test_current_release_docs_bind_superseded_agy_route_and_current_review_bound
     assert "final-0.2.533-r9" in release_plan
     assert "FINAL_REVIEW_ID" in release_plan
     assert "final-r2" not in release_plan
+    assert "Historical, superseded, and non-executable" in release_plan
+    assert "skills/triad-antigravity-dispatch/SKILL.md" in release_plan
+    assert "skills/triad-cross-family-review/SKILL.md" in release_plan
     assert "docs/references/repair-protocol.md" in handoff
     assert "stale 80-file count" in handoff
 

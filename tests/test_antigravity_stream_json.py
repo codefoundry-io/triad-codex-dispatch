@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 from pydantic import BaseModel, ConfigDict
 
 
@@ -46,6 +47,77 @@ def _stream(result: dict) -> str:
     )
 
 
+def _formal_payload() -> dict:
+    return {
+        "review_id": "review-r1",
+        "family": "google",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["source/product/file.py"],
+        "open_questions": [],
+    }
+
+
+def _plan_stream(*tool_calls: tuple[str, dict]) -> str:
+    events = [
+        {"event": "init", "init": {"model": "gemini-3.1-pro-high"}},
+    ]
+    for step_index, (tool_name, parameters) in enumerate(tool_calls, start=1):
+        events.append(
+            {
+                "event": "step_update",
+                "step_update": {
+                    "step_index": step_index,
+                    "state": "ACTIVE",
+                    "step_type": "tool",
+                    "tool_name": tool_name,
+                    "tool_info": {"name": tool_name, "parameters": parameters},
+                },
+            }
+        )
+    events.append(
+        {
+            "event": "result",
+            "result": {"status": "SUCCESS", "response": json.dumps(_formal_payload())},
+        }
+    )
+    return "\n".join(json.dumps(event) for event in events)
+
+
+def _interpret_plan_stream(*tool_calls: tuple[str, dict]) -> _common.RunResult:
+    return wrapper._interpret_run(
+        _run_result(_plan_stream(*tool_calls)),
+        LegVerdict,
+        "gemini-3.1-pro-high",
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+        plan_mode=True,
+    )
+
+
+def _interpret_plan_updates(*updates: dict) -> _common.RunResult:
+    events = [{"event": "init", "init": {"model": "gemini-3.1-pro-high"}}]
+    events.extend({"event": "step_update", "step_update": update} for update in updates)
+    events.append(
+        {
+            "event": "result",
+            "result": {"status": "SUCCESS", "response": json.dumps(_formal_payload())},
+        }
+    )
+    return wrapper._interpret_run(
+        _run_result("\n".join(json.dumps(event) for event in events)),
+        LegVerdict,
+        "gemini-3.1-pro-high",
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+        plan_mode=True,
+    )
+
+
 def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
     cmd = wrapper._build_cmd(
         "/opt/bin/agy",
@@ -76,7 +148,7 @@ def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
     assert cmd.count("--dangerously-skip-permissions") == 1
 
 
-def test_formal_route_matches_claude_sandbox_and_autoapprove_contract() -> None:
+def test_formal_route_uses_plan_mode_with_sandbox() -> None:
     cmd = wrapper._build_cmd(
         "/opt/bin/agy",
         "review the directory",
@@ -131,8 +203,8 @@ def test_schema_argv_is_redacted_from_logs() -> None:
     ]
 
 
-def test_version_floor_requires_headless_plan_mode_support() -> None:
-    assert wrapper.AGY_VERSION_FLOOR == (1, 1, 12)
+def test_version_floor_requires_headless_static_review_support() -> None:
+    assert wrapper.AGY_VERSION_FLOOR == (1, 1, 17)
     assert wrapper._parse_agy_version("1.1.10\n") == (1, 1, 10)
     assert wrapper._parse_agy_version("agy 2.0.1") == (2, 0, 1)
     assert wrapper._parse_agy_version("unknown") is None
@@ -169,6 +241,385 @@ def test_structured_result_uses_native_payload_then_local_validation() -> None:
     assert admitted.validated == {"ok": True}
     assert admitted.final_answer == '{"ok": true}'
     assert admitted.runtime_identity == "gemini-3.1-pro-high"
+
+
+def test_plan_mode_locally_validates_terminal_response_without_native_schema() -> None:
+    payload = {
+        "review_id": "review-r1",
+        "family": "google",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": json.dumps(payload),
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(
+        raw,
+        LegVerdict,
+        "gemini-3.1-pro-high",
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+        plan_mode=True,
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.validated == payload
+    assert admitted.final_answer == json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    (
+        "run_command",
+        "write_to_file",
+        "call_mcp_tool",
+        "browser_click_element",
+        "notebook_execution",
+        "invoke_subagent",
+        "sed_file",
+    ),
+)
+def test_plan_mode_rejects_forbidden_tool_attempt_before_valid_terminal_result(
+    tool_name: str,
+) -> None:
+    admitted = _interpret_plan_stream((tool_name, {}))
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "tool-contract-violation"
+    assert admitted.final_answer == ""
+    assert tool_name in (admitted.extraction_error or "")
+
+
+def test_plan_mode_admits_direct_source_view_without_prior_grep() -> None:
+    admitted = _interpret_plan_stream(
+        ("view_file", {"AbsolutePath": "/review/shared/source/product/file.py"})
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "/review/shared/TASK.md",
+        "/review/shared/EVIDENCE.md",
+        "/review/shared/REVIEW.diff",
+        "/review/shared/SOURCE_SHA256SUMS",
+    ),
+)
+def test_plan_mode_admits_one_direct_view_of_leader_packet_control(path: str) -> None:
+    admitted = _interpret_plan_stream(("view_file", {"AbsolutePath": path}))
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+
+
+@pytest.mark.parametrize(
+    "step_update",
+    (
+        {
+            "step_type": "tool",
+            "tool_name": "run_command",
+            "tool_info": {"parameters": {}},
+        },
+        {
+            "step_index": "1",
+            "step_type": "tool",
+            "tool_name": "run_command",
+            "tool_info": {"parameters": {}},
+        },
+    ),
+)
+def test_plan_mode_rejects_missing_or_noninteger_tool_step_index(
+    step_update: dict,
+) -> None:
+    admitted = _interpret_plan_updates(step_update)
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "tool-contract-violation"
+    assert "step_index" in (admitted.extraction_error or "")
+
+
+def test_plan_mode_admits_identical_duplicate_tool_event_representation() -> None:
+    update = {
+        "step_index": 1,
+        "step_type": "tool",
+        "tool_name": "view_file",
+        "tool_info": {
+            "parameters": {"AbsolutePath": "/review/shared/TASK.md"},
+        },
+    }
+
+    admitted = _interpret_plan_updates(update, update)
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "parameters"),
+    (
+        ("run_command", {}),
+        (
+            "view_file",
+            {"AbsolutePath": "/review/shared/TASK.md", "StartLine": 10},
+        ),
+        ("view_file", {"AbsolutePath": "/review/shared/EVIDENCE.md"}),
+    ),
+)
+def test_plan_mode_rejects_changed_duplicate_tool_event_representation(
+    tool_name: str,
+    parameters: dict,
+) -> None:
+    first = {
+        "step_index": 1,
+        "step_type": "tool",
+        "tool_name": "view_file",
+        "tool_info": {
+            "parameters": {"AbsolutePath": "/review/shared/TASK.md"},
+        },
+    }
+    changed = {
+        "step_index": 1,
+        "step_type": "tool",
+        "tool_name": tool_name,
+        "tool_info": {"parameters": parameters},
+    }
+
+    admitted = _interpret_plan_updates(first, changed)
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "tool-contract-violation"
+    assert "duplicate" in (admitted.extraction_error or "")
+
+
+@pytest.mark.parametrize(
+    "line_range",
+    (
+        {"StartLine": 1},
+        {"EndLine": 200},
+        {"StartLine": 201, "EndLine": 400},
+    ),
+)
+def test_plan_mode_admits_documented_view_line_range(line_range: dict) -> None:
+    path = "/review/shared/source/product/file.py"
+    admitted = _interpret_plan_stream(
+        ("view_file", {"AbsolutePath": path, **line_range}),
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+
+
+@pytest.mark.parametrize("extra_argument", ("ContentOffset", "IsSkillFile"))
+def test_plan_mode_rejects_undocumented_view_argument(extra_argument: str) -> None:
+    path = "/review/shared/source/product/file.py"
+    admitted = _interpret_plan_stream(
+        ("view_file", {"AbsolutePath": path, extra_argument: 10}),
+    )
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "tool-contract-violation"
+    assert extra_argument in (admitted.extraction_error or "")
+
+
+@pytest.mark.parametrize(
+    "line_range",
+    (
+        {"StartLine": 0},
+        {"StartLine": True},
+        {"EndLine": "200"},
+        {"StartLine": 20, "EndLine": 10},
+    ),
+)
+def test_plan_mode_rejects_invalid_view_line_range(line_range: dict) -> None:
+    path = "/review/shared/source/product/file.py"
+    admitted = _interpret_plan_stream(
+        ("view_file", {"AbsolutePath": path, **line_range}),
+    )
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "tool-contract-violation"
+    assert "line" in (admitted.extraction_error or "")
+
+
+def test_plan_mode_admits_repeated_read_only_view_for_one_path() -> None:
+    path = "/review/shared/source/product/file.py"
+    admitted = _interpret_plan_stream(
+        ("view_file", {"AbsolutePath": path}),
+        ("view_file", {"AbsolutePath": path}),
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+
+
+@pytest.mark.parametrize(
+    "search_path",
+    (
+        "/review/shared/source/product/file.py",
+        "/review/shared/source/product",
+    ),
+)
+def test_plan_mode_admits_agy_1_1_17_public_grep_search(search_path: str) -> None:
+    admitted = _interpret_plan_stream(
+        (
+            "grep_search",
+            {
+                "SearchPath": search_path,
+                "Query": "decision",
+            },
+        ),
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+
+
+@pytest.mark.parametrize("extra_argument", ("toolSummary", "toolAction"))
+def test_plan_mode_rejects_nonpublic_grep_search_argument(extra_argument: str) -> None:
+    admitted = _interpret_plan_stream(
+        (
+            "grep_search",
+            {
+                "SearchPath": "/review/shared/source/product",
+                "Query": "decision",
+                extra_argument: "not part of the public AGY schema",
+            },
+        ),
+    )
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "tool-contract-violation"
+    assert "grep_search" in (admitted.extraction_error or "")
+
+
+def test_plan_mode_admits_agy_single_fenced_terminal_json_locally() -> None:
+    payload = {
+        "review_id": "review-r1",
+        "family": "google",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": f"```json\n{json.dumps(payload)}\n```\n",
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(
+        raw,
+        LegVerdict,
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+        plan_mode=True,
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.validated == payload
+    assert admitted.final_answer == json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    "response",
+    (
+        "```json\n{payload}",
+        "{payload}\n```",
+    ),
+)
+def test_plan_mode_rejects_unmatched_terminal_markdown_fence(response: str) -> None:
+    payload = {
+        "review_id": "review-r1",
+        "family": "google",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": response.format(payload=json.dumps(payload)),
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(raw, LegVerdict, plan_mode=True)
+
+    assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
+    assert admitted.classification == "schema-fail"
+    assert admitted.final_answer == ""
+    assert "valid JSON object" in (admitted.validation_error or "")
+
+
+@pytest.mark.parametrize(
+    "response",
+    (
+        "prose\n{payload}",
+        "{payload}\nprose",
+        "{payload}\n{payload}",
+        "```json\n```json\n{payload}\n```\n```",
+    ),
+)
+def test_plan_mode_rejects_non_single_terminal_json_transport(response: str) -> None:
+    payload = {
+        "review_id": "review-r1",
+        "family": "google",
+        "content_digest": "a" * 64,
+        "verdict": "SAFE",
+        "criteria_checked": ["correctness"],
+        "findings": [],
+        "affected_surfaces_inspected": ["src/parser.py"],
+        "open_questions": [],
+    }
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": response.format(payload=json.dumps(payload)),
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(raw, LegVerdict, plan_mode=True)
+
+    assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
+    assert admitted.classification == "schema-fail"
+    assert admitted.final_answer == ""
+
+
+def test_plan_mode_rejects_non_json_terminal_response() -> None:
+    raw = _run_result(_stream({"status": "SUCCESS", "response": "not a JSON object"}))
+
+    admitted = wrapper._interpret_run(raw, LegVerdict, plan_mode=True)
+
+    assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
+    assert admitted.classification == "schema-fail"
+    assert admitted.final_answer == ""
+    assert "valid JSON object" in (admitted.validation_error or "")
 
 
 def test_bound_formal_result_rejects_wrong_family_after_local_validation() -> None:
@@ -349,7 +800,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     calls: list[list[str]] = []
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
@@ -392,7 +843,9 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     assert calls[0][calls[0].index("--effort") + 1] == "high"
 
 
-def test_main_binds_formal_leg_in_native_schema(monkeypatch, capsys) -> None:
+def test_main_omits_native_schema_and_binds_formal_leg_locally(
+    monkeypatch, capsys
+) -> None:
     calls: list[list[str]] = []
     guarded: list[list[str]] = []
     payload = {
@@ -406,7 +859,7 @@ def test_main_binds_formal_leg_in_native_schema(monkeypatch, capsys) -> None:
         "open_questions": [],
     }
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
@@ -423,17 +876,12 @@ def test_main_binds_formal_leg_in_native_schema(monkeypatch, capsys) -> None:
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log, remove_env):
         calls.append(cmd)
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
-        schema = json.loads(cmd[cmd.index("--json-schema") + 1])
-        properties = schema["properties"]
-        assert properties["review_id"]["const"] == "review-r1"
-        assert properties["family"]["const"] == "google"
-        assert properties["content_digest"]["const"] == "a" * 64
+        assert "--json-schema" not in cmd
         return _run_result(
             _stream(
                 {
                     "status": "SUCCESS",
                     "response": json.dumps(payload),
-                    "structured_output": payload,
                 }
             )
         )
@@ -467,6 +915,10 @@ def test_main_binds_formal_leg_in_native_schema(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out) == payload
     assert len(calls) == 1
     assert "--sandbox" in calls[0]
+    assert calls[0][calls[0].index("--mode") : calls[0].index("--mode") + 2] == [
+        "--mode",
+        "plan",
+    ]
     assert "--dangerously-skip-permissions" in calls[0]
     assert guarded == [wrapper._agy_settings._READ_ONLY_DENY]
 
@@ -480,7 +932,7 @@ def test_formal_provider_failure_restores_settings_bytes(
     target.write_bytes(baseline)
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(target))
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_args, **_kwargs: None
@@ -526,7 +978,7 @@ def test_formal_main_stops_before_provider_without_read_only_sandbox(
     monkeypatch, capsys
 ) -> None:
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
         wrapper._common,
@@ -561,7 +1013,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     pruned: list[str] = []
     guarded: list[list[str]] = []
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
     @contextlib.contextmanager
@@ -596,7 +1048,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert wrapper.main() == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt == {
-        "agy_version": "1.1.12",
+        "agy_version": "1.1.17",
         "effort": "high",
         "model": "gemini-3.1-pro-high",
         "provider_started": False,
@@ -608,7 +1060,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
 
 def test_preflight_settings_failure_stops_before_provider(monkeypatch, capsys) -> None:
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 12))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
 
     @contextlib.contextmanager

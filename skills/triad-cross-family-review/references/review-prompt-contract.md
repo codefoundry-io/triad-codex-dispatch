@@ -32,12 +32,32 @@ do not interpolate them again.
 
 Treat the prepared directory as the only local filesystem input. Do not inspect
 a canonical worktree or another local path. Start with `TASK.md` and
-`SOURCE_SHA256SUMS`. Use available read and search tools, including
-provider-native tools, installed CLI tools, and configured MCP tools, when
-their inputs stay within the approved review boundary. Configured MCP servers
-remain available. Existing user permission settings continue to govern MCP
-calls. Approved official-web reads through read-only MCP tools remain available
-when the review objective and authorized external data boundary permit them.
+`SOURCE_SHA256SUMS`. Claude and Codex retain available read and search tools,
+including provider-native tools, installed CLI tools, and configured MCP tools,
+when their inputs stay within the approved review boundary. For those two
+families, Configured MCP servers remain available. Existing user permission
+settings continue to govern MCP calls. Approved official-web reads through
+read-only MCP tools remain available when the review objective and authorized
+external data boundary expressly permit them. The Google prompt instead permits
+AGY native file-read and search tools for local inspection and explicitly forbids
+`run_command`, terminal and shell tools, file writes/edits, notebook execution,
+subagents, browser actuation, scratch-space tools, and experiments. The formal
+Google settings transaction denies all MCP calls. Approved AGY native
+official-web reads remain available only when the review objective and
+authorized external data boundary expressly permit them; otherwise an
+uncertainty that static inspection cannot decide belongs in `open_questions`.
+Use `grep_search` with the required `SearchPath` and `Query` arguments to search
+inside the review target identified by Review metadata, and use `list_dir`, `find_by_name`, and
+`view_file` as needed. For every `view_file` call, provide the required `AbsolutePath`
+argument. For files larger than one native view, request explicit
+positive-integer `StartLine` and `EndLine` ranges. Never request `ContentOffset`
+or `IsSkillFile`, and do not rely
+on implicit another-page continuation. If native reads and searches are insufficient, report the limit in
+`open_questions`.
+The wrapper scans formal `step_update` telemetry, admits only the fixed native
+read/search tool set, and terminates the leg as `tool-contract-violation` for
+any other tool, non-object parameters, a missing or non-integer step index, or
+conflicting duplicate step telemetry.
 Do not edit files, change external state, or execute candidate code, tests,
 builds, hooks, or scripts.
 

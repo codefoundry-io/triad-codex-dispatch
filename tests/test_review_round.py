@@ -142,8 +142,12 @@ def _git(repo: Path, *args: str) -> str:
         "GIT_COMMITTER_EMAIL": "triad@example.invalid",
     }
     return subprocess.run(
-        ["git", *args], cwd=repo, env=env, text=True,
-        capture_output=True, check=True,
+        ["git", *args],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
     ).stdout
 
 
@@ -479,7 +483,9 @@ def test_prepare_accepts_200_character_review_id(tmp_path: Path) -> None:
     assert Path(result.root) == temp_root / f"triad-review-{review_id}"
 
 
-def test_prepare_keeps_nested_source_files_named_like_packet_artifacts(tmp_path: Path) -> None:
+def test_prepare_keeps_nested_source_files_named_like_packet_artifacts(
+    tmp_path: Path,
+) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
     source = (tmp_path / "source").resolve()
@@ -514,7 +520,7 @@ def test_prepare_keeps_nested_source_files_named_like_packet_artifacts(tmp_path:
         (_canonical_json_bytes(["a.txt", "a.txt"]), "duplicate member path"),
         (b'["a.txt\r"]\n', "raw JSON control character"),
         (_canonical_json_bytes(["nested/../a.txt"]), "invalid member path"),
-        (b"\xef\xbb\xbf[\"a.txt\"]\n", "without BOM"),
+        (b'\xef\xbb\xbf["a.txt"]\n', "without BOM"),
         (_canonical_json_bytes(["a.txt\0"]), "invalid member path"),
         (b'["a.txt\xff"]\n', "member list must be UTF-8"),
     ],
@@ -602,7 +608,11 @@ def test_prepare_rejects_missing_or_non_directory_parent_source_member(
     _write_member_list(members, ["not-a-directory/child.txt"])
     with pytest.raises(RoundIntegrityError, match="parent is not a directory"):
         review_round.prepare_review_workspace(
-            "non-directory-parent", source, members, temp_root=temp_root, now=4_000_000.0
+            "non-directory-parent",
+            source,
+            members,
+            temp_root=temp_root,
+            now=4_000_000.0,
         )
 
     assert (source / "a.txt").read_bytes() == b"a\n"
@@ -654,7 +664,11 @@ def test_prepare_rejects_unsupported_source_entry(
 
     with pytest.raises(RoundIntegrityError, match="not a regular file"):
         review_round.prepare_review_workspace(
-            f"unsupported-{entry_type}", source, members, temp_root=temp_root, now=4_000_000.0
+            f"unsupported-{entry_type}",
+            source,
+            members,
+            temp_root=temp_root,
+            now=4_000_000.0,
         )
 
     assert entry.exists()
@@ -762,7 +776,12 @@ def test_prepare_wraps_destination_storage_error_and_cleans_owned_root(
     members = (tmp_path / "members.txt").resolve()
     _write_member_list(members, ["a.txt"])
     destination = (
-        temp_root / "triad-review-destination-error" / "shared" / "source" / "product" / "a.txt"
+        temp_root
+        / "triad-review-destination-error"
+        / "shared"
+        / "source"
+        / "product"
+        / "a.txt"
     )
     original_open = Path.open
 
@@ -773,7 +792,10 @@ def test_prepare_wraps_destination_storage_error_and_cleans_owned_root(
 
     monkeypatch.setattr(Path, "open", fail_destination_open)
 
-    with pytest.raises(RoundIntegrityError, match="review workspace preparation failed: simulated destination storage failure"):
+    with pytest.raises(
+        RoundIntegrityError,
+        match="review workspace preparation failed: simulated destination storage failure",
+    ):
         review_round.prepare_review_workspace(
             "destination-error", source, members, temp_root=temp_root, now=4_000_000.0
         )
@@ -897,9 +919,7 @@ def test_cleanup_rejects_unsafe_root_type(tmp_path: Path, root_type: str) -> Non
         root.write_text("keep\n", encoding="utf-8")
 
     with pytest.raises(RoundIntegrityError, match="non-symlink directory"):
-        review_round.cleanup_review_workspace(
-            "unsafe", root, temp_root=temp_root
-        )
+        review_round.cleanup_review_workspace("unsafe", root, temp_root=temp_root)
 
     assert root.is_symlink() if root_type == "symlink" else root.is_file()
     assert outside.is_dir()
@@ -944,7 +964,9 @@ def test_prepare_sweeps_partial_roots_by_root_mtime(tmp_path: Path) -> None:
 
     assert all(path.is_dir() for path in retained)
     assert all(not path.exists() for path in stale)
-    assert result.swept_roots == tuple(str(path) for path in sorted(stale, key=os.fspath))
+    assert result.swept_roots == tuple(
+        str(path) for path in sorted(stale, key=os.fspath)
+    )
     assert outside.read_text(encoding="utf-8") == "outside\n"
 
 
@@ -1048,9 +1070,7 @@ def test_cleanup_propagates_persistent_removal_error(
     monkeypatch.setattr(review_round.shutil, "rmtree", fail_removal)
 
     with pytest.raises(RoundIntegrityError, match="review root could not be removed"):
-        review_round.cleanup_review_workspace(
-            "persistent", root, temp_root=temp_root
-        )
+        review_round.cleanup_review_workspace("persistent", root, temp_root=temp_root)
 
     assert root.is_dir()
 
@@ -1075,7 +1095,9 @@ def test_stale_sweep_propagates_persistent_removal_error(
 
     monkeypatch.setattr(review_round.shutil, "rmtree", fail_removal)
 
-    with pytest.raises(RoundIntegrityError, match="stale review root could not be removed"):
+    with pytest.raises(
+        RoundIntegrityError, match="stale review root could not be removed"
+    ):
         review_round.prepare_review_workspace(
             "current", source, members, temp_root=temp_root, now=now
         )
@@ -1106,9 +1128,12 @@ def test_cleanup_removes_only_the_exact_review_root(tmp_path: Path) -> None:
     assert cleaned.removed is True
     assert not Path(first.root).exists()
     assert Path(second.root).exists()
-    assert review_round.cleanup_review_workspace(
-        "first", Path(first.root), temp_root=temp_root
-    ).removed is False
+    assert (
+        review_round.cleanup_review_workspace(
+            "first", Path(first.root), temp_root=temp_root
+        ).removed
+        is False
+    )
     with pytest.raises(RoundIntegrityError, match="expected root mismatch"):
         review_round.cleanup_review_workspace(
             "second", Path(first.root), temp_root=temp_root
@@ -1139,9 +1164,7 @@ def test_cleanup_does_not_report_dangling_symlink_replacement_as_removed(
     monkeypatch.setattr(review_round.shutil, "rmtree", replace_with_dangling_symlink)
 
     with pytest.raises(RoundIntegrityError, match="review root could not be removed"):
-        review_round.cleanup_review_workspace(
-            "cleanup-race", root, temp_root=temp_root
-        )
+        review_round.cleanup_review_workspace("cleanup-race", root, temp_root=temp_root)
 
     assert root.is_symlink()
 
@@ -1226,7 +1249,9 @@ def test_cleanup_does_not_follow_internal_symlink(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "keep.txt").write_text("keep\n", encoding="utf-8")
-    (Path(result.results_dir) / "outside-link").symlink_to(outside, target_is_directory=True)
+    (Path(result.results_dir) / "outside-link").symlink_to(
+        outside, target_is_directory=True
+    )
 
     review_round.cleanup_review_workspace(
         "symlink-cleanup", Path(result.root), temp_root=temp_root
@@ -1335,7 +1360,9 @@ def test_capture_rechecks_source_members_after_worktree_fingerprinting(
         (root / "source.py").write_text("VALUE = 10\n", encoding="utf-8")
         return fingerprint
 
-    monkeypatch.setattr(review_round, "_worktree_fingerprint", mutate_after_fingerprinting)
+    monkeypatch.setattr(
+        review_round, "_worktree_fingerprint", mutate_after_fingerprinting
+    )
     with pytest.raises(
         RoundIntegrityError, match="prepared source member does not match worktree"
     ):
@@ -1362,7 +1389,8 @@ def test_capture_rejects_source_root_symlink_before_reading_it(
 
     monkeypatch.setattr(Path, "read_bytes", observe_read)
     with pytest.raises(
-        RoundIntegrityError, match="prepared source root metadata must be a regular file"
+        RoundIntegrityError,
+        match="prepared source root metadata must be a regular file",
     ):
         capture_round(shared, worktree)
 
@@ -1406,7 +1434,9 @@ def test_verify_rejects_changed_ignored_selected_source_member(
         ignored.write_text("changed during verify\n", encoding="utf-8")
         return fingerprint
 
-    monkeypatch.setattr(review_round, "_worktree_fingerprint", mutate_after_fingerprinting)
+    monkeypatch.setattr(
+        review_round, "_worktree_fingerprint", mutate_after_fingerprinting
+    )
     with pytest.raises(
         RoundIntegrityError, match="prepared source member does not match worktree"
     ):
@@ -1488,11 +1518,7 @@ def test_manifest_cli_json_round_trips_special_paths_and_rejects_invalid_packet(
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         }
         for path in sorted(
-            (
-                path
-                for path in shared.rglob("*")
-                if path.is_file() and path != manifest
-            ),
+            (path for path in shared.rglob("*") if path.is_file() and path != manifest),
             key=lambda path: path.relative_to(shared).as_posix(),
         )
     ]
@@ -1563,7 +1589,9 @@ def test_manifest_cli_json_round_trips_special_paths_and_rejects_invalid_packet(
     os.utime(marker, ns=(fixed_ns, fixed_ns))
     os.utime(root, ns=(fixed_ns, fixed_ns))
     failed = run_manifest(root)
-    assert_branch_failure(failed, "lifecycle operations require the exact shared directory")
+    assert_branch_failure(
+        failed, "lifecycle operations require the exact shared directory"
+    )
     assert marker.stat().st_mtime_ns == fixed_ns
     assert root.stat().st_mtime_ns == fixed_ns
 
@@ -1573,7 +1601,11 @@ def test_manifest_cli_json_round_trips_special_paths_and_rejects_invalid_packet(
     assert_branch_failure(failed, "manifest requires a managed review shared directory")
     assert not (unmanaged / "SOURCE_SHA256SUMS").exists()
 
-    for label, marker_mode in (("missing", "missing"), ("symlink", "symlink"), ("readonly", "readonly")):
+    for label, marker_mode in (
+        ("missing", "missing"),
+        ("symlink", "symlink"),
+        ("readonly", "readonly"),
+    ):
         root, shared = make_packet(f"manifest-activity-{label}", ["a.txt"])
         marker = root / ".last_activity"
         external_marker = tmp_path / f"external-marker-{label}"
@@ -1933,16 +1965,16 @@ def test_cli_prepare_reports_collision(tmp_path: Path) -> None:
     prepared_result = json.loads(first.stdout)
     assert first.stdout.encode("ascii") == _canonical_json_bytes(prepared_result)
     root = Path(prepared_result["root"])
-    before = sorted(
-        path.relative_to(root).as_posix() for path in root.rglob("*")
-    )
+    before = sorted(path.relative_to(root).as_posix() for path in root.rglob("*"))
 
     second = subprocess.run(command, env=env, text=True, capture_output=True)
 
     assert second.returncode == 2
     assert "review root already exists" in second.stderr
     assert second.stdout == ""
-    assert sorted(path.relative_to(root).as_posix() for path in root.rglob("*")) == before
+    assert (
+        sorted(path.relative_to(root).as_posix() for path in root.rglob("*")) == before
+    )
 
 
 @pytest.mark.parametrize(
@@ -1964,7 +1996,9 @@ def test_cli_invalid_lifecycle_arguments_fail_without_mutation(
     (source / "a.txt").write_text("a\n", encoding="utf-8")
     members = (tmp_path / "members.txt").resolve()
     _write_member_list(members, ["a.txt"])
-    before = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+    before = sorted(
+        path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*")
+    )
 
     completed = subprocess.run(
         [
@@ -1988,7 +2022,10 @@ def test_cli_invalid_lifecycle_arguments_fail_without_mutation(
     assert completed.returncode == 2
     assert completed.stdout == ""
     assert "review_round:" in completed.stderr
-    assert sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*")) == before
+    assert (
+        sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+        == before
+    )
     assert sentinel.read_text(encoding="utf-8") == "preserve\n"
     assert (source / "a.txt").read_text(encoding="utf-8") == "a\n"
     assert members.read_bytes() == _canonical_json_bytes(["a.txt"])
@@ -2112,7 +2149,10 @@ def test_cli_lifecycle_sequence(tmp_path: Path, worktree: Path) -> None:
     )
     assert rendered.returncode == 0, rendered.stderr
     assert rendered.stdout.strip() == str(prompt_path)
-    assert _review_metadata(prompt_path.read_text(encoding="utf-8"))["review_id"] == "sequence"
+    assert (
+        _review_metadata(prompt_path.read_text(encoding="utf-8"))["review_id"]
+        == "sequence"
+    )
 
     verified = subprocess.run(
         [
@@ -2140,12 +2180,8 @@ def test_cli_lifecycle_sequence(tmp_path: Path, worktree: Path) -> None:
         "--expected-root",
         str(root),
     ]
-    first_cleanup = subprocess.run(
-        cleanup, env=env, text=True, capture_output=True
-    )
-    second_cleanup = subprocess.run(
-        cleanup, env=env, text=True, capture_output=True
-    )
+    first_cleanup = subprocess.run(cleanup, env=env, text=True, capture_output=True)
+    second_cleanup = subprocess.run(cleanup, env=env, text=True, capture_output=True)
     assert first_cleanup.returncode == 0, first_cleanup.stderr
     first_cleanup_result = {
         "removed": True,
@@ -2297,7 +2333,9 @@ def test_worktree_fingerprint_rejects_untracked_fifo_swapped_at_open(
     victim.write_text("inside\n", encoding="utf-8")
     state = _inject_leaf_fifo_swap(monkeypatch, victim)
 
-    with pytest.raises(RoundIntegrityError, match="untracked file is not a regular file"):
+    with pytest.raises(
+        RoundIntegrityError, match="untracked file is not a regular file"
+    ):
         review_round._worktree_fingerprint(worktree)
 
     assert state["swapped"]
@@ -2350,7 +2388,9 @@ def test_regular_file_digest_streams_fixed_size_chunks(
     monkeypatch.setattr(os, "read", observe_read)
 
     assert len(_prepared_digest(prepared)) == 64
-    assert review_round._regular_file_digest(path) == hashlib.sha256(payload).hexdigest()
+    assert (
+        review_round._regular_file_digest(path) == hashlib.sha256(payload).hexdigest()
+    )
     assert whole_file_reads == []
     assert len(requested_sizes) >= 3
     assert set(requested_sizes) == {review_round._FILE_READ_CHUNK_SIZE}
@@ -2446,9 +2486,7 @@ def test_worktree_fingerprint_does_not_execute_textconv(
     assert not sentinel.exists()
 
 
-def test_worktree_fingerprint_pins_both_diff_arms(
-    worktree: Path, monkeypatch
-) -> None:
+def test_worktree_fingerprint_pins_both_diff_arms(worktree: Path, monkeypatch) -> None:
     expected = (
         "--binary",
         "--full-index",
@@ -2494,7 +2532,13 @@ def _visible_tracked_fingerprint_arms(worktree: Path) -> tuple[bytes, ...]:
 
 
 @pytest.mark.parametrize(
-    ("flags", "expected_tag", "expected_labels", "expected_guidance", "absent_guidance"),
+    (
+        "flags",
+        "expected_tag",
+        "expected_labels",
+        "expected_guidance",
+        "absent_guidance",
+    ),
     [
         (
             ("--assume-unchanged",),
@@ -2694,6 +2738,66 @@ def test_worktree_prompt_preserves_leader_authored_review_points(
     assert metadata["content_digest"] == metadata["worktree_review_digest"]
     assert "authenticated custody locations only" in prompt
     assert "Return exactly one JSON object matching verdict_schema:LegVerdict" in prompt
+    google_tool_contract = (
+        "For this Google leg, use only AGY native file-read and search tools for local inspection. "
+        "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "
+        "and use list_dir, find_by_name, and view_file as needed. For every view_file call, "
+        "provide the required AbsolutePath argument. For files larger than one native view, request "
+        "explicit positive-integer StartLine and EndLine ranges. Never request ContentOffset or IsSkillFile, "
+        "and do not rely on implicit another-page continuation. If native reads and searches are insufficient, report "
+        "the limit in open_questions. "
+        "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
+        "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
+        "The formal read-only settings transaction denies all MCP calls. Approved AGY native official-web "
+        "reads remain available only when the review objective and authorized external data boundary "
+        "expressly permit them. Do not create or execute an experiment "
+        "to resolve uncertainty. If static inspection and any expressly authorized read-only external "
+        "evidence cannot decide current correctness, report the uncertainty in open_questions. "
+    )
+    assert prompt.count(google_tool_contract) == 1
+    assert "explicit positive-integer StartLine and EndLine ranges" in prompt
+    assert "Never call view_file with only AbsolutePath" not in prompt
+    assert "ContentOffset" in prompt
+    assert "Configured MCP servers remain available" not in prompt
+    assert "Approved official-web or MCP reads" not in prompt
+    assert "Use available read and search tools. For this Google leg" not in prompt
+    assert (
+        "provider-native tools, installed CLI tools, and configured MCP tools"
+        not in prompt
+    )
+
+
+@pytest.mark.parametrize("family", ("claude", "codex"))
+def test_worktree_prompt_preserves_non_google_read_search_tools(
+    worktree: Path, family: str
+) -> None:
+    task = (worktree / f"TASK-{family}.md").resolve()
+    status = (worktree / f"STATUS-{family}.txt").resolve()
+    diff = (worktree / f"REVIEW-{family}.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id=f"{family}-r1",
+        review_kind="implementation-review",
+        family=family,
+        objective="Review the current implementation.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the changed renderer into supported routes.",),
+        approved_boundary=("sanitized worktree",),
+    )
+
+    prompt = render_worktree_review_prompt(brief)
+
+    assert "Use available read and search tools" in prompt
+    assert (
+        "provider-native tools, installed CLI tools, and configured MCP tools" in prompt
+    )
+    assert "Never invoke run_command" not in prompt
 
 
 def test_worktree_prompt_rejects_empty_review_points(
@@ -2782,9 +2886,9 @@ def test_worktree_prompts_share_common_digest_across_families(
             render_worktree_review_prompt(brief)
         )
 
-    assert {
-        metadata["content_digest"] for metadata in metadata_by_family.values()
-    } == {metadata_by_family["claude"]["content_digest"]}
+    assert {metadata["content_digest"] for metadata in metadata_by_family.values()} == {
+        metadata_by_family["claude"]["content_digest"]
+    }
     assert {
         family: metadata["family"] for family, metadata in metadata_by_family.items()
     } == {"claude": "claude", "google": "google", "codex": "codex"}
@@ -2821,9 +2925,7 @@ def test_worktree_review_digest_binds_leader_authored_review_points(
     excluded = {"content_digest", "review_points", "worktree_review_digest"}
     assert {
         key: value for key, value in first_metadata.items() if key not in excluded
-    } == {
-        key: value for key, value in second_metadata.items() if key not in excluded
-    }
+    } == {key: value for key, value in second_metadata.items() if key not in excluded}
 
 
 def test_worktree_prompt_uses_captured_fingerprint_without_rehashing(
@@ -2902,22 +3004,28 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert "batch_manifest" not in prompt
     assert (
         "findings[].path and affected_surfaces_inspected entries must be "
-        "prepared-directory-relative"
-        in prompt
+        "prepared-directory-relative" in prompt
     )
     assert "Treat the prepared directory as the only filesystem input" in prompt
     assert "Do not inspect canonical worktrees or other local paths" in prompt
-    assert "Use available read and search tools" in prompt
-    assert "Do not edit files, change external state, or execute candidate code" in prompt
+    assert (
+        "For this Google leg, use only AGY native file-read and search tools for local inspection."
+        in prompt
+    )
+    assert (
+        "Do not edit files, change external state, or execute candidate code" in prompt
+    )
     assert (
         "Trace changed decisions into affected unchanged callers, consumers, schemas, "
         "configuration, build files, and governing documentation present within the "
-        "approved boundary"
-        in prompt
+        "approved boundary" in prompt
     )
     assert "Enumerate the criteria actually checked" in prompt
     assert "Do not call command or notebook tools" not in prompt
-    assert "NOT-SAFE requires at least one Critical/Major finding or one open question" in prompt
+    assert (
+        "NOT-SAFE requires at least one Critical/Major finding or one open question"
+        in prompt
+    )
 
 
 def test_rendered_prompt_distinguishes_nonblocking_suggestions(prepared):
@@ -2999,8 +3107,7 @@ def test_review_prompts_and_reference_share_reviewer_context_contract(
     worktree_prompt = " ".join(worktree_prompt_raw.split())
     expected_normalized = " ".join(expected.split())
     reference = (
-        ROOT
-        / "skills/triad-cross-family-review/references/review-prompt-contract.md"
+        ROOT / "skills/triad-cross-family-review/references/review-prompt-contract.md"
     ).read_text(encoding="utf-8")
     start = "<!-- REVIEWER_CONTEXT_CONTRACT_START -->"
     end = "<!-- REVIEWER_CONTEXT_CONTRACT_END -->"
@@ -3085,18 +3192,22 @@ def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
 
     assert (
         "If a potentially relevant surface needed to decide current correctness is absent "
-        "from the prepared directory"
-        in prompt
+        "from the prepared directory" in prompt
     )
     assert "not expressly excluded by metadata.approved_boundary" in prompt
-    assert "do not cite it as a finding or list it in affected_surfaces_inspected" in prompt
+    assert (
+        "do not cite it as a finding or list it in affected_surfaces_inspected"
+        in prompt
+    )
     assert (
         "This workflow prepares source/product from the canonical worktree root, so "
         "prepared product paths map to worktree-relative paths by removing their leading "
-        "source/product/ prefix"
+        "source/product/ prefix" in prompt
+    )
+    assert (
+        "suspected normalized worktree-relative path and required check in open_questions"
         in prompt
     )
-    assert "suspected normalized worktree-relative path and required check in open_questions" in prompt
     assert "which requires NOT-SAFE" in prompt
     assert "Do not ask how to proceed or wrap the JSON in prose" in prompt
 
@@ -3139,7 +3250,9 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
     assert len(metadata_lines) == 1
     metadata_line = metadata_lines[0]
     encoded_metadata = _canonical_json_bytes(expected_metadata)
-    assert (metadata_line.removeprefix(prefix) + "\n").encode("ascii") == encoded_metadata
+    assert (metadata_line.removeprefix(prefix) + "\n").encode(
+        "ascii"
+    ) == encoded_metadata
     assert json.loads(metadata_line.removeprefix(prefix)) == expected_metadata
     for escape in (b'\\"', b"\\\\", b"\\n", b"\\r", b"\\t", b"\\u0001", b"\\u2028"):
         assert escape in encoded_metadata
@@ -3171,13 +3284,11 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
     )
     assert (
         "Inspect metadata.prepared_directory and evaluate every metadata.criteria item across "
-        "metadata.approved_boundary."
-        in fixed_prose
+        "metadata.approved_boundary." in fixed_prose
     )
     assert (
         "Bind the returned review_id, family, and content_digest to metadata.review_id, "
-        "metadata.family, and metadata.content_digest."
-        in fixed_prose
+        "metadata.family, and metadata.content_digest." in fixed_prose
     )
 
 
@@ -3196,8 +3307,12 @@ def test_rendered_codex_prompt_preserves_available_read_search_tools(prepared):
     prompt = render_review_prompt(brief)
 
     assert "Use available read and search tools" in prompt
-    assert "provider-native tools, installed CLI tools, and configured MCP tools" in prompt
-    assert "Do not edit files, change external state, or execute candidate code" in prompt
+    assert (
+        "provider-native tools, installed CLI tools, and configured MCP tools" in prompt
+    )
+    assert (
+        "Do not edit files, change external state, or execute candidate code" in prompt
+    )
     assert "Never invoke Bash" not in prompt
 
 
@@ -3217,13 +3332,63 @@ def test_rendered_claude_prompt_preserves_all_read_search_tools(prepared):
 
     assert "Treat the prepared directory as the only filesystem input" in prompt
     assert "Use available read and search tools" in prompt
-    assert "provider-native tools, installed CLI tools, and configured MCP tools" in prompt
+    assert (
+        "provider-native tools, installed CLI tools, and configured MCP tools" in prompt
+    )
     assert "Configured MCP servers remain available" in prompt
     assert "Existing user permission settings continue to govern MCP calls" in prompt
-    assert "Approved official-web reads through read-only MCP tools remain available" in prompt
-    assert "Do not edit files, change external state, or execute candidate code" in prompt
+    assert (
+        "Approved official-web reads through read-only MCP tools remain available"
+        in prompt
+    )
+    assert (
+        "Do not edit files, change external state, or execute candidate code" in prompt
+    )
     assert "Never invoke Bash" not in prompt
     assert "do not substitute a shell command" not in prompt
+
+
+def test_rendered_google_prompt_forbids_command_tools_and_experiments(prepared):
+    brief = ReviewBrief(
+        review_id="review-r1",
+        review_kind="formal-plan",
+        family="google",
+        objective="Check plan completeness.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness", "completeness"),
+        approved_boundary=("all prepared files",),
+    )
+
+    prompt = render_review_prompt(brief)
+
+    google_tool_contract = (
+        "For this Google leg, use only AGY native file-read and search tools for local inspection. "
+        "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "
+        "and use list_dir, find_by_name, and view_file as needed. For every view_file call, "
+        "provide the required AbsolutePath argument. For files larger than one native view, request "
+        "explicit positive-integer StartLine and EndLine ranges. Never request ContentOffset or IsSkillFile, "
+        "and do not rely on implicit another-page continuation. If native reads and searches are insufficient, report "
+        "the limit in open_questions. "
+        "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
+        "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
+        "The formal read-only settings transaction denies all MCP calls. Approved AGY native official-web "
+        "reads remain available only when the review objective and authorized external data boundary "
+        "expressly permit them. Do not create or execute an experiment "
+        "to resolve uncertainty. If static inspection and any expressly authorized read-only external "
+        "evidence cannot decide current correctness, report the uncertainty in open_questions. "
+    )
+    assert prompt.count(google_tool_contract) == 1
+    assert "explicit positive-integer StartLine and EndLine ranges" in prompt
+    assert "Never call view_file with only AbsolutePath" not in prompt
+    assert "ContentOffset" in prompt
+    assert "Configured MCP servers remain available" not in prompt
+    assert "Approved official-web or MCP reads" not in prompt
+    assert "Use available read and search tools. For this Google leg" not in prompt
+    assert (
+        "provider-native tools, installed CLI tools, and configured MCP tools"
+        not in prompt
+    )
 
 
 def test_render_rejects_digest_not_bound_to_prepared_bytes(prepared):
@@ -3261,7 +3426,9 @@ def test_render_rejects_review_id_mismatched_with_lifecycle_root(
         approved_boundary=("all prepared files",),
     )
 
-    with pytest.raises(RoundIntegrityError, match="review ID does not match lifecycle root"):
+    with pytest.raises(
+        RoundIntegrityError, match="review ID does not match lifecycle root"
+    ):
         render_review_prompt(brief)
 
 
@@ -3285,11 +3452,19 @@ def test_cli_capture_and_verify(prepared, worktree, tmp_path):
     snapshot_file = (tmp_path / "round.json").resolve()
     captured = subprocess.run(
         [
-            sys.executable, str(BIN / "review_round.py"), "capture",
-            "--prepared-dir", str(prepared), "--worktree", str(worktree),
-            "--output", str(snapshot_file),
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "capture",
+            "--prepared-dir",
+            str(prepared),
+            "--worktree",
+            str(worktree),
+            "--output",
+            str(snapshot_file),
         ],
-        text=True, capture_output=True, check=False,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     assert captured.returncode == 0
     snapshot = json.loads(snapshot_file.read_text())
@@ -3298,11 +3473,19 @@ def test_cli_capture_and_verify(prepared, worktree, tmp_path):
 
     verified = subprocess.run(
         [
-            sys.executable, str(BIN / "review_round.py"), "verify",
-            "--prepared-dir", str(prepared), "--worktree", str(worktree),
-            "--snapshot", str(snapshot_file),
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "verify",
+            "--prepared-dir",
+            str(prepared),
+            "--worktree",
+            str(worktree),
+            "--snapshot",
+            str(snapshot_file),
         ],
-        text=True, capture_output=True, check=False,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     assert verified.returncode == 0
     assert verified.stdout.strip() == "ROUND_INTEGRITY_OK"
@@ -3434,9 +3617,7 @@ def test_cli_lifecycle_activity_success_paths(
     )
     manifest_packet: tuple[Path, Path] | None = None
     if operation == "capture":
-        manifest_packet = _lifecycle_packet(
-            tmp_path, monkeypatch, "activity-manifest"
-        )
+        manifest_packet = _lifecycle_packet(tmp_path, monkeypatch, "activity-manifest")
         (manifest_packet[1] / "SOURCE_SHA256SUMS").unlink()
     marker = root / ".last_activity"
     env = {**os.environ, "TMPDIR": str(tmp_path.resolve())}
@@ -3507,7 +3688,9 @@ def test_cli_lifecycle_activity_success_paths(
         return original_lstat(path)
 
     with monkeypatch.context() as context:
-        context.setattr(review_round.tempfile, "gettempdir", lambda: str(tmp_path.resolve()))
+        context.setattr(
+            review_round.tempfile, "gettempdir", lambda: str(tmp_path.resolve())
+        )
         context.setattr(Path, "lstat", fail_marker_inspection)
         assert review_round.main(in_process_arguments) == 0
     captured = capsys.readouterr()

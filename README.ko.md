@@ -28,8 +28,12 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   같이 `--sandbox read-only` 호출 동안 일시적 global-settings transaction으로
   다섯 deny를 합치고 원래 바이트를 복원합니다. AGY 1.1.3+에서는 operator가
   `AGY_NO_HEADLESS_AUTOAPPROVE=1`을 설정하지 않은 한 headless 실행에 wrapper 소유
-  `--dangerously-skip-permissions`가 필요합니다. 이 flag를 쓰는 read-only는 강제
-  containment가 아니라 의도와 round-integrity 검증으로 유지됩니다.
+  `--dangerously-skip-permissions`가 필요합니다. auto-approve는 interactive approval
+  prompt를 제거하지만 transaction의 explicit deny rule은 지정된 action namespace를
+  계속 차단합니다. formal Google transaction에서 MCP 호출은 차단되고, 조건부로
+  승인된 외부 근거는 AGY native official-web read 경로를 사용합니다. 이는 OS 수준
+  confinement가 아니며 round-integrity mutation detection은 별도의 fail-closed
+  검사입니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
   인증된 로그인 터미널에서 bootstrap이 출력한
   `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
@@ -130,10 +134,13 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 
 ### Gemini Enterprise Business Sign-In
 
-*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.12 이상에서
+*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.17 이상에서
 조직 소유 Google Cloud project로 Business Sign-In을 선택하세요. 개인 환경과 같은
-정식 AGY wrapper, settings transaction, `--sandbox read-only`, `--mode plan` 수명주기를 사용합니다. TRIAD는 활성
-계정을 변경하거나 개인 sign-in으로 fallback하지 않습니다. 별도
+정식 AGY wrapper, settings transaction, `--sandbox read-only`, native
+`--mode plan` 수명주기를 사용합니다. wrapper는 terminal response JSON을 파싱한 뒤
+유일한 JSON object를 감싼 AGY의 선택적 단일 Markdown fence를 제거하고 strict local
+verdict 및 review-binding 검증을 적용합니다. TRIAD는 활성 계정을
+변경하거나 개인 sign-in으로 fallback하지 않습니다. 별도
 `triad-gemini-dispatch` skill은 standalone 호환 consult이며 Gemini Enterprise 정식
 leg가 아닙니다.
 [공식 AGY changelog](https://antigravity.google/changelog?plan=free)를 참고하세요.
@@ -160,13 +167,26 @@ leg가 아닙니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.540 업그레이드
+### 0.2.542 업그레이드
 
-0.2.540은 formal AGY 경로에 native `--mode plan`을 추가하고 AGY 1.1.12 이상을
-요구해 headless review가 읽기 전용 search/file-view 도구를 사용하게 합니다. 개인
-또는 Gemini Enterprise Business Sign-In, 일시적 global-settings transaction,
-`--sandbox read-only`, operator opt-out, 유료 API/ADC/Vertex route-selector 제거,
-native 결과 binding, whole-round fail-fast cancellation은 유지합니다.
+0.2.542는 formal Google-family 프롬프트를 명시적인 정적 전용 계약으로 만듭니다.
+native file read/search와 조건부로 승인된 AGY native official-web read만 허용하고
+MCP 호출은 차단하며 command, write, experiment, notebook, subagent, browser
+actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
+`open_questions`에 기록합니다. prepared directory 안에서는 native `list_dir`,
+`find_by_name`, `view_file`을 필요에 따라 사용하고, 필수 `SearchPath`와 `Query` 인자를
+전달하는 native `grep_search`를 사용합니다. 모든 view는 필수 `AbsolutePath` 인자를 전달하고, 큰 파일은 양의 정수 `StartLine`과
+`EndLine` 범위를 명시해 읽습니다.
+`ContentOffset`, `IsSkillFile`, 묵시적 `another page` 연속 읽기는 금지합니다.
+formal plan-mode route에서 지원되지 않는 native `--json-schema` finish contract를
+생략하고 terminal `response`의 하나의 JSON object를 감싼 AGY의 선택적 단일
+Markdown fence를 허용한 뒤 strict local `LegVerdict` 및 exact review-binding 검증을
+적용하여 0.2.540의 plan-mode
+structured-output 회귀를 수정하면서 AGY 1.1.17 이상,
+개인 또는 Gemini Enterprise Business Sign-In,
+일시적 global-settings transaction, `--sandbox read-only`, operator opt-out, 유료
+API/ADC/Vertex route-selector 제거, local 결과 binding, whole-round fail-fast
+cancellation은 유지합니다.
 
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
@@ -176,8 +196,9 @@ rule, permission profile, credential, 관련 없는 파일을 건드리지 않�
 
 review runtime은 하나의 complete focused directory, required family별 하나의
 `LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
-receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.12 이상을
-요구하고 native `stream-json`과 `json-schema`를 사용합니다. formal route는
+receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.17 이상을
+요구하고 native `stream-json`을 사용합니다. formal plan-mode route는 native
+`--json-schema`를 의도적으로 생략하고 terminal JSON을 로컬에서 검증하며,
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. 문서화된 packaged AGY child
 선택만 permission-mode 예외이며, 다른 provider permission과 모든 project-trust
 policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
@@ -185,7 +206,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.540-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.542-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -320,8 +341,10 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   wrapper-containment env는 wrapper 프로세스의 path/pydantic 처리를 gate할 뿐, OS
   수준 격리 주장이 아닙니다. 정식 AGY는 일시적 deny lease, `--sandbox`, disposable
   `--cwd` review directory, digest/mutation check, 커밋 전 사용자 검토를 결합합니다.
-  AGY 1.1.3+에서 활성화된 headless auto-approve는 deny와 sandbox 강제를 무효화하므로 최종
-  경계는 prompt 의도와 mutation detection입니다.
+  AGY 1.1.3+의 headless auto-approve는 interactive approval prompt를 제거하지만
+  transaction의 explicit deny rule은 지정된 action namespace를 계속 차단합니다.
+  sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
+  mutation detection은 별도의 fail-closed 검사입니다.
   Formal review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
   system-temp root 아래에 있습니다. `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정했다면 hardened
   mode를 포함해 canonical system temp base를 포함해야 합니다.
