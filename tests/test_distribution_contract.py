@@ -19,7 +19,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.542"
+    assert manifest["version"] == "0.2.543"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -31,11 +31,16 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     version = json.loads(_text(MANIFEST))["version"]
     changelog = _text(ROOT / "CHANGELOG.md")
 
-    assert f"## {version} — 2026-08-21" in changelog
+    assert f"## {version} — 2026-08-22" in changelog
     assert f"### Upgrading to {version}" in _text(ROOT / "README.md")
     assert f"### {version} 업그레이드" in _text(ROOT / "README.ko.md")
     assert "## 0.2.541 — 2026-08-20" in changelog
     assert "Formal review excludes `grep_search` because AGY 1.1.16" in changelog
+    assert (
+        "Post-completion `step_update` telemetry is diagnostic vendor output"
+        in changelog
+    )
+    assert "Historical 0.2.541 behavior, superseded in 0.2.543" in changelog
 
 
 def test_distribution_contains_only_the_four_public_skills() -> None:
@@ -181,16 +186,15 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         assert "explicit positive-integer `StartLine` and `EndLine` ranges" in compact
         assert "Never request `ContentOffset` or `IsSkillFile`" in compact
     telemetry_contract = (
-        "The wrapper scans formal `step_update` telemetry, admits only the fixed "
-        "native read/search tool set, and terminates the leg as "
-        "`tool-contract-violation` for any other tool, non-object parameters, a "
-        "missing or non-integer step index, or conflicting duplicate step telemetry."
+        "Formal `step_update` telemetry is diagnostic vendor output, not an admission "
+        "schema: added fields, changed optional tool arguments, denied attempts, and "
+        "duplicate progress events do not invalidate an otherwise valid terminal "
+        "verdict."
     )
     for compact in (
         compact_leg_contracts,
         compact_prompt_contract,
         compact_antigravity,
-        " ".join(_text(ROOT / "CHANGELOG.md").split()),
     ):
         assert telemetry_contract in compact
     assert "MCP calls are denied" in compact_readme
@@ -419,11 +423,18 @@ def test_changelog_marks_the_superseded_google_permission_claim() -> None:
 
 
 def test_leg_contract_scopes_mechanical_denial_to_named_namespaces() -> None:
-    leg_contracts = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
-        ).split()
+    active_contracts = tuple(
+        " ".join(_text(path).split())
+        for path in (
+            SKILLS / "triad-antigravity-dispatch" / "SKILL.md",
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md",
+            SKILLS
+            / "triad-cross-family-review"
+            / "references"
+            / "review-prompt-contract.md",
+        )
     )
+    leg_contracts = active_contracts[1]
 
     assert (
         "A tool attempt in a named denied namespace is also blocked by its matching "
@@ -433,7 +444,10 @@ def test_leg_contract_scopes_mechanical_denial_to_named_namespaces() -> None:
         "Other prompt-forbidden actions remain contract obligations"
         not in leg_contracts
     )
-    assert "`tool-contract-violation`" in leg_contracts
+    for active_contract in active_contracts:
+        assert "a denied call invalidates the leg" not in active_contract
+        assert "`tool-contract-violation`" not in active_contract
+    assert "Local verdict and review-binding checks" in leg_contracts
 
 
 def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:

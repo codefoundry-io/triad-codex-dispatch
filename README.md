@@ -185,9 +185,17 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.542
+### Upgrading to 0.2.543
 
-0.2.542 makes the formal Google-family prompt explicitly static-only: it permits
+0.2.543 stops treating post-completion AGY `step_update` telemetry as a
+verdict-admission schema. Added metadata fields, changed optional tool
+arguments, denied attempts, and conflicting duplicate progress events cannot
+retroactively invalidate an otherwise valid terminal review. Static-review
+containment remains enforced by the prompt, native `--mode plan`, and the
+explicit deny transaction; strict local `LegVerdict` and review-binding checks
+plus round-integrity verification remain the admission gates.
+
+The formal Google-family prompt remains explicitly static-only: it permits
 native file read/search and conditionally authorized AGY native official-web
 reads, denies MCP calls, forbids command, write, experiment, notebook, subagent,
 browser-actuation, and scratch tools, and sends unresolved static uncertainty to
@@ -226,7 +234,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.542-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.543-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

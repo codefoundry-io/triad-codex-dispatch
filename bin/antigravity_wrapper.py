@@ -39,17 +39,6 @@ FORMAL_AGY_ENV_REMOVE = (
     "GOOGLE_CLOUD_QUOTA_PROJECT",
     "AGY_ADC_AUTH",
 )
-_FORMAL_PLAN_READ_TOOLS = frozenset(
-    {
-        "code_search",
-        "find_by_name",
-        "grep_search",
-        "list_dir",
-        "read_url_content",
-        "search_web",
-        "view_file",
-    }
-)
 
 
 def _parse_agy_version(text: str) -> tuple[int, int, int] | None:
@@ -142,69 +131,6 @@ def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | 
     return events, terminal
 
 
-def _plan_tool_contract_error(events: list[dict[str, Any]]) -> str | None:
-    seen_steps: dict[int, tuple[object, object]] = {}
-    for event in events:
-        update = event.get("step_update")
-        if event.get("event") != "step_update" or not isinstance(update, dict):
-            continue
-        if update.get("step_type") != "tool":
-            continue
-        step_index = update.get("step_index")
-        if type(step_index) is not int:
-            return "formal plan tool has missing or non-integer step_index"
-        tool_name = update.get("tool_name")
-        tool_info = update.get("tool_info")
-        parameters = (
-            tool_info.get("parameters") if isinstance(tool_info, dict) else None
-        )
-        representation = (tool_name, parameters)
-        if step_index in seen_steps:
-            if seen_steps[step_index] != representation:
-                return f"formal plan tool step {step_index} has conflicting duplicate telemetry"
-            continue
-        seen_steps[step_index] = representation
-        if tool_name not in _FORMAL_PLAN_READ_TOOLS:
-            return f"formal plan attempted forbidden tool {tool_name!r}"
-        if not isinstance(parameters, dict):
-            return f"formal plan tool {tool_name!r} has invalid parameters"
-        if tool_name == "grep_search":
-            allowed = {
-                "SearchPath",
-                "Query",
-                "IsRegex",
-                "CaseInsensitive",
-                "Includes",
-                "MatchPerLine",
-            }
-            unexpected = sorted(set(parameters) - allowed)
-            if unexpected:
-                return f"formal plan grep_search has forbidden arguments {unexpected!r}"
-            for name in ("SearchPath", "Query"):
-                value = parameters.get(name)
-                if not isinstance(value, str) or not value:
-                    return f"formal plan grep_search has invalid {name}"
-        if tool_name == "view_file":
-            allowed = {"AbsolutePath", "StartLine", "EndLine"}
-            if "AbsolutePath" not in parameters or not set(parameters) <= allowed:
-                unexpected = sorted(set(parameters) - allowed)
-                return f"formal plan view_file has forbidden arguments {unexpected!r}"
-            view_path = parameters.get("AbsolutePath")
-            if not isinstance(view_path, str) or not view_path:
-                return "formal plan view_file has invalid AbsolutePath"
-            for name in ("StartLine", "EndLine"):
-                value = parameters.get(name)
-                if name in parameters and (type(value) is not int or value < 1):
-                    return f"formal plan view_file has invalid line range {name}"
-            if (
-                "StartLine" in parameters
-                and "EndLine" in parameters
-                and parameters["EndLine"] < parameters["StartLine"]
-            ):
-                return "formal plan view_file has invalid line range"
-    return None
-
-
 def _fail(
     run: _common.RunResult,
     classification: str,
@@ -229,7 +155,7 @@ def _interpret_run(
     expected_content_digest: str | None = None,
     plan_mode: bool = False,
 ) -> _common.RunResult:
-    """Admit one terminal AGY result after enforcing formal tool telemetry."""
+    """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
     events, result = parse_agy_stream(run.stdout)
     exposed_model = None
@@ -291,14 +217,6 @@ def _interpret_run(
             _common.EXIT_TERMINAL,
             f"requested model {expected_model!r} but AGY exposed {route_conflict!r}",
         )
-    if plan_mode and (tool_error := _plan_tool_contract_error(events)) is not None:
-        return _fail(
-            run,
-            "tool-contract-violation",
-            _common.EXIT_TERMINAL,
-            tool_error,
-        )
-
     if pydantic_cls is not None:
         if plan_mode:
             response = result.get("response")

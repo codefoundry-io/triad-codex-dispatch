@@ -278,29 +278,6 @@ def test_plan_mode_locally_validates_terminal_response_without_native_schema() -
     assert admitted.final_answer == json.dumps(payload)
 
 
-@pytest.mark.parametrize(
-    "tool_name",
-    (
-        "run_command",
-        "write_to_file",
-        "call_mcp_tool",
-        "browser_click_element",
-        "notebook_execution",
-        "invoke_subagent",
-        "sed_file",
-    ),
-)
-def test_plan_mode_rejects_forbidden_tool_attempt_before_valid_terminal_result(
-    tool_name: str,
-) -> None:
-    admitted = _interpret_plan_stream((tool_name, {}))
-
-    assert admitted.exit_code == _common.EXIT_TERMINAL
-    assert admitted.classification == "tool-contract-violation"
-    assert admitted.final_answer == ""
-    assert tool_name in (admitted.extraction_error or "")
-
-
 def test_plan_mode_admits_direct_source_view_without_prior_grep() -> None:
     admitted = _interpret_plan_stream(
         ("view_file", {"AbsolutePath": "/review/shared/source/product/file.py"})
@@ -330,60 +307,40 @@ def test_plan_mode_admits_one_direct_view_of_leader_packet_control(path: str) ->
     "step_update",
     (
         {
+            "step_index": 1,
             "step_type": "tool",
-            "tool_name": "run_command",
-            "tool_info": {"parameters": {}},
+            "tool_name": "view_file",
+            "tool_info": {
+                "parameters": {
+                    "AbsolutePath": "/review/shared/TASK.md",
+                    "TelemetryRevision": 2,
+                },
+                "vendor_metadata": {"schema_revision": 2},
+            },
         },
         {
-            "step_index": "1",
+            "step_index": "opaque-v2",
             "step_type": "tool",
             "tool_name": "run_command",
-            "tool_info": {"parameters": {}},
+            "tool_info": {
+                "parameters": {"CommandLine": "git status --short"},
+                "error": {"type": "permission", "message": "denied permission"},
+            },
+            "vendor_metadata": {"schema_revision": 2},
         },
     ),
 )
-def test_plan_mode_rejects_missing_or_noninteger_tool_step_index(
+def test_plan_mode_terminal_verdict_admission_is_independent_of_tool_telemetry_schema(
     step_update: dict,
 ) -> None:
     admitted = _interpret_plan_updates(step_update)
-
-    assert admitted.exit_code == _common.EXIT_TERMINAL
-    assert admitted.classification == "tool-contract-violation"
-    assert "step_index" in (admitted.extraction_error or "")
-
-
-def test_plan_mode_admits_identical_duplicate_tool_event_representation() -> None:
-    update = {
-        "step_index": 1,
-        "step_type": "tool",
-        "tool_name": "view_file",
-        "tool_info": {
-            "parameters": {"AbsolutePath": "/review/shared/TASK.md"},
-        },
-    }
-
-    admitted = _interpret_plan_updates(update, update)
 
     assert admitted.exit_code == _common.EXIT_OK
     assert admitted.classification == "ok"
 
 
-@pytest.mark.parametrize(
-    ("tool_name", "parameters"),
-    (
-        ("run_command", {}),
-        (
-            "view_file",
-            {"AbsolutePath": "/review/shared/TASK.md", "StartLine": 10},
-        ),
-        ("view_file", {"AbsolutePath": "/review/shared/EVIDENCE.md"}),
-    ),
-)
-def test_plan_mode_rejects_changed_duplicate_tool_event_representation(
-    tool_name: str,
-    parameters: dict,
-) -> None:
-    first = {
+def test_plan_mode_admits_conflicting_duplicate_tool_event_representation() -> None:
+    first_update = {
         "step_index": 1,
         "step_type": "tool",
         "tool_name": "view_file",
@@ -391,18 +348,20 @@ def test_plan_mode_rejects_changed_duplicate_tool_event_representation(
             "parameters": {"AbsolutePath": "/review/shared/TASK.md"},
         },
     }
-    changed = {
+    conflicting_update = {
         "step_index": 1,
         "step_type": "tool",
-        "tool_name": tool_name,
-        "tool_info": {"parameters": parameters},
+        "tool_name": "run_command",
+        "tool_info": {
+            "parameters": {"CommandLine": "git status --short"},
+            "error": {"type": "permission", "message": "denied permission"},
+        },
     }
 
-    admitted = _interpret_plan_updates(first, changed)
+    admitted = _interpret_plan_updates(first_update, conflicting_update)
 
-    assert admitted.exit_code == _common.EXIT_TERMINAL
-    assert admitted.classification == "tool-contract-violation"
-    assert "duplicate" in (admitted.extraction_error or "")
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
 
 
 @pytest.mark.parametrize(
@@ -421,38 +380,6 @@ def test_plan_mode_admits_documented_view_line_range(line_range: dict) -> None:
 
     assert admitted.exit_code == _common.EXIT_OK
     assert admitted.classification == "ok"
-
-
-@pytest.mark.parametrize("extra_argument", ("ContentOffset", "IsSkillFile"))
-def test_plan_mode_rejects_undocumented_view_argument(extra_argument: str) -> None:
-    path = "/review/shared/source/product/file.py"
-    admitted = _interpret_plan_stream(
-        ("view_file", {"AbsolutePath": path, extra_argument: 10}),
-    )
-
-    assert admitted.exit_code == _common.EXIT_TERMINAL
-    assert admitted.classification == "tool-contract-violation"
-    assert extra_argument in (admitted.extraction_error or "")
-
-
-@pytest.mark.parametrize(
-    "line_range",
-    (
-        {"StartLine": 0},
-        {"StartLine": True},
-        {"EndLine": "200"},
-        {"StartLine": 20, "EndLine": 10},
-    ),
-)
-def test_plan_mode_rejects_invalid_view_line_range(line_range: dict) -> None:
-    path = "/review/shared/source/product/file.py"
-    admitted = _interpret_plan_stream(
-        ("view_file", {"AbsolutePath": path, **line_range}),
-    )
-
-    assert admitted.exit_code == _common.EXIT_TERMINAL
-    assert admitted.classification == "tool-contract-violation"
-    assert "line" in (admitted.extraction_error or "")
 
 
 def test_plan_mode_admits_repeated_read_only_view_for_one_path() -> None:
@@ -486,24 +413,6 @@ def test_plan_mode_admits_agy_1_1_17_public_grep_search(search_path: str) -> Non
 
     assert admitted.exit_code == _common.EXIT_OK
     assert admitted.classification == "ok"
-
-
-@pytest.mark.parametrize("extra_argument", ("toolSummary", "toolAction"))
-def test_plan_mode_rejects_nonpublic_grep_search_argument(extra_argument: str) -> None:
-    admitted = _interpret_plan_stream(
-        (
-            "grep_search",
-            {
-                "SearchPath": "/review/shared/source/product",
-                "Query": "decision",
-                extra_argument: "not part of the public AGY schema",
-            },
-        ),
-    )
-
-    assert admitted.exit_code == _common.EXIT_TERMINAL
-    assert admitted.classification == "tool-contract-violation"
-    assert "grep_search" in (admitted.extraction_error or "")
 
 
 def test_plan_mode_admits_agy_single_fenced_terminal_json_locally() -> None:

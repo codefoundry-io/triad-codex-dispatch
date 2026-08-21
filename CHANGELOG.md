@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.543 — 2026-08-22
+
+- Post-completion `step_update` telemetry is diagnostic vendor output, not a
+  verdict-admission schema. Added fields, changed optional arguments,
+  denied attempts, and conflicting duplicate progress events no longer
+  retroactively invalidate an otherwise valid terminal review.
+- Keeps static-review containment at the prompt, native `--mode plan`, and the
+  explicit deny transaction. Local `LegVerdict` and review-binding validation
+  plus round-integrity verification remain the admission gates.
+
 ## 0.2.542 — 2026-08-21
 
 - Raises the formal AGY floor to 1.1.17 and restores native `grep_search` using
@@ -23,7 +33,8 @@
   Each view uses the required `AbsolutePath` argument, while large files use
   explicit positive-integer `StartLine` and `EndLine` ranges. `ContentOffset`,
   `IsSkillFile`, and implicit another-page continuation remain forbidden.
-- The wrapper scans formal `step_update` telemetry, admits only the fixed native
+- Historical 0.2.541 behavior, superseded in 0.2.543: the wrapper scans formal
+  `step_update` telemetry, admits only the fixed native
   read/search tool set, and terminates the leg as `tool-contract-violation` for
   any other tool, non-object parameters, a missing or non-integer step index, or
   conflicting duplicate step telemetry.
