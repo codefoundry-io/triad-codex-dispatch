@@ -54,10 +54,12 @@ positive-integer `StartLine` and `EndLine` ranges. Never request `ContentOffset`
 or `IsSkillFile`, and do not rely
 on implicit another-page continuation. If native reads and searches are insufficient, report the limit in
 `open_questions`.
-The wrapper scans formal `step_update` telemetry, admits only the fixed native
-read/search tool set, and terminates the leg as `tool-contract-violation` for
-any other tool, non-object parameters, a missing or non-integer step index, or
-conflicting duplicate step telemetry.
+Formal `step_update` telemetry is diagnostic vendor output, not an admission
+schema: added fields, changed optional tool arguments, denied attempts, and
+duplicate progress events do not invalidate an otherwise valid terminal
+verdict. The prompt and native `--mode plan` define the static-review behavior;
+explicit deny rules enforce blocked action namespaces, and local verdict,
+review-binding, and round-integrity checks remain the admission gates.
 Do not edit files, change external state, or execute candidate code, tests,
 builds, hooks, or scripts.
 

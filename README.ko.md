@@ -167,9 +167,16 @@ leg가 아닙니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.542 업그레이드
+### 0.2.543 업그레이드
 
-0.2.542는 formal Google-family 프롬프트를 명시적인 정적 전용 계약으로 만듭니다.
+0.2.543은 완료 후 AGY `step_update` telemetry를 verdict-admission schema로 취급하지
+않습니다. 새 metadata field, 변경된 optional tool argument, 차단된 시도, 상충하는
+duplicate progress event가 유효한 terminal review를 사후에 무효화하지 않습니다.
+정적 리뷰 containment는 prompt, native `--mode plan`, 명시적 deny transaction이
+계속 담당하며, strict local `LegVerdict`와 review-binding 검증 및 round-integrity
+검증이 admission gate로 유지됩니다.
+
+formal Google-family 프롬프트는 계속 명시적인 정적 전용 계약입니다.
 native file read/search와 조건부로 승인된 AGY native official-web read만 허용하고
 MCP 호출은 차단하며 command, write, experiment, notebook, subagent, browser
 actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
@@ -206,7 +213,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.542-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.543-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

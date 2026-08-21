@@ -31,18 +31,19 @@ larger than one native view, request explicit positive-integer `StartLine` and
 `EndLine` ranges.
 Never request `ContentOffset` or `IsSkillFile`, and do not rely on implicit
 another-page continuation. If native reads and searches are insufficient, report the limit in
-`open_questions`. The wrapper scans formal `step_update` telemetry, admits only
-the fixed native read/search tool set, and terminates the leg as
-`tool-contract-violation` for any other tool, non-object parameters, a missing
-or non-integer step index, or conflicting duplicate step telemetry. The
-explicit deny rules remain the action-namespace enforcement backstop, and a
-denied tool call invalidates the leg. Headless
-auto-approve removes interactive approval prompts but does not remove those
-explicit deny entries. Round-integrity mutation detection is separate. The
-wrapper does not suppress installed tools before provider execution; local
-post-dispatch telemetry admission rejects a formal leg that used any tool
-outside the fixed read set. The route remains read-only by intent plus explicit
-deny, local result admission, and separate round-integrity checks.
+`open_questions`. Formal `step_update` telemetry is diagnostic vendor output,
+not an admission schema: added fields, changed optional tool arguments, denied
+attempts, and duplicate progress events do not invalidate an otherwise valid
+terminal verdict. The prompt and native `--mode plan` define the static-review
+behavior. The explicit deny rules remain the action-namespace enforcement
+backstop. Headless auto-approve removes interactive approval prompts but does
+not remove those explicit deny entries. Local verdict and review-binding checks plus
+round-integrity verification remain the admission gates. Round-integrity
+mutation detection is separate. The wrapper does not suppress installed tools
+before provider execution or reinterpret a completed review from the vendor's
+evolving telemetry schema.
+The route remains read-only by intent plus explicit deny, local result
+admission, and separate round-integrity checks.
 
 ## Route proof
 

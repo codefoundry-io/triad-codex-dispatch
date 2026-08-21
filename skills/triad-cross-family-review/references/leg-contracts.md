@@ -120,7 +120,7 @@ A missing, malformed, or schema-invalid response terminates the leg with no
 schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, and undecidable
 uncertainty goes to `open_questions`. The explicit deny rules remain the
-action-namespace enforcement backstop, and a denied call invalidates the leg.
+action-namespace enforcement backstop and block matching calls before execution.
 The formal Google settings transaction denies all MCP calls. Approved AGY
 native official-web reads remain available only when the review objective and
 authorized external data boundary expressly permit them.
@@ -148,12 +148,15 @@ arguments to search inside the review target identified by Review metadata, and 
 positive-integer `StartLine` and `EndLine` ranges. Never request `ContentOffset`
 or `IsSkillFile`, and do not rely on implicit another-page continuation. If
 native reads and searches are insufficient, report the limit in
-`open_questions`. The wrapper scans formal `step_update` telemetry, admits only
-the fixed native read/search tool set, and terminates the leg as
-`tool-contract-violation` for any other tool, non-object parameters, a missing
-or non-integer step index, or conflicting duplicate step telemetry. A tool
-attempt in a named denied namespace is also blocked by its matching deny entry;
-round-integrity mutation detection remains separate.
+`open_questions`. Formal `step_update` telemetry is diagnostic vendor output,
+not an admission schema: added fields, changed optional tool arguments, denied
+attempts, and duplicate progress events do not invalidate an otherwise valid
+terminal verdict. The prompt and native `--mode plan` define the static-review
+behavior. A tool attempt in a named denied namespace is also blocked by its
+matching deny entry. The explicit deny rules remain the action-namespace
+enforcement backstop. Local verdict and review-binding checks plus
+round-integrity verification remain the admission gates. Round-integrity
+mutation detection is separate.
 Do not edit files, change external state, or execute candidate code, tests,
 builds, hooks, or scripts. If AGY, the model, or the settings transaction is
 unavailable, invalidate the round. Clean it and repair the same selected AGY
