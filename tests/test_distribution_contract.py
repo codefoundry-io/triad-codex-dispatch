@@ -19,7 +19,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.543"
+    assert manifest["version"] == "0.2.544"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -31,7 +31,7 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     version = json.loads(_text(MANIFEST))["version"]
     changelog = _text(ROOT / "CHANGELOG.md")
 
-    assert f"## {version} — 2026-08-22" in changelog
+    assert f"## {version} — 2026-08-25" in changelog
     assert f"### Upgrading to {version}" in _text(ROOT / "README.md")
     assert f"### {version} 업그레이드" in _text(ROOT / "README.ko.md")
     assert "## 0.2.541 — 2026-08-20" in changelog
@@ -233,13 +233,13 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "invalidates the complete round and discards every verdict"
         in compact_leg_contracts
     )
-    assert "1.1.17 or newer" in agy
-    assert "AGY 1.1.17 or newer" in reviewer_routing
+    assert "1.1.20 or newer" in agy
+    assert "AGY 1.1.20 or newer" in reviewer_routing
     assert "--model gemini-3.1-pro-high" in agy
     assert "--effort high" in agy
     assert "--timeout 1800" in agy
     assert "stream-json" in agy
-    assert "omits native `--json-schema` in plan mode" in agy
+    assert "review-bound native `--json-schema` in plan mode" in agy
     compact_agy = " ".join(agy.split())
     compact_leg_contracts = " ".join(leg_contracts.split())
     assert "internally inserts `--dangerously-skip-permissions`" in compact_agy
@@ -254,14 +254,13 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "uses native `--mode plan`" in compact_agy
     assert "uses native `--mode plan`" in compact_leg_contracts
     for compact in (compact_agy, compact_leg_contracts):
-        assert "omits native `--json-schema` in plan mode" in compact
-        assert "terminal `response` to be one JSON object" in compact
-        assert "optional single Markdown fence" in compact
-        assert "strict local `LegVerdict` validation" in compact
+        assert "review-bound native `--json-schema` in plan mode" in compact
+        assert "consumes the terminal `structured_output`" in compact
         assert (
-            "Unmatched, nested, repeated, prose-bearing, and multiple-object "
-            "responses are rejected locally" in compact
+            "Human-readable response text and diagnostic finish messages are not "
+            "verdict transport" in compact
         )
+        assert "strict local `LegVerdict` validation" in compact
         assert "no schema-repair provider call" in compact
     assert "transient global-settings transaction" in compact_leg_contracts
     assert "restores the original bytes" in compact_leg_contracts
@@ -994,6 +993,7 @@ def test_current_release_docs_bind_superseded_agy_route_and_current_review_bound
 
 def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> None:
     antigravity = _text(ROOT / "bin" / "antigravity_wrapper.py")
+    compact_antigravity = " ".join(antigravity.split())
     other_wrappers = "\n".join(
         _text(ROOT / "bin" / name)
         for name in ("claude_wrapper.py", "gemini_wrapper.py")
@@ -1008,6 +1008,14 @@ def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> Non
     assert '"--sandbox"' in antigravity
     assert '"--project"' not in antigravity
     assert antigravity.count('"--dangerously-skip-permissions"') == 1
+    assert (
+        "Formal plan-mode calls pass the review-bound native finish schema"
+        in compact_antigravity
+    )
+    assert (
+        "plan-mode calls omit the unsupported native finish schema"
+        not in compact_antigravity
+    )
     assert "--dangerously-skip-permissions" not in other_wrappers
 
 

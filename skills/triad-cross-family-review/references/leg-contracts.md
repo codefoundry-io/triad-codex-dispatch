@@ -64,7 +64,7 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
 
 ## Google family
 
-Before the round, prove `agy --version` is at least 1.1.17 and `agy models`
+Before the round, prove `agy --version` is at least 1.1.20 and `agy models`
 advertises `gemini-3.1-pro-high`. Before starting any family, run this
 non-model wrapper preflight to validate the same binary/version and route:
 
@@ -109,14 +109,12 @@ transaction that unions `write_file(*)`, `command(*)`, `unsandboxed(*)`,
 `execute_url(*)`, and `mcp(*)`, and restores the original bytes. AGY 1.1.3+
 also receives the wrapper-owned `--dangerously-skip-permissions` adaptation so
 headless read tools work, unless the operator sets
-`AGY_NO_HEADLESS_AUTOAPPROVE=1`. The formal route omits native `--json-schema` in plan mode because the
-selected Business Sign-In backend rejects a custom finish schema before model
-execution. It requires the terminal `response` to be one JSON object, then
-uses the shared local validator to remove AGY's optional single Markdown fence
-around that sole object. It then performs strict local `LegVerdict` validation
-and exact review-binding checks. Unmatched, nested, repeated, prose-bearing,
-and multiple-object responses are rejected locally.
-A missing, malformed, or schema-invalid response terminates the leg with no
+`AGY_NO_HEADLESS_AUTOAPPROVE=1`. On AGY 1.1.20 or newer, the formal route passes
+a review-bound native `--json-schema` in plan mode and consumes the terminal
+`structured_output`. It then repeats strict local `LegVerdict` validation and
+exact review-binding checks. Human-readable response text and diagnostic finish
+messages are not verdict transport.
+A missing, malformed, or schema-invalid structured output terminates the leg with no
 schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, and undecidable
 uncertainty goes to `open_questions`. The explicit deny rules remain the

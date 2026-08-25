@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Single-shot AGY wrapper using the 1.1.17 headless plan-mode contract.
+"""Single-shot AGY wrapper using the 1.1.20 headless plan-mode contract.
 
 The wrapper forwards one prompt through ``stream-json``, admits only the
 terminal ``result`` event, and validates contracted output locally. Formal
-plan-mode calls omit the unsupported native finish schema. Read-only calls use
-the same transient global-settings transaction and headless adaptation as the
+plan-mode calls pass the review-bound native finish schema, admit terminal
+``structured_output``, and repeat local verdict binding. Read-only calls use the
+same transient global-settings transaction and headless adaptation as the
 deployed Claude-led TRIAD wrapper.
 """
 
@@ -23,7 +24,7 @@ import _agy_settings
 from _common import load_pydantic_class, validate_response
 
 
-AGY_VERSION_FLOOR = (1, 1, 17)
+AGY_VERSION_FLOOR = (1, 1, 20)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
@@ -227,36 +228,20 @@ def _interpret_run(
             f"requested model {expected_model!r} but AGY exposed {route_conflict!r}",
         )
     if pydantic_cls is not None:
-        if plan_mode:
-            response = result.get("response")
-            if not isinstance(response, str) or (
-                response.strip().startswith("```") != response.strip().endswith("```")
-            ):
-                run.validation_error = (
-                    "plan-mode terminal response is not a valid JSON object"
-                )
-                return _fail(
-                    run,
-                    "schema-fail",
-                    _common.EXIT_SCHEMA_FAIL,
-                    run.validation_error,
-                )
-            encoded = response
-        else:
-            structured = result.get("structured_output")
-            if structured is None:
-                run.validation_error = "terminal result has no structured_output"
-                return _fail(
-                    run,
-                    "schema-fail",
-                    _common.EXIT_SCHEMA_FAIL,
-                    run.validation_error,
-                )
-            encoded = json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
+        structured = result.get("structured_output")
+        if structured is None:
+            run.validation_error = "terminal result has no structured_output"
+            return _fail(
+                run,
+                "schema-fail",
+                _common.EXIT_SCHEMA_FAIL,
+                run.validation_error,
+            )
+        encoded = json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
         valid, payload = validate_response(encoded, pydantic_cls)
         if not valid:
             run.validation_error = (
-                f"plan-mode terminal response is not a valid JSON object matching "
+                f"plan-mode native structured output does not match "
                 f"LegVerdict: {payload}"
                 if plan_mode
                 else str(payload)
@@ -414,9 +399,7 @@ def main() -> int:
     )
     try:
         schema_object = (
-            pydantic_cls.model_json_schema()
-            if pydantic_cls is not None and not local_plan_response
-            else None
+            pydantic_cls.model_json_schema() if pydantic_cls is not None else None
         )
         if schema_object is not None:
             properties = schema_object["properties"]

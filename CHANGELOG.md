@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.544 — 2026-08-25
+
+- Raises the formal AGY floor to 1.1.20 and restores native `--json-schema`
+  enforcement for `--mode plan` after an authenticated Business Sign-In probe
+  proved the current CLI returns a schema-validated terminal
+  `structured_output`.
+- Treats human-readable response drafts and finish diagnostics as non-verdict
+  transport, then repeats strict local `LegVerdict` and exact review-binding
+  validation before admitting the Google leg.
+
 ## 0.2.543 — 2026-08-22
 
 - Post-completion `step_update` telemetry is diagnostic vendor output, not a

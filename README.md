@@ -149,12 +149,12 @@ subsection only when its "do this ONLY if…" line applies to you.
 ### Gemini Enterprise Business Sign-In
 
 *Do this only in a company environment with a GE Standard or GE Plus seat.* Use
-AGY 1.1.17 or newer and select its Business Sign-In with the organization-owned
+AGY 1.1.20 or newer and select its Business Sign-In with the organization-owned
 Google Cloud project. The same formal AGY wrapper, settings transaction, and
 `--sandbox read-only` plus native `--mode plan` lifecycle apply. The wrapper
-parses the terminal response JSON and applies the strict local verdict and
-review-binding checks, accepting AGY's optional single Markdown fence around
-the sole JSON object. TRIAD never changes the active account or falls back to
+passes a review-bound native `--json-schema`, consumes the terminal
+`structured_output`, and repeats strict local verdict and review-binding checks.
+Human-readable response text is not verdict transport. TRIAD never changes the active account or falls back to
 a personal sign-in. The separate `triad-gemini-dispatch` skill remains a
 standalone compatibility consult; it is not the Gemini Enterprise formal leg.
 See the official [AGY changelog](https://antigravity.google/changelog?plan=free).
@@ -185,10 +185,10 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.543
+### Upgrading to 0.2.544
 
-0.2.543 stops treating post-completion AGY `step_update` telemetry as a
-verdict-admission schema. Added metadata fields, changed optional tool
+0.2.544 keeps post-completion AGY `step_update` telemetry diagnostic rather
+than part of the verdict-admission schema. Added metadata fields, changed optional tool
 arguments, denied attempts, and conflicting duplicate progress events cannot
 retroactively invalidate an otherwise valid terminal review. Static-review
 containment remains enforced by the prompt, native `--mode plan`, and the
@@ -205,11 +205,10 @@ required `SearchPath` and `Query` arguments. Every view supplies the required `A
 positive-integer `StartLine` and `EndLine` ranges.
 `ContentOffset`, `IsSkillFile`, and implicit `another page` continuation remain
 forbidden.
-It corrects 0.2.540's plan-mode structured-output regression by omitting native
-`--json-schema` on the formal plan-mode route, requiring the terminal
-`response` to contain one JSON object, accepting AGY's optional single Markdown
-fence around that object, and applying strict local `LegVerdict` plus exact
-review-binding validation. It requires AGY 1.1.17 or newer, personal or
+On AGY 1.1.20 or newer, the formal plan-mode route passes native
+`--json-schema`, consumes the terminal `structured_output`, and repeats strict
+local `LegVerdict` plus exact review-binding validation. Human-readable response
+text and finish diagnostics are not verdict transport. It supports personal or
 Gemini Enterprise Business Sign-In, transient global-settings transaction, `--sandbox read-only`,
 operator opt-out, billed API/ADC/Vertex route-selector removal, local result
 binding, and immediate whole-round fail-fast cancellation.
@@ -224,8 +223,8 @@ permission profiles, and credentials; unrelated files remain untouched.
 The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
 packet, receipt, PTY, and sentinel review transports are removed. AGY requires
-1.1.17 or newer and uses native `stream-json`; the formal plan-mode route
-deliberately omits native `--json-schema` and validates the terminal JSON
+1.1.20 or newer and uses native `stream-json`; the formal plan-mode route
+passes native `--json-schema`, consumes `structured_output`, and validates it
 locally. It passes `gemini-3.1-pro-high` with `high` effort. The documented packaged
 AGY child selection is the sole permission-mode exception; other provider
 permission and all project-trust policy remain native. Ordinary `codex` remains
@@ -234,7 +233,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.543-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.544-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

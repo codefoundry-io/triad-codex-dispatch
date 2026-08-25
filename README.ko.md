@@ -134,12 +134,13 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 
 ### Gemini Enterprise Business Sign-In
 
-*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.17 이상에서
+*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.20 이상에서
 조직 소유 Google Cloud project로 Business Sign-In을 선택하세요. 개인 환경과 같은
 정식 AGY wrapper, settings transaction, `--sandbox read-only`, native
-`--mode plan` 수명주기를 사용합니다. wrapper는 terminal response JSON을 파싱한 뒤
-유일한 JSON object를 감싼 AGY의 선택적 단일 Markdown fence를 제거하고 strict local
-verdict 및 review-binding 검증을 적용합니다. TRIAD는 활성 계정을
+`--mode plan` 수명주기를 사용합니다. wrapper는 review-bound native
+`--json-schema`를 전달하고 terminal `structured_output`을 소비한 뒤 strict local
+verdict 및 review-binding 검증을 반복합니다. 사람이 읽는 response text는 verdict
+transport가 아닙니다. TRIAD는 활성 계정을
 변경하거나 개인 sign-in으로 fallback하지 않습니다. 별도
 `triad-gemini-dispatch` skill은 standalone 호환 consult이며 Gemini Enterprise 정식
 leg가 아닙니다.
@@ -167,10 +168,10 @@ leg가 아닙니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.543 업그레이드
+### 0.2.544 업그레이드
 
-0.2.543은 완료 후 AGY `step_update` telemetry를 verdict-admission schema로 취급하지
-않습니다. 새 metadata field, 변경된 optional tool argument, 차단된 시도, 상충하는
+0.2.544는 완료 후 AGY `step_update` telemetry를 diagnostic으로 유지하고
+verdict-admission schema로 취급하지 않습니다. 새 metadata field, 변경된 optional tool argument, 차단된 시도, 상충하는
 duplicate progress event가 유효한 terminal review를 사후에 무효화하지 않습니다.
 정적 리뷰 containment는 prompt, native `--mode plan`, 명시적 deny transaction이
 계속 담당하며, strict local `LegVerdict`와 review-binding 검증 및 round-integrity
@@ -185,11 +186,10 @@ actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없
 전달하는 native `grep_search`를 사용합니다. 모든 view는 필수 `AbsolutePath` 인자를 전달하고, 큰 파일은 양의 정수 `StartLine`과
 `EndLine` 범위를 명시해 읽습니다.
 `ContentOffset`, `IsSkillFile`, 묵시적 `another page` 연속 읽기는 금지합니다.
-formal plan-mode route에서 지원되지 않는 native `--json-schema` finish contract를
-생략하고 terminal `response`의 하나의 JSON object를 감싼 AGY의 선택적 단일
-Markdown fence를 허용한 뒤 strict local `LegVerdict` 및 exact review-binding 검증을
-적용하여 0.2.540의 plan-mode
-structured-output 회귀를 수정하면서 AGY 1.1.17 이상,
+AGY 1.1.20 이상의 formal plan-mode route는 native `--json-schema`를 전달하고
+terminal `structured_output`을 소비한 뒤 strict local `LegVerdict` 및 exact
+review-binding 검증을 반복합니다. 사람이 읽는 response text와 finish diagnostics는
+verdict transport가 아니며,
 개인 또는 Gemini Enterprise Business Sign-In,
 일시적 global-settings transaction, `--sandbox read-only`, operator opt-out, 유료
 API/ADC/Vertex route-selector 제거, local 결과 binding, whole-round fail-fast
@@ -203,9 +203,9 @@ rule, permission profile, credential, 관련 없는 파일을 건드리지 않�
 
 review runtime은 하나의 complete focused directory, required family별 하나의
 `LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
-receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.17 이상을
+receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 이상을
 요구하고 native `stream-json`을 사용합니다. formal plan-mode route는 native
-`--json-schema`를 의도적으로 생략하고 terminal JSON을 로컬에서 검증하며,
+`--json-schema`를 전달하고 `structured_output`을 소비하여 로컬에서 검증하며,
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. 문서화된 packaged AGY child
 선택만 permission-mode 예외이며, 다른 provider permission과 모든 project-trust
 policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
@@ -213,7 +213,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.543-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.544-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

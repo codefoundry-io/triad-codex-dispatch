@@ -10,14 +10,12 @@ Use the packaged `bin/antigravity_wrapper.py`. The wrapper internally inserts
 sets `AGY_NO_HEADLESS_AUTOAPPROVE=1`. Callers do not pass this flag. Formal
 calls use `--sandbox read-only`. The route uses native `--mode plan` with a transient global-settings transaction
 that unions the five write/command/unsandboxed/URL/MCP deny rules, then
-restores the original bytes. The formal route omits native `--json-schema` in plan mode because the
-selected Business Sign-In backend rejects a custom finish schema before model
-execution. It requires the terminal `response` to be one JSON object, then
-uses the shared local validator to remove AGY's optional single Markdown fence
-around that sole object. It then performs strict local `LegVerdict` validation
-and exact review-binding checks. Unmatched, nested, repeated, prose-bearing,
-and multiple-object responses are rejected locally.
-A missing, malformed, or schema-invalid response terminates the leg with no
+restores the original bytes. On AGY 1.1.20 or newer, the formal route passes a
+review-bound native `--json-schema` in plan mode and consumes the terminal
+`structured_output`. It then repeats strict local `LegVerdict` validation and
+exact review-binding checks. Human-readable response text and diagnostic finish
+messages are not verdict transport.
+A missing, malformed, or schema-invalid structured output terminates the leg with no
 schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, forbids command and
 other action tools plus experiments, and undecidable uncertainty goes to
@@ -50,7 +48,7 @@ admission, and separate round-integrity checks.
 Before formal review, require authenticated output proving:
 
 ```text
-agy --version  -> 1.1.17 or newer
+agy --version  -> 1.1.20 or newer
 agy models     -> gemini-3.1-pro-high present
 ```
 
@@ -75,10 +73,9 @@ formal wrapper arguments are:
 ```
 
 The wrapper calls AGY print mode with native `--output-format stream-json`.
-The formal plan-mode route omits native `--json-schema`, admits only the
-terminal result event, requires its terminal `response` to be one JSON object,
-accepts AGY's optional single Markdown fence around that sole object, and
-applies strict local `LegVerdict` validation. It checks the exact review ID,
+The formal plan-mode route passes native `--json-schema`, admits only the
+terminal result event's `structured_output`, and repeats strict local
+`LegVerdict` validation. It checks the exact review ID,
 Google family, content digest, and review-relative path shape locally. Invalid
 output is terminal and causes no schema-repair provider call. The formal leg uses this explicit 1,800-second end-to-end deadline;
 shorter leader polling waits do not terminate it. The formal Google prompt

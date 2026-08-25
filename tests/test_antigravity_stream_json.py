@@ -80,7 +80,11 @@ def _plan_stream(*tool_calls: tuple[str, dict]) -> str:
     events.append(
         {
             "event": "result",
-            "result": {"status": "SUCCESS", "response": json.dumps(_formal_payload())},
+            "result": {
+                "status": "SUCCESS",
+                "response": json.dumps(_formal_payload()),
+                "structured_output": _formal_payload(),
+            },
         }
     )
     return "\n".join(json.dumps(event) for event in events)
@@ -104,7 +108,11 @@ def _interpret_plan_updates(*updates: dict) -> _common.RunResult:
     events.append(
         {
             "event": "result",
-            "result": {"status": "SUCCESS", "response": json.dumps(_formal_payload())},
+            "result": {
+                "status": "SUCCESS",
+                "response": json.dumps(_formal_payload()),
+                "structured_output": _formal_payload(),
+            },
         }
     )
     return wrapper._interpret_run(
@@ -204,7 +212,7 @@ def test_schema_argv_is_redacted_from_logs() -> None:
 
 
 def test_version_floor_requires_headless_static_review_support() -> None:
-    assert wrapper.AGY_VERSION_FLOOR == (1, 1, 17)
+    assert wrapper.AGY_VERSION_FLOOR == (1, 1, 20)
     assert wrapper._parse_agy_version("1.1.10\n") == (1, 1, 10)
     assert wrapper._parse_agy_version("agy 2.0.1") == (2, 0, 1)
     assert wrapper._parse_agy_version("unknown") is None
@@ -243,7 +251,7 @@ def test_structured_result_uses_native_payload_then_local_validation() -> None:
     assert admitted.runtime_identity == "gemini-3.1-pro-high"
 
 
-def test_plan_mode_locally_validates_terminal_response_without_native_schema() -> None:
+def test_plan_mode_locally_validates_native_structured_output() -> None:
     payload = {
         "review_id": "review-r1",
         "family": "google",
@@ -259,6 +267,7 @@ def test_plan_mode_locally_validates_terminal_response_without_native_schema() -
             {
                 "status": "SUCCESS",
                 "response": json.dumps(payload),
+                "structured_output": payload,
             }
         )
     )
@@ -415,7 +424,7 @@ def test_plan_mode_admits_agy_1_1_17_public_grep_search(search_path: str) -> Non
     assert admitted.classification == "ok"
 
 
-def test_plan_mode_admits_agy_single_fenced_terminal_json_locally() -> None:
+def test_plan_mode_admits_native_structured_output_independent_of_response() -> None:
     payload = {
         "review_id": "review-r1",
         "family": "google",
@@ -430,7 +439,8 @@ def test_plan_mode_admits_agy_single_fenced_terminal_json_locally() -> None:
         _stream(
             {
                 "status": "SUCCESS",
-                "response": f"```json\n{json.dumps(payload)}\n```\n",
+                "response": f"```json\n{json.dumps(payload)}\n```\nextra telemetry",
+                "structured_output": payload,
             }
         )
     )
@@ -459,6 +469,7 @@ def test_plan_mode_admits_valid_verdict_after_denied_post_completion_write() -> 
                     "permission check failed for command \"cat << 'EOF' > result.json\""
                 ),
                 "response": f"```json\n{json.dumps(payload)}\n```\n",
+                "structured_output": payload,
             }
         )
     )
@@ -512,7 +523,7 @@ def test_plan_mode_rejects_valid_verdict_after_arbitrary_terminal_error() -> Non
         "{payload}\n```",
     ),
 )
-def test_plan_mode_rejects_unmatched_terminal_markdown_fence(response: str) -> None:
+def test_plan_mode_rejects_missing_native_structured_output(response: str) -> None:
     payload = {
         "review_id": "review-r1",
         "family": "google",
@@ -537,7 +548,7 @@ def test_plan_mode_rejects_unmatched_terminal_markdown_fence(response: str) -> N
     assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
     assert admitted.classification == "schema-fail"
     assert admitted.final_answer == ""
-    assert "valid JSON object" in (admitted.validation_error or "")
+    assert "structured_output" in (admitted.validation_error or "")
 
 
 @pytest.mark.parametrize(
@@ -549,7 +560,9 @@ def test_plan_mode_rejects_unmatched_terminal_markdown_fence(response: str) -> N
         "```json\n```json\n{payload}\n```\n```",
     ),
 )
-def test_plan_mode_rejects_non_single_terminal_json_transport(response: str) -> None:
+def test_plan_mode_ignores_response_transport_when_native_output_is_valid(
+    response: str,
+) -> None:
     payload = {
         "review_id": "review-r1",
         "family": "google",
@@ -565,6 +578,25 @@ def test_plan_mode_rejects_non_single_terminal_json_transport(response: str) -> 
             {
                 "status": "SUCCESS",
                 "response": response.format(payload=json.dumps(payload)),
+                "structured_output": payload,
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(raw, LegVerdict, plan_mode=True)
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+    assert admitted.validated == payload
+
+
+def test_plan_mode_rejects_schema_invalid_native_structured_output() -> None:
+    raw = _run_result(
+        _stream(
+            {
+                "status": "SUCCESS",
+                "response": "not a JSON object",
+                "structured_output": {"review_id": "wrong"},
             }
         )
     )
@@ -574,17 +606,7 @@ def test_plan_mode_rejects_non_single_terminal_json_transport(response: str) -> 
     assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
     assert admitted.classification == "schema-fail"
     assert admitted.final_answer == ""
-
-
-def test_plan_mode_rejects_non_json_terminal_response() -> None:
-    raw = _run_result(_stream({"status": "SUCCESS", "response": "not a JSON object"}))
-
-    admitted = wrapper._interpret_run(raw, LegVerdict, plan_mode=True)
-
-    assert admitted.exit_code == _common.EXIT_SCHEMA_FAIL
-    assert admitted.classification == "schema-fail"
-    assert admitted.final_answer == ""
-    assert "valid JSON object" in (admitted.validation_error or "")
+    assert "LegVerdict" in (admitted.validation_error or "")
 
 
 def test_bound_formal_result_rejects_wrong_family_after_local_validation() -> None:
@@ -765,7 +787,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     calls: list[list[str]] = []
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
@@ -808,7 +830,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     assert calls[0][calls[0].index("--effort") + 1] == "high"
 
 
-def test_main_omits_native_schema_and_binds_formal_leg_locally(
+def test_main_uses_native_schema_and_binds_formal_leg_locally(
     monkeypatch, capsys
 ) -> None:
     calls: list[list[str]] = []
@@ -824,7 +846,7 @@ def test_main_omits_native_schema_and_binds_formal_leg_locally(
         "open_questions": [],
     }
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
@@ -841,12 +863,17 @@ def test_main_omits_native_schema_and_binds_formal_leg_locally(
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log, remove_env):
         calls.append(cmd)
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
-        assert "--json-schema" not in cmd
+        schema_index = cmd.index("--json-schema")
+        schema = json.loads(cmd[schema_index + 1])
+        assert schema["properties"]["review_id"]["const"] == "review-r1"
+        assert schema["properties"]["family"]["const"] == "google"
+        assert schema["properties"]["content_digest"]["const"] == "a" * 64
         return _run_result(
             _stream(
                 {
                     "status": "SUCCESS",
-                    "response": json.dumps(payload),
+                    "response": '{"draft":true}\n{"toolAction":"Finishing task"}\n',
+                    "structured_output": payload,
                 }
             )
         )
@@ -897,7 +924,7 @@ def test_formal_provider_failure_restores_settings_bytes(
     target.write_bytes(baseline)
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(target))
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_args, **_kwargs: None
@@ -943,7 +970,7 @@ def test_formal_main_stops_before_provider_without_read_only_sandbox(
     monkeypatch, capsys
 ) -> None:
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
         wrapper._common,
@@ -978,7 +1005,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     pruned: list[str] = []
     guarded: list[list[str]] = []
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
     @contextlib.contextmanager
@@ -1013,7 +1040,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert wrapper.main() == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt == {
-        "agy_version": "1.1.17",
+        "agy_version": "1.1.20",
         "effort": "high",
         "model": "gemini-3.1-pro-high",
         "provider_started": False,
@@ -1025,7 +1052,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
 
 def test_preflight_settings_failure_stops_before_provider(monkeypatch, capsys) -> None:
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 17))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
 
     @contextlib.contextmanager
