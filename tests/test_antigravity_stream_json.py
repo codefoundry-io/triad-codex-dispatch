@@ -449,6 +449,62 @@ def test_plan_mode_admits_agy_single_fenced_terminal_json_locally() -> None:
     assert admitted.final_answer == json.dumps(payload)
 
 
+def test_plan_mode_admits_valid_verdict_after_denied_post_completion_write() -> None:
+    payload = _formal_payload()
+    raw = _run_result(
+        _stream(
+            {
+                "status": "ERROR",
+                "error": (
+                    "permission check failed for command \"cat << 'EOF' > result.json\""
+                ),
+                "response": f"```json\n{json.dumps(payload)}\n```\n",
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(
+        raw,
+        LegVerdict,
+        "gemini-3.1-pro-high",
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+        plan_mode=True,
+    )
+
+    assert admitted.exit_code == _common.EXIT_OK
+    assert admitted.classification == "ok"
+    assert admitted.validated == payload
+    assert admitted.final_answer == json.dumps(payload)
+
+
+def test_plan_mode_rejects_valid_verdict_after_arbitrary_terminal_error() -> None:
+    payload = _formal_payload()
+    raw = _run_result(
+        _stream(
+            {
+                "status": "ERROR",
+                "error": "model backend failed after generating a response",
+                "response": json.dumps(payload),
+            }
+        )
+    )
+
+    admitted = wrapper._interpret_run(
+        raw,
+        LegVerdict,
+        expected_review_id="review-r1",
+        expected_family="google",
+        expected_content_digest="a" * 64,
+        plan_mode=True,
+    )
+
+    assert admitted.exit_code == _common.EXIT_TERMINAL
+    assert admitted.classification == "vendor-error"
+    assert admitted.final_answer == ""
+
+
 @pytest.mark.parametrize(
     "response",
     (

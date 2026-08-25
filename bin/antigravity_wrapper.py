@@ -203,7 +203,16 @@ def _interpret_run(
             _common.EXIT_CLI_FAIL,
             "missing terminal result event",
         )
-    if status != "SUCCESS":
+    denied_post_completion = (
+        plan_mode
+        and pydantic_cls is not None
+        and status == "ERROR"
+        and isinstance(result.get("error"), str)
+        and result["error"].startswith("permission check failed for command ")
+        and isinstance(result.get("response"), str)
+        and bool(result["response"].strip())
+    )
+    if status != "SUCCESS" and not denied_post_completion:
         return _fail(
             run,
             "vendor-error",
