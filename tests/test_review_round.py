@@ -2805,6 +2805,44 @@ def test_worktree_prompt_preserves_non_google_read_search_tools(
     assert "Never invoke run_command" not in prompt
 
 
+def test_worktree_prompt_forbids_repository_wide_path_enumeration(
+    worktree: Path,
+) -> None:
+    task = (worktree / "TASK-enumeration.md").resolve()
+    status = (worktree / "STATUS-enumeration.txt").resolve()
+    diff = (worktree / "REVIEW-enumeration.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="enumeration-r1",
+        review_kind="formal-plan",
+        family="codex",
+        objective="Review the approved plan without inspecting excluded paths.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the changed plan through approved source paths.",),
+        approved_boundary=("src and docs only", "exclude _runs and provider logs"),
+    )
+
+    contract = (
+        "Do not run repository-wide file enumeration, status, or search commands that can "
+        "expose excluded or unrelated path names. Start from metadata.diff_file and use only "
+        "explicit approved paths or pathspecs for later file listing, status, diff, search, "
+        "and read operations."
+    )
+    prompt = render_worktree_review_prompt(brief)
+    skill = (ROOT / "skills/triad-cross-family-review/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert contract in prompt
+    assert contract in " ".join(skill.split())
+
+
 def test_worktree_prompt_rejects_empty_review_points(
     worktree: Path, tmp_path: Path
 ) -> None:

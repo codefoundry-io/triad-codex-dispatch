@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.546 — 2026-08-25
+
+- Prevents worktree-first reviewers from invalidating their own leg by running
+  repository-wide path enumeration, status, or search commands that expose an
+  excluded path name. Review starts from the authenticated current-round diff,
+  then uses only explicit approved paths or pathspecs.
+- Provider routing, verdict schemas, and review scope are unchanged.
+
 ## 0.2.545 — 2026-08-25
 
 - Aligns provider-native JSON Schema, strict local `LegVerdict` validation,

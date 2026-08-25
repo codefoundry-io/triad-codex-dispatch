@@ -34,6 +34,9 @@ temporary root outside the worktree. `render-worktree` rejects an external custo
 The leader writes the situation-specific objective, criteria, and review points; tooling never
 generates or broadens them. Capture the pre/post fingerprint with packaged `python3
 bin/review_round.py fingerprint-worktree --worktree "$review_worktree"` exactly once at each boundary.
+Do not run repository-wide file enumeration, status, or search commands that can expose excluded
+or unrelated path names. Start from metadata.diff_file and use only explicit approved paths or
+pathspecs for later file listing, status, diff, search, and read operations.
 Invoke packaged `python3 bin/review_round.py render-worktree` once per family to validate custody
 and wrap that exact brief. One successful deterministic render pass
 proceeds directly to provider dispatch. Do not invoke `skill-prompt-review` before or during an

@@ -185,7 +185,13 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.545
+### Upgrading to 0.2.546
+
+0.2.546 prevents worktree-first reviewers from invalidating their own leg by
+running repository-wide path enumeration, status, or search commands that can
+expose excluded path names. Reviews start from the authenticated current-round
+diff and use explicit approved paths or pathspecs afterward. Provider routing,
+verdict schemas, and review scope do not change.
 
 0.2.545 aligns the provider-native JSON Schema, strict local `LegVerdict`
 validator, and both review prompts on clean POSIX result paths. It rejects
@@ -240,7 +246,7 @@ the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.545-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.546-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
