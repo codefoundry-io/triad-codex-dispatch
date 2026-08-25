@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.545 — 2026-08-25
+
+- Aligns provider-native JSON Schema, strict local `LegVerdict` validation,
+  and both review prompts on clean POSIX result paths. Leading/trailing slash,
+  backslash, empty or exact dot/dotdot components, ASCII controls, and DEL are
+  rejected before a completed leg can self-invalidate during local admission.
+- Preserves ordinary relative paths, spaces, hidden names such as `.gitignore`,
+  and names such as `..hidden`; provider routing, retry behavior, and review
+  capability are unchanged.
+
 ## 0.2.544 — 2026-08-25
 
 - Raises the formal AGY floor to 1.1.20 and restores native `--json-schema`

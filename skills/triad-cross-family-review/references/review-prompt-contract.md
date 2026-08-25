@@ -96,6 +96,9 @@ source-grounded `evidence`, and bounded `correction` direction.
 `findings[].path` and each `affected_surfaces_inspected` entry are prepared-
 directory-relative. Prose in `open_questions` may carry a suspected normalized
 worktree-relative path under the omitted-surface convention below.
+Result paths must be clean POSIX relative paths with no leading or trailing slash,
+backslash, empty component, `.` component, `..` component, ASCII control character,
+or DEL character.
 
 `SAFE` allows Minor findings but no Critical/Major finding or open question.
 `NOT-SAFE` requires a Critical/Major finding or open question.

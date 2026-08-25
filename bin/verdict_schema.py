@@ -24,7 +24,14 @@ from pydantic import (
 
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 _REVIEW_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-_NATIVE_REVIEW_PATH_PATTERN = r"^[^/\\][^\\]*$"
+_PATH_COMPONENT_PATTERN = (
+    r"(?:[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
+    r"\.[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
+    r"\.\.[^/\\\x00-\x1f\x7f]+)"
+)
+_NATIVE_REVIEW_PATH_PATTERN = (
+    rf"^{_PATH_COMPONENT_PATTERN}(?:/{_PATH_COMPONENT_PATTERN})*$"
+)
 ReviewRelativePath = Annotated[
     str,
     StringConstraints(pattern=_NATIVE_REVIEW_PATH_PATTERN),
@@ -42,7 +49,12 @@ def _review_relative_path(value: str) -> str:
     if "\\" in value or any(ord(char) < 32 or ord(char) == 127 for char in value):
         raise ValueError("path must be a clean POSIX review-relative path")
     path = PurePosixPath(value)
-    if path.is_absolute() or value != path.as_posix() or any(part in ("", ".", "..") for part in path.parts):
+    if (
+        not path.parts
+        or path.is_absolute()
+        or value != path.as_posix()
+        or any(part in ("", ".", "..") for part in path.parts)
+    ):
         raise ValueError("path must be a clean POSIX review-relative path")
     return value
 
@@ -95,7 +107,9 @@ class LegVerdict(BaseModel):
     @classmethod
     def _valid_digest(cls, value: str) -> str:
         if not _DIGEST_RE.fullmatch(value):
-            raise ValueError("content_digest must be 64 lowercase hexadecimal characters")
+            raise ValueError(
+                "content_digest must be 64 lowercase hexadecimal characters"
+            )
         return value
 
     @field_validator("criteria_checked", "open_questions")
@@ -117,14 +131,18 @@ class LegVerdict(BaseModel):
 
     @model_validator(mode="after")
     def _verdict_matches_evidence(self) -> "LegVerdict":
-        blocking = any(finding.severity in ("Critical", "Major") for finding in self.findings)
+        blocking = any(
+            finding.severity in ("Critical", "Major") for finding in self.findings
+        )
         if self.verdict == "SAFE":
             if blocking:
                 raise ValueError("SAFE requires no Critical or Major finding")
             if self.open_questions:
                 raise ValueError("SAFE requires no open questions")
         elif not blocking and not self.open_questions:
-            raise ValueError("NOT-SAFE requires a Critical/Major finding or open question")
+            raise ValueError(
+                "NOT-SAFE requires a Critical/Major finding or open question"
+            )
         return self
 
 
@@ -133,14 +151,23 @@ def _read_canonical_regular_file(path: Path) -> bytes:
         resolved = path.resolve(strict=True)
         before = path.lstat()
     except (OSError, RuntimeError):
-        raise ValueError("result file must be a canonical existing regular file") from None
-    if not path.is_absolute() or path != resolved or not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise ValueError(
+            "result file must be a canonical existing regular file"
+        ) from None
+    if (
+        not path.is_absolute()
+        or path != resolved
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+    ):
         raise ValueError("result file must be a canonical existing regular file")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
         descriptor = os.open(path, flags)
     except OSError:
-        raise ValueError("result file must be a canonical existing regular file") from None
+        raise ValueError(
+            "result file must be a canonical existing regular file"
+        ) from None
     try:
         opened = os.fstat(descriptor)
         if not os.path.samestat(opened, before):
@@ -150,7 +177,10 @@ def _read_canonical_regular_file(path: Path) -> bytes:
             chunks.append(chunk)
         after = os.fstat(descriptor)
         if (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns) != (
-            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
         ):
             raise ValueError("result file changed while reading")
         return b"".join(chunks)
@@ -164,7 +194,9 @@ def validate_verdict_file(
     expected_family: Literal["claude", "google", "codex"],
     expected_content_digest: str,
 ) -> LegVerdict:
-    verdict = LegVerdict.model_validate_json(_read_canonical_regular_file(result_file), strict=True)
+    verdict = LegVerdict.model_validate_json(
+        _read_canonical_regular_file(result_file), strict=True
+    )
     if verdict.review_id != expected_review_id:
         raise ValueError("review ID mismatch")
     if verdict.family != expected_family:
@@ -181,7 +213,9 @@ def _parser() -> argparse.ArgumentParser:
     validate = commands.add_parser("validate")
     validate.add_argument("--result-file", type=Path, required=True)
     validate.add_argument("--expected-review-id", required=True)
-    validate.add_argument("--expected-family", choices=("claude", "google", "codex"), required=True)
+    validate.add_argument(
+        "--expected-family", choices=("claude", "google", "codex"), required=True
+    )
     validate.add_argument("--expected-content-digest", required=True)
     return parser
 
@@ -190,7 +224,13 @@ def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
         if arguments.command == "schema":
-            print(json.dumps(LegVerdict.model_json_schema(), sort_keys=True, separators=(",", ":")))
+            print(
+                json.dumps(
+                    LegVerdict.model_json_schema(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
         else:
             verdict = validate_verdict_file(
                 arguments.result_file,

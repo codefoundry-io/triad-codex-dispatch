@@ -168,7 +168,13 @@ leg가 아닙니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.544 업그레이드
+### 0.2.545 업그레이드
+
+0.2.545는 provider-native JSON Schema, strict local `LegVerdict` validator,
+두 review prompt의 clean POSIX result path 계약을 일치시킵니다. leading/trailing
+slash, backslash, empty 또는 exact dot/dotdot component, ASCII control, DEL을
+거부하면서 일반 path, space, `.gitignore`, `..hidden`은 유지합니다. provider
+선택, retry 동작, 정적 리뷰 capability는 변경하지 않습니다.
 
 0.2.544는 완료 후 AGY `step_update` telemetry를 diagnostic으로 유지하고
 verdict-admission schema로 취급하지 않습니다. 새 metadata field, 변경된 optional tool argument, 차단된 시도, 상충하는
@@ -213,7 +219,7 @@ policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입�
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.544-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.545-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

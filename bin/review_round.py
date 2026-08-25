@@ -1330,6 +1330,9 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         '"correction":"bounded correction"}],"affected_surfaces_inspected":["relative/path"],'
         '"open_questions":[]}. findings[].path and affected_surfaces_inspected entries must be '
         "prepared-directory-relative. "
+        "Result paths must be clean POSIX relative paths with no leading or trailing slash, "
+        "backslash, empty component, `.` component, `..` component, ASCII control "
+        "character, or DEL character. "
         "SAFE permits Minor findings but no Critical/Major finding and no open question. "
         "NOT-SAFE requires at least one Critical/Major finding or one open question. "
         "A Minor finding may carry a non-blocking hardening suggestion only when packet evidence "
@@ -1450,7 +1453,10 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         '"path":"relative/path","line":1,"trigger":"condition","evidence":"specific evidence",'
         '"correction":"bounded correction"}],"affected_surfaces_inspected":["relative/path"],'
         '"open_questions":[]}. findings[].path and affected_surfaces_inspected entries must be '
-        "worktree-relative. SAFE permits Minor findings but no Critical/Major finding and no open "
+        "worktree-relative. Result paths must be clean POSIX relative paths with no leading or "
+        "trailing slash, backslash, empty component, `.` component, `..` component, ASCII "
+        "control character, or DEL character. "
+        "SAFE permits Minor findings but no Critical/Major finding and no open "
         "question. NOT-SAFE requires at least one Critical/Major finding or one open question. "
         "A Minor finding may carry a non-blocking hardening suggestion only when worktree evidence "
         "establishes current correctness and rules out its scenario for this decision; state why "

@@ -43,7 +43,9 @@ def test_safe_rejects_blocking_finding():
         "evidence": "the failure branch returns success",
         "correction": "return the validation error",
     }
-    with pytest.raises(ValidationError, match="SAFE requires no Critical or Major finding"):
+    with pytest.raises(
+        ValidationError, match="SAFE requires no Critical or Major finding"
+    ):
         LegVerdict.model_validate({**VALID, "findings": [finding]})
 
 
@@ -74,6 +76,8 @@ def test_safe_accepts_minor_finding():
         ("criteria_checked", [" "]),
         ("affected_surfaces_inspected", ["../escape.py"]),
         ("affected_surfaces_inspected", ["/absolute.py"]),
+        ("affected_surfaces_inspected", ["line\nbreak.py"]),
+        ("affected_surfaces_inspected", ["del\x7fname.py"]),
     ],
 )
 def test_rejects_unbound_or_unsafe_contract_values(field, value):
@@ -81,25 +85,57 @@ def test_rejects_unbound_or_unsafe_contract_values(field, value):
         LegVerdict.model_validate({**VALID, field: value})
 
 
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"affected_surfaces_inspected": ["."]},
+        {
+            "findings": [
+                {
+                    "severity": "Minor",
+                    "path": ".",
+                    "line": None,
+                    "trigger": "the reviewer identifies the review root",
+                    "evidence": "the result path is a standalone dot",
+                    "correction": "name the exact affected relative file",
+                }
+            ]
+        },
+    ],
+)
+def test_rejects_standalone_dot_review_paths(changes):
+    with pytest.raises(ValidationError):
+        LegVerdict.model_validate({**VALID, **changes})
+
+
 def test_rejects_unknown_result_fields():
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         LegVerdict.model_validate({**VALID, "batch_id": "batch-0001"})
 
 
-def test_native_schema_rejects_absolute_and_backslash_review_paths():
+def test_native_schema_rejects_noncanonical_review_paths():
     schema = LegVerdict.model_json_schema()
     surface_pattern = schema["properties"]["affected_surfaces_inspected"]["items"][
         "pattern"
     ]
-    finding_pattern = schema["$defs"]["LegFinding"]["properties"]["path"][
-        "pattern"
-    ]
+    finding_pattern = schema["$defs"]["LegFinding"]["properties"]["path"]["pattern"]
 
     for pattern in (surface_pattern, finding_pattern):
         assert re.search(pattern, "src/parser.py")
         assert re.search(pattern, "docs/space name.md")
+        assert re.search(pattern, ".gitignore")
+        assert re.search(pattern, "..hidden")
         assert not re.search(pattern, "/absolute/path.py")
         assert not re.search(pattern, r"src\windows.py")
+        assert not re.search(pattern, "src/validation/seeds/")
+        assert not re.search(pattern, ".")
+        assert not re.search(pattern, "..")
+        assert not re.search(pattern, "./src/a.py")
+        assert not re.search(pattern, "../escape.py")
+        assert not re.search(pattern, "src/./a.py")
+        assert not re.search(pattern, "src/../a.py")
+        assert not re.search(pattern, "line\nbreak.py")
+        assert not re.search(pattern, "del\x7fname.py")
 
 
 def test_file_validation_binds_review_family_and_digest(tmp_path):

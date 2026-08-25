@@ -2738,6 +2738,11 @@ def test_worktree_prompt_preserves_leader_authored_review_points(
     assert metadata["content_digest"] == metadata["worktree_review_digest"]
     assert "authenticated custody locations only" in prompt
     assert "Return exactly one JSON object matching verdict_schema:LegVerdict" in prompt
+    assert (
+        "Result paths must be clean POSIX relative paths with no leading or trailing slash, "
+        "backslash, empty component, `.` component, `..` component, ASCII control "
+        "character, or DEL character." in prompt
+    )
     google_tool_contract = (
         "For this Google leg, use only AGY native file-read and search tools for local inspection. "
         "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "
@@ -3005,6 +3010,11 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     assert (
         "findings[].path and affected_surfaces_inspected entries must be "
         "prepared-directory-relative" in prompt
+    )
+    assert (
+        "Result paths must be clean POSIX relative paths with no leading or trailing slash, "
+        "backslash, empty component, `.` component, `..` component, ASCII control "
+        "character, or DEL character." in prompt
     )
     assert "Treat the prepared directory as the only filesystem input" in prompt
     assert "Do not inspect canonical worktrees or other local paths" in prompt
