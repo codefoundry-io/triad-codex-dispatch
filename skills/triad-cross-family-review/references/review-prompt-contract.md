@@ -1,5 +1,11 @@
 # Shared review prompt contract
 
+## Contents
+
+- [Required inputs](#required-inputs)
+- [Inspection contract](#inspection-contract)
+- [Result](#result)
+
 Every family receives the same values below. The perspective may differ; the
 task, prepared directory, boundary, digest, criteria, and result shape may not.
 
@@ -57,9 +63,12 @@ on implicit another-page continuation. If native reads and searches are insuffic
 Formal `step_update` telemetry is diagnostic vendor output, not an admission
 schema: added fields, changed optional tool arguments, denied attempts, and
 duplicate progress events do not invalidate an otherwise valid terminal
-verdict. The prompt and native `--mode plan` define the static-review behavior;
-explicit deny rules enforce blocked action namespaces, and local verdict,
-review-binding, and round-integrity checks remain the admission gates.
+verdict. Claude's native `--permission-mode plan` and Google's native
+`--mode plan` define static-review behavior for those routes; explicit deny
+rules enforce blocked Google action namespaces. Fresh Codex remains prompt-controlled unless
+runtime metadata proves stronger containment. Local verdict and review-binding
+checks establish provisional validity; round-integrity checks decide final
+admission as formal review evidence.
 Do not edit files, change external state, or execute candidate code, tests,
 builds, hooks, or scripts.
 

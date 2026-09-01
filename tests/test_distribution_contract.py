@@ -19,7 +19,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.546"
+    assert manifest["version"] == "0.2.547"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -124,6 +124,18 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     compact_antigravity = " ".join(agy.split())
     compact_readme = " ".join(readme.split())
     compact_readme_ko = " ".join(readme_ko.split())
+    compact_claude = " ".join(claude.split())
+
+    assert "Claude's native `--permission-mode plan`" in compact_prompt_contract
+    assert "Google's native `--mode plan`" in compact_prompt_contract
+    assert "Fresh Codex remains prompt-controlled" in compact_prompt_contract
+    assert "each provider's native Plan Mode" not in compact_prompt_contract
+    assert "The prompt and native `--mode plan` define" not in compact_prompt_contract
+    assert "Ordinary calls leave Claude permission selection native" in compact_claude
+    assert (
+        "fully bound formal `LegVerdict` route adds native per-call Plan Mode"
+        in compact_claude
+    )
 
     for compact in (compact_readme, compact_readme_ko):
         assert "`AbsolutePath`" in compact
@@ -837,12 +849,14 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
             "`--sandbox read-only`",
             "transient global-settings transaction",
             "restores the original bytes",
+            "formally bound Claude leg adds native `--permission-mode plan`",
         ),
         "README.ko.md": (
             "native AGY CLI 로그인",
             "`--sandbox read-only`",
             "일시적 global-settings transaction",
             "원래 바이트를 복원",
+            "formal binding이 완료된 Claude leg는 native `--permission-mode plan`을 추가",
         ),
         "SECURITY.md": (
             "native AGY CLI sign-in",
@@ -862,6 +876,8 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
             "Permission selection remains with the provider/user/project",
             "Provider, user, and project settings decide whether a native operation is allowed, denied, or interactive",
             "The boundary rests on process permissions selected by the provider/user/project",
+            "AGY child selection is the sole permission-mode exception",
+            "outside the documented packaged AGY child selection",
         ),
         "README.ko.md": (
             "Native provider permission을 그대로 상속합니다",
@@ -869,6 +885,8 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
             "provider permission과 project trust policy는 native 설정을 유지합니다",
             "Permission 선택은 provider/user/project에 남습니다",
             "경계는 provider/user/project가 선택한 permission",
+            "packaged AGY child 선택만 permission-mode 예외",
+            "packaged AGY child 예외 밖의 permission 선택은",
         ),
         "SECURITY.md": (
             "TRIAD does not select or override a permission mode",

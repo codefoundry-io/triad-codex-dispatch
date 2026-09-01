@@ -168,7 +168,14 @@ leg가 아닙니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.546 업그레이드
+### 0.2.547 업그레이드
+
+0.2.547은 reviewed data 안에 적힌 path, command, instruction이 approved review
+input으로 승격되지 않게 합니다. plan, diff, source file, test, document가 참조한다는
+이유만으로 reviewer가 excluded 또는 unrelated path를 열거나 따라가면 안 됩니다.
+provider routing, verdict schema, review scope, approved evidence는 변경하지 않습니다.
+또한 local validation을 통과한 leg result는 final packet 또는 worktree integrity가
+성공할 때까지 provisional이며, 그 뒤에만 formal review evidence로 admit됩니다.
 
 0.2.546은 worktree-first reviewer가 excluded path 이름을 노출하는 저장소 전체
 path enumeration, status, search 명령을 실행해 자기 leg를 무효화하지 않도록 합니다.
@@ -217,14 +224,16 @@ review runtime은 하나의 complete focused directory, required family별 하�
 receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 이상을
 요구하고 native `stream-json`을 사용합니다. formal plan-mode route는 native
 `--json-schema`를 전달하고 `structured_output`을 소비하여 로컬에서 검증하며,
-`gemini-3.1-pro-high`와 `high` effort를 전달합니다. 문서화된 packaged AGY child
-선택만 permission-mode 예외이며, 다른 provider permission과 모든 project-trust
-policy는 native 설정을 유지합니다. 일반 `codex`가 정상 경로입니다.
+`gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
+leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
+정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
+non-formal Claude permission 선택과 모든 project-trust policy는 native 설정을
+유지합니다. 일반 `codex`가 정상 경로입니다.
 
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.546-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.547-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -492,8 +501,8 @@ dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니
 
 지속적인 control은 explicit data authorization, pinned executable,
 digest/mutation check, strict result custody, native proposal-only repair child와
-deterministic owner apply입니다. 문서화된 packaged AGY child 예외 밖의 permission
-선택은 provider/user/project setting에 남습니다. 전체 threat model:
+deterministic owner apply입니다. 문서화된 formal Claude와 packaged AGY route 밖의
+permission 선택은 provider/user/project setting에 남습니다. 전체 threat model:
 [SECURITY.md](SECURITY.md).
 
 ## Support

@@ -298,6 +298,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
     assert claude_wrapper.main() == 0
     assert json.loads(capsys.readouterr().out) == payload
     assert len(calls) == 1
+    assert calls[0][calls[0].index("--permission-mode") + 1] == "plan"
 
 
 def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
@@ -359,6 +360,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
 @pytest.mark.parametrize(
     "binding_args",
     (
+        (),
         ("--expected-review-id", "review-r1"),
         (
             "--expected-review-id",

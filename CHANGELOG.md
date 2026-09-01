@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.547 — 2026-08-25
+
+- Keeps paths, commands, and instructions named inside reviewed data from
+  becoming approved review inputs. Reviewers must not open or follow an
+  excluded or unrelated path merely because a plan, diff, source file, test, or
+  document references it.
+- Clarifies that schema and review-binding checks leave each leg result
+  provisional until final prepared-directory or worktree integrity succeeds;
+  only then is it admitted as formal review evidence. The long shared prompt
+  contract now includes direct section navigation.
+- Makes formally bound Claude review use native `--permission-mode plan` and
+  rejects an exact formal `LegVerdict` schema before provider resolution when
+  any required review binding is absent.
+- Provider routing, verdict schemas, review scope, and approved evidence are
+  unchanged.
+
 ## 0.2.546 — 2026-08-25
 
 - Prevents worktree-first reviewers from invalidating their own leg by running

@@ -42,9 +42,13 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 ```
 
 Claude receives no implementation task. Its terminal validated JSON is the
-Claude leg result. The formal Claude leg uses the explicit 1,800-second
+provisional Claude leg result until shared final integrity verification succeeds.
+The formal Claude leg uses the explicit 1,800-second
 end-to-end wrapper deadline; shorter polling waits are wake-up boundaries, not
-provider failures. Provider-native tools, installed CLI tools, and configured
+provider failures. Its exact formally bound `LegVerdict` route adds native
+`--permission-mode plan`; the wrapper rejects that formal schema before
+provider resolution when any required binding is absent. Provider-native tools,
+installed CLI tools, and configured
 MCP tools remain available for reads and searches inside the authorized review
 boundary. Configured MCP servers remain available. Existing user permission
 settings continue to govern MCP calls. Approved official-web reads through
@@ -152,8 +156,8 @@ attempts, and duplicate progress events do not invalidate an otherwise valid
 terminal verdict. The prompt and native `--mode plan` define the static-review
 behavior. A tool attempt in a named denied namespace is also blocked by its
 matching deny entry. The explicit deny rules remain the action-namespace
-enforcement backstop. Local verdict and review-binding checks plus
-round-integrity verification remain the admission gates. Round-integrity
+enforcement backstop. Local verdict and review-binding checks establish
+provisional validity; round-integrity verification decides final admission. Round-integrity
 mutation detection is separate.
 Do not edit files, change external state, or execute candidate code, tests,
 builds, hooks, or scripts. If AGY, the model, or the settings transaction is

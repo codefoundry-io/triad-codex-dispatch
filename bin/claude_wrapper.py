@@ -3,7 +3,9 @@
 
 Forwards a prompt to Claude's JSON output mode along with only native model,
 effort, fallback-model, working-directory, timeout, schema, and debug controls.
-Provider-owned permission and trust settings are left to the native CLI.
+Provider-owned permission and trust settings are left to the native CLI for
+ordinary calls. The exact formally bound ``LegVerdict`` route adds native
+``--permission-mode plan``.
 
 Stdout is the final answer text from envelope `.result` (or, with
 ``--pydantic``, the validated JSON object). Stderr is wrapper logging and
@@ -214,6 +216,11 @@ def main() -> int:
         args.expected_family,
         args.expected_content_digest,
     )
+    if args.pydantic == "verdict_schema:LegVerdict" and not all(
+        value is not None for value in binding_values
+    ):
+        log("formal verdict schema requires all formal verdict bindings")
+        return EXIT_ARG_ERROR
     if any(value is not None for value in binding_values):
         if not all(value is not None for value in binding_values):
             log("formal verdict bindings must be supplied together")
@@ -244,6 +251,8 @@ def main() -> int:
             cmd += ["--effort", args.effort]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
+        if all(value is not None for value in binding_values):
+            cmd += ["--permission-mode", "plan"]
         if native_schema is not None:
             cmd += ["--json-schema", native_schema]
         return cmd

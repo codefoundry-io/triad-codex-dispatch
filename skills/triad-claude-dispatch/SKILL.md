@@ -6,7 +6,9 @@ description: Use when a bounded task needs one authorized Claude-family answer o
 # Claude Dispatch
 
 Use the packaged `bin/claude_wrapper.py`; do not call provider internals or
-modify Claude authentication, permissions, or user configuration.
+modify Claude authentication or user configuration. Ordinary calls leave Claude
+permission selection native. The fully bound formal `LegVerdict` route adds
+native per-call Plan Mode without changing persistent user configuration.
 
 ## Ordinary bounded dispatch
 

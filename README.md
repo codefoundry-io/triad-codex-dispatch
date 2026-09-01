@@ -169,8 +169,8 @@ support. The installer does not install OS packages.
 *Do this ONLY if you want the full threat model before relying on the toolkit.*
 See [SECURITY.md](SECURITY.md) — the durable boundaries are explicit data
 authorization, pinned executables, digest/mutation checks, strict result custody,
-and deterministic owner apply. Provider/user/project settings retain all
-permission choices outside the documented packaged AGY child selection, and
+and deterministic owner apply. Provider/user/project settings retain permission
+selection outside the documented formal Claude and packaged AGY routes, and
 no-edit/no-execution containment is prompt-controlled unless a provider actually
 enforces it (summarized under [Security](#security) below).
 
@@ -185,7 +185,15 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Upgrading to 0.2.546
+### Upgrading to 0.2.547
+
+0.2.547 prevents a path, command, or instruction named inside reviewed data
+from becoming an approved review input. A reviewer must not open or follow an
+excluded or unrelated path merely because a plan, diff, source file, test, or
+document references it. Provider routing, verdict schemas, review scope, and
+approved evidence do not change. The workflow also labels locally validated
+leg results as provisional until final packet or worktree integrity succeeds,
+then admits them as formal review evidence.
 
 0.2.546 prevents worktree-first reviewers from invalidating their own leg by
 running repository-wide path enumeration, status, or search commands that can
@@ -238,15 +246,16 @@ from each required family, and fresh complete rounds after bounded fixes. Batch,
 packet, receipt, PTY, and sentinel review transports are removed. AGY requires
 1.1.20 or newer and uses native `stream-json`; the formal plan-mode route
 passes native `--json-schema`, consumes `structured_output`, and validates it
-locally. It passes `gemini-3.1-pro-high` with `high` effort. The documented packaged
-AGY child selection is the sole permission-mode exception; other provider
-permission and all project-trust policy remain native. Ordinary `codex` remains
-the normal path.
+locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
+Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
+schema without all three review bindings fails before provider resolution.
+Non-formal Claude permission selection and all project-trust policy remain
+native. Ordinary `codex` remains the normal path.
 
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.546-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.547-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -526,7 +535,8 @@ a perfect garbage collector.
 The durable controls are explicit data authorization, pinned executables,
 digest/mutation checks, strict result custody, and a native proposal-only repair
 child followed by deterministic owner apply. Provider/user/project settings
-retain permission selection outside the documented packaged AGY child exception.
+retain permission selection outside the documented formal Claude and packaged
+AGY routes.
 Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Support
