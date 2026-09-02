@@ -390,7 +390,7 @@ def load_google_selector_receipt(
     ).resolve()
     if paths["wrapper"] != packaged_wrapper:
         raise RoundIntegrityError(
-            "google selector wrapper does not match selected route"
+            "google selector wrapper belongs to a different toolkit root"
         )
     if expected_review_id is not None and review_id != _validate_review_id(
         expected_review_id

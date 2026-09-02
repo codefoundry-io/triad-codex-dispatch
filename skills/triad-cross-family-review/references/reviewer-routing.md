@@ -30,8 +30,12 @@ Gemini reports requested approval mode `plan` and effective approval mode
 mode-independent policy remains active if Gemini resolves a different approval
 mode; TRIAD never adds `--skip-trust` or reads user settings to speculate about it.
 
-Before starting any family, run the bootstrap-managed `review_round.py select-google-route`
-launcher for the packaged script with
+Before starting any family, run a bootstrap-managed `review_round.py select-google-route`
+launcher that targets the same canonical toolkit root as the lifecycle renderer and provider
+wrappers. For an installed operational skill, use its matching installed launcher. For a
+source-SOT pre-deployment round, create the isolated task-scoped same-root launcher group in
+[leg contracts](leg-contracts.md); never mix a source renderer with a launcher targeting another
+checkout or installed cache, even when one wrapper file is byte-identical. Run the selected launcher with
 `--review-id`, `--authentication-class personal-google|gemini-enterprise`, and a new round-owned
 `--output`. The exact canonical receipt must report `provider_started:false` plus the review ID,
 selected executable, wrapper, route, and authentication class. Preflight only the recorded wrapper

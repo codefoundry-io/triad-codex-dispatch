@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import replace
@@ -76,19 +77,18 @@ def _write_google_selector_receipt(
     authentication_class: str,
     route: str,
     executable: Path,
+    wrapper: Path | None = None,
 ) -> dict[str, object]:
+    selected_wrapper = wrapper or (
+        BIN / ("antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py")
+    )
     record = {
         "authentication_class": authentication_class,
         "executable": str(executable.resolve()),
         "provider_started": False,
         "review_id": review_id,
         "route": route,
-        "wrapper": str(
-            (
-                BIN
-                / ("antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py")
-            ).resolve()
-        ),
+        "wrapper": str(selected_wrapper.resolve()),
     }
     path.write_bytes(_canonical_json_bytes(record))
     return record
@@ -4759,6 +4759,83 @@ def test_cli_render_derives_shared_basis_from_exact_selector_receipt(
         digests_by_receipt.append(family_digests)
 
     assert digests_by_receipt[0] != digests_by_receipt[1]
+
+
+@pytest.mark.parametrize(
+    "route",
+    ("agy", "gemini"),
+)
+def test_cli_render_rejects_byte_identical_cross_install_google_wrapper(
+    prepared: Path,
+    tmp_path: Path,
+    route: str,
+) -> None:
+    installed_bin = tmp_path / f"installed-{route}" / "bin"
+    installed_bin.mkdir(parents=True)
+    wrapper_name = "antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py"
+    installed_wrapper = installed_bin / wrapper_name
+    shutil.copy2(BIN / wrapper_name, installed_wrapper)
+
+    executable = tmp_path / f"{route}-executable"
+    _fake_executable(executable)
+    review_id = f"cross-install-{route}-r1"
+    selector_receipt = (tmp_path / f"{review_id}-selector.json").resolve()
+    preflight_receipt = (tmp_path / f"{review_id}-preflight.json").resolve()
+    output = (tmp_path / f"{review_id}-prompt.txt").resolve()
+    _write_google_selector_receipt(
+        selector_receipt,
+        review_id=review_id,
+        authentication_class="gemini-enterprise",
+        route=route,
+        executable=executable,
+        wrapper=installed_wrapper,
+    )
+    _write_google_preflight_receipt(
+        preflight_receipt,
+        selector_receipt=selector_receipt,
+        review_id=review_id,
+        route=route,
+        executable=executable,
+    )
+
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            review_id,
+            "--review-kind",
+            "implementation-review",
+            "--family",
+            "google",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--objective",
+            "Verify cross-install Google route custody.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            _prepared_digest(prepared),
+            "--criterion",
+            "route custody",
+            "--approved-boundary",
+            "prepared source",
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 2
+    assert "google selector wrapper belongs to a different toolkit root" in (
+        rendered.stderr
+    )
+    assert not output.exists()
 
 
 def test_cli_render_rejects_free_google_route_for_admissible_prompt(

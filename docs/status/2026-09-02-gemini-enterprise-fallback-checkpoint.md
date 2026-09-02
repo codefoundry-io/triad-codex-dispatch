@@ -44,7 +44,17 @@ the round. `personal-google` continues to require AGY.
 - Permission-guidance RED: two focused cases failed while public guidance still
   recommended unrestricted host access. A separate fresh executor then passed
   the corrected three-case selector under `workspace-write` / `on-request`.
-- Full repository suite: 671 tests passed on the final integrated candidate.
+- A paid-smoke preflight exposed a source-SOT / installed-selector toolkit-root
+  contradiction before any provider started. The invalid round preserved
+  `ROUND_INTEGRITY_OK`, was cleaned exactly, and consumed no provider budget.
+  Focused RED then proved the ambiguous diagnostic for both AGY and Gemini.
+- The bounded repair keeps exact toolkit-root identity, gives source-SOT
+  pre-deployment rounds an isolated same-root bootstrap launcher, and rejects
+  byte-identical wrappers from another toolkit because sibling modules and
+  policy files affect runtime behavior. A separate fresh executor proved the
+  focused GREEN, same-root AGY 1.1.24 / `gemini-3.1-pro-high` provider-free
+  preflight, exact temporary cleanup, and unchanged source fingerprint.
+- Full repository suite: 673 tests passed on the final integrated candidate.
 - Both skill validators and the plugin validator passed.
 - Ruff passed for every changed Python source and test path. `git diff --check`
   and `bash -n scripts/bootstrap.sh` passed.

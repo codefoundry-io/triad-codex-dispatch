@@ -79,17 +79,66 @@ passed to `render-worktree --task-file`. That file must exist before selection a
 wrapper preflight's sole prompt input.
 
 Before starting any family, bind `google_authentication_class` to exactly
-`personal-google` or `gemini-enterprise`, then create one round-owned selector receipt:
+`personal-google` or `gemini-enterprise`. The selector launcher must target the same canonical
+toolkit root used by every lifecycle renderer and provider wrapper. A wrapper from another
+checkout or installed cache remains foreign even when that one file is byte-identical: sibling
+modules and the Gemini policy are part of its runtime behavior.
+
+For an installed operational skill whose bootstrap-managed launcher targets that installed
+toolkit root, bind it normally:
 
 ```text
 google_selector_launcher="$(command -v review_round.py)"
+```
+
+For a source-SOT pre-deployment round, do not use an older installed launcher. Before preparing
+the review packet, create two unique sibling system-temporary directories: one neutral bootstrap
+working directory and one task-scoped stage. Bind every path first, keep the launcher directory on
+the bootstrap `PATH`, and isolate bootstrap's launcher, Codex-home, configuration, classifier, and
+shell-rc targets inside the stage. Run this before packet capture; bootstrap may also create its
+ordinary ignored runtime-log directory under the canonical toolkit root:
+
+```text
+selector_bootstrap_cwd_raw="$(mktemp -d "${TMPDIR:-/tmp}/triad-selector-cwd.${review_id}.XXXXXX")"
+selector_stage_root_raw="$(mktemp -d "${TMPDIR:-/tmp}/triad-selector-stage.${review_id}.XXXXXX")"
+selector_bootstrap_cwd="$(realpath "$selector_bootstrap_cwd_raw")"
+selector_stage_root="$(realpath "$selector_stage_root_raw")"
+selector_launcher_dir="$selector_stage_root/bin"
+selector_stage_codex_home="$selector_stage_root/codex-home"
+selector_stage_config_home="$selector_stage_root/config-home"
+selector_stage_classifier="$selector_stage_config_home/triad-codex-dispatch/classifier-patches.json"
+selector_stage_shell_rc="$selector_stage_root/shellrc"
+(
+  cd "$selector_bootstrap_cwd" &&
+  CODEX_HOME="$selector_stage_codex_home" \
+  XDG_CONFIG_HOME="$selector_stage_config_home" \
+  TRIAD_CLASSIFIER_EXTENSION="$selector_stage_classifier" \
+  TRIAD_BOOTSTRAP_SHELL_RC="$selector_stage_shell_rc" \
+  TRIAD_BOOTSTRAP_REPO_ROOT="$toolkit_root" \
+  TRIAD_BOOTSTRAP_BIN_DIR="$selector_launcher_dir" \
+  PATH="$selector_launcher_dir:$PATH" \
+    "$toolkit_root/scripts/bootstrap.sh" --install
+)
+google_selector_launcher="$selector_launcher_dir/review_round.py"
+```
+
+The two `mktemp` results must be distinct canonical directories, and neither may contain the
+other, the toolkit root, or the review worktree. Record both as current-round temporary handles.
+If staging fails or the launcher does not exist as a canonical executable, no review root or
+provider may start. Remove only those two exact directories after the round terminates or after a
+pre-provider failure, and confirm both are absent.
+
+Then exclusive-create one round-owned selector receipt:
+
+```text
 "$google_selector_launcher" select-google-route \
   --review-id "$review_id" \
   --authentication-class "$google_authentication_class" \
   --output "$google_selector_receipt"
 ```
 
-The command must resolve to the bootstrap-managed launcher for the packaged `review_round.py`.
+The command must resolve to the bootstrap-managed launcher for the canonical toolkit root's
+packaged `review_round.py`.
 Do not prefix it with `python3`: that launcher supplies the install-resolved AGY and Gemini pins,
 explicitly records either absence, and requires pinned-vendor selection without exporting pin
 variables into the shell. A missing or shadowed selector launcher is a route-setup failure.
