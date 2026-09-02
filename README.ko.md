@@ -217,6 +217,18 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.550 업그레이드
+
+0.2.550은 provider가 하나도 시작되기 전에 반복되는 실패의 복구 절차를 강화합니다.
+같은 workflow에서 두 번째 zero-provider 실패가 발생하면 새 review ID 할당을 멈추고,
+모든 failure receipt를 보존·비교해 공통 원인을 검증한 뒤 provider-free setup-only probe
+하나를 통과해야 다음 formal round를 준비할 수 있습니다. source-SOT bootstrap에서는 host
+command의 outer workdir를 환경 요구대로 유지하고, 문서화된 subshell만 별도의 neutral child
+cwd로 들어갑니다. `HOME`은 보존하고 Codex 상태만 `CODEX_HOME`으로 격리합니다. repository
+검증 명령도 의도한 checkout을 명시적으로 binding하므로 workspace root의 다른 `tests/`
+directory를 실수로 선택하지 않습니다. provider 구성, routing, strict `LegVerdict` schema는
+바뀌지 않습니다.
+
 ### 0.2.549 업그레이드
 
 0.2.549는 review family 하나라도 시작된 뒤 required leg의 시작이나 결과가 실패할 때의
@@ -310,7 +322,7 @@ non-formal Claude permission 선택과 모든 project-trust policy는 native 설
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.549-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.550-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

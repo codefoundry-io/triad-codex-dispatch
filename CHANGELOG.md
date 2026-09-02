@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.550 — 2026-09-03
+
+- Distinguishes the host executor's outer working directory from the neutral child working
+  directory used by source-SOT bootstrap. The canonical recipe keeps the login user's `HOME`,
+  isolates Codex state with `CODEX_HOME`, and prevents the toolkit or stage root from being
+  mistaken for bootstrap's child `PWD`.
+- Stops allocating new review IDs after a second zero-provider failure in the same attempted
+  workflow. The leader retains and compares every failure receipt, verifies the shared root
+  cause, and runs one provider-free setup-only proof before another formal round.
+- Makes repository verification commands bind the current checkout by absolute path, preventing
+  a workspace-root invocation from silently selecting another `tests/` directory. Provider
+  composition, routing, and the public `LegVerdict` schema are unchanged.
+
 ## 0.2.549 — 2026-09-03
 
 - Replaces first-failure whole-round cancellation once any family has started
