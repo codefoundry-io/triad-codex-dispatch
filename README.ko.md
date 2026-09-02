@@ -6,7 +6,7 @@
 결과물을 검토시키면 같은 framing 을 물려받습니다 — 버그를 만든 추론이 곧 그 버그를
 리뷰하는 추론입니다. triad-codex-dispatch 는 **다른 모델 패밀리** 로부터 두 번째, 세
 번째 의견을 받아줍니다: codex 가 리더로 남아 **Claude Code**(Anthropic)와
-**antigravity / `agy`**(Google)를 단발(single-shot) 워커로 디스패치하고, 위험한
+**AGY 또는 Gemini CLI**(Google)를 단발(single-shot) 워커로 디스패치하고, 위험한
 변경을 머지하기 전에는 각 패밀리가 그 결정을 **독립적으로** 반박하는 리뷰를
 돌립니다 — 그래서 내 주 모델이 스스로 합리화해 넘긴 버그를, 그 blind spot 이 애초에
 없던 모델이 잡아냅니다.
@@ -23,17 +23,24 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 - `skills/` 아래의 Codex 플러그인 skill.
 - bootstrap은 새로 Claude, agy, Gemini 세 provider wrapper command만 publish합니다.
   `triad-setup` 및 `triad-doctor`는 remove-only legacy cleanup 이름입니다.
-- 정식 Google review는 native AGY CLI 로그인으로 개인 Google Sign-In 또는 회사
-  Gemini Enterprise Business Sign-In을 사용합니다. 배포된 Claude 주최 TRIAD와
-  같이 `--sandbox read-only` 호출 동안 일시적 global-settings transaction으로
+- 정식 Google review는 어떤 family도 시작하기 전에 route를 선택해 고정합니다.
+  AGY를 우선하며 개인 Google Sign-In에는 AGY가 필요합니다. owner가 Gemini
+  Enterprise OAuth를 선택했고 AGY 실행 파일이 없을 때만 기존 Gemini CLI wrapper로
+  즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
+  않습니다. AGY route는 배포된 Claude 주최 TRIAD와 같이 `--sandbox read-only`
+  호출 동안 일시적 global-settings transaction으로
   다섯 deny를 합치고 원래 바이트를 복원합니다. AGY 1.1.3+에서는 operator가
   `AGY_NO_HEADLESS_AUTOAPPROVE=1`을 설정하지 않은 한 headless 실행에 wrapper 소유
   `--dangerously-skip-permissions`가 필요합니다. auto-approve는 interactive approval
   prompt를 제거하지만 transaction의 explicit deny rule은 지정된 action namespace를
-  계속 차단합니다. formal Google transaction에서 MCP 호출은 차단되고, 조건부로
-  승인된 외부 근거는 AGY native official-web read 경로를 사용합니다. 이는 OS 수준
-  confinement가 아니며 round-integrity mutation detection은 별도의 fail-closed
-  검사입니다.
+  계속 차단합니다. AGY route의 formal AGY transaction에서 MCP 호출은 차단되고, 조건부로
+  승인된 외부 근거는 AGY native official-web read 경로를 사용합니다. Enterprise
+  Gemini route는 explicit CLI Auto와 native Plan Mode를 요청하고,
+  mode-independent packaged read/search-only user policy를 fail-closed enforcement
+  boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
+  API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
+  runtime model은 `unexposed`입니다. 이는 OS 수준 confinement가 아니며
+  round-integrity mutation detection은 별도 검사입니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
   인증된 로그인 터미널에서 bootstrap이 출력한
   `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
@@ -48,7 +55,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    worktree를 사용합니다. leader `codex`와 사용할 worker 를 설치하고
    로그인합니다 — toolkit 은 credential 을 발급/refresh 하지 않습니다:
    - `codex` — 설치 후 `codex login`.
-   - `agy` — 설치 + OAuth 로그인 (개인 사용자의 Google-family worker).
+   - `agy` — 우선 Google-family worker이며 개인 Google Sign-In에는 필수.
+   - `gemini` — AGY가 없는 Gemini Enterprise OAuth route에서만 필수.
    - `claude` — Claude Code `>= 2.1.170`; bootstrap 은 binary 존재만 확인하며
      version probe 를 실행하지 않습니다.
 
@@ -56,7 +64,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    필요합니다. runtime 의존성은 배포되는 `requirements.txt`에 선언됩니다.
    `~/.local/bin` 이 `PATH`
    에 있어야 합니다(아니면 이미 `PATH` 에 있는 디렉터리를 `TRIAD_BOOTSTRAP_BIN_DIR`
-   로 지정). `gemini` 는 선택입니다 — [선택 / 고급](#선택--고급) 참고.
+   로 지정). `agy` 또는 `gemini` 중 하나 이상은 설치되어야 합니다.
 
    Bootstrap은 installer-selected Python을 생성된 launcher에 고정합니다.
    credential-compatible/user-site mode에서는 Codex와 launcher를 trusted HOME에서
@@ -85,7 +93,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    argv-safe 명령을 출력합니다. 소유한 Python 환경에서 그 명령을 실행한 뒤 bootstrap을
    다시 실행하세요. Bootstrap은 Python package를 설치하지 않습니다.
 
-   이 스크립트는 three provider wrapper launchers를 하나의 staged all-or-nothing
+   이 스크립트는 three provider wrapper launchers와 packaged script를 재사용하는
+   review-round selector launcher를 하나의 staged all-or-nothing
    command group으로 설치합니다. Codex permission profile, command rule,
    repair-agent registration, pre-spawn `[shell_environment_policy]`는 설치하지
    않습니다. owner-authored `config.toml`, rule, permission setting, credential,
@@ -96,10 +105,47 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    `python3 bin/apply_patch.py` owner argv를 Python `shlex.join`으로 출력합니다.
    설치된 apply launcher는 없고 ambient default를 다시 계산하지 않습니다.
 
-   Native permission 처리는 실행 시점 경계이지 owner workflow authorization이
-   아닙니다. Commit, push, plugin 또는 dependency 설치, release, publication은 각각 별도의
-   owner 결정이며, leader는 `approvals_reviewer = "auto_review"`가 활성화되어 있다는 이유만으로
-   이를 시작하면 안 됩니다.
+   **TRIAD를 사용하기 전에 Codex host 권한 모드를 선택하세요.** Codex가 실행하는
+   모든 TRIAD lifecycle/provider 명령과 TRIAD test/development 명령은 Codex workspace
+   sandbox 밖에서 실행합니다. 이 바깥쪽 host 경계는 AGY의 provider-native read-only
+   sandbox 및 Gemini의 native Plan Mode + packaged read/search-only policy와 별개입니다.
+
+   관리형 회사 환경과 호환되는 interactive workspace 정책을 사용하세요. 해당
+   profile이 제공되면 Desktop 또는 CLI `/permissions`에서 Workspace Write / on-request를
+   선택합니다. 같은 설정을 지속하려면 user 범위 `~/.codex/config.toml` 또는 신뢰한
+   프로젝트의 `.codex/config.toml`에 둡니다.
+
+   ```toml
+   sandbox_mode = "workspace-write"
+   approval_policy = "on-request"
+   approvals_reviewer = "user"
+   ```
+
+   `approvals_reviewer = "user"`는 outside-sandbox 요청마다 사람의 Yes/No 결정을
+   유지합니다. 조직 정책이 agent reviewer를 허용하는 경우에만 이 필드만 바꿉니다.
+
+   ```toml
+   approvals_reviewer = "auto_review"
+   ```
+
+   leader는 처음부터 outside-sandbox 실행 승인을 요청하며, 실패가 확실한
+   workspace-sandbox 시험 명령으로 한 번 낭비하지 않습니다. `auto_review`는 요청을
+   검토하는 주체만 바꾸며 권한을 부여하지 않습니다. Project config는 신뢰한
+   프로젝트에서만 로드됩니다. 새 permission-profile 시스템을 사용한다면
+   `/permissions`에서 interactive workspace profile을 선택하고 legacy `sandbox_mode`
+   키와 섞지 마세요. OpenAI 공식 [sandbox](https://learn.chatgpt.com/docs/sandboxing),
+   [configuration](https://learn.chatgpt.com/docs/config-file/config-basic),
+   [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference),
+   [plugin](https://learn.chatgpt.com/docs/plugins) 문서를 따릅니다.
+
+   OpenAI 문서상 plugin capability에는 Codex host의 sandbox와 approval policy가
+   적용되며, plugin-level install-time sandbox Yes/No grant는 문서화되어 있지 않습니다.
+   Connector 인증 prompt는 별개입니다. 따라서 이 plugin은 host permission mode를
+   선택하거나 설치하지 않습니다. Native permission 처리는 실행 시점 경계이지 owner
+   workflow authorization이 아닙니다. Commit, push, plugin/dependency 설치, release,
+   publication은 각각 별도 owner 결정이며, leader는
+   `approvals_reviewer = "auto_review"`가 활성화되어 있다는 이유만으로 이를 시작하면
+   안 됩니다.
 
    > **배치 불변식 (hard).** bootstrap 은 설치 대상이 들어 있는 디렉터리가 아니라
    > 작업할 project workspace 에서 실행하세요. bootstrap 은 classifier patch 를
@@ -109,9 +155,10 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    > 어느 하나라도 실행 디렉터리(예: `$HOME`) 안으로 resolve 되면 hard-fail 합니다.
 
    일반 `codex`는 동일한 인증된 로그인 터미널의 실제 project/worktree root에서
-   시작하세요. AGY의 개인 Google Sign-In 또는 Gemini Enterprise Business Sign-In으로
-   인증합니다. 정식 review는 Claude 배포본과 같은 일시적 settings lease 아래
-   `--sandbox read-only`로 AGY를 실행합니다. Trusted
+   시작하세요. 기존 AGY 로그인 또는 AGY가 없을 때 기존 Gemini Enterprise OAuth
+   로그인을 사용합니다. 정식 AGY review는 일시적 settings lease 아래
+   `--sandbox read-only`로 실행하고, 정식 Gemini review는 native Plan Mode를 요청하며
+   mode-independent packaged per-call policy가 read/search-only behavior를 enforce합니다. Trusted
    Python과 `PATH`가 prerequisite이며 trusted launcher와 interpreter가 시작된 뒤
    wrapper child-process scrubbing은 유지됩니다.
 
@@ -132,19 +179,21 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 이 섹션의 어떤 것도 일반 개인 설치에는 필요 없습니다. 각 하위 섹션의 "다음 경우에만
 하세요…" 조건이 해당될 때만 보세요.
 
-### Gemini Enterprise Business Sign-In
+### AGY가 없는 Gemini Enterprise OAuth
 
-*GE Standard 또는 GE Plus 좌석이 있는 회사 환경에서만.* AGY 1.1.20 이상에서
-조직 소유 Google Cloud project로 Business Sign-In을 선택하세요. 개인 환경과 같은
-정식 AGY wrapper, settings transaction, `--sandbox read-only`, native
-`--mode plan` 수명주기를 사용합니다. wrapper는 review-bound native
-`--json-schema`를 전달하고 terminal `structured_output`을 소비한 뒤 strict local
-verdict 및 review-binding 검증을 반복합니다. 사람이 읽는 response text는 verdict
-transport가 아닙니다. TRIAD는 활성 계정을
-변경하거나 개인 sign-in으로 fallback하지 않습니다. 별도
-`triad-gemini-dispatch` skill은 standalone 호환 consult이며 Gemini Enterprise 정식
-leg가 아닙니다.
-[공식 AGY changelog](https://antigravity.google/changelog?plan=free)를 참고하세요.
+*조직 계정으로 Gemini CLI Sign in with Google이 이미 완료된 경우에만.* AGY가
+설치되어 있으면 selector는 계속 AGY를 우선합니다. AGY가 없으면 어떤 family도
+시작하기 전에 `gemini-enterprise`가 packaged Gemini wrapper를 선택합니다. 조직
+Cloud-project 변수는 보존하고, explicit `-m auto`와 native `--approval-mode plan`을
+요청하며 mode-independent packaged read/search-only policy를 enforcement boundary로
+사용합니다. effective approval mode는 `unexposed`입니다. 모든 formal binding을
+요구하고 provider call은 한 번만 합니다. API-key, ADC, Vertex, ambient-model
+fallback을 사용하지 않고 선택한 provider가
+시작된 뒤에는 route를 바꾸지 않습니다. `triad-gemini-dispatch`는 standalone consult로
+남으며 formal route 선택은 `triad-cross-family-review`만 소유합니다.
+현재 Gemini JSON envelope에는 신뢰할 수 있는 단일 runtime-model identity가 없으므로
+formal audit는 정확히 `runtime_identity: "unexposed"`를 기록하고 `stats.models`, account
+class, route에서 identity를 추론하지 않습니다.
 
 ### Linux / WSL2 sandbox 지원
 
@@ -167,6 +216,23 @@ leg가 아닙니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.548 업그레이드
+
+0.2.548은 Gemini를 사후 재시도로 만들지 않으면서 회사용 정식 Google route를
+복원합니다. 어떤 family도 시작하기 전에 packaged selector가 owner-selected 인증
+class를 기록하고 AGY를 우선하며, AGY가 없을 때만 Gemini Enterprise OAuth용 Gemini
+CLI를 선택합니다. selector는 review ID용 receipt 하나를 exclusive-create하고 preflight는
+그 review ID, route, executable, selector SHA를 담은 canonical receipt를 만듭니다. 이
+receipt 자체의 SHA, 정확한 model, nullable effort도 공통 review basis에 binding되며,
+AGY는 tab-separated model catalog에서 필요한 정확한 slug를 증명합니다. 모든 family
+render와 선택된 wrapper dispatch는 두 receipt가 다르면 거부합니다.
+provider-free model/Plan/policy help preflight, explicit `-m auto`, native Plan Mode
+요청, effective mode `unexposed` 기록, enforcement boundary인 mode-independent
+packaged read/search-only policy의 exact fail-closed shape 검사,
+경쟁 auth-selector scrub, 한 번의 provider call, exact local review-binding 검증과
+literal `runtime_identity: "unexposed"` 기록을 수행합니다. 개인 Google Sign-In에는 계속
+AGY가 필요합니다.
 
 ### 0.2.547 업그레이드
 
@@ -195,7 +261,7 @@ duplicate progress event가 유효한 terminal review를 사후에 무효화하�
 계속 담당하며, strict local `LegVerdict`와 review-binding 검증 및 round-integrity
 검증이 admission gate로 유지됩니다.
 
-formal Google-family 프롬프트는 계속 명시적인 정적 전용 계약입니다.
+formal AGY 프롬프트는 계속 명시적인 정적 전용 계약입니다.
 native file read/search와 조건부로 승인된 AGY native official-web read만 허용하고
 MCP 호출은 차단하며 command, write, experiment, notebook, subagent, browser
 actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
@@ -233,7 +299,7 @@ non-formal Claude permission 선택과 모든 project-trust policy는 native 설
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.547-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.548-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -249,7 +315,8 @@ Codex에게 다음 skill을 사용하도록 요청합니다.
 - `triad-claude-dispatch`: Claude Code 단발 consult.
 - `triad-antigravity-dispatch`: `agy` 기반 기본 Google-family consult.
 - `triad-gemini-dispatch`: 별도 설치된 `gemini` CLI를 통한 standalone 호환
-  consult이며 Gemini Enterprise 정식 leg가 아님.
+  consult입니다. formal review를 이끌지는 않지만, cross-family skill이 AGY가 없는
+  Enterprise route에서 그 wrapper를 선택할 수 있습니다.
 - `triad-cross-family-review`: Claude, Google-family, fresh Codex subagent 기반
   pre-merge review.
 
@@ -292,7 +359,7 @@ advisory review는 별도로 owner가 승인한 data scope를 따릅니다.
 Normal SDD implementation review includes relevant test source.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file body.
-Leader는 dispatch 전에 one simple content digest를 기록하고 모든 required leg이 끝난
+Leader는 dispatch 전에 prepared-directory integrity digest를 기록하고 모든 required leg이 끝난
 뒤 다시 비교합니다. 달라지면 round를 무효화합니다. 정식 gate 전에 모든 test failure를
 production defect, test-case defect, intentional specification change 중 하나로
 분류하고 해결하거나 승인합니다. Reviewer는 candidate code, test, build, hook,
@@ -303,8 +370,8 @@ or intentional specification change and resolve or approve it.
 full diff는 navigation evidence이지 review boundary가 아닙니다. Leader는 현재 결정에
 관련된 complete current file, configuration, governing documentation을 하나의 focused
 directory에 준비합니다. 모든 required family는 그 동일한 complete directory를 한 번씩
-검토하고 family, review ID, directory digest에 bind된 strict `LegVerdict` 하나를
-반환합니다. Leader는 dispatch 전에 directory digest와 canonical-worktree fingerprint를
+검토하고 family, review ID, route-bound `metadata.content_digest`에 bind된 strict `LegVerdict` 하나를
+반환합니다. Leader는 dispatch 전에 prepared-directory integrity digest와 canonical-worktree fingerprint를
 capture하고 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
 재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는
 prompt-controlled이며, manifest path나 provider confidence만으로 승격하지 않습니다.
@@ -326,8 +393,8 @@ immutable-directory digest, leader mutation check에 의존합니다.
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | Gemini가 project worktree를 untrusted로 거부 | `--skip-trust` 제거 후 Gemini가 workspace trust를 소유 | 해당 worktree에 provider-native trust 결정을 하거나 중단하세요. TRIAD에는 trust bypass나 speculative detector가 없습니다. |
-| 디스패치가 `oauth-env`로 실패 | 워커 CLI 로그인이 만료됐거나 없음 | 해당 vendor의 native login 재실행(`claude` / `agy` OAuth, 또는 `codex login`). toolkit은 대신 재인증하지 않습니다 — 신호만 surface 하니 직접 로그인하세요. |
-| gemini leg이 `IneligibleTier`로 실패 | Gemini CLI *개인* tier 폐지 | `agy`(Antigravity) leg을 쓰세요 — 개인 사용자의 Google-family leg입니다. `gemini`는 business / Vertex / API-key 계정 전용. |
+| 디스패치가 `oauth-env`로 실패 | 워커 CLI 로그인이 만료됐거나 없음 | 해당 vendor의 native login 재실행(`claude`, native AGY CLI 로그인, Gemini CLI Sign in with Google, 또는 `codex login`). toolkit은 대신 재인증하지 않습니다 — 신호만 surface 하니 직접 로그인하세요. |
+| gemini leg이 `IneligibleTier`로 실패 | 선택한 조직 계정에 적합한 Gemini CLI entitlement가 없음 | 동일 Enterprise OAuth route를 고치세요. 개인 Google review는 AGY를 사용하며 dispatch 뒤 계정이나 route를 바꾸지 않습니다. |
 | 설치/업데이트 후 새 skill이 안 보임 | 기존 Codex 세션은 새로 설치된 skill을 못 봄 | 새 Codex 세션을 시작하세요(플러그인 업데이트 뒤에는 launcher 경로 최신화를 위해 `bootstrap.sh --install` 재실행). |
 | 디스패치가 non-zero로 끝났고 원인을 알고 싶음 | 숫자 exit code가 항상 권위가 있으며, 완료된 wrapper 실패는 보통 최종 분류도 출력함 | 아래 exit-code 범례를 보세요. 최종 `[wrapper] …` stderr 줄이 있으면 그 분류를 쓰고, summary 없는 초기 실패는 그대로 보존하세요. |
 
@@ -337,7 +404,7 @@ immutable-directory digest, leader mutation check에 의존합니다.
 | Exit | 의미 | 조치 |
 |---|---|---|
 | `0` | 성공 — 이어서 답변 | 없음. |
-| `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | 해당 binary를 고치세요. 개인 및 Gemini Enterprise 인증 모두 정식 Google review에는 AGY가 필요하며 복구를 위해 계정을 전환하지 않습니다. |
+| `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | dispatch 전에는 개인 Google용 AGY 또는 Enterprise OAuth용 AGY/Gemini를 설치하세요. route 선택 뒤에는 같은 실행 파일을 고치고 사후 fallback하지 않습니다. |
 | `64` | 재시도 후에도 server capacity 소진 | 일시적 vendor 과부하; 기다렸다 재시도. |
 | `65` | 인증, config, quota 또는 다른 terminal provider failure(예: `oauth-env`, `cli-subscription-cap`, `token-limit`) | 표시된 provider state를 해결한 뒤 explicit new invocation을 만드세요. |
 | `66` | 구조화 출력(`--pydantic`) 스키마 검증 실패 | `schema-fail is terminal for that invocation`; leader가 판단한 뒤 explicit new invocation을 만들 수 있습니다. shared-directory formal path는 legacy packet-bound schema를 요구하지 않습니다. |
@@ -354,7 +421,8 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   credential 복사, sandbox login 시도, company setup flow, authorization store는 없습니다.
 - **OS 또는 Python package를 설치하지 않습니다.** vendor CLI, `python3`, 배포된
   Python requirements, (Linux/WSL2에서) `bubblewrap`은 직접 설치하며, installer는
-  three provider wrapper launchers만 쓰고 owner-authored config를 보존합니다. 선택된
+  three provider wrapper launchers와 review-round selector launcher만 쓰고
+  owner-authored config를 보존합니다. 선택된
   Python에 Pydantic 2가 없으면 bootstrap은
   mutation 전에 멈추고 그 interpreter를 위한 정확한
   `python3 -m pip install -r .../requirements.txt` 명령을 출력합니다.
@@ -384,7 +452,7 @@ python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex"
 ```
 
 새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 permission state를 만들지 않고
-three provider wrapper launchers를 다시 publish하며 exact plugin-owned legacy cleanup을
+three provider wrapper launchers와 review-round selector launcher를 다시 publish하며 exact plugin-owned legacy cleanup을
 수행합니다. 업데이트 후 일반 Codex session을 새로 시작하세요.
 
 ## 설치 검증
@@ -440,7 +508,7 @@ codex plugin remove triad-codex-dispatch@triad-codex-dispatch
 codex plugin marketplace remove triad-codex-dispatch
 ```
 
-`--remove`는 three provider wrapper launchers와 exact plugin-owned legacy launcher,
+`--remove`는 three provider wrapper launchers, review-round selector launcher와 exact plugin-owned legacy launcher,
 profile, command rule, repair-agent registration, `[shell_environment_policy]` fragment를
 marker와 expected byte가 정확히 일치할 때만 삭제합니다. exact legacy three-agent TOML도
 제거합니다. Foreign, edited, linked, non-regular target은 보존하고 보고합니다.
@@ -501,7 +569,7 @@ dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니
 
 지속적인 control은 explicit data authorization, pinned executable,
 digest/mutation check, strict result custody, native proposal-only repair child와
-deterministic owner apply입니다. 문서화된 formal Claude와 packaged AGY route 밖의
+deterministic owner apply입니다. 문서화된 formal Claude, packaged AGY, formal Gemini route 밖의
 permission 선택은 provider/user/project setting에 남습니다. 전체 threat model:
 [SECURITY.md](SECURITY.md).
 
@@ -513,7 +581,8 @@ permission 선택은 provider/user/project setting에 남습니다. 전체 threa
 
 ## 참고
 
-- 위에서 공개한 승인된 내부 AGY flag와 일시적 AGY global-settings transaction 외에는
+- 위에서 공개한 승인된 내부 AGY flag, 일시적 AGY global-settings transaction,
+  wrapper 내부 formal Gemini model/Plan 요청 및 policy flag 외에는
   TRIAD가 caller-supplied yolo, bypass, skip-trust, accept-edits 또는 동등한 permission
   control을 받지 않습니다. transaction은 lease 동안만 AGY setting을 변경하고 원래
   바이트를 복원하며, hard crash가 남긴 deny residue는 다음 guarded call이 복구합니다.

@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.548 — 2026-09-02
+
+- Adds a provider-free Google-route selector before any review family starts.
+  AGY remains preferred and required for personal Google Sign-In; an
+  owner-selected Gemini Enterprise OAuth class uses the existing Gemini CLI
+  only when the AGY executable is absent.
+- Exclusive-creates one selector receipt for the review ID, binds its exact
+  authentication class, route, executable, wrapper, and SHA into every family
+  render, and makes selected-wrapper preflight and dispatch consume its executable.
+  The canonical preflight receipt carries the review ID, route, executable, and
+  selector SHA. Its exact SHA, model, and nullable effort enter every family digest;
+  AGY additionally proves the required exact slug in its tab-separated model catalog
+  and rejects any dispatch whose model, effort, or ordered route arguments drift.
+  Every render and formal Google dispatch rejects a mismatched pair.
+  A selected AGY or Gemini route
+  never switches after provider start, authentication, entitlement, capacity,
+  schema, or provider failure.
+- Reuses `gemini_wrapper.py` for the Enterprise formal route with explicit
+  `-m auto`, requested native `--approval-mode plan`, a mode-independent packaged
+  read/search-only user policy as the enforcement boundary, provider-free
+  help-surface preflight, an exact fail-closed policy-shape check, one provider
+  call, exact local `LegVerdict` review-binding admission, and
+  literal `runtime_identity: "unexposed"` because its JSON envelope exposes no
+  authoritative single model identity. The effective approval mode is likewise
+  recorded as `unexposed`; the help preflight proves supported flags, not resolved
+  user settings or workspace trust.
+- Preserves cached organization Sign in with Google and Cloud-project selection
+  while removing competing API-key, ADC, Vertex, base-URL, Cloud Shell, and
+  compute-ADC and ambient `GEMINI_MODEL` selectors from the formal Gemini child
+  without reading values.
+- Makes bootstrap accept Gemini-only company installations, prefer AGY when both
+  CLIs exist, publish a managed launcher for the existing `review_round.py`
+  selector with both install-resolved Google CLI pins, publish route-specific
+  guidance, and hash both the formal policy and bootstrap script in
+  clean-distribution evidence.
+
 ## 0.2.547 — 2026-08-25
 
 - Keeps paths, commands, and instructions named inside reviewed data from

@@ -1,7 +1,7 @@
 interface:
   display_name: "Triad Cross-Family Review"
   short_description: "Run independent Claude, Google-family, and Codex review"
-  default_prompt: "Use $triad-cross-family-review to prepare a bounded review. Confirm provider authorization, objective, review target, approved data, exclusions, and result profile before external dispatch."
+  default_prompt: "Use $triad-cross-family-review to prepare a bounded review. Confirm provider authorization, objective, review target, approved data, exclusions, result profile, and Google authentication class; exclusive-create and preserve one Google selector receipt before any family starts."
 
 policy:
   allow_implicit_invocation: true

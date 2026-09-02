@@ -1,6 +1,6 @@
 {
   "name": "triad-codex-dispatch",
-  "version": "0.2.547",
+  "version": "0.2.548",
   "description": "Codex-led reviewer dispatch for Claude, Antigravity, Gemini, and convergent cross-family review.",
   "author": {
     "name": "codefoundry-io"
@@ -19,7 +19,7 @@
       "Read"
     ],
     "defaultPrompt": [
-      "Use $triad-cross-family-review to review this change. Confirm the objective, approved data, and exact exclusions, then give Claude, Google, and fresh Codex the same complete focused directory. Codex reproduces findings, writes bounded fixes, and asks the owner before any design or scope change.",
+      "Use $triad-cross-family-review to review this change. Confirm the objective, approved data, exact exclusions, and Google authentication class; select and freeze AGY or the AGY-absent Gemini Enterprise OAuth route before any family starts. Then give Claude, Google, and fresh Codex the same complete focused directory. Codex reproduces findings, writes bounded fixes, and asks the owner before any design or scope change.",
       "Use $triad-antigravity-dispatch for an owner-authorized reviewer-only Google-family leg through AGY 1.1.20 or newer with an explicit model and effort."
     ]
   },

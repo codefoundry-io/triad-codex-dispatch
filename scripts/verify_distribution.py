@@ -22,14 +22,18 @@ HASH_TARGETS = (
     "skills/triad-cross-family-review/references/leg-contracts.md",
     "skills/triad-cross-family-review/references/review-prompt-contract.md",
     "skills/triad-cross-family-review/references/reviewer-routing.md",
+    "skills/triad-gemini-dispatch/SKILL.md",
+    "skills/triad-gemini-dispatch/agents/openai.yaml",
     "bin/_common.py",
     "bin/_agy_settings.py",
     "bin/antigravity_wrapper.py",
     "bin/claude_wrapper.py",
     "bin/gemini_wrapper.py",
+    "bin/policies/gemini-formal-readonly.toml",
     "bin/review_round.py",
     "bin/verdict_schema.py",
     "requirements.txt",
+    "scripts/bootstrap.sh",
 )
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 

@@ -2,7 +2,7 @@
 # Constructed-launcher trust invariant: the launcher, its pinned Python runtime,
 # and the checkout wrapper it executes must remain outside the mutable project
 # worktree. Bootstrap installs no persistent global permission policy. Formal
-# AGY review uses the deployed Claude-led settings-transaction lifecycle.
+# Google review prefers AGY; Enterprise OAuth may select Gemini when AGY is absent.
 set -u
 
 usage() {
@@ -12,7 +12,7 @@ Usage: scripts/bootstrap.sh --install
 
 --install checks local prerequisites for triad-codex-dispatch, removes exact
 plugin-owned repair and permission artifacts from older installs, and installs
-the provider launcher group. Applying a validated proposal remains an explicit
+the provider and selector launcher group. Applying a validated proposal remains an explicit
 owner action through the bootstrap-printed login-shell Python argv (see
 docs/references/repair-protocol.md).
 It also quarantines any legacy personal-scope
@@ -20,7 +20,7 @@ repair-agent TOMLs (bootstrap-authored provenance only — a same-name file
 without that provenance is left in place) left by an older install into a
 timestamped directory outside agents/, recoverable if needed.
 
---remove uninstalls managed wrapper launchers and exact legacy plugin-owned
+--remove uninstalls managed provider and selector launchers and exact legacy plugin-owned
 profile, command-rule, config-fragment, shell-entry, and repair artifacts. It
 preserves owner-authored or edited artifacts and refuses unsafe targets without
 following or changing them. It
@@ -28,19 +28,20 @@ also removes any bootstrap-managed (provenance-matched) legacy personal-scope
 repair-agent TOMLs left by an older install; a non-matching same-name file is
 preserved. Learned classifier patches are preserved.
 
-Assumes codex, claude, and agy with either personal Google Sign-In or Gemini
-Enterprise Business Sign-In are already installed.
+Assumes codex and claude are installed. Formal Google review prefers agy;
+personal Google Sign-In requires agy, while Gemini Enterprise OAuth may use
+gemini when agy is absent.
 
 Install targets must resolve outside the project worktree. Run TRIAD from the
 same authenticated login terminal and worktree used for development. TRIAD
 does not install or inject a separate Codex profile, command rule, shell
 environment policy, shell entry, or persistent global permission requirement.
-Both native authentication classes use --sandbox read-only plus a transient
-global-settings transaction that restores the original bytes. Unless the
+The AGY route uses --sandbox read-only plus a transient global-settings
+transaction that restores the original bytes. Unless the
 operator sets AGY_NO_HEADLESS_AUTOAPPROVE=1, AGY 1.1.3+ receives the
 wrapper-owned --dangerously-skip-permissions headless adaptation,
-matching the deployed Claude-led TRIAD. Company use retains its AGY-managed
-Gemini Enterprise Business Sign-In and entitlement. Wrapper descendants remain
+matching the deployed Claude-led TRIAD. Company use may retain its existing
+Gemini Enterprise OAuth sign-in through the Gemini CLI fallback. Wrapper descendants remain
 scrubbed after trusted launcher and interpreter startup. Bootstrap does not
 install persistent global AGY permission policy.
 
@@ -81,6 +82,7 @@ CODEX_PROFILE_NAME="${TRIAD_CODEX_PROFILE_NAME:-triad-codex-dispatch}"
 CODEX_RULES_NAME="${TRIAD_CODEX_RULES_NAME:-triad-codex-dispatch.rules}"
 REPAIR_ANALYZER_NAME="triad-repair-analyzer"
 APPLY_REPAIR_LAUNCHER="triad-apply-repair"
+MANAGED_LAUNCHERS="claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py review_round.py"
 SHELL_RC="${TRIAD_BOOTSTRAP_SHELL_RC:-}"
 if [ -z "$SHELL_RC" ]; then
   case "${SHELL:-}" in
@@ -386,9 +388,13 @@ GOOGLE_ROUTE=""
 check_google_route() {
   if command -v agy >/dev/null 2>&1; then
     GOOGLE_ROUTE="agy"
-    ok "found native Google reviewer: agy; use personal Google Sign-In or Gemini Enterprise Business Sign-In"
+    ok "found preferred native Google reviewer: agy"
+  elif command -v gemini >/dev/null 2>&1; then
+    GOOGLE_ROUTE="gemini"
+    warn "agy not found; personal Google Sign-In formal review is unavailable"
+    ok "Gemini Enterprise OAuth fallback available: gemini"
   else
-    fail "missing formal Google reviewer: agy; Gemini Enterprise Business Sign-In is provided by agy"
+    fail "missing formal Google reviewer: install agy or gemini"
   fi
 }
 
@@ -806,7 +812,7 @@ check_formal_schema_dependency() {
 
 preflight_install_command_targets() {
   command_preflight_failed=0
-  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+  for wrapper in $MANAGED_LAUNCHERS; do
     launcher="$LAUNCHER_DIR/$wrapper"
     if [ -L "$launcher" ]; then
       fail "refusing to overwrite symlinked launcher: $launcher"
@@ -832,7 +838,7 @@ install_launchers() {
   fi
 
   all_wrappers_ready=1
-  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+  for wrapper in $MANAGED_LAUNCHERS; do
     target="$repo_bin/$wrapper"
     resolved="$(command -v "$wrapper" 2>/dev/null || true)"
     if ! is_expected_wrapper "$resolved" "$target" "$target"; then
@@ -848,7 +854,7 @@ install_launchers() {
     return
   }
 
-  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+  for wrapper in $MANAGED_LAUNCHERS; do
     target="$repo_bin/$wrapper"
     launcher="$LAUNCHER_DIR/$wrapper"
     if [ ! -f "$target" ]; then
@@ -867,6 +873,8 @@ install_launchers() {
       fail "could not quote launcher target: $target"
       continue
     }
+    second_vendor_cmd=""
+    second_vendor_env=""
     case "$wrapper" in
       claude_wrapper.py)
         vendor_cmd="claude"
@@ -879,6 +887,12 @@ install_launchers() {
       gemini_wrapper.py)
         vendor_cmd="gemini"
         vendor_env="TRIAD_GEMINI_BIN"
+        ;;
+      review_round.py)
+        vendor_cmd="agy"
+        vendor_env="TRIAD_AGY_BIN"
+        second_vendor_cmd="gemini"
+        second_vendor_env="TRIAD_GEMINI_BIN"
         ;;
       *)
         fail "unknown wrapper: $wrapper"
@@ -900,6 +914,25 @@ install_launchers() {
       fail "could not quote vendor path for $wrapper"
       continue
     }
+    second_vendor_path=""
+    escaped_second_vendor_env=""
+    escaped_second_vendor_path=""
+    if [ -n "$second_vendor_cmd" ]; then
+      if command -v "$second_vendor_cmd" >/dev/null 2>&1; then
+        second_vendor_path="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$(command -v "$second_vendor_cmd")")" || {
+          fail "could not resolve vendor binary for $wrapper: $second_vendor_cmd"
+          continue
+        }
+      fi
+      escaped_second_vendor_env="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$second_vendor_env")" || {
+        fail "could not quote second vendor env for $wrapper"
+        continue
+      }
+      escaped_second_vendor_path="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$second_vendor_path")" || {
+        fail "could not quote second vendor path for $wrapper"
+        continue
+      }
+    fi
     # Trusted PATH for the launcher's constructed env: the install-time PATH,
     # which already resolved the vendor + its runtime and is the operator's env
     # (a sandboxed session cannot influence it), NOT a session-runtime PATH. Pins
@@ -973,6 +1006,13 @@ install_launchers() {
         # otherwise be exec'd.
         printf 'env.pop(%s, None)\n' "$escaped_vendor_env"
       fi
+      if [ -n "$second_vendor_env" ]; then
+        if [ -n "$second_vendor_path" ]; then
+          printf 'env[%s] = %s\n' "$escaped_second_vendor_env" "$escaped_second_vendor_path"
+        else
+          printf 'env.pop(%s, None)\n' "$escaped_second_vendor_env"
+        fi
+      fi
       printf 'os.execve(%s, [%s, "-E", %s] + sys.argv[1:], env)\n' "$escaped_python" "$escaped_python" "$escaped_target"
     } >"$temp_launcher" || {
       rm -f "$temp_launcher"
@@ -996,7 +1036,7 @@ install_launchers() {
 
 verify_installed_launchers() {
   repo_bin="$REPO_ROOT/bin"
-  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+  for wrapper in $MANAGED_LAUNCHERS; do
     target="$repo_bin/$wrapper"
     launcher="$LAUNCHER_DIR/$wrapper"
     resolved="$(command -v "$wrapper" 2>/dev/null || true)"
@@ -1149,7 +1189,7 @@ run_remove() {
   if ! begin_command_group; then
     return
   fi
-  for wrapper in claude_wrapper.py gemini_wrapper.py antigravity_wrapper.py; do
+  for wrapper in $MANAGED_LAUNCHERS; do
     launcher="$LAUNCHER_DIR/$wrapper"
     queue_command_removal "$wrapper" launcher "$launcher"
   done
@@ -1370,7 +1410,11 @@ if [ "$errors" -ne 0 ]; then
 fi
 if [ "$errors" -eq 0 ]; then
   warn "launcher Python is installer-selected: credential-compatible user-site mode requires a trusted HOME because sitecustomize/usercustomize can run before launcher scrubbing; alternatively select a trusted isolated Python only if it preserves provider login."
-  printf 'native permissions: select personal Google Sign-In or Gemini Enterprise Business Sign-In in AGY before formal dispatch. AGY uses --sandbox read-only plus the transient Claude-parity settings transaction and restores original bytes; bootstrap installs no persistent global AGY policy and never switches accounts.\n'
+  if [ "$GOOGLE_ROUTE" = "agy" ]; then
+    printf 'native permissions: use the existing AGY sign-in. Personal Google Sign-In and Gemini Enterprise authentication remain provider-owned. AGY uses --sandbox read-only plus the transient Claude-parity settings transaction and restores original bytes; bootstrap installs no persistent global AGY policy and never switches accounts.\n'
+  else
+    printf 'native permissions: use the existing Gemini Enterprise OAuth sign-in. Formal dispatch uses Gemini CLI Auto plus the packaged per-call Plan Mode policy; bootstrap does not change accounts or persistent Gemini configuration.\n'
+  fi
   print_owner_apply_argv
   printf 'next step: start a fresh Codex session so the updated native repair protocol loads.\n'
   ok "bootstrap install passed"

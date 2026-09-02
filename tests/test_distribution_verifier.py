@@ -22,14 +22,18 @@ EXPECTED_HASH_TARGETS = (
     "skills/triad-cross-family-review/references/leg-contracts.md",
     "skills/triad-cross-family-review/references/review-prompt-contract.md",
     "skills/triad-cross-family-review/references/reviewer-routing.md",
+    "skills/triad-gemini-dispatch/SKILL.md",
+    "skills/triad-gemini-dispatch/agents/openai.yaml",
     "bin/_common.py",
     "bin/_agy_settings.py",
     "bin/antigravity_wrapper.py",
     "bin/claude_wrapper.py",
     "bin/gemini_wrapper.py",
+    "bin/policies/gemini-formal-readonly.toml",
     "bin/review_round.py",
     "bin/verdict_schema.py",
     "requirements.txt",
+    "scripts/bootstrap.sh",
 )
 
 
@@ -73,6 +77,7 @@ def fixture_repo(tmp_path: Path) -> Path:
         target = repo / relative
         if target.exists():
             continue
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(f"fixture for {relative}\n", encoding="utf-8")
     (repo / "tests" / "test_packaged.py").write_text(
         "def test_packaged_bytes():\n    assert True\n",

@@ -38,7 +38,7 @@ import tempfile
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, Tuple
@@ -294,7 +294,7 @@ class RunResult:
     validation_error: Optional[str] = None
     # Vendor raw exit code retained as evidence for unobserved classifications.
     vendor_exit_code: int = -1
-    # Antigravity provider/result custody boundary. Other wrappers leave it unset.
+    # Provider/result custody phase when the selected route exposes one.
     dispatch_phase: Optional[str] = None
     # Provider-exposed runtime identity, or ``unexposed`` when the route omits it.
     runtime_identity: Optional[str] = None
@@ -1387,6 +1387,7 @@ def run_cli_with_retry(
     repair_mode: bool = False,
     prompt_via_stdin: bool = False,
     single_provider_call: bool = False,
+    remove_env=(),
 ) -> RunResult:
     """Top-level driver.
 
@@ -1506,9 +1507,17 @@ def run_cli_with_retry(
         )
         result: Optional[RunResult] = None
         for attempt in range(max_retries + 1):
+            run_once_kwargs = {
+                "stdin_text": effective_prompt if prompt_via_stdin else None,
+            }
+            if remove_env:
+                run_once_kwargs["remove_env"] = remove_env
             r = _run_once(
-                cli, cmd, cwd=cwd, timeout=timeout,
-                stdin_text=effective_prompt if prompt_via_stdin else None,
+                cli,
+                cmd,
+                cwd=cwd,
+                timeout=timeout,
+                **run_once_kwargs,
             )
             r.repair_attempt = attempt if repair_mode else 0
             r.schema_repair_attempt = schema_repair_attempt

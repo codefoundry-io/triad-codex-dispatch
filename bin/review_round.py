@@ -59,7 +59,7 @@ _RESULT_METADATA_COPY_CONTRACT = (
     "directly from the single Review metadata JSON record. Before returning, compare each "
     "copied value character-for-character with that record; the three pairs must be identical."
 )
-_GOOGLE_TOOL_CONTRACT = (
+_AGY_GOOGLE_TOOL_CONTRACT = (
     "For this Google leg, use only AGY native file-read and search tools for local inspection. "
     "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "
     "and use list_dir, find_by_name, and view_file as needed. For every view_file call, "
@@ -74,6 +74,19 @@ _GOOGLE_TOOL_CONTRACT = (
     "expressly permit them. Do not create or execute an experiment "
     "to resolve uncertainty. If static inspection and any expressly authorized read-only external "
     "evidence cannot decide current correctness, report the uncertainty in open_questions. "
+)
+_GEMINI_GOOGLE_TOOL_CONTRACT = (
+    "For this Google leg, use only Gemini CLI native read and search tools for local inspection. "
+    "Use read_file, read_many_files, list_directory, glob, and grep_search inside the review "
+    "target identified by Review metadata. Use google_web_search, web_fetch, and "
+    "get_internal_docs only when the review objective and authorized external data boundary "
+    "expressly permit them. Do not call enter_plan_mode or exit_plan_mode. Never invoke "
+    "run_shell_command or any file-write, file-edit, notebook-execution, subagent, "
+    "browser-actuation, interaction, task-tracker, or scratch-space tool. The packaged "
+    "per-call user-tier policy denies every non-read/search tool; a higher-tier enterprise "
+    "admin policy remains authoritative. Do not create or execute an experiment to resolve "
+    "uncertainty. If static inspection and any expressly authorized read-only external evidence "
+    "cannot decide current correctness, report the uncertainty in open_questions. "
 )
 
 
@@ -91,6 +104,7 @@ class ReviewBrief:
     content_digest: str
     criteria: tuple[str, ...]
     approved_boundary: tuple[str, ...]
+    google_selector_receipt: GooglePreflightReceipt | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +121,25 @@ class WorktreeReviewBrief:
     criteria: tuple[str, ...]
     review_points: tuple[str, ...]
     approved_boundary: tuple[str, ...]
+    google_selector_receipt: GooglePreflightReceipt | None = None
+
+
+@dataclass(frozen=True)
+class GoogleSelectorReceipt:
+    review_id: str
+    authentication_class: Literal["personal-google", "gemini-enterprise"]
+    route: Literal["agy", "gemini"]
+    executable: Path
+    wrapper: Path
+    receipt_sha256: str
+
+
+@dataclass(frozen=True)
+class GooglePreflightReceipt(GoogleSelectorReceipt):
+    preflight_receipt_sha256: str
+    model: str
+    effort: str | None
+    route_args: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -161,6 +194,49 @@ def _canonical_json_bytes(value: object) -> bytes:
 def _print_canonical_json(value: object) -> None:
     sys.stdout.write(_canonical_json_bytes(value).decode("ascii"))
     sys.stdout.flush()
+
+
+def _google_selector_metadata(receipt: GoogleSelectorReceipt) -> dict[str, object]:
+    return {
+        "google_authentication_class": receipt.authentication_class,
+        "google_executable": str(receipt.executable),
+        "google_provider_started": False,
+        "google_route": receipt.route,
+        "google_selector_receipt_sha256": receipt.receipt_sha256,
+        "google_wrapper": str(receipt.wrapper),
+    }
+
+
+def _google_preflight_metadata(
+    receipt: GooglePreflightReceipt,
+) -> dict[str, object]:
+    if (
+        not isinstance(receipt, GooglePreflightReceipt)
+        or re.fullmatch(r"[0-9a-f]{64}", receipt.preflight_receipt_sha256) is None
+        or (
+            receipt.route == "agy"
+            and (
+                receipt.model != "gemini-3.1-pro-high"
+                or receipt.effort != "high"
+                or receipt.route_args
+                != ("--model", "gemini-3.1-pro-high", "--effort", "high")
+            )
+        )
+        or (
+            receipt.route == "gemini"
+            and (
+                receipt.model != "auto"
+                or receipt.effort is not None
+                or receipt.route_args
+            )
+        )
+    ):
+        raise RoundIntegrityError("Google preflight receipt is required")
+    return {
+        "google_preflight_effort": receipt.effort,
+        "google_preflight_model": receipt.model,
+        "google_preflight_receipt_sha256": receipt.preflight_receipt_sha256,
+    }
 
 
 def _record(hasher, tag: bytes, payload: bytes) -> None:
@@ -222,6 +298,258 @@ def _canonical_regular_file_bytes(path: Path, label: str) -> bytes:
         return b"".join(chunks)
     finally:
         os.close(descriptor)
+
+
+def load_google_selector_receipt(
+    path: Path,
+    *,
+    expected_review_id: str | None = None,
+    expected_route: Literal["agy", "gemini"] | None = None,
+    expected_wrapper: Path | None = None,
+) -> GoogleSelectorReceipt:
+    payload = _canonical_regular_file_bytes(path, "google_selector_receipt")
+    try:
+        record = json.loads(payload.decode("ascii"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise RoundIntegrityError(
+            "google selector receipt must be canonical ASCII JSON"
+        ) from None
+    required_keys = {
+        "authentication_class",
+        "executable",
+        "provider_started",
+        "review_id",
+        "route",
+        "wrapper",
+    }
+    if (
+        not isinstance(record, dict)
+        or set(record) != required_keys
+        or payload != _canonical_json_bytes(record)
+    ):
+        raise RoundIntegrityError(
+            "google selector receipt must use the exact canonical schema"
+        )
+    if not all(
+        isinstance(record[key], str)
+        for key in (
+            "authentication_class",
+            "executable",
+            "review_id",
+            "route",
+            "wrapper",
+        )
+    ):
+        raise RoundIntegrityError("google selector receipt string field is invalid")
+    review_id = _validate_review_id(record["review_id"])
+    authentication_class = record["authentication_class"]
+    route = record["route"]
+    if authentication_class not in ("personal-google", "gemini-enterprise"):
+        raise RoundIntegrityError(
+            "invalid Google authentication class in selector receipt"
+        )
+    if route not in ("agy", "gemini"):
+        raise RoundIntegrityError("invalid Google route in selector receipt")
+    if authentication_class == "personal-google" and route != "agy":
+        raise RoundIntegrityError(
+            "personal Google Sign-In selector receipt requires agy"
+        )
+    if record["provider_started"] is not False:
+        raise RoundIntegrityError("google selector receipt must precede provider start")
+
+    paths: dict[str, Path] = {}
+    for label in ("executable", "wrapper"):
+        raw_path = record[label]
+        if not isinstance(raw_path, str):
+            raise RoundIntegrityError(
+                f"google selector {label} must be a canonical absolute path"
+            )
+        candidate = Path(raw_path)
+        try:
+            resolved = candidate.resolve(strict=True)
+            metadata = candidate.lstat()
+        except (OSError, RuntimeError):
+            raise RoundIntegrityError(
+                f"google selector {label} must be a canonical executable file"
+            ) from None
+        if (
+            not candidate.is_absolute()
+            or candidate != resolved
+            or stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or not os.access(candidate, os.X_OK)
+        ):
+            raise RoundIntegrityError(
+                f"google selector {label} must be a canonical executable file"
+            )
+        paths[label] = candidate
+
+    packaged_wrapper = (
+        Path(__file__).resolve().parent
+        / ("antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py")
+    ).resolve()
+    if paths["wrapper"] != packaged_wrapper:
+        raise RoundIntegrityError(
+            "google selector wrapper does not match selected route"
+        )
+    if expected_review_id is not None and review_id != _validate_review_id(
+        expected_review_id
+    ):
+        raise RoundIntegrityError("google selector receipt review ID mismatch")
+    if expected_route is not None and route != expected_route:
+        raise RoundIntegrityError("google selector receipt route mismatch")
+    if expected_wrapper is not None and paths["wrapper"] != expected_wrapper.resolve():
+        raise RoundIntegrityError("google selector receipt wrapper mismatch")
+    return GoogleSelectorReceipt(
+        review_id=review_id,
+        authentication_class=authentication_class,
+        route=route,
+        executable=paths["executable"],
+        wrapper=paths["wrapper"],
+        receipt_sha256=hashlib.sha256(payload).hexdigest(),
+    )
+
+
+def validate_google_preflight_receipt(
+    path: Path,
+    selector_receipt: GoogleSelectorReceipt,
+    *,
+    expected_review_id: str,
+) -> GooglePreflightReceipt:
+    payload = _canonical_regular_file_bytes(path, "google_preflight_receipt")
+    try:
+        record = json.loads(payload.decode("ascii"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise RoundIntegrityError(
+            "Google preflight receipt must be canonical ASCII JSON"
+        ) from None
+    common_keys = {
+        "executable",
+        "google_selector_receipt_sha256",
+        "provider_started",
+        "review_id",
+        "route",
+    }
+    route_keys = {
+        "agy": {"agy_version", "effort", "model", "route_args"},
+        "gemini": {
+            "effective_approval_mode",
+            "model",
+            "policy",
+            "read_only_enforcement",
+            "requested_approval_mode",
+        },
+    }
+    route = record.get("route") if isinstance(record, dict) else None
+    if (
+        not isinstance(route, str)
+        or route not in route_keys
+        or set(record) != common_keys | route_keys[route]
+        or payload != _canonical_json_bytes(record)
+    ):
+        raise RoundIntegrityError(
+            "Google preflight receipt has invalid canonical schema"
+        )
+    if (
+        not all(
+            isinstance(record[key], str)
+            for key in (
+                "executable",
+                "google_selector_receipt_sha256",
+                "review_id",
+                "route",
+            )
+        )
+        or record["provider_started"] is not False
+    ):
+        raise RoundIntegrityError("Google preflight receipt has invalid common fields")
+    review_id = _validate_review_id(record["review_id"])
+    expected_id = _validate_review_id(expected_review_id)
+    if review_id != expected_id:
+        raise RoundIntegrityError("Google preflight receipt review ID mismatch")
+    if (
+        route != selector_receipt.route
+        or record["executable"] != str(selector_receipt.executable)
+        or record["google_selector_receipt_sha256"] != selector_receipt.receipt_sha256
+    ):
+        raise RoundIntegrityError("Google preflight receipt selector mismatch")
+    if route == "agy":
+        if (
+            not all(
+                isinstance(record[key], str)
+                for key in ("agy_version", "effort", "model")
+            )
+            or not isinstance(record["route_args"], list)
+            or not all(isinstance(value, str) for value in record["route_args"])
+            or not record["agy_version"].strip()
+            or record["model"] != "gemini-3.1-pro-high"
+            or record["effort"] != "high"
+            or record["route_args"]
+            != ["--model", "gemini-3.1-pro-high", "--effort", "high"]
+        ):
+            raise RoundIntegrityError("Google AGY preflight fields are invalid")
+    else:
+        gemini_fields = (
+            "effective_approval_mode",
+            "model",
+            "policy",
+            "read_only_enforcement",
+            "requested_approval_mode",
+        )
+        expected_policy = (
+            selector_receipt.wrapper.parent / "policies" / "gemini-formal-readonly.toml"
+        ).resolve()
+        if (
+            not all(isinstance(record[key], str) for key in gemini_fields)
+            or record["effective_approval_mode"] != "unexposed"
+            or record["model"] != "auto"
+            or Path(record["policy"]).resolve() != expected_policy
+            or record["read_only_enforcement"] != "packaged-mode-independent-policy"
+            or record["requested_approval_mode"] != "plan"
+        ):
+            raise RoundIntegrityError("Google Gemini preflight fields are invalid")
+    return GooglePreflightReceipt(
+        review_id=selector_receipt.review_id,
+        authentication_class=selector_receipt.authentication_class,
+        route=selector_receipt.route,
+        executable=selector_receipt.executable,
+        wrapper=selector_receipt.wrapper,
+        receipt_sha256=selector_receipt.receipt_sha256,
+        preflight_receipt_sha256=hashlib.sha256(payload).hexdigest(),
+        model=record["model"],
+        effort=record["effort"] if route == "agy" else None,
+        route_args=tuple(record["route_args"]) if route == "agy" else (),
+    )
+
+
+def validate_google_selector_prompt(
+    prompt: str,
+    receipt: GooglePreflightReceipt,
+    *,
+    expected_review_id: str,
+    expected_content_digest: str,
+) -> None:
+    prefix = "Review metadata: "
+    records = [line for line in prompt.splitlines() if line.startswith(prefix)]
+    if len(records) != 1:
+        raise RoundIntegrityError(
+            "formal prompt must contain one Review metadata record"
+        )
+    try:
+        metadata = json.loads(records[0].removeprefix(prefix))
+    except json.JSONDecodeError:
+        raise RoundIntegrityError("formal prompt Review metadata is invalid") from None
+    expected = {
+        **_google_selector_metadata(receipt),
+        **_google_preflight_metadata(receipt),
+        "content_digest": expected_content_digest,
+        "family": "google",
+        "review_id": expected_review_id,
+    }
+    if not isinstance(metadata, dict) or any(
+        metadata.get(key) != value for key, value in expected.items()
+    ):
+        raise RoundIntegrityError("formal prompt selector binding mismatch")
 
 
 def _validate_review_id(review_id: str) -> str:
@@ -1254,6 +1582,85 @@ def verify_round(snapshot: RoundSnapshot, prepared_dir: Path, worktree: Path) ->
         raise RoundIntegrityError("worktree fingerprint mismatch")
 
 
+def _google_route(
+    family: Literal["claude", "google", "codex"],
+    receipt: GoogleSelectorReceipt | None,
+) -> Literal["agy", "gemini"] | None:
+    if receipt is None:
+        raise RoundIntegrityError("Google selector receipt is required")
+    if family != "google":
+        return None
+    return receipt.route
+
+
+def _prepared_review_digest(
+    prepared_digest: str,
+    receipt: GooglePreflightReceipt,
+) -> str:
+    return hashlib.sha256(
+        _canonical_json_bytes(
+            {
+                **_google_selector_metadata(receipt),
+                **_google_preflight_metadata(receipt),
+                "prepared_digest": prepared_digest,
+            }
+        )
+    ).hexdigest()
+
+
+def _google_tool_contract(route: Literal["agy", "gemini"]) -> str:
+    if route == "agy":
+        return _AGY_GOOGLE_TOOL_CONTRACT
+    return _GEMINI_GOOGLE_TOOL_CONTRACT
+
+
+def _selectable_google_binary(name: Literal["agy", "gemini"]) -> str | None:
+    pin_name = f"TRIAD_{name.upper()}_BIN"
+    pin = os.environ.get(pin_name)
+    require_pinned = os.environ.get("TRIAD_REQUIRE_PINNED_VENDOR") == "1"
+    if pin:
+        if os.path.isabs(pin) and os.path.isfile(pin) and os.access(pin, os.X_OK):
+            return pin
+        if require_pinned:
+            raise RoundIntegrityError(
+                f"pinned Google reviewer {pin_name} is not an executable absolute path"
+            )
+    if require_pinned:
+        return None
+    return shutil.which(name)
+
+
+def select_google_route(authentication_class: str, review_id: str) -> dict[str, object]:
+    validated_review_id = _validate_review_id(review_id)
+    agy = _selectable_google_binary("agy")
+    gemini = _selectable_google_binary("gemini")
+    if authentication_class == "personal-google":
+        if agy is None:
+            raise RoundIntegrityError("personal Google Sign-In requires agy")
+        route = "agy"
+        executable = agy
+    elif authentication_class == "gemini-enterprise":
+        if agy is not None:
+            route = "agy"
+            executable = agy
+        elif gemini is not None:
+            route = "gemini"
+            executable = gemini
+        else:
+            raise RoundIntegrityError("no eligible Google reviewer executable")
+    else:
+        raise RoundIntegrityError("invalid Google authentication class")
+    wrapper_name = "antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py"
+    return {
+        "authentication_class": authentication_class,
+        "executable": str(Path(executable).resolve()),
+        "provider_started": False,
+        "review_id": validated_review_id,
+        "route": route,
+        "wrapper": str((Path(__file__).resolve().parent / wrapper_name).resolve()),
+    }
+
+
 def render_review_prompt(brief: ReviewBrief) -> str:
     if not brief.objective.strip() or not brief.criteria or not brief.approved_boundary:
         raise RoundIntegrityError(
@@ -1276,21 +1683,33 @@ def render_review_prompt(brief: ReviewBrief) -> str:
         raise RoundIntegrityError(
             "review brief content digest does not match prepared directory"
         )
+    receipt = brief.google_selector_receipt
+    route = _google_route(brief.family, receipt)
+    assert receipt is not None
+    if receipt.review_id != review_id:
+        raise RoundIntegrityError("google selector receipt review ID mismatch")
+    review_digest = _prepared_review_digest(
+        brief.content_digest,
+        receipt,
+    )
     metadata = {
         "approved_boundary": list(brief.approved_boundary),
-        "content_digest": brief.content_digest,
+        "content_digest": review_digest,
         "criteria": list(brief.criteria),
         "family": brief.family,
+        **_google_selector_metadata(receipt),
+        **_google_preflight_metadata(receipt),
         "objective": brief.objective,
         "prepared_directory": str(brief.prepared_dir),
+        "prepared_digest": brief.content_digest,
         "review_id": review_id,
         "review_kind": brief.review_kind,
     }
     encoded_metadata = (
         _canonical_json_bytes(metadata).decode("ascii").removesuffix("\n")
     )
-    if brief.family == "google":
-        tool_contract = _GOOGLE_TOOL_CONTRACT
+    if route is not None:
+        tool_contract = _google_tool_contract(route)
     else:
         tool_contract = (
             "Use available read and search tools, including provider-native tools, installed CLI tools, and "
@@ -1396,10 +1815,17 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         custody[f"{label}_file"] = str(path)
         custody[f"{label}_sha256"] = hashlib.sha256(payload).hexdigest()
 
+    receipt = brief.google_selector_receipt
+    route = _google_route(brief.family, receipt)
+    assert receipt is not None
+    if receipt.review_id != review_id:
+        raise RoundIntegrityError("google selector receipt review ID mismatch")
     common_metadata = {
         "approved_boundary": list(brief.approved_boundary),
         "criteria": list(brief.criteria),
         **custody,
+        **_google_selector_metadata(receipt),
+        **_google_preflight_metadata(receipt),
         "objective": brief.objective,
         "review_id": review_id,
         "review_kind": brief.review_kind,
@@ -1419,8 +1845,8 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
     encoded_metadata = (
         _canonical_json_bytes(metadata).decode("ascii").removesuffix("\n")
     )
-    if brief.family == "google":
-        tool_contract = _GOOGLE_TOOL_CONTRACT
+    if route is not None:
+        tool_contract = _google_tool_contract(route)
     else:
         tool_contract = (
             "Use available read and search tools, including provider-native tools, installed CLI tools, and "
@@ -1520,6 +1946,14 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--snapshot", type=Path, required=True)
     fingerprint_worktree = commands.add_parser("fingerprint-worktree")
     fingerprint_worktree.add_argument("--worktree", type=Path, required=True)
+    select_google = commands.add_parser("select-google-route")
+    select_google.add_argument(
+        "--authentication-class",
+        choices=("personal-google", "gemini-enterprise"),
+        required=True,
+    )
+    select_google.add_argument("--review-id", required=True)
+    select_google.add_argument("--output", type=Path, required=True)
     render = commands.add_parser("render")
     render.add_argument("--review-id", required=True)
     render.add_argument(
@@ -1530,6 +1964,8 @@ def _parser() -> argparse.ArgumentParser:
     render.add_argument(
         "--family", choices=("claude", "google", "codex"), required=True
     )
+    render.add_argument("--google-selector-receipt", type=Path, required=True)
+    render.add_argument("--google-preflight-receipt", type=Path, required=True)
     render.add_argument("--objective", required=True)
     render.add_argument("--prepared-dir", type=Path, required=True)
     render.add_argument("--content-digest", required=True)
@@ -1546,6 +1982,8 @@ def _parser() -> argparse.ArgumentParser:
     render_worktree.add_argument(
         "--family", choices=("claude", "google", "codex"), required=True
     )
+    render_worktree.add_argument("--google-selector-receipt", type=Path, required=True)
+    render_worktree.add_argument("--google-preflight-receipt", type=Path, required=True)
     render_worktree.add_argument("--objective", required=True)
     render_worktree.add_argument("--worktree", type=Path, required=True)
     render_worktree.add_argument("--worktree-fingerprint", required=True)
@@ -1596,7 +2034,22 @@ def main(argv: list[str] | None = None) -> int:
             _refresh_lifecycle_activity(Path(snapshot.prepared_dir))
         elif arguments.command == "fingerprint-worktree":
             print(_worktree_fingerprint(arguments.worktree), flush=True)
+        elif arguments.command == "select-google-route":
+            receipt = select_google_route(
+                arguments.authentication_class, arguments.review_id
+            )
+            _write_new(arguments.output, _canonical_json_bytes(receipt))
+            print(arguments.output, flush=True)
         elif arguments.command == "render":
+            selector_receipt = load_google_selector_receipt(
+                arguments.google_selector_receipt,
+                expected_review_id=arguments.review_id,
+            )
+            selector_receipt = validate_google_preflight_receipt(
+                arguments.google_preflight_receipt,
+                selector_receipt,
+                expected_review_id=arguments.review_id,
+            )
             brief = ReviewBrief(
                 review_id=arguments.review_id,
                 review_kind=arguments.review_kind,
@@ -1608,6 +2061,7 @@ def main(argv: list[str] | None = None) -> int:
                 content_digest=arguments.content_digest,
                 criteria=tuple(arguments.criterion),
                 approved_boundary=tuple(arguments.approved_boundary),
+                google_selector_receipt=selector_receipt,
             )
             _write_new(
                 arguments.output, render_review_prompt(brief).encode("utf-8") + b"\n"
@@ -1615,6 +2069,15 @@ def main(argv: list[str] | None = None) -> int:
             print(arguments.output, flush=True)
             _refresh_lifecycle_activity(brief.prepared_dir)
         else:
+            selector_receipt = load_google_selector_receipt(
+                arguments.google_selector_receipt,
+                expected_review_id=arguments.review_id,
+            )
+            selector_receipt = validate_google_preflight_receipt(
+                arguments.google_preflight_receipt,
+                selector_receipt,
+                expected_review_id=arguments.review_id,
+            )
             brief = WorktreeReviewBrief(
                 review_id=arguments.review_id,
                 review_kind=arguments.review_kind,
@@ -1628,7 +2091,18 @@ def main(argv: list[str] | None = None) -> int:
                 criteria=tuple(arguments.criterion),
                 review_points=tuple(arguments.review_point),
                 approved_boundary=tuple(arguments.approved_boundary),
+                google_selector_receipt=selector_receipt,
             )
+            try:
+                arguments.output.parent.resolve(strict=True).relative_to(
+                    brief.worktree
+                )
+            except ValueError:
+                pass
+            else:
+                raise RoundIntegrityError(
+                    "output must be outside the canonical worktree"
+                )
             _write_new(
                 arguments.output,
                 render_worktree_review_prompt(brief).encode("utf-8") + b"\n",

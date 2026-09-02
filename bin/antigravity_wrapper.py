@@ -17,10 +17,12 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import _common
 import _agy_settings
+import review_round
 from _common import load_pydantic_class, validate_response
 
 
@@ -28,6 +30,8 @@ AGY_VERSION_FLOOR = (1, 1, 20)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
+FORMAL_AGY_MODEL = "gemini-3.1-pro-high"
+FORMAL_AGY_EFFORT = "high"
 FORMAL_AGY_ENV_REMOVE = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -64,6 +68,28 @@ def _probe_agy_version(agy_bin: str) -> tuple[int, int, int] | None:
     if result.returncode != 0:
         return None
     return _parse_agy_version(result.stdout)
+
+
+def _probe_agy_models(agy_bin: str) -> set[str] | None:
+    try:
+        result = subprocess.run(
+            [agy_bin, "models"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_common.scrubbed_child_env(remove=FORMAL_AGY_ENV_REMOVE),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    models: set[str] = set()
+    for line in result.stdout.splitlines():
+        slug, separator, label = line.partition("\t")
+        if separator and slug and label:
+            models.add(slug)
+    return models
 
 
 def _route_args(model: str | None, effort: str | None) -> list[str]:
@@ -305,10 +331,12 @@ def main() -> int:
     parser.add_argument("--expected-review-id", default=None)
     parser.add_argument(
         "--expected-family",
-        choices=("claude", "google", "codex"),
+        choices=("google",),
         default=None,
     )
     parser.add_argument("--expected-content-digest", default=None)
+    parser.add_argument("--google-selector-receipt", type=Path, default=None)
+    parser.add_argument("--google-preflight-receipt", type=Path, default=None)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
@@ -337,7 +365,15 @@ def main() -> int:
         args.expected_family,
         args.expected_content_digest,
     )
-    if any(value is not None for value in binding_values):
+    if args.preflight_only:
+        if (
+            args.expected_review_id is None
+            or args.expected_family is not None
+            or args.expected_content_digest is not None
+        ):
+            _common.log("AGY formal preflight requires only --expected-review-id")
+            return _common.EXIT_ARG_ERROR
+    elif any(value is not None for value in binding_values):
         if not all(value is not None for value in binding_values):
             _common.log("formal verdict bindings must be supplied together")
             return _common.EXIT_ARG_ERROR
@@ -345,9 +381,6 @@ def main() -> int:
             _common.log(
                 "formal verdict bindings require --pydantic verdict_schema:LegVerdict"
             )
-            return _common.EXIT_ARG_ERROR
-        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.expected_review_id) is None:
-            _common.log("expected review ID has invalid syntax")
             return _common.EXIT_ARG_ERROR
         if re.fullmatch(r"[0-9a-f]{64}", args.expected_content_digest) is None:
             _common.log(
@@ -357,13 +390,92 @@ def main() -> int:
         if args.sandbox != "read-only":
             _common.log("formal verdict bindings require --sandbox read-only")
             return _common.EXIT_ARG_ERROR
+    if (
+        args.expected_review_id is not None
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.expected_review_id) is None
+    ):
+        _common.log("expected review ID has invalid syntax")
+        return _common.EXIT_ARG_ERROR
 
-    agy_bin = _common.require_binary("agy")
+    formal_bindings = all(value is not None for value in binding_values)
+    selected_context = args.preflight_only or formal_bindings
+    if selected_context and args.google_selector_receipt is None:
+        _common.log("formal AGY route requires --google-selector-receipt")
+        return _common.EXIT_ARG_ERROR
+    if not selected_context and args.google_selector_receipt is not None:
+        _common.log(
+            "Google selector receipt is reserved for formal review and preflight"
+        )
+        return _common.EXIT_ARG_ERROR
+    if formal_bindings and args.google_preflight_receipt is None:
+        _common.log("formal AGY review requires --google-preflight-receipt")
+        return _common.EXIT_ARG_ERROR
+    if not formal_bindings and args.google_preflight_receipt is not None:
+        _common.log("Google preflight receipt is reserved for formal dispatch")
+        return _common.EXIT_ARG_ERROR
+    selector_receipt = None
+    if args.google_selector_receipt is not None:
+        try:
+            selector_receipt = review_round.load_google_selector_receipt(
+                args.google_selector_receipt,
+                expected_review_id=args.expected_review_id,
+                expected_route="agy",
+                expected_wrapper=Path(__file__).resolve(),
+            )
+            if formal_bindings:
+                selector_receipt = review_round.validate_google_preflight_receipt(
+                    args.google_preflight_receipt,
+                    selector_receipt,
+                    expected_review_id=args.expected_review_id,
+                )
+                if (
+                    args.model != selector_receipt.model
+                    or args.effort != selector_receipt.effort
+                    or tuple(_route_args(args.model, args.effort))
+                    != selector_receipt.route_args
+                ):
+                    raise review_round.RoundIntegrityError(
+                        "formal AGY arguments do not match bound preflight"
+                    )
+                review_round.validate_google_selector_prompt(
+                    prompt,
+                    selector_receipt,
+                    expected_review_id=args.expected_review_id,
+                    expected_content_digest=args.expected_content_digest,
+                )
+        except review_round.RoundIntegrityError as exc:
+            _common.log(f"Google selector receipt rejected: {exc}")
+            return _common.EXIT_ARG_ERROR
+
+    if args.preflight_only and (
+        args.model != FORMAL_AGY_MODEL or args.effort != FORMAL_AGY_EFFORT
+    ):
+        _common.log(
+            "formal AGY preflight requires --model gemini-3.1-pro-high --effort high"
+        )
+        return _common.EXIT_ARG_ERROR
+
+    agy_bin = (
+        str(selector_receipt.executable)
+        if selector_receipt is not None
+        else _common.require_binary("agy")
+    )
     version = _probe_agy_version(agy_bin)
     if version is None or version < AGY_VERSION_FLOOR:
         found = _version_text(version) if version is not None else "unprobeable"
         _common.log(f"agy {found} is below required {_version_text(AGY_VERSION_FLOOR)}")
         return _common.EXIT_TERMINAL
+
+    if args.preflight_only:
+        advertised_models = _probe_agy_models(agy_bin)
+        if advertised_models is None:
+            _common.log("agy model catalog is unprobeable")
+            return _common.EXIT_TERMINAL
+        if FORMAL_AGY_MODEL not in advertised_models:
+            _common.log(
+                f"agy model catalog does not advertise required model {FORMAL_AGY_MODEL}"
+            )
+            return _common.EXIT_TERMINAL
 
     deny_rules = (
         _agy_settings.build_deny_rules(args.sandbox) if args.sandbox is not None else []
@@ -387,23 +499,33 @@ def main() -> int:
         receipt = {
             "agy_version": _version_text(version),
             "effort": args.effort,
+            "executable": agy_bin,
+            "google_selector_receipt_sha256": selector_receipt.receipt_sha256,
             "model": args.model,
             "provider_started": False,
+            "review_id": selector_receipt.review_id,
+            "route": "agy",
             "route_args": _route_args(args.model, args.effort),
         }
-        sys.stdout.write(json.dumps(receipt, ensure_ascii=False) + "\n")
+        sys.stdout.write(
+            json.dumps(
+                receipt,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        )
         return _common.EXIT_OK
 
-    local_plan_response = args.sandbox == "read-only" and all(
-        value is not None for value in binding_values
-    )
+    local_plan_response = args.sandbox == "read-only" and formal_bindings
     try:
         schema_object = (
             pydantic_cls.model_json_schema() if pydantic_cls is not None else None
         )
         if schema_object is not None:
             properties = schema_object["properties"]
-            if all(value is not None for value in binding_values):
+            if formal_bindings:
                 properties["review_id"]["const"] = args.expected_review_id
                 properties["family"]["const"] = args.expected_family
                 properties["content_digest"]["const"] = args.expected_content_digest
@@ -427,7 +549,7 @@ def main() -> int:
         skip_permissions=_agy_needs_skip_permissions(version),
     )
     run_options: dict[str, Any] = {"classify_and_log": False}
-    if all(value is not None for value in binding_values):
+    if formal_bindings:
         run_options["remove_env"] = FORMAL_AGY_ENV_REMOVE
     try:
         with _agy_settings.agy_settings_guard(

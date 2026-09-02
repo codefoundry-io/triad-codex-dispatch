@@ -39,7 +39,16 @@ def test_current_migration_guidance_discloses_child_permission_selection_without
     assert "does not change stored or global user/project settings" in guidance
     assert "does not install a separate Codex profile, rule, permission" in guidance
     assert "pre-spawn `shell_environment_policy`" in guidance
-    assert "danger-full-access" not in guidance
+    assert "outside the Codex workspace sandbox" in guidance
+    assert "user-selected Codex host policy" in guidance
+    assert '`sandbox_mode = "workspace-write"`' in guidance
+    assert '`approval_policy = "on-request"`' in guidance
+    assert '`approvals_reviewer = "user"`' in guidance
+    assert '`approvals_reviewer = "auto_review"`' in guidance
+    assert "no plugin-level install-time sandbox grant" in guidance
+    assert '`sandbox_mode = "danger-full-access"`' not in guidance
+    assert '`approval_policy = "never"`' not in guidance
+    assert "select Full access" not in guidance
     assert "read-only sandbox" not in guidance
     assert "triad-repair-analyzer" not in guidance
 

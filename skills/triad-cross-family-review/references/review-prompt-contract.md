@@ -7,7 +7,8 @@
 - [Result](#result)
 
 Every family receives the same values below. The perspective may differ; the
-task, prepared directory, boundary, digest, criteria, and result shape may not.
+task, prepared directory, boundary, digest, criteria, selected Google route,
+selector receipt binding, and result shape may not.
 
 ## Required inputs
 
@@ -16,8 +17,12 @@ task, prepared directory, boundary, digest, criteria, and result shape may not.
 - objective and acceptance criteria
 - absolute immutable prepared-directory path
 - prepared-directory content digest
+- route-bound result-admission content digest
 - exact approved data and test-source boundary
 - reviewer perspective
+- selected Google authentication class, `google_route`, canonical executable and wrapper
+- canonical selector-receipt SHA-256 and `google_provider_started: false`
+- canonical preflight-receipt SHA-256 plus its exact model and nullable effort
 
 The prepared directory contains complete current files relevant to the decision
 and governing documentation under `source/product/`. The only current-round
@@ -30,8 +35,8 @@ point, not an inline prompt payload.
 
 Every rendered prompt carries dynamic values only in one canonical
 `Review metadata: ` JSON record. The object contains the review ID, review kind,
-family, objective, prepared directory, content digest, criteria, and approved
-boundary. Fixed instructions refer to those values through `metadata.*` keys and
+family, objective, prepared directory, prepared digest, route-bound content digest, criteria, approved
+boundary, and the exact selector fields and SHA-256. Fixed instructions refer to those values through `metadata.*` keys and
 do not interpolate them again.
 
 ## Inspection contract
@@ -44,28 +49,34 @@ when their inputs stay within the approved review boundary. For those two
 families, Configured MCP servers remain available. Existing user permission
 settings continue to govern MCP calls. Approved official-web reads through
 read-only MCP tools remain available when the review objective and authorized
-external data boundary expressly permit them. The Google prompt instead permits
-AGY native file-read and search tools for local inspection and explicitly forbids
-`run_command`, terminal and shell tools, file writes/edits, notebook execution,
-subagents, browser actuation, scratch-space tools, and experiments. The formal
-Google settings transaction denies all MCP calls. Approved AGY native
-official-web reads remain available only when the review objective and
-authorized external data boundary expressly permit them; otherwise an
-uncertainty that static inspection cannot decide belongs in `open_questions`.
-Use `grep_search` with the required `SearchPath` and `Query` arguments to search
-inside the review target identified by Review metadata, and use `list_dir`, `find_by_name`, and
-`view_file` as needed. For every `view_file` call, provide the required `AbsolutePath`
-argument. For files larger than one native view, request explicit
-positive-integer `StartLine` and `EndLine` ranges. Never request `ContentOffset`
-or `IsSkillFile`, and do not rely
-on implicit another-page continuation. If native reads and searches are insufficient, report the limit in
-`open_questions`.
+external data boundary expressly permit them. Every family render consumes and binds the same
+canonical selector receipt in its shared review basis; only the Google render
+uses it to select provider tools. The AGY prompt permits AGY native file-read/search tools
+and forbids command, write/edit, notebook, subagent, browser-actuation,
+scratch-space, and experiment tools. The formal AGY settings transaction denies
+all MCP calls. Approved AGY native official-web reads remain available only when
+the review objective and authorized external data boundary expressly permit them.
+Use `grep_search` with the required `SearchPath` and `Query` inside the review
+target identified by Review metadata, and use `list_dir`, `find_by_name`, and
+`view_file` as needed. For every `view_file` call, provide `AbsolutePath`. For
+files larger than one native view, request explicit positive-integer `StartLine`
+and `EndLine` ranges. Never request `ContentOffset` or `IsSkillFile`, and do not
+rely on implicit another-page continuation.
+
+The Gemini Enterprise OAuth prompt instead permits Gemini CLI native `read_file`,
+`read_many_files`, `list_directory`, `glob`, `grep_search`, and expressly authorized
+`google_web_search`, `web_fetch`, or `get_internal_docs`. It does not use AGY native
+tool names. It forbids shell, writes/edits, Plan Mode transitions, interaction,
+subagents, task tracking, scratch space, and experiments. A fact unavailable through
+the selected route's allowed static reads belongs in `open_questions`.
 Formal `step_update` telemetry is diagnostic vendor output, not an admission
 schema: added fields, changed optional tool arguments, denied attempts, and
 duplicate progress events do not invalidate an otherwise valid terminal
-verdict. Claude's native `--permission-mode plan` and Google's native
-`--mode plan` define static-review behavior for those routes; explicit deny
-rules enforce blocked Google action namespaces. Fresh Codex remains prompt-controlled unless
+verdict. Claude's native `--permission-mode plan` defines its static route.
+Google requests its selected route's native Plan Mode: AGY `--mode plan`, or
+Gemini `--approval-mode plan`. For Gemini, effective approval mode remains
+unexposed; the mode-independent packaged policy is the read-only enforcement boundary.
+Explicit deny rules enforce blocked Google action namespaces. Fresh Codex remains prompt-controlled unless
 runtime metadata proves stronger containment. Local verdict and review-binding
 checks establish provisional validity; round-integrity checks decide final
 admission as formal review evidence.

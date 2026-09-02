@@ -881,9 +881,10 @@ def command_data_is_managed(name: str, kind: str, data: bytes) -> bool:
     a user executable from granting install/remove ownership.
     """
     vendor_envs = {
-        "claude_wrapper.py": "TRIAD_CLAUDE_BIN",
-        "gemini_wrapper.py": "TRIAD_GEMINI_BIN",
-        "antigravity_wrapper.py": "TRIAD_AGY_BIN",
+        "claude_wrapper.py": ("TRIAD_CLAUDE_BIN",),
+        "gemini_wrapper.py": ("TRIAD_GEMINI_BIN",),
+        "antigravity_wrapper.py": ("TRIAD_AGY_BIN",),
+        "review_round.py": ("TRIAD_AGY_BIN", "TRIAD_GEMINI_BIN"),
     }
     if kind == "launcher":
         marker = PUBLIC_LAUNCHER_MARKER
@@ -922,9 +923,11 @@ def command_data_is_managed(name: str, kind: str, data: bytes) -> bool:
         return shebang_python is not None and _managed_hardened_launcher_ast(
             name, vendor_envs[name], shebang_python, body
         )
+    if len(vendor_envs[name]) != 1:
+        return False
     shebang_python = _shebang_python(lines[0], isolated=False)
     return shebang_python is not None and _managed_legacy_launcher_ast(
-        name, vendor_envs[name], shebang_python, body
+        name, vendor_envs[name][0], shebang_python, body
     )
 
 
@@ -1020,11 +1023,15 @@ def _exec_call(
 
 def _managed_hardened_launcher_ast(
     name: str,
-    vendor_env: str,
+    vendor_envs: tuple[str, ...],
     shebang_python: str,
     body: list[ast.stmt],
 ) -> bool:
-    if len(body) not in {6, 7, 8}:
+    if len(body) not in {
+        5 + len(vendor_envs),
+        6 + len(vendor_envs),
+        7 + len(vendor_envs),
+    }:
         return False
     scrub = body[0]
     expected_scrub = (
@@ -1083,20 +1090,21 @@ def _managed_hardened_launcher_ast(
     ) != "1":
         return False
     index += 1
-    vendor_value = _string_assignment(body[index], owner="env", key=vendor_env)
-    if vendor_value is not None:
-        if not vendor_value or not os.path.isabs(vendor_value):
-            return False
-    else:
-        pop_node = body[index]
-        if not (
-            isinstance(pop_node, ast.Expr)
-            and _matches_expression(
-                pop_node.value, f'env.pop("{vendor_env}", None)'
-            )
-        ):
-            return False
-    index += 1
+    for vendor_env in vendor_envs:
+        vendor_value = _string_assignment(body[index], owner="env", key=vendor_env)
+        if vendor_value is not None:
+            if not vendor_value or not os.path.isabs(vendor_value):
+                return False
+        else:
+            pop_node = body[index]
+            if not (
+                isinstance(pop_node, ast.Expr)
+                and _matches_expression(
+                    pop_node.value, f'env.pop("{vendor_env}", None)'
+                )
+            ):
+                return False
+        index += 1
     if index != len(body) - 1:
         return False
     executed = _exec_call(body[index], "execve", env_arg=True)

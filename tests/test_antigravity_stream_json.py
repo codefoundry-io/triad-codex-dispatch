@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -58,6 +59,131 @@ def _formal_payload() -> dict:
         "affected_surfaces_inspected": ["source/product/file.py"],
         "open_questions": [],
     }
+
+
+def _google_selector_fixture(
+    tmp_path: Path, *, route: str = "agy", family: str = "google"
+) -> tuple[Path, str, Path]:
+    executable = (tmp_path / f"selected-{route}").resolve()
+    executable.write_text("#!/bin/sh\nexit 91\n", encoding="utf-8")
+    executable.chmod(0o755)
+    record = {
+        "authentication_class": (
+            "personal-google" if route == "agy" else "gemini-enterprise"
+        ),
+        "executable": str(executable),
+        "provider_started": False,
+        "review_id": "review-r1",
+        "route": route,
+        "wrapper": str(
+            (
+                BIN
+                / ("antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py")
+            ).resolve()
+        ),
+    }
+    payload = (
+        json.dumps(
+            record,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        + b"\n"
+    )
+    receipt_path = (tmp_path / f"{route}-selector.json").resolve()
+    receipt_path.write_bytes(payload)
+    preflight_common = {
+        "executable": str(executable),
+        "google_selector_receipt_sha256": hashlib.sha256(payload).hexdigest(),
+        "provider_started": False,
+        "review_id": "review-r1",
+        "route": route,
+    }
+    if route == "agy":
+        preflight_record = {
+            **preflight_common,
+            "agy_version": "1.1.20",
+            "effort": "high",
+            "model": "gemini-3.1-pro-high",
+            "route_args": [
+                "--model",
+                "gemini-3.1-pro-high",
+                "--effort",
+                "high",
+            ],
+        }
+    else:
+        preflight_record = {
+            **preflight_common,
+            "effective_approval_mode": "unexposed",
+            "model": "auto",
+            "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
+            "read_only_enforcement": "packaged-mode-independent-policy",
+            "requested_approval_mode": "plan",
+        }
+    metadata = {
+        "content_digest": "a" * 64,
+        "family": family,
+        "google_authentication_class": record["authentication_class"],
+        "google_executable": str(executable),
+        "google_provider_started": False,
+        "google_preflight_effort": "high" if route == "agy" else None,
+        "google_preflight_model": preflight_record["model"],
+        "google_preflight_receipt_sha256": hashlib.sha256(
+            json.dumps(
+                preflight_record,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("ascii")
+            + b"\n"
+        ).hexdigest(),
+        "google_route": route,
+        "google_selector_receipt_sha256": hashlib.sha256(payload).hexdigest(),
+        "google_wrapper": record["wrapper"],
+        "review_id": "review-r1",
+    }
+    prompt = "Review metadata: " + json.dumps(
+        metadata,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return receipt_path, prompt, executable
+
+
+def _agy_preflight_fixture(
+    tmp_path: Path,
+    selector_receipt: Path,
+    executable: Path,
+    *,
+    review_id: str = "review-r1",
+) -> Path:
+    receipt = {
+        "agy_version": "1.1.20",
+        "effort": "high",
+        "executable": str(executable),
+        "google_selector_receipt_sha256": hashlib.sha256(
+            selector_receipt.read_bytes()
+        ).hexdigest(),
+        "model": "gemini-3.1-pro-high",
+        "provider_started": False,
+        "review_id": review_id,
+        "route": "agy",
+        "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
+    }
+    path = (tmp_path / "agy-preflight.json").resolve()
+    path.write_bytes(
+        json.dumps(
+            receipt,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        + b"\n"
+    )
+    return path
 
 
 def _plan_stream(*tool_calls: tuple[str, dict]) -> str:
@@ -831,7 +957,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
 
 
 def test_main_uses_native_schema_and_binds_formal_leg_locally(
-    monkeypatch, capsys
+    monkeypatch, capsys, tmp_path
 ) -> None:
     calls: list[list[str]] = []
     guarded: list[list[str]] = []
@@ -845,7 +971,8 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
         "affected_surfaces_inspected": ["src/parser.py"],
         "open_questions": [],
     }
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
+    selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
+    preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
@@ -885,7 +1012,11 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
         [
             "antigravity_wrapper.py",
             "--prompt",
-            "review",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
             "--model",
             "gemini-3.1-pro-high",
             "--effort",
@@ -906,6 +1037,7 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
     assert wrapper.main() == 0
     assert json.loads(capsys.readouterr().out) == payload
     assert len(calls) == 1
+    assert calls[0][0] == str(selected)
     assert "--sandbox" in calls[0]
     assert calls[0][calls[0].index("--mode") : calls[0].index("--mode") + 2] == [
         "--mode",
@@ -923,7 +1055,8 @@ def test_formal_provider_failure_restores_settings_bytes(
     baseline = b'{\n  "permissions": {"allow": ["command(git)"]}\n}'
     target.write_bytes(baseline)
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(target))
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
+    selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
+    preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
@@ -946,7 +1079,15 @@ def test_formal_provider_failure_restores_settings_bytes(
         [
             "antigravity_wrapper.py",
             "--prompt",
-            "review",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -1000,12 +1141,18 @@ def test_formal_main_stops_before_provider_without_read_only_sandbox(
 
 
 def test_preflight_proves_version_and_route_without_provider_submission(
-    monkeypatch, capsys
+    monkeypatch, capsys, tmp_path
 ) -> None:
     pruned: list[str] = []
     guarded: list[list[str]] = []
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
+    catalog_probes: list[str] = []
+    selector_receipt, _prompt, selected = _google_selector_fixture(tmp_path)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_models",
+        lambda binary: catalog_probes.append(binary) or {"gemini-3.1-pro-high"},
+    )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
     @contextlib.contextmanager
@@ -1033,6 +1180,10 @@ def test_preflight_proves_version_and_route_without_provider_submission(
             "high",
             "--sandbox",
             "read-only",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--expected-review-id",
+            "review-r1",
             "--preflight-only",
         ],
     )
@@ -1042,17 +1193,408 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert receipt == {
         "agy_version": "1.1.20",
         "effort": "high",
+        "executable": str(selected),
+        "google_selector_receipt_sha256": hashlib.sha256(
+            selector_receipt.read_bytes()
+        ).hexdigest(),
         "model": "gemini-3.1-pro-high",
         "provider_started": False,
+        "review_id": "review-r1",
+        "route": "agy",
         "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
     }
     assert pruned == ["antigravity"]
+    assert catalog_probes == [str(selected)]
     assert guarded == [wrapper._agy_settings._READ_ONLY_DENY]
 
 
-def test_preflight_settings_failure_stops_before_provider(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
+def test_probe_agy_models_parses_the_advertised_catalog_and_scrubs_auth_env(
+    monkeypatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed["kwargs"] = kwargs
+        return wrapper.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=(
+                "gemini-3.1-pro-high\tGemini 3.1 Pro (High)\n"
+                "gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n"
+            ),
+            stderr="Fetching available models...\n",
+        )
+
+    monkeypatch.setattr(wrapper.subprocess, "run", fake_run)
+
+    assert wrapper._probe_agy_models("/selected/agy") == {
+        "gemini-3.1-pro-high",
+        "gemini-3.1-pro-low",
+    }
+    assert observed["command"] == ["/selected/agy", "models"]
+    kwargs = observed["kwargs"]
+    assert kwargs["capture_output"] is True
+    assert kwargs["text"] is True
+    assert kwargs["check"] is False
+    assert kwargs["timeout"] == 30
+    assert "GOOGLE_API_KEY" not in kwargs["env"]
+
+
+def test_preflight_rejects_when_required_agy_model_is_not_advertised(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
+    catalog_probes: list[str] = []
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_models",
+        lambda binary: catalog_probes.append(binary) or {"gemini-3.1-pro-low"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        wrapper._agy_settings,
+        "agy_settings_guard",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("settings guard entered")
+        ),
+    )
+    monkeypatch.setattr(
+        wrapper._common,
+        "_run_once",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("provider started")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            "route proof",
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "--sandbox",
+            "read-only",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--expected-review-id",
+            "review-r1",
+            "--preflight-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_TERMINAL
+    assert catalog_probes == [str(_selected)]
+    assert "does not advertise required model gemini-3.1-pro-high" in (
+        capsys.readouterr().err
+    )
+
+
+def test_preflight_rejects_gemini_selector_receipt_before_binary_probe(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    selector_receipt, _prompt, _selected = _google_selector_fixture(
+        tmp_path, route="gemini"
+    )
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: (_ for _ in ()).throw(AssertionError("binary probed")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            "route proof",
+            "--sandbox",
+            "read-only",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--expected-review-id",
+            "review-r1",
+            "--preflight-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert "selector receipt route mismatch" in capsys.readouterr().err
+
+
+def test_agy_formal_preflight_rejects_foreign_review_before_binary_probe(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
+    record = json.loads(selector_receipt.read_text(encoding="ascii"))
+    record["review_id"] = "foreign-r1"
+    selector_receipt.write_bytes(
+        json.dumps(
+            record,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        + b"\n"
+    )
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: (_ for _ in ()).throw(AssertionError("binary probed")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            "route proof",
+            "--sandbox",
+            "read-only",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--expected-review-id",
+            "review-r1",
+            "--preflight-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert "selector receipt review ID mismatch" in capsys.readouterr().err
+
+
+def test_formal_agy_rejects_preflight_selector_mismatch_before_binary_probe(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
+    preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
+    record = json.loads(preflight_receipt.read_text(encoding="ascii"))
+    record["google_selector_receipt_sha256"] = "0" * 64
+    preflight_receipt.write_bytes(
+        json.dumps(
+            record,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        + b"\n"
+    )
+    monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: (_ for _ in ()).throw(AssertionError("binary probed")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "google",
+            "--expected-content-digest",
+            "a" * 64,
+            "--sandbox",
+            "read-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert "Google preflight receipt selector mismatch" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("model", "effort"),
+    [
+        ("gemini-3.1-pro-low", "high"),
+        ("gemini-3.1-pro-high", "medium"),
+    ],
+)
+def test_formal_agy_rejects_arguments_different_from_bound_preflight_before_probe(
+    monkeypatch,
+    capsys,
+    tmp_path,
+    model,
+    effort,
+) -> None:
+    selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
+    preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
+    metadata = json.loads(prompt.removeprefix("Review metadata: "))
+    metadata.update(
+        {
+            "google_preflight_effort": "high",
+            "google_preflight_model": "gemini-3.1-pro-high",
+            "google_preflight_receipt_sha256": hashlib.sha256(
+                preflight_receipt.read_bytes()
+            ).hexdigest(),
+        }
+    )
+    prompt = "Review metadata: " + json.dumps(
+        metadata,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: (_ for _ in ()).throw(AssertionError("binary probed")),
+    )
+    monkeypatch.setattr(
+        wrapper._common,
+        "_run_once",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("provider started")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--model",
+            model,
+            "--effort",
+            effort,
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "google",
+            "--expected-content-digest",
+            "a" * 64,
+            "--sandbox",
+            "read-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert "formal AGY arguments do not match bound preflight" in (
+        capsys.readouterr().err
+    )
+
+
+def test_formal_agy_rejects_non_google_prompt_before_binary_probe(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    selector_receipt, prompt, selected = _google_selector_fixture(
+        tmp_path, family="codex"
+    )
+    preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
+    monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: (_ for _ in ()).throw(AssertionError("binary probed")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "google",
+            "--expected-content-digest",
+            "a" * 64,
+            "--sandbox",
+            "read-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert "formal prompt selector binding mismatch" in capsys.readouterr().err
+
+
+def test_formal_agy_rejects_non_google_expected_family_before_binary_probe(
+    monkeypatch, tmp_path
+) -> None:
+    selector_receipt, prompt, _selected = _google_selector_fixture(tmp_path)
+    monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: (_ for _ in ()).throw(AssertionError("binary probed")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "codex",
+            "--expected-content-digest",
+            "a" * 64,
+            "--sandbox",
+            "read-only",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as rejected:
+        wrapper.main()
+    assert rejected.value.code == 2
+
+
+def test_preflight_settings_failure_stops_before_provider(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(
+        wrapper, "_probe_agy_models", lambda _bin: {"gemini-3.1-pro-high"}
+    )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
 
     @contextlib.contextmanager
@@ -1076,8 +1618,16 @@ def test_preflight_settings_failure_stops_before_provider(monkeypatch, capsys) -
             "antigravity_wrapper.py",
             "--prompt",
             "route proof",
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
             "--sandbox",
             "read-only",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--expected-review-id",
+            "review-r1",
             "--preflight-only",
         ],
     )

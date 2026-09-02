@@ -33,6 +33,12 @@ BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 BOOTSTRAP_REPAIR = ROOT / "bin" / "bootstrap_repair.py"
 APPLY_PATCH = ROOT / "bin" / "apply_patch.py"
 FIXTURES = ROOT / "tests" / "fixtures"
+PROVIDER_WRAPPERS = (
+    "claude_wrapper.py",
+    "gemini_wrapper.py",
+    "antigravity_wrapper.py",
+)
+MANAGED_LAUNCHERS = (*PROVIDER_WRAPPERS, "review_round.py")
 
 
 def _copy_test_python_executable(target: Path) -> None:
@@ -86,7 +92,7 @@ def _make_repo_root(
     mode = stat.S_IRUSR | stat.S_IWUSR
     if executable_wrappers:
         mode |= stat.S_IXUSR
-    for name in ("claude_wrapper.py", "gemini_wrapper.py", "antigravity_wrapper.py"):
+    for name in MANAGED_LAUNCHERS:
         wrapper = bin_dir / name
         wrapper.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
         wrapper.chmod(mode)
@@ -466,7 +472,7 @@ def test_bootstrap_source_contains_no_retired_permission_controller_names() -> N
     assert "install_codex_rules" not in text
 
 
-def test_bootstrap_help_describes_claude_parity_agy_native_auth_route() -> None:
+def test_bootstrap_help_describes_claude_parity_and_google_route_selection() -> None:
     result = subprocess.run(
         ["bash", str(BOOTSTRAP), "--help"],
         text=True,
@@ -476,11 +482,13 @@ def test_bootstrap_help_describes_claude_parity_agy_native_auth_route() -> None:
 
     assert result.returncode == 2
     help_text = " ".join(result.stderr.split())
-    assert "agy with either personal Google Sign-In or Gemini Enterprise Business Sign-In" in help_text
+    assert "prefers agy" in help_text
+    assert "personal Google Sign-In requires agy" in help_text
+    assert "Gemini Enterprise OAuth may use gemini when agy is absent" in help_text
     assert "same authenticated login terminal" in help_text
     assert "transient global-settings transaction" in help_text
     assert "restores the original bytes" in help_text
-    assert "Gemini Enterprise Business Sign-In" in help_text
+    assert "Gemini Enterprise OAuth sign-in" in help_text
     assert "--dangerously-skip-permissions" in help_text
     assert "does not install persistent global AGY permission policy" in help_text
     assert "does not install or inject a separate Codex profile" in help_text
@@ -503,7 +511,7 @@ def test_bootstrap_usage_omits_retired_permission_install_flags() -> None:
     assert "TRIAD_BOOTSTRAP_INSTALL_SHELL_ENTRY" not in help_text
     assert "TRIAD_WRAPPER_HARDENED" not in help_text
     assert "TRIAD_CLAUDE_ENFORCE_SANDBOX" not in help_text
-    assert "provider launcher group" in help_text
+    assert "provider and selector launcher group" in help_text
     assert "same authenticated login terminal" in help_text
 
 
@@ -2833,16 +2841,19 @@ def test_check_warns_when_gemini_binary_is_missing(tmp_path):
     assert "optional binary not found: gemini" in result.stdout
 
 
-def test_check_rejects_gemini_without_agy_for_formal_enterprise_use(tmp_path: Path) -> None:
+def test_check_accepts_gemini_without_agy_for_formal_enterprise_use(tmp_path: Path) -> None:
     result, _env, _launchers = _run_bootstrap(
         tmp_path, fake_names=("codex", "claude", "gemini")
     )
 
-    assert result.returncode != 0
-    assert "missing formal Google reviewer: agy" in result.stderr
-    assert "Gemini Enterprise Business Sign-In is provided by agy" in result.stderr
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "agy not found" in result.stdout
+    assert "Gemini Enterprise OAuth fallback available: gemini" in result.stdout
+    assert "use the existing Gemini Enterprise OAuth sign-in" in result.stdout
+    assert "select personal Google Sign-In" not in result.stdout
 
-def test_check_requires_agy_for_both_native_authentication_classes(tmp_path: Path) -> None:
+
+def test_check_prefers_agy_and_requires_one_google_route(tmp_path: Path) -> None:
     both, _env, _launchers = _run_bootstrap(
         tmp_path, fake_names=("codex", "claude", "agy", "gemini")
     )
@@ -2851,11 +2862,10 @@ def test_check_requires_agy_for_both_native_authentication_classes(tmp_path: Pat
     )
 
     assert both.returncode == 0, both.stderr + both.stdout
-    assert "found native Google reviewer: agy" in both.stdout
-    assert "personal Google Sign-In or Gemini Enterprise Business Sign-In" in both.stdout
-    assert "fallback" not in both.stdout
+    assert "found preferred native Google reviewer: agy" in both.stdout
+    assert "Gemini Enterprise OAuth fallback" not in both.stdout
     assert neither.returncode != 0
-    assert "missing formal Google reviewer: agy" in neither.stderr
+    assert "missing formal Google reviewer: install agy or gemini" in neither.stderr
 
 
 def test_check_fails_when_required_binary_is_missing(tmp_path):
@@ -3567,6 +3577,88 @@ def test_optional_gemini_launcher_remains_pinned_and_fails_closed_when_pin_is_mi
     assert "TRIAD_REQUIRE_PINNED_VENDOR" in text
     assert 'env["TRIAD_REQUIRE_PINNED_VENDOR"] = "1"' in text
     assert 'env.pop("TRIAD_GEMINI_BIN", None)' in text
+
+
+@pytest.mark.parametrize(
+    ("installed_google", "expected_route"),
+    (("agy", "agy"), ("gemini", "gemini")),
+)
+def test_installed_selector_launcher_ignores_runtime_vendor_path_shadow(
+    tmp_path: Path,
+    installed_google: str,
+    expected_route: str,
+) -> None:
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    shutil.copy2(ROOT / "bin" / "review_round.py", repo_root / "bin" / "review_round.py")
+    provider_marker = tmp_path / "provider-started"
+    marker_command = f"touch {shlex.quote(str(provider_marker))}"
+
+    installed, install_env, launcher_dir = _run_bootstrap(
+        tmp_path,
+        repo_root=repo_root,
+        fake_names=("codex", "claude", installed_google),
+        fake_scripts={installed_google: marker_command},
+    )
+    assert installed.returncode == 0, installed.stderr + installed.stdout
+
+    trusted_text = shutil.which(installed_google, path=install_env["PATH"])
+    assert trusted_text is not None
+    trusted_google = Path(trusted_text).resolve()
+
+    shadow_parent = tmp_path / "runtime-shadow"
+    shadow_parent.mkdir()
+    shadow_bin = _fake_bin(
+        shadow_parent,
+        "agy",
+        "gemini",
+        scripts={"agy": marker_command, "gemini": marker_command},
+    )
+
+    runtime_env = dict(install_env)
+    for name in (
+        "TRIAD_REQUIRE_PINNED_VENDOR",
+        "TRIAD_AGY_BIN",
+        "TRIAD_GEMINI_BIN",
+    ):
+        runtime_env.pop(name, None)
+    runtime_env["PATH"] = os.pathsep.join(
+        (
+            str(launcher_dir),
+            str(shadow_bin),
+            str(Path(sys.executable).parent),
+            "/usr/bin",
+            "/bin",
+        )
+    )
+
+    selector_text = shutil.which("review_round.py", path=runtime_env["PATH"])
+    assert selector_text is not None
+    receipt_file = tmp_path / "google-selector.json"
+
+    selected = subprocess.run(
+        [
+            selector_text,
+            "select-google-route",
+            "--review-id",
+            "installed-selector-r1",
+            "--authentication-class",
+            "gemini-enterprise",
+            "--output",
+            str(receipt_file),
+        ],
+        cwd=tmp_path,
+        env=runtime_env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert selected.returncode == 0, selected.stderr
+    receipt = json.loads(receipt_file.read_text(encoding="ascii"))
+    assert receipt["route"] == expected_route
+    assert Path(receipt["executable"]) == trusted_google
+    assert Path(receipt["executable"]).parent != shadow_bin.resolve()
+    assert not provider_marker.exists()
 
 
 def test_install_preserves_unmanaged_codex_command_rules(tmp_path: Path) -> None:

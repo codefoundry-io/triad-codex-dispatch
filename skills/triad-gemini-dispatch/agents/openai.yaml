@@ -1,7 +1,7 @@
 interface:
   display_name: "Triad Gemini Dispatch"
   short_description: "Standalone Gemini CLI compatibility consult"
-  default_prompt: "Use $triad-gemini-dispatch for one authorized standalone Gemini CLI compatibility consult; it is not a formal Google-family review leg or fallback. State the objective, review target, approved data, exclusions, and result profile before dispatch."
+  default_prompt: "Use $triad-gemini-dispatch for one authorized standalone Gemini CLI compatibility consult; it does not lead a formal Google-family review. The cross-family review may select the packaged Gemini wrapper for Enterprise OAuth before dispatch only when AGY is absent, never after AGY has started, and carries one selector receipt through render and execution. State the objective, review target, approved data, exclusions, and result profile before dispatch."
 
 policy:
   allow_implicit_invocation: false

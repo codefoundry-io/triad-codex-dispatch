@@ -28,6 +28,7 @@ from review_round import (  # noqa: E402
     render_worktree_review_prompt,
     verify_round,
 )
+from verdict_schema import validate_verdict_file  # noqa: E402
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -58,6 +59,115 @@ def _write_source_manifest(shared: Path) -> None:
             {"path": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
         )
     manifest.write_bytes(_canonical_json_bytes(entries))
+
+
+def _fake_executable(path: Path, marker: Path | None = None) -> None:
+    marker_command = ""
+    if marker is not None:
+        marker_command = f"printf invoked > {shlex.quote(str(marker))}\n"
+    path.write_text(f"#!/bin/sh\n{marker_command}exit 91\n", encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _write_google_selector_receipt(
+    path: Path,
+    *,
+    review_id: str,
+    authentication_class: str,
+    route: str,
+    executable: Path,
+) -> dict[str, object]:
+    record = {
+        "authentication_class": authentication_class,
+        "executable": str(executable.resolve()),
+        "provider_started": False,
+        "review_id": review_id,
+        "route": route,
+        "wrapper": str(
+            (
+                BIN
+                / ("antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py")
+            ).resolve()
+        ),
+    }
+    path.write_bytes(_canonical_json_bytes(record))
+    return record
+
+
+def _write_google_preflight_receipt(
+    path: Path,
+    *,
+    selector_receipt: Path,
+    review_id: str,
+    route: str,
+    executable: Path,
+) -> None:
+    common = {
+        "executable": str(executable.resolve()),
+        "google_selector_receipt_sha256": hashlib.sha256(
+            selector_receipt.read_bytes()
+        ).hexdigest(),
+        "provider_started": False,
+        "review_id": review_id,
+        "route": route,
+    }
+    if route == "agy":
+        record = {
+            **common,
+            "agy_version": "1.1.20",
+            "effort": "high",
+            "model": "gemini-3.1-pro-high",
+            "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
+        }
+    else:
+        record = {
+            **common,
+            "effective_approval_mode": "unexposed",
+            "model": "auto",
+            "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
+            "read_only_enforcement": "packaged-mode-independent-policy",
+            "requested_approval_mode": "plan",
+        }
+    path.write_bytes(_canonical_json_bytes(record))
+
+
+def _google_selector_receipt(
+    review_id: str,
+    *,
+    route: str = "agy",
+    authentication_class: str = "personal-google",
+    executable: Path | None = None,
+) -> review_round.GooglePreflightReceipt:
+    selected_executable = (executable or Path(sys.executable)).resolve()
+    record = {
+        "authentication_class": authentication_class,
+        "executable": str(selected_executable),
+        "provider_started": False,
+        "review_id": review_id,
+        "route": route,
+        "wrapper": str(
+            (
+                BIN
+                / ("antigravity_wrapper.py" if route == "agy" else "gemini_wrapper.py")
+            ).resolve()
+        ),
+    }
+    return review_round.GooglePreflightReceipt(
+        review_id=review_id,
+        authentication_class=authentication_class,
+        route=route,
+        executable=selected_executable,
+        wrapper=Path(record["wrapper"]),
+        receipt_sha256=hashlib.sha256(_canonical_json_bytes(record)).hexdigest(),
+        preflight_receipt_sha256="b" * 64,
+        model="gemini-3.1-pro-high" if route == "agy" else "auto",
+        effort="high" if route == "agy" else None,
+        route_args=(
+            ("--model", "gemini-3.1-pro-high", "--effort", "high")
+            if route == "agy"
+            else ()
+        ),
+    )
 
 
 def _inject_leaf_symlink_swap(
@@ -213,6 +323,22 @@ def _cli_operation_args(
             str(output_dir / f"capture-{label}.json"),
         ]
     if operation == "render":
+        selector_receipt = (output_dir / f"selector-{label}.json").resolve()
+        preflight_receipt = (output_dir / f"preflight-{label}.json").resolve()
+        _write_google_selector_receipt(
+            selector_receipt,
+            review_id=review_id,
+            authentication_class="personal-google",
+            route="agy",
+            executable=Path(sys.executable),
+        )
+        _write_google_preflight_receipt(
+            preflight_receipt,
+            selector_receipt=selector_receipt,
+            review_id=review_id,
+            route="agy",
+            executable=Path(sys.executable),
+        )
         return [
             *prefix,
             "--review-id",
@@ -221,6 +347,10 @@ def _cli_operation_args(
             "formal-plan",
             "--family",
             "codex",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
             "--objective",
             "Check correctness.",
             "--prepared-dir",
@@ -2120,6 +2250,22 @@ def test_cli_lifecycle_sequence(tmp_path: Path, worktree: Path) -> None:
     assert snapshot["prepared_dir"] == str(shared)
 
     prompt_path = Path(prepared_result["prompts_dir"]) / "claude.txt"
+    selector_receipt = (tmp_path / "sequence-selector.json").resolve()
+    preflight_receipt = (tmp_path / "sequence-preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_receipt,
+        review_id="sequence",
+        authentication_class="personal-google",
+        route="agy",
+        executable=Path(sys.executable),
+    )
+    _write_google_preflight_receipt(
+        preflight_receipt,
+        selector_receipt=selector_receipt,
+        review_id="sequence",
+        route="agy",
+        executable=Path(sys.executable),
+    )
     rendered = subprocess.run(
         [
             *cli,
@@ -2130,6 +2276,10 @@ def test_cli_lifecycle_sequence(tmp_path: Path, worktree: Path) -> None:
             "formal-plan",
             "--family",
             "claude",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
             "--objective",
             "Check correctness.",
             "--prepared-dir",
@@ -2726,6 +2876,7 @@ def test_worktree_prompt_preserves_leader_authored_review_points(
             "Trace the Task 4 state transition into every unchanged consumer.",
         ),
         approved_boundary=("sanitized Argus worktree", "relevant tests"),
+        google_selector_receipt=_google_selector_receipt("argus-r1"),
     )
 
     prompt = render_worktree_review_prompt(brief)
@@ -2794,6 +2945,7 @@ def test_worktree_prompt_preserves_non_google_read_search_tools(
         criteria=("correctness",),
         review_points=("Trace the changed renderer into supported routes.",),
         approved_boundary=("sanitized worktree",),
+        google_selector_receipt=_google_selector_receipt(f"{family}-r1"),
     )
 
     prompt = render_worktree_review_prompt(brief)
@@ -2803,6 +2955,45 @@ def test_worktree_prompt_preserves_non_google_read_search_tools(
         "provider-native tools, installed CLI tools, and configured MCP tools" in prompt
     )
     assert "Never invoke run_command" not in prompt
+
+
+def test_worktree_gemini_prompt_binds_route_and_uses_native_tool_names(
+    worktree: Path,
+) -> None:
+    task = (worktree / "TASK-gemini.md").resolve()
+    status = (worktree / "STATUS-gemini.txt").resolve()
+    diff = (worktree / "REVIEW-gemini.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="gemini-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Review through the selected Gemini Enterprise OAuth route.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace the selected Google route.",),
+        approved_boundary=("sanitized worktree",),
+        google_selector_receipt=_google_selector_receipt(
+            "gemini-r1",
+            route="gemini",
+            authentication_class="gemini-enterprise",
+        ),
+    )
+
+    prompt = render_worktree_review_prompt(brief)
+    metadata = _review_metadata(prompt)
+
+    assert metadata["google_route"] == "gemini"
+    assert "use only Gemini CLI native read and search tools" in prompt
+    assert "read_file, read_many_files, list_directory, glob, and grep_search" in prompt
+    assert "Do not call enter_plan_mode or exit_plan_mode" in prompt
+    assert "AGY native" not in prompt
+    assert "AbsolutePath" not in prompt
 
 
 def test_worktree_prompt_forbids_repository_wide_path_enumeration(
@@ -2826,6 +3017,7 @@ def test_worktree_prompt_forbids_repository_wide_path_enumeration(
         criteria=("correctness",),
         review_points=("Trace the changed plan through approved source paths.",),
         approved_boundary=("src and docs only", "exclude _runs and provider logs"),
+        google_selector_receipt=_google_selector_receipt("enumeration-r1"),
     )
 
     contract = (
@@ -2864,6 +3056,7 @@ def test_worktree_prompt_does_not_promote_embedded_excluded_path_references(
         criteria=("correctness",),
         review_points=("Assess a local-state path reference without opening it.",),
         approved_boundary=("src/** and docs/**", "exclude local-state and _runs"),
+        google_selector_receipt=_google_selector_receipt("excluded-reference-r1"),
     )
 
     contract = (
@@ -2932,6 +3125,7 @@ def test_worktree_prompt_rejects_custody_outside_canonical_worktree(
         criteria=("correctness",),
         review_points=("Trace the state transition.",),
         approved_boundary=("sanitized Argus worktree",),
+        google_selector_receipt=_google_selector_receipt("argus-outside-r1"),
     )
 
     with pytest.raises(
@@ -2965,6 +3159,7 @@ def test_worktree_prompts_share_common_digest_across_families(
             criteria=("correctness",),
             review_points=("Trace the decision into unchanged consumers.",),
             approved_boundary=("sanitized Argus worktree",),
+            google_selector_receipt=_google_selector_receipt("argus-shared-r1"),
         )
         metadata_by_family[family] = _review_metadata(
             render_worktree_review_prompt(brief)
@@ -2999,6 +3194,7 @@ def test_worktree_review_digest_binds_leader_authored_review_points(
         criteria=("correctness",),
         review_points=("Trace the state transition.",),
         approved_boundary=("sanitized Argus worktree",),
+        google_selector_receipt=_google_selector_receipt("argus-points-r1"),
     )
     second = replace(first, review_points=("Trace the compatibility boundary.",))
 
@@ -3010,6 +3206,132 @@ def test_worktree_review_digest_binds_leader_authored_review_points(
     assert {
         key: value for key, value in first_metadata.items() if key not in excluded
     } == {key: value for key, value in second_metadata.items() if key not in excluded}
+
+
+def test_worktree_review_digest_binds_selected_google_route(
+    worktree: Path,
+) -> None:
+    task = (worktree / "TASK-route.md").resolve()
+    status = (worktree / "STATUS-route.txt").resolve()
+    diff = (worktree / "REVIEW-route.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    agy = WorktreeReviewBrief(
+        review_id="google-route-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Review the selected Google route.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace route custody.",),
+        approved_boundary=("sanitized worktree",),
+        google_selector_receipt=_google_selector_receipt("google-route-r1"),
+    )
+    gemini = replace(
+        agy,
+        google_selector_receipt=_google_selector_receipt(
+            "google-route-r1",
+            route="gemini",
+            authentication_class="gemini-enterprise",
+        ),
+    )
+
+    agy_metadata = _review_metadata(render_worktree_review_prompt(agy))
+    gemini_metadata = _review_metadata(render_worktree_review_prompt(gemini))
+    refreshed_preflight_metadata = _review_metadata(
+        render_worktree_review_prompt(
+            replace(
+                agy,
+                google_selector_receipt=replace(
+                    agy.google_selector_receipt,
+                    preflight_receipt_sha256="c" * 64,
+                ),
+            )
+        )
+    )
+
+    assert agy_metadata["content_digest"] != gemini_metadata["content_digest"]
+    assert (
+        agy_metadata["content_digest"] != refreshed_preflight_metadata["content_digest"]
+    )
+    assert agy_metadata["google_route"] == "agy"
+    assert gemini_metadata["google_route"] == "gemini"
+
+
+def test_worktree_review_digest_shares_frozen_google_route_across_families(
+    worktree: Path,
+) -> None:
+    task = (worktree / "TASK-route-shared.md").resolve()
+    status = (worktree / "STATUS-route-shared.txt").resolve()
+    diff = (worktree / "REVIEW-route-shared.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    base = WorktreeReviewBrief(
+        review_id="google-route-shared-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Review one route-bound round basis.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace shared route custody.",),
+        approved_boundary=("sanitized worktree",),
+        google_selector_receipt=_google_selector_receipt(
+            "google-route-shared-r1",
+            route="gemini",
+            authentication_class="gemini-enterprise",
+        ),
+    )
+
+    metadata_by_family = {
+        family: _review_metadata(
+            render_worktree_review_prompt(replace(base, family=family))
+        )
+        for family in ("claude", "google", "codex")
+    }
+
+    assert {metadata["content_digest"] for metadata in metadata_by_family.values()} == {
+        metadata_by_family["google"]["content_digest"]
+    }
+    assert {metadata["google_route"] for metadata in metadata_by_family.values()} == {
+        "gemini"
+    }
+
+
+def test_worktree_review_rejects_missing_selected_google_route(
+    worktree: Path,
+) -> None:
+    task = (worktree / "TASK-route-required.md").resolve()
+    status = (worktree / "STATUS-route-required.txt").resolve()
+    diff = (worktree / "REVIEW-route-required.diff").resolve()
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+    brief = WorktreeReviewBrief(
+        review_id="google-route-required-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Reject a route-less formal review basis.",
+        worktree=worktree,
+        worktree_fingerprint=review_round._worktree_fingerprint(worktree),
+        task_file=task,
+        status_file=status,
+        diff_file=diff,
+        criteria=("correctness",),
+        review_points=("Trace route custody.",),
+        approved_boundary=("sanitized worktree",),
+    )
+
+    with pytest.raises(
+        RoundIntegrityError, match="Google selector receipt is required"
+    ):
+        render_worktree_review_prompt(brief)
 
 
 def test_worktree_prompt_uses_captured_fingerprint_without_rehashing(
@@ -3034,6 +3356,7 @@ def test_worktree_prompt_uses_captured_fingerprint_without_rehashing(
         criteria=("correctness",),
         review_points=("Trace the state transition.",),
         approved_boundary=("sanitized Argus worktree",),
+        google_selector_receipt=_google_selector_receipt("argus-captured-r1"),
     )
 
     def unexpected_rehash(_worktree: Path) -> str:
@@ -3057,6 +3380,7 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
         content_digest=digest,
         criteria=("correctness", "compatibility"),
         approved_boundary=("src/source.py", "REVIEW.diff"),
+        google_selector_receipt=_google_selector_receipt("review-r1"),
     )
     prompt = render_review_prompt(brief)
     metadata = _review_metadata(prompt)
@@ -3070,7 +3394,8 @@ def test_rendered_prompt_binds_focused_round_once(prepared):
     )
     assert metadata["family"] == "google"
     assert metadata["review_id"] == "review-r1"
-    assert metadata["content_digest"] == digest
+    assert metadata["prepared_digest"] == digest
+    assert metadata["content_digest"] != digest
     assert "metadata.family, and metadata.content_digest" in prompt
     for field in (
         '"review_id"',
@@ -3127,6 +3452,7 @@ def test_rendered_prompt_distinguishes_nonblocking_suggestions(prepared):
         content_digest=_prepared_digest(prepared),
         criteria=("correctness",),
         approved_boundary=("src/source.py",),
+        google_selector_receipt=_google_selector_receipt("suggestion-r1"),
     )
 
     prompt = render_review_prompt(brief)
@@ -3168,6 +3494,7 @@ def test_review_prompts_and_reference_share_reviewer_context_contract(
         content_digest=_prepared_digest(prepared),
         criteria=("correctness",),
         approved_boundary=("src/source.py",),
+        google_selector_receipt=_google_selector_receipt("context-contract-r1"),
     )
     task = (worktree / "TASK.md").resolve()
     status = (worktree / "STATUS.txt").resolve()
@@ -3188,6 +3515,9 @@ def test_review_prompts_and_reference_share_reviewer_context_contract(
         criteria=("correctness",),
         review_points=("Check the declared trust boundary.",),
         approved_boundary=("sanitized worktree",),
+        google_selector_receipt=_google_selector_receipt(
+            "context-contract-worktree-r1"
+        ),
     )
 
     prepared_prompt_raw = render_review_prompt(prepared_brief)
@@ -3233,6 +3563,7 @@ def test_review_prompts_require_character_exact_metadata_copy(
         content_digest=_prepared_digest(prepared),
         criteria=("correctness",),
         approved_boundary=("src/source.py",),
+        google_selector_receipt=_google_selector_receipt("metadata-copy-r1"),
     )
     task = (worktree / "TASK.md").resolve()
     status = (worktree / "STATUS.txt").resolve()
@@ -3253,6 +3584,7 @@ def test_review_prompts_require_character_exact_metadata_copy(
         criteria=("correctness",),
         review_points=("Check the bound result envelope.",),
         approved_boundary=("sanitized worktree",),
+        google_selector_receipt=_google_selector_receipt("metadata-copy-worktree-r1"),
     )
 
     assert expected in render_review_prompt(prepared_brief)
@@ -3275,6 +3607,7 @@ def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):
         content_digest=_prepared_digest(prepared),
         criteria=("correctness",),
         approved_boundary=("src/source.py",),
+        google_selector_receipt=_google_selector_receipt("omitted-surface-r1"),
     )
 
     prompt = render_review_prompt(brief)
@@ -3320,14 +3653,23 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
             f"boundary-one<{special}>",
             f"boundary-two<{special}>",
         ),
+        google_selector_receipt=_google_selector_receipt("metadata-r1"),
     )
+    prepared_digest = brief.content_digest
+    selector_receipt = brief.google_selector_receipt
+    assert selector_receipt is not None
     expected_metadata = {
         "approved_boundary": list(brief.approved_boundary),
-        "content_digest": brief.content_digest,
+        "content_digest": review_round._prepared_review_digest(
+            prepared_digest, selector_receipt
+        ),
         "criteria": list(brief.criteria),
         "family": brief.family,
+        **review_round._google_selector_metadata(selector_receipt),
+        **review_round._google_preflight_metadata(selector_receipt),
         "objective": brief.objective,
         "prepared_directory": str(brief.prepared_dir),
+        "prepared_digest": prepared_digest,
         "review_id": brief.review_id,
         "review_kind": brief.review_kind,
     }
@@ -3391,6 +3733,7 @@ def test_rendered_codex_prompt_preserves_available_read_search_tools(prepared):
         content_digest=_prepared_digest(prepared),
         criteria=("correctness", "completeness"),
         approved_boundary=("all prepared files",),
+        google_selector_receipt=_google_selector_receipt("review-r1"),
     )
 
     prompt = render_review_prompt(brief)
@@ -3415,6 +3758,7 @@ def test_rendered_claude_prompt_preserves_all_read_search_tools(prepared):
         content_digest=_prepared_digest(prepared),
         criteria=("correctness", "completeness"),
         approved_boundary=("all prepared files",),
+        google_selector_receipt=_google_selector_receipt("review-r1"),
     )
 
     prompt = render_review_prompt(brief)
@@ -3447,6 +3791,7 @@ def test_rendered_google_prompt_forbids_command_tools_and_experiments(prepared):
         content_digest=_prepared_digest(prepared),
         criteria=("correctness", "completeness"),
         approved_boundary=("all prepared files",),
+        google_selector_receipt=_google_selector_receipt("review-r1"),
     )
 
     prompt = render_review_prompt(brief)
@@ -3478,6 +3823,474 @@ def test_rendered_google_prompt_forbids_command_tools_and_experiments(prepared):
         "provider-native tools, installed CLI tools, and configured MCP tools"
         not in prompt
     )
+
+
+def test_rendered_gemini_google_prompt_uses_route_specific_read_only_contract(
+    prepared,
+) -> None:
+    brief = ReviewBrief(
+        review_id="review-r1",
+        review_kind="formal-plan",
+        family="google",
+        objective="Check plan completeness.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness", "completeness"),
+        approved_boundary=("all prepared files",),
+        google_selector_receipt=_google_selector_receipt(
+            "review-r1",
+            route="gemini",
+            authentication_class="gemini-enterprise",
+        ),
+    )
+
+    prompt = render_review_prompt(brief)
+    metadata = _review_metadata(prompt)
+
+    assert metadata["google_route"] == "gemini"
+    assert "use only Gemini CLI native read and search tools" in prompt
+    assert "read_file, read_many_files, list_directory, glob, and grep_search" in prompt
+    assert "Do not call enter_plan_mode or exit_plan_mode" in prompt
+    assert "per-call user-tier policy denies every non-read/search tool" in prompt
+    assert "AGY native" not in prompt
+    assert "settings transaction" not in prompt
+    assert "AbsolutePath" not in prompt
+
+
+def test_prepared_review_digest_binds_required_route_across_families(
+    prepared: Path,
+) -> None:
+    prepared_digest = _prepared_digest(prepared)
+    base = ReviewBrief(
+        review_id="prepared-route-r1",
+        review_kind="pre-merge",
+        family="claude",
+        objective="Bind one selected route into the prepared review basis.",
+        prepared_dir=prepared,
+        content_digest=prepared_digest,
+        criteria=("correctness",),
+        approved_boundary=("all prepared files",),
+        google_selector_receipt=_google_selector_receipt("prepared-route-r1"),
+    )
+
+    agy_metadata = _review_metadata(render_review_prompt(base))
+    gemini_metadata = _review_metadata(
+        render_review_prompt(
+            replace(
+                base,
+                google_selector_receipt=_google_selector_receipt(
+                    "prepared-route-r1",
+                    route="gemini",
+                    authentication_class="gemini-enterprise",
+                ),
+            )
+        )
+    )
+    refreshed_preflight_metadata = _review_metadata(
+        render_review_prompt(
+            replace(
+                base,
+                google_selector_receipt=replace(
+                    base.google_selector_receipt,
+                    preflight_receipt_sha256="c" * 64,
+                ),
+            )
+        )
+    )
+    metadata_by_family = {
+        family: _review_metadata(render_review_prompt(replace(base, family=family)))
+        for family in ("claude", "google", "codex")
+    }
+
+    assert agy_metadata["content_digest"] != gemini_metadata["content_digest"]
+    assert (
+        agy_metadata["content_digest"] != refreshed_preflight_metadata["content_digest"]
+    )
+    assert {metadata["content_digest"] for metadata in metadata_by_family.values()} == {
+        agy_metadata["content_digest"]
+    }
+    assert {
+        metadata["prepared_digest"] for metadata in metadata_by_family.values()
+    } == {prepared_digest}
+    with pytest.raises(
+        RoundIntegrityError, match="Google selector receipt is required"
+    ):
+        render_review_prompt(replace(base, google_selector_receipt=None))
+
+
+def test_prepared_wrong_route_result_replay_is_rejected(
+    prepared: Path, tmp_path: Path
+) -> None:
+    base = ReviewBrief(
+        review_id="prepared-route-replay-r1",
+        review_kind="pre-merge",
+        family="codex",
+        objective="Reject a verdict from another selected route.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("all prepared files",),
+        google_selector_receipt=_google_selector_receipt("prepared-route-replay-r1"),
+    )
+    agy_digest = _review_metadata(render_review_prompt(base))["content_digest"]
+    gemini_digest = _review_metadata(
+        render_review_prompt(
+            replace(
+                base,
+                google_selector_receipt=_google_selector_receipt(
+                    "prepared-route-replay-r1",
+                    route="gemini",
+                    authentication_class="gemini-enterprise",
+                ),
+            )
+        )
+    )["content_digest"]
+    result_file = (tmp_path / "agy-result.json").resolve()
+    result_file.write_bytes(
+        _canonical_json_bytes(
+            {
+                "review_id": base.review_id,
+                "family": base.family,
+                "content_digest": agy_digest,
+                "verdict": "SAFE",
+                "criteria_checked": ["correctness"],
+                "findings": [],
+                "affected_surfaces_inspected": ["source/product/source.py"],
+                "open_questions": [],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="content digest mismatch"):
+        validate_verdict_file(
+            result_file,
+            base.review_id,
+            base.family,
+            gemini_digest,
+        )
+
+
+def test_cli_render_requires_selected_google_route_before_output(
+    prepared: Path, tmp_path: Path
+) -> None:
+    output = tmp_path / "route-less-prompt.txt"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            "route-less-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "google",
+            "--objective",
+            "Reject a route-less provider prompt.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            _prepared_digest(prepared),
+            "--criterion",
+            "correctness",
+            "--approved-boundary",
+            "prepared source",
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "--google-selector-receipt" in completed.stderr
+    assert not output.exists()
+
+
+def test_cli_render_accepts_and_binds_selected_google_route(
+    prepared: Path, tmp_path: Path
+) -> None:
+    output = tmp_path / "gemini-prompt.txt"
+    selector_receipt = (tmp_path / "gemini-selector.json").resolve()
+    preflight_receipt = (tmp_path / "gemini-preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_receipt,
+        review_id="review-r1",
+        authentication_class="gemini-enterprise",
+        route="gemini",
+        executable=Path(sys.executable),
+    )
+    _write_google_preflight_receipt(
+        preflight_receipt,
+        selector_receipt=selector_receipt,
+        review_id="review-r1",
+        route="gemini",
+        executable=Path(sys.executable),
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            "review-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "google",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--objective",
+            "Review through Gemini Enterprise OAuth.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            _prepared_digest(prepared),
+            "--criterion",
+            "correctness",
+            "--approved-boundary",
+            "prepared source",
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert (
+        _review_metadata(output.read_text(encoding="utf-8"))["google_route"] == "gemini"
+    )
+
+
+def test_cli_render_rejects_selector_not_bound_to_preflight_receipt(
+    prepared: Path, tmp_path: Path
+) -> None:
+    output = tmp_path / "mismatched-prompt.txt"
+    selected_a = tmp_path / "gemini-a"
+    selected_b = tmp_path / "gemini-b"
+    _fake_executable(selected_a)
+    _fake_executable(selected_b)
+    selector_a = (tmp_path / "selector-a.json").resolve()
+    selector_b = (tmp_path / "selector-b.json").resolve()
+    preflight = (tmp_path / "preflight-a.json").resolve()
+    _write_google_selector_receipt(
+        selector_a,
+        review_id="review-r1",
+        authentication_class="gemini-enterprise",
+        route="gemini",
+        executable=selected_a,
+    )
+    _write_google_selector_receipt(
+        selector_b,
+        review_id="review-r1",
+        authentication_class="gemini-enterprise",
+        route="gemini",
+        executable=selected_b,
+    )
+    _write_google_preflight_receipt(
+        preflight,
+        selector_receipt=selector_a,
+        review_id="review-r1",
+        route="gemini",
+        executable=selected_a,
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            "review-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "google",
+            "--google-selector-receipt",
+            str(selector_b),
+            "--google-preflight-receipt",
+            str(preflight),
+            "--objective",
+            "Reject a selector that was not preflighted.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            _prepared_digest(prepared),
+            "--criterion",
+            "correctness",
+            "--approved-boundary",
+            "prepared source",
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "Google preflight receipt selector mismatch" in completed.stderr
+    assert not output.exists()
+
+
+def test_google_gemini_preflight_receipt_requires_truthful_mode_fields(
+    tmp_path: Path,
+) -> None:
+    selected = Path(sys.executable).resolve()
+    selector_path = (tmp_path / "selector.json").resolve()
+    preflight_path = (tmp_path / "preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_path,
+        review_id="review-r1",
+        authentication_class="gemini-enterprise",
+        route="gemini",
+        executable=selected,
+    )
+    selector = review_round.load_google_selector_receipt(
+        selector_path,
+        expected_review_id="review-r1",
+        expected_route="gemini",
+    )
+    common = {
+        "executable": str(selected),
+        "google_selector_receipt_sha256": selector.receipt_sha256,
+        "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
+        "provider_started": False,
+        "review_id": "review-r1",
+        "route": "gemini",
+    }
+    preflight_path.write_bytes(
+        _canonical_json_bytes({**common, "approval_mode": "plan"})
+    )
+
+    with pytest.raises(RoundIntegrityError, match="invalid canonical schema"):
+        review_round.validate_google_preflight_receipt(
+            preflight_path,
+            selector,
+            expected_review_id="review-r1",
+        )
+
+    preflight_path.write_bytes(
+        _canonical_json_bytes(
+            {
+                **common,
+                "effective_approval_mode": "unexposed",
+                "model": "auto",
+                "read_only_enforcement": "packaged-mode-independent-policy",
+                "requested_approval_mode": "plan",
+            }
+        )
+    )
+    review_round.validate_google_preflight_receipt(
+        preflight_path,
+        selector,
+        expected_review_id="review-r1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("model", "gemini-3.1-pro-low"),
+        ("effort", "medium"),
+        ("route_args", ["--effort", "high", "--model", "gemini-3.1-pro-high"]),
+    ],
+)
+def test_google_agy_preflight_receipt_requires_the_exact_formal_route(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    selected = Path(sys.executable).resolve()
+    selector_path = (tmp_path / "selector.json").resolve()
+    preflight_path = (tmp_path / "preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_path,
+        review_id="review-r1",
+        authentication_class="personal-google",
+        route="agy",
+        executable=selected,
+    )
+    selector = review_round.load_google_selector_receipt(
+        selector_path,
+        expected_review_id="review-r1",
+        expected_route="agy",
+    )
+    _write_google_preflight_receipt(
+        preflight_path,
+        selector_receipt=selector_path,
+        review_id="review-r1",
+        route="agy",
+        executable=selected,
+    )
+    record = json.loads(preflight_path.read_text(encoding="ascii"))
+    record[field] = value
+    preflight_path.write_bytes(_canonical_json_bytes(record))
+
+    with pytest.raises(RoundIntegrityError, match="AGY preflight fields are invalid"):
+        review_round.validate_google_preflight_receipt(
+            preflight_path,
+            selector,
+            expected_review_id="review-r1",
+        )
+
+
+def test_google_preflight_receipt_is_bound_into_the_prepared_prompt_digest(
+    prepared: Path,
+    tmp_path: Path,
+) -> None:
+    selected = Path(sys.executable).resolve()
+    selector_path = (tmp_path / "selector.json").resolve()
+    preflight_path = (tmp_path / "preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_path,
+        review_id="review-r1",
+        authentication_class="personal-google",
+        route="agy",
+        executable=selected,
+    )
+    selector = review_round.load_google_selector_receipt(
+        selector_path,
+        expected_review_id="review-r1",
+        expected_route="agy",
+    )
+    _write_google_preflight_receipt(
+        preflight_path,
+        selector_receipt=selector_path,
+        review_id="review-r1",
+        route="agy",
+        executable=selected,
+    )
+    bound_receipt = review_round.validate_google_preflight_receipt(
+        preflight_path,
+        selector,
+        expected_review_id="review-r1",
+    )
+    brief = ReviewBrief(
+        review_id="review-r1",
+        review_kind="pre-merge",
+        family="google",
+        objective="Bind the selected AGY preflight into every family prompt.",
+        prepared_dir=prepared,
+        content_digest=_prepared_digest(prepared),
+        criteria=("correctness",),
+        approved_boundary=("all prepared files",),
+        google_selector_receipt=bound_receipt,
+    )
+
+    metadata = _review_metadata(render_review_prompt(brief))
+
+    assert (
+        metadata["google_preflight_receipt_sha256"]
+        == hashlib.sha256(preflight_path.read_bytes()).hexdigest()
+    )
+    assert metadata["google_preflight_model"] == "gemini-3.1-pro-high"
+    assert metadata["google_preflight_effort"] == "high"
 
 
 def test_render_rejects_digest_not_bound_to_prepared_bytes(prepared):
@@ -3582,6 +4395,22 @@ def test_cli_capture_and_verify(prepared, worktree, tmp_path):
 
 def test_cli_renders_family_bound_prompt(prepared, tmp_path):
     prompt_file = (tmp_path / "prompt.txt").resolve()
+    selector_receipt = (tmp_path / "family-selector.json").resolve()
+    preflight_receipt = (tmp_path / "family-preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_receipt,
+        review_id="review-r1",
+        authentication_class="personal-google",
+        route="agy",
+        executable=Path(sys.executable),
+    )
+    _write_google_preflight_receipt(
+        preflight_receipt,
+        selector_receipt=selector_receipt,
+        review_id="review-r1",
+        route="agy",
+        executable=Path(sys.executable),
+    )
     rendered = subprocess.run(
         [
             sys.executable,
@@ -3593,6 +4422,10 @@ def test_cli_renders_family_bound_prompt(prepared, tmp_path):
             "pre-merge",
             "--family",
             "claude",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
             "--objective",
             "Check compatibility.",
             "--prepared-dir",
@@ -3625,6 +4458,22 @@ def test_cli_renders_leader_authored_worktree_prompt(
     status = (worktree / "STATUS.txt").resolve()
     diff = (worktree / "REVIEW.diff").resolve()
     prompt_file = (tmp_path / "worktree-prompt.txt").resolve()
+    selector_receipt = (tmp_path / "worktree-selector.json").resolve()
+    preflight_receipt = (tmp_path / "worktree-preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_receipt,
+        review_id="argus-cli-r1",
+        authentication_class="personal-google",
+        route="agy",
+        executable=Path(sys.executable),
+    )
+    _write_google_preflight_receipt(
+        preflight_receipt,
+        selector_receipt=selector_receipt,
+        review_id="argus-cli-r1",
+        route="agy",
+        executable=Path(sys.executable),
+    )
     for path in (task, status, diff):
         path.write_text(f"{path.name}\n", encoding="utf-8")
 
@@ -3639,6 +4488,10 @@ def test_cli_renders_leader_authored_worktree_prompt(
             "pre-merge",
             "--family",
             "codex",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
             "--objective",
             "Review the current Task 4 decision.",
             "--worktree",
@@ -3674,6 +4527,78 @@ def test_cli_renders_leader_authored_worktree_prompt(
     assert metadata["content_digest"] == metadata["worktree_review_digest"]
 
 
+def test_cli_render_worktree_rejects_output_inside_canonical_worktree(
+    worktree: Path, tmp_path: Path
+) -> None:
+    task = (worktree / "TASK.md").resolve()
+    status = (worktree / "STATUS.txt").resolve()
+    diff = (worktree / "REVIEW.diff").resolve()
+    prompt_file = (worktree / "worktree-prompt.txt").resolve()
+    selector_receipt = (tmp_path / "worktree-selector.json").resolve()
+    preflight_receipt = (tmp_path / "worktree-preflight.json").resolve()
+    _write_google_selector_receipt(
+        selector_receipt,
+        review_id="argus-cli-output-r1",
+        authentication_class="personal-google",
+        route="agy",
+        executable=Path(sys.executable),
+    )
+    _write_google_preflight_receipt(
+        preflight_receipt,
+        selector_receipt=selector_receipt,
+        review_id="argus-cli-output-r1",
+        route="agy",
+        executable=Path(sys.executable),
+    )
+    for path in (task, status, diff):
+        path.write_text(f"{path.name}\n", encoding="utf-8")
+
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render-worktree",
+            "--review-id",
+            "argus-cli-output-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "codex",
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--objective",
+            "Review the current Task 4 decision.",
+            "--worktree",
+            str(worktree),
+            "--worktree-fingerprint",
+            review_round._worktree_fingerprint(worktree),
+            "--task-file",
+            str(task),
+            "--status-file",
+            str(status),
+            "--diff-file",
+            str(diff),
+            "--criterion",
+            "correctness",
+            "--review-point",
+            "Trace the state transition into unchanged consumers.",
+            "--approved-boundary",
+            "sanitized Argus worktree",
+            "--output",
+            str(prompt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 2
+    assert "output must be outside the canonical worktree" in rendered.stderr
+    assert not prompt_file.exists()
+
+
 def test_cli_prints_one_worktree_fingerprint(worktree: Path) -> None:
     completed = subprocess.run(
         [
@@ -3690,6 +4615,392 @@ def test_cli_prints_one_worktree_fingerprint(worktree: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == review_round._worktree_fingerprint(worktree)
+
+
+def test_cli_select_google_route_exclusive_creates_canonical_receipt(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    provider_marker = tmp_path / "provider-started"
+    _fake_executable(fake_bin / "agy", provider_marker)
+    receipt_file = (tmp_path / "google-selector.json").resolve()
+    env = dict(os.environ, PATH=str(fake_bin))
+    command = [
+        sys.executable,
+        str(BIN / "review_round.py"),
+        "select-google-route",
+        "--review-id",
+        "selector-r1",
+        "--authentication-class",
+        "personal-google",
+        "--output",
+        str(receipt_file),
+    ]
+
+    selected = subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert selected.returncode == 0, selected.stderr
+    assert selected.stdout.strip() == str(receipt_file)
+    receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+    assert receipt_file.read_bytes() == _canonical_json_bytes(receipt)
+    assert receipt == {
+        "authentication_class": "personal-google",
+        "executable": str((fake_bin / "agy").resolve()),
+        "provider_started": False,
+        "review_id": "selector-r1",
+        "route": "agy",
+        "wrapper": str((BIN / "antigravity_wrapper.py").resolve()),
+    }
+    assert not provider_marker.exists()
+
+    original = receipt_file.read_bytes()
+    repeated = subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    assert repeated.returncode == 2
+    assert receipt_file.read_bytes() == original
+    assert not provider_marker.exists()
+
+
+def test_cli_render_derives_shared_basis_from_exact_selector_receipt(
+    prepared: Path, tmp_path: Path
+) -> None:
+    first_agy = tmp_path / "first" / "agy"
+    second_agy = tmp_path / "second" / "agy"
+    for executable in (first_agy, second_agy):
+        executable.parent.mkdir()
+        _fake_executable(executable)
+    receipts = []
+    for label, authentication_class, executable in (
+        ("personal", "personal-google", first_agy),
+        ("enterprise", "gemini-enterprise", second_agy),
+    ):
+        receipt_path = (tmp_path / f"{label}-selector.json").resolve()
+        record = _write_google_selector_receipt(
+            receipt_path,
+            review_id="receipt-bound-r1",
+            authentication_class=authentication_class,
+            route="agy",
+            executable=executable,
+        )
+        preflight_path = (tmp_path / f"{label}-preflight.json").resolve()
+        _write_google_preflight_receipt(
+            preflight_path,
+            selector_receipt=receipt_path,
+            review_id="receipt-bound-r1",
+            route="agy",
+            executable=executable,
+        )
+        receipts.append((receipt_path, preflight_path, record))
+
+    digests_by_receipt: list[set[str]] = []
+    for receipt_index, (receipt_path, preflight_path, record) in enumerate(receipts):
+        family_digests: set[str] = set()
+        for family in ("claude", "google", "codex"):
+            output = (tmp_path / f"prompt-{receipt_index}-{family}.txt").resolve()
+            rendered = subprocess.run(
+                [
+                    sys.executable,
+                    str(BIN / "review_round.py"),
+                    "render",
+                    "--review-id",
+                    "receipt-bound-r1",
+                    "--review-kind",
+                    "pre-merge",
+                    "--family",
+                    family,
+                    "--google-selector-receipt",
+                    str(receipt_path),
+                    "--google-preflight-receipt",
+                    str(preflight_path),
+                    "--objective",
+                    "Review one selector-bound basis.",
+                    "--prepared-dir",
+                    str(prepared),
+                    "--content-digest",
+                    _prepared_digest(prepared),
+                    "--criterion",
+                    "correctness",
+                    "--approved-boundary",
+                    "prepared source",
+                    "--output",
+                    str(output),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert rendered.returncode == 0, rendered.stderr
+            metadata = _review_metadata(output.read_text(encoding="utf-8"))
+            assert (
+                metadata["google_authentication_class"]
+                == record["authentication_class"]
+            )
+            assert metadata["google_route"] == record["route"]
+            assert metadata["google_executable"] == record["executable"]
+            assert metadata["google_wrapper"] == record["wrapper"]
+            assert (
+                metadata["google_selector_receipt_sha256"]
+                == hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+            )
+            family_digests.add(metadata["content_digest"])
+        assert len(family_digests) == 1
+        digests_by_receipt.append(family_digests)
+
+    assert digests_by_receipt[0] != digests_by_receipt[1]
+
+
+def test_cli_render_rejects_free_google_route_for_admissible_prompt(
+    prepared: Path, tmp_path: Path
+) -> None:
+    output = (tmp_path / "free-route-prompt.txt").resolve()
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            "free-route-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "google",
+            "--google-route",
+            "gemini",
+            "--objective",
+            "Reject a route not derived from the selector receipt.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            _prepared_digest(prepared),
+            "--criterion",
+            "correctness",
+            "--approved-boundary",
+            "prepared source",
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 2
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("foreign_round", (True, False))
+def test_cli_render_rejects_foreign_or_noncanonical_selector_receipt(
+    prepared: Path, tmp_path: Path, foreign_round: bool
+) -> None:
+    receipt_path = (tmp_path / "invalid-selector.json").resolve()
+    record = _write_google_selector_receipt(
+        receipt_path,
+        review_id="other-r1" if foreign_round else "current-r1",
+        authentication_class="personal-google",
+        route="agy",
+        executable=Path(sys.executable),
+    )
+    if not foreign_round:
+        receipt_path.write_text(json.dumps(record, indent=2), encoding="ascii")
+    output = (tmp_path / "invalid-selector-prompt.txt").resolve()
+
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "render",
+            "--review-id",
+            "current-r1",
+            "--review-kind",
+            "pre-merge",
+            "--family",
+            "google",
+            "--google-selector-receipt",
+            str(receipt_path),
+            "--objective",
+            "Reject substituted selector evidence.",
+            "--prepared-dir",
+            str(prepared),
+            "--content-digest",
+            _prepared_digest(prepared),
+            "--criterion",
+            "correctness",
+            "--approved-boundary",
+            "prepared source",
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert rendered.returncode == 2
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    ("authentication_class", "binaries", "expected_route"),
+    (
+        ("gemini-enterprise", ("agy", "gemini"), "agy"),
+        ("gemini-enterprise", ("gemini",), "gemini"),
+        ("personal-google", ("agy", "gemini"), "agy"),
+    ),
+)
+def test_cli_selects_google_route_without_starting_provider(
+    tmp_path: Path,
+    authentication_class: str,
+    binaries: tuple[str, ...],
+    expected_route: str,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    provider_marker = tmp_path / "provider-started"
+    for name in binaries:
+        _fake_executable(fake_bin / name, provider_marker)
+    env = dict(os.environ, PATH=str(fake_bin))
+    receipt_file = (tmp_path / "selected-google.json").resolve()
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "select-google-route",
+            "--review-id",
+            "selection-r1",
+            "--authentication-class",
+            authentication_class,
+            "--output",
+            str(receipt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == str(receipt_file)
+    receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+    assert receipt["review_id"] == "selection-r1"
+    assert receipt["provider_started"] is False
+    assert receipt["authentication_class"] == authentication_class
+    assert receipt["route"] == expected_route
+    assert Path(receipt["executable"]) == fake_bin / expected_route
+    assert Path(receipt["wrapper"]) == BIN / (
+        "antigravity_wrapper.py" if expected_route == "agy" else "gemini_wrapper.py"
+    )
+    assert not provider_marker.exists()
+
+
+def test_cli_google_route_selector_honors_pinned_vendor_policy(
+    tmp_path: Path,
+) -> None:
+    shadow_bin = tmp_path / "shadow"
+    pinned_bin = tmp_path / "pinned"
+    shadow_bin.mkdir()
+    pinned_bin.mkdir()
+    provider_marker = tmp_path / "provider-started"
+    for executable in (
+        shadow_bin / "agy",
+        shadow_bin / "gemini",
+        pinned_bin / "gemini",
+    ):
+        _fake_executable(executable, provider_marker)
+    receipt_file = (tmp_path / "pinned-google.json").resolve()
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in {"TRIAD_AGY_BIN", "TRIAD_GEMINI_BIN"}
+    }
+    env.update(
+        {
+            "PATH": str(shadow_bin),
+            "TRIAD_REQUIRE_PINNED_VENDOR": "1",
+            "TRIAD_GEMINI_BIN": str((pinned_bin / "gemini").resolve()),
+        }
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "select-google-route",
+            "--review-id",
+            "pinned-selection-r1",
+            "--authentication-class",
+            "gemini-enterprise",
+            "--output",
+            str(receipt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+    assert receipt["route"] == "gemini"
+    assert Path(receipt["executable"]) == (pinned_bin / "gemini").resolve()
+    assert not provider_marker.exists()
+
+
+@pytest.mark.parametrize(
+    ("authentication_class", "binaries", "message"),
+    (
+        ("personal-google", ("gemini",), "personal Google Sign-In requires agy"),
+        ("gemini-enterprise", (), "no eligible Google reviewer executable"),
+    ),
+)
+def test_cli_google_route_selection_fails_before_provider_when_unavailable(
+    tmp_path: Path,
+    authentication_class: str,
+    binaries: tuple[str, ...],
+    message: str,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    provider_marker = tmp_path / "provider-started"
+    for name in binaries:
+        _fake_executable(fake_bin / name, provider_marker)
+    env = dict(os.environ, PATH=str(fake_bin))
+    receipt_file = (tmp_path / "unavailable-google.json").resolve()
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BIN / "review_round.py"),
+            "select-google-route",
+            "--review-id",
+            "selection-r1",
+            "--authentication-class",
+            authentication_class,
+            "--output",
+            str(receipt_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert completed.returncode == 2
+    assert message in completed.stderr
+    assert not receipt_file.exists()
+    assert not provider_marker.exists()
 
 
 @pytest.mark.parametrize("operation", ("capture", "render", "verify"))

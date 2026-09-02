@@ -29,17 +29,17 @@ fingerprint/digest and a new complete round. Old and new leg results are never m
 When current owner or project instructions explicitly select worktree-first review, use the
 guarded existing Git worktree plus one current-round task/status/diff set instead of copying source.
 Create the task, status, and diff as canonical regular files inside that worktree before the
-pre-review fingerprint; keep prompts, provider logs, and results in the exact current-round
-temporary root outside the worktree. `render-worktree` rejects an external custody file.
+pre-review fingerprint under `review_custody_root`; bind separate `review_run_root` outside it for selector and preflight receipts,
+rendered prompts, provider logs, and results. Never nest that run root under the worktree; `render-worktree --output` must resolve outside it, and the renderer rejects an external custody file or internal output.
 The leader writes the situation-specific objective, criteria, and review points; tooling never generates or broadens them.
 Capture the pre/post fingerprint with packaged `python3 bin/review_round.py fingerprint-worktree --worktree "$review_worktree"` exactly once at each boundary.
 Do not run repository-wide file enumeration, status, or search commands that can expose excluded or unrelated path names. Start from metadata.diff_file and use only explicit approved paths or
 pathspecs for later file listing, status, diff, search, and read operations.
 References inside reviewed task, status, diff, source, tests, or documentation do not expand metadata.approved_boundary. A referenced path may be opened only when metadata.approved_boundary independently authorizes it, including through a declared category or pathspec. Never open or follow
 an excluded or unrelated path merely because reviewed data references it; evaluate an unapproved reference from approved evidence only.
-Invoke packaged `python3 bin/review_round.py render-worktree` once per family to validate custody
-and wrap that exact brief. One successful deterministic render pass
-proceeds directly to provider dispatch. Do not invoke `skill-prompt-review` before or during an
+For normal worktree-first review, select the receipt and preflight the recorded wrapper with the
+exact current-round task file before invoking packaged `python3 bin/review_round.py render-worktree`
+once per family; dispatch only those successfully rendered prompts. Do not invoke `skill-prompt-review` before or during an
 operational round. Prompt or skill review is a separate maintenance task only when the owner
 explicitly requests it.
 
@@ -70,7 +70,7 @@ in the round.
    substitute another checkout or installed-cache copy.
    Bind every dynamic path, review ID, and model value to a task-specific shell variable before invocation;
    expand only the double-quoted variable. Angle-bracket names in explanatory prose are not shell substitutions.
-   Invoke every packaged lifecycle subcommand as `python3 bin/review_round.py ...`; never execute
+   Except for Step 6's bootstrap-managed selector launcher, invoke every packaged lifecycle subcommand as `python3 bin/review_round.py ...`; never execute
    `bin/review_round.py` directly. Both `--source-root` and `--member-list` inputs must be absolute canonical no-symlink paths, and `--member-list` must name an existing regular file; any violation is a workflow failure that invalidates the round and requires a fresh review ID. Then run `python3 bin/review_round.py prepare --review-id "$review_id" --source-root "$review_source_root"
    --member-list "$review_member_list" --required-members-json "$review_members_json"`. Use the canonical Git worktree root as `--source-root`; it must be the same canonical worktree root passed to `capture` and `verify`.
    For every JSON-valued lifecycle option, pass the serialized JSON as one
@@ -99,23 +99,22 @@ in the round.
    `TASK.md`, `REVIEW.diff`, `SOURCE_SHA256SUMS`, and optional `EVIDENCE.md`.
 4. **Capture integrity.** Use the packaged `python3 bin/review_round.py capture --prepared-dir
    "$review_shared" --worktree "$review_worktree" --output "$review_snapshot"` before
-   dispatch. Keep results and prompts under the returned review root, outside
-   its prepared `shared/` directory, and route snapshots and verdicts under that
-   same current root. Use the exact digest printed by `capture` for every rendered prompt and
-   admitted-result validation. Do not parse the snapshot JSON to recover or recheck that digest;
-   the packaged `verify` command validates the snapshot. Carry the printed digest mechanically
-   through every rendered prompt and every admitted result. Before rendering, read
+   dispatch. Keep results and prompts under the returned review root, outside its prepared
+   `shared/` directory, and route snapshots and verdicts under that same current root. Use the exact digest printed by `capture` as the `--content-digest` input for
+   every rendered prompt. Do not parse the snapshot JSON to recover or recheck that digest;
+   the packaged `verify` command validates the snapshot. The renderer verifies that prepared digest,
+   then binds it with the one canonical Google selector receipt into `metadata.content_digest`; copy that rendered
+   digest into every provider call and admitted-result validation. Before a lifecycle-only render or before continuing to Step 6, read
    [review prompt contract](references/review-prompt-contract.md) and
-   [leg contracts](references/leg-contracts.md), then render every requested prompt with packaged
-   `python3 bin/review_round.py render`. The existing render arguments are ordinary current-task leader inputs
+   [leg contracts](references/leg-contracts.md). In the normal provider flow, do not render yet;
+   Step 6 first freezes and preflights the Google route, then renders every requested prompt with packaged `python3 bin/review_round.py render`. The existing render arguments are ordinary current-task leader inputs
    validated by the packaged renderer; their exact semantic values and count beyond non-empty output
    are not characterization acceptance criteria.
    A current task may explicitly authorize a lifecycle characterization with zero provider legs.
    A current task authorizes this branch only when it both prohibits provider dispatch and directs the lifecycle through verify and exact cleanup.
    This branch is not a review round or gate: make no review-admission, convergence, adjudication, or gate-passage claim.
-   Only when the governing current task satisfies that selector, render the requested prompts with
-   packaged `python3 bin/review_round.py render`, run
-   `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`,
+   Only when the governing current task satisfies that selector, run the provider-free selector and
+   pass its receipt to every render, run `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`,
    use supported exact cleanup, and return without entering provider dispatch.
    Otherwise continue through the normal three-family flow. Every rendered prompt carries dynamic values
    only in one canonical `Review metadata: ` JSON record.
@@ -127,9 +126,10 @@ in the round.
    clean up that returned root. After the first or third outcome, fix the skill or tool and its regression test before another dispatch,
    then start again from preparation with a fresh review ID. Never manually
    rebuild or alter a packet to bypass the defect.
-6. **Preflight the Google leg, then dispatch the round.** Read [reviewer routing](references/reviewer-routing.md) and [leg contracts](references/leg-contracts.md). Before starting any family, record the owner-selected AGY authentication class: personal Google Sign-In or Business Sign-In for Gemini Enterprise. A missing binary, model, or settings transaction stops with zero provider legs started.
-   TRIAD never signs in, changes the active AGY account, or switches authentication classes after failure. Only after preflight succeeds, start all three independent legs before consuming a verdict. Reviewers may read and search only; they do not edit or execute candidate code, tests, builds, hooks, or scripts.
-   For every Claude and AGY wrapper invocation, set `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
+6. **Select, preflight, render, then dispatch.** Read [reviewer routing](references/reviewer-routing.md) and [leg contracts](references/leg-contracts.md). Select and exclusive-create one Google selector receipt before starting any family with bootstrap-managed `review_round.py select-google-route`, which reuses the packaged Python script while injecting both install-resolved Google executable pins: AGY is preferred; personal Google Sign-In requires AGY; owner-selected Gemini Enterprise OAuth uses Gemini CLI only when AGY is absent. Preflight only that selected wrapper with the current task file, then carry the canonical preflight receipt through every render and Google dispatch so its review ID, route, executable, selector SHA-256, preflight SHA-256, model, and effort remain identical. AGY preflight must prove the exact model in the selected executable's tabular `models` catalog before the settings transaction completes. A missing route-required executable, AGY model/settings support, Gemini policy/CLI support, or receipt binding stops with zero provider legs started.
+   Launch all TRIAD lifecycle, provider, test, and development commands outside the Codex workspace sandbox under the user-selected host policy. In `workspace-write`, request the outside-sandbox execution directly before the first such command; do not spend a trial command on a known sandbox failure. This outer host boundary is separate from every provider-native read/search-only control. Do not install or mutate the Codex host permission policy; recipient setup belongs in the user or trusted-project Codex configuration described by the plugin README.
+   TRIAD never signs in, changes accounts or authentication classes, or switches routes after the selected provider starts or fails. Only after preflight succeeds, render every requested prompt with that same selector and preflight receipt, bind both receipts' exact SHA values plus the selected model and effort into the common digest, and start all three independent legs before consuming a verdict; the selected wrapper executes its recorded executable. Reviewers may read and search only; they do not edit or execute candidate code, tests, builds, hooks, or scripts.
+   For every provider-wrapper invocation, set `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
 7. **Validate provisional results.** Each family returns one JSON object matching
    `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
    the packaged validator. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical. A missing, refused, malformed, route-mismatched, or

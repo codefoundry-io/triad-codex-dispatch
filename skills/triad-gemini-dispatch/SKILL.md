@@ -1,6 +1,6 @@
 ---
 name: triad-gemini-dispatch
-description: Use when a bounded task needs one authorized standalone Gemini CLI compatibility answer. Do not use it as the formal Google-family review leg.
+description: Use when a bounded task needs one authorized standalone Gemini CLI compatibility answer. It never leads formal cross-family review.
 ---
 
 # Gemini Dispatch
@@ -15,17 +15,24 @@ with `--prompt-file` for long input, `--cwd`, optional `--model`, and optional
 `--pydantic module:Class`. A nonzero exit or malformed result is a failed
 dispatch, not substantive evidence.
 
-## No formal Google-leg substitution
+## Formal ownership boundary
 
-This skill is a standalone compatibility consult only. Formal Google review
-uses the packaged AGY route for both personal Google Sign-In and Gemini
-Enterprise Business Sign-In. If AGY is unavailable, invalidate the round and
-repair the same selected AGY authentication class; never substitute this
-Gemini wrapper in the current or a fresh formal round.
+This skill is a standalone compatibility consult only and never chooses or leads
+a formal Google leg. The `triad-cross-family-review` leader may select this same
+packaged wrapper for an owner-selected Gemini Enterprise OAuth route only before
+any family starts and only when AGY is absent. Personal Google Sign-In requires
+AGY. If AGY was selected, started, or later failed, never switch to Gemini.
 
-The exact formal `verdict_schema:LegVerdict` route makes one provider call.
-Capacity failure or invalid structured output is terminal for that invocation;
-the wrapper makes no hidden capacity retry or schema-repair provider call.
+When the cross-family skill selects it, the exact formally bound
+`verdict_schema:LegVerdict` route injects explicit `-m auto`, requests native Plan
+Mode, and uses the mode-independent packaged read/search-only policy as its
+enforcement boundary. The effective approval mode is `unexposed`. It consumes the
+one review-ID selector receipt and makes one provider call.
+The current JSON envelope exposes no authoritative single runtime-model identity,
+so formal audit records exactly `runtime_identity: "unexposed"` and never infers
+identity from `stats.models`, authentication class, or route. Capacity failure or invalid
+structured output is terminal; there is no capacity retry, schema-repair call,
+or post-start route fallback.
 
 Gemini reviews only; it does not edit or execute candidate code. The leader
 reproduces every finding and asks the owner before any proposed design,

@@ -7,26 +7,36 @@ strict result custody, and deterministic owner apply.
 
 ## Native permission boundary
 
-Formal Google review uses native AGY CLI sign-in with either personal Google
-Sign-In or Gemini Enterprise Business Sign-In. Matching the deployed Claude-led
-TRIAD, the wrapper brackets `--sandbox read-only` in a transient global-settings
+Formal Google review selects and freezes one route before any family starts.
+AGY is preferred and personal Google Sign-In requires it. When the owner selects
+Gemini Enterprise OAuth and AGY is absent, the selector may choose the already
+authenticated Gemini CLI instead. Matching the deployed Claude-led TRIAD, the
+AGY wrapper brackets `--sandbox read-only` in a transient global-settings
 transaction, unions the exact write/command/unsandboxed/URL/MCP deny set, and
 restores the original bytes. Unless the operator sets
 `AGY_NO_HEADLESS_AUTOAPPROVE=1`, AGY 1.1.3+ requires the wrapper-owned
 `--dangerously-skip-permissions` headless adaptation. Headless auto-approve
 removes interactive approval prompts but does not remove explicit deny entries.
-MCP calls are denied; conditionally authorized external evidence uses the AGY
+On the AGY route, MCP calls are denied; conditionally authorized external evidence uses the AGY
 native official-web read path. The provider-managed sandbox is not OS-level
 confinement, and round-integrity mutation detection is a separate fail-closed
-check. Bootstrap installs no persistent global permission policy, Enterprise
-authentication, or pre-spawn `shell_environment_policy`.
+check. The formal Gemini wrapper explicitly requests CLI Auto and native Plan
+Mode, but records the effective approval mode as `unexposed`. Its exact
+mode-independent packaged read/search-only user-tier policy is the enforcement
+boundary: it denies writes, shell, Plan Mode transitions, and all other tools in
+every mode; an enterprise admin policy remains a higher tier. Bootstrap installs
+no persistent global permission policy, Enterprise authentication, or pre-spawn
+`shell_environment_policy`.
 
 Run TRIAD from the same authenticated login terminal and project worktree used
-for development. Trusted Python and `PATH` values are prerequisites. Wrapper
-child-process scrubbing remains defense in depth after trusted startup: loader
-and interpreter injection variables are removed only after the trusted launcher
-and interpreter have begun. It is not a substitute for native permission or
-project-trust selection.
+for development. The outer Codex host sandbox is separate from each provider's
+native containment: Codex-launched TRIAD lifecycle, provider, test, and
+development commands run outside the workspace sandbox under the user's selected
+host policy. TRIAD does not install or mutate that host policy. Trusted Python
+and `PATH` values are prerequisites. Wrapper child-process scrubbing remains
+defense in depth after trusted startup: loader and interpreter injection
+variables are removed only after the trusted launcher and interpreter have
+begun. It is not a substitute for native permission or project-trust selection.
 
 Bootstrap pins the installer-selected Python. This is an explicit installation
 and operation precondition, not a fully closed launcher guarantee:
@@ -35,9 +45,11 @@ credential-compatible/user-site mode requires a trusted `HOME` because
 trusted isolated Python environment is acceptable only when it preserves the
 provider login workflow.
 
-Formal AGY calls use owner-provisioned personal or Gemini Enterprise native
-sign-in and the same transaction lifecycle. TRIAD does not change the active AGY
-account or workspace-trust decision.
+Formal AGY calls use owner-provisioned native AGY CLI sign-in and the same transaction
+lifecycle. Formal Gemini calls preserve the existing organization Sign in with
+Google/OAuth cache and Cloud-project selection while removing competing API-key,
+ADC, and Vertex selectors without reading their values. TRIAD does not change an
+active account or workspace-trust decision.
 
 ## Provider data and executable boundary
 
@@ -95,7 +107,9 @@ When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured, it must include the canonical
 system temp base, including when hardened mode requires the setting.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
-body. Record one simple content digest before dispatch and compare it after every
+body. The prepared-directory digest protects packet bytes; the renderer binds it
+with the canonical Google selector receipt into one result-admission content digest shared by
+every family. Compare both packet integrity and result bindings after every
 required leg terminates. Reviewers do not execute candidate code, tests, builds,
 hooks, or generated scripts.
 
@@ -103,27 +117,40 @@ Before a formal gate, classify every test failure as production defect,
 test-case defect, or intentional specification change and resolve or approve it.
 
 Each required family inspects the same complete focused directory once per
-round. One strict `LegVerdict` binds the family, review ID, and content digest.
-The immutable directory digest, canonical-worktree fingerprint, local schema
+round. One strict `LegVerdict` binds the family, review ID, and route-bound content digest.
+The immutable prepared-directory digest, canonical-worktree fingerprint, local schema
 validation, independent family review, and leader reproduction protect result
 integrity. They do not prove that a provider read every byte or choose runtime
 permissions.
 
 ## Formal Google boundary
 
-AGY is the formal Google reviewer for both personal Google Sign-In and Gemini
-Enterprise Business Sign-In. Record the selected authentication class before
-dispatch. AGY version, executable, model-catalog, and settings-transaction checks
-happen before submission; its child removes known API-key, ADC, Vertex,
-SDK-enterprise, cloud project/location/quota, and `AGY_ADC_AUTH` route selectors without reading
-their values. TRIAD never changes or falls back between authentication classes.
-Failure of the selected class invalidates the round. See the
+Record `personal-google` or `gemini-enterprise` before dispatch, then use the
+packaged selector receipt. Personal Google requires AGY. Enterprise prefers AGY
+and chooses Gemini only when AGY is absent. The exclusive-created receipt binds
+the review ID, authentication class, route, canonical executable, wrapper, and
+SHA through selected-wrapper preflight, every render, and dispatch. The canonical
+preflight receipt repeats the review ID, route, executable, and selector SHA; its own
+SHA, exact model, and nullable effort are bound into every family digest, and every
+render and dispatch rejects a mismatch. The selected wrapper executes the receipt
+executable directly. Its provider-free preflight finishes before any family starts;
+the route is then immutable. AGY
+version, executable, exact tabular model-catalog, and settings-transaction checks precede
+submission. Gemini preflight validates the receipt binary, model/Plan Mode/policy
+CLI surfaces, and mode-independent packaged policy without a model call. It
+records requested Plan Mode and effective mode `unexposed`; the policy, not a
+speculative settings or trust probe, supplies the fail-closed read-only boundary.
+The current Gemini JSON route records literal `runtime_identity: "unexposed"`;
+it does not infer a single model from `stats.models`. Neither route falls back after
+provider start, auth failure, capacity failure, or invalid output. Failure of the
+selected route invalidates the round. See the
 [formal reviewer routing contract](skills/triad-cross-family-review/references/reviewer-routing.md).
 
 ## Installation, cleanup, and owner state
 
-Bootstrap installs three provider wrapper launchers and prints the owner apply
-argv. Install and remove perform exact plugin-owned legacy cleanup for old
+Bootstrap installs three provider wrapper launchers plus one review-round
+selector launcher that supplies both install-resolved Google executable pins,
+and prints the owner apply argv. Install and remove perform exact plugin-owned legacy cleanup for old
 profiles, command rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]` fragments, legacy agent TOMLs, and retired
 launchers only when their marker and expected content match. Foreign, edited,

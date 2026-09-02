@@ -6,7 +6,7 @@
 codex to check codex's work and it inherits the same framing — the reasoning that
 produced the bug is the reasoning that reviews it. triad-codex-dispatch gets you a
 second and third opinion from a **different model family**: codex stays the leader
-and dispatches **Claude Code** (Anthropic) and **antigravity / `agy`** (Google) as
+and dispatches **Claude Code** (Anthropic) and **AGY or Gemini CLI** (Google) as
 single-shot workers, and before you merge a risky change it runs a review where
 each family independently challenges the decision — so the bug your main model
 rationalized away gets caught by a model that never had that blind spot.
@@ -23,21 +23,28 @@ reaches out to the other families for you.
 ## What You Get
 
 - Codex plugin skills under `skills/`.
-- Bootstrap newly publishes only three provider wrapper commands: Claude, agy,
-  and Gemini. `triad-setup` and `triad-doctor` are remove-only legacy cleanup
-  names.
-- Formal Google review uses native AGY CLI sign-in: personal Google Sign-In or
-  Gemini Enterprise Business Sign-In for company use. Like the deployed
-  Claude-led TRIAD, `--sandbox read-only` brackets AGY in a transient
+- Bootstrap newly publishes three provider wrapper commands—Claude, agy, and
+  Gemini—plus one managed `review_round.py` selector launcher. The selector
+  launcher reuses the packaged script with both install-resolved Google CLI
+  pins. `triad-setup` and `triad-doctor` are remove-only legacy cleanup names.
+- Formal Google review selects and freezes its route before any family starts.
+  AGY is preferred and is required for personal Google Sign-In. For an
+  owner-selected Gemini Enterprise OAuth account, an absent AGY executable
+  selects the existing Gemini CLI wrapper immediately; later AGY failure never
+  triggers that fallback. Like the deployed Claude-led TRIAD, `--sandbox read-only` brackets AGY in a transient
   global-settings transaction that unions five deny rules and restores the
   original bytes. AGY 1.1.3+ also needs the wrapper-owned
   `--dangerously-skip-permissions` headless adaptation unless the operator sets
   `AGY_NO_HEADLESS_AUTOAPPROVE=1`. The auto-approve removes interactive approval
   prompts, while the transaction's explicit deny rules still block their named
-  action namespaces. MCP calls are denied in the formal Google transaction;
+  action namespaces. On the AGY route, MCP calls are denied in the formal AGY transaction;
   conditionally authorized external evidence uses AGY's native official-web read
-  path. This is not OS-level confinement; round-integrity mutation detection
-  remains a separate fail-closed check.
+  path. The Enterprise Gemini route requests explicit CLI Auto and native Plan
+  Mode while a mode-independent packaged read/search-only user policy supplies
+  the fail-closed enforcement boundary. It uses the existing organization OAuth
+  cache and removes competing API-key/ADC/Vertex/model selectors without reading
+  them. Effective mode and runtime model remain `unexposed`. This is not OS-level
+  confinement; round-integrity mutation detection remains separate.
 - Classifier gaps use a fresh native proposal-only child. The owner applies an
   accepted proposal locally from the same authenticated login terminal with the
   bootstrap-printed `python3 bin/apply_patch.py ... --classifier-file ...`
@@ -52,8 +59,8 @@ section is optional.
    project worktree used for development. Install and log in to the leader `codex` and the
    workers you will use — the toolkit issues/refreshes no credentials:
    - `codex` — install, then `codex login`.
-   - `agy` — install + OAuth sign-in (the Google-family worker for individual
-     users).
+   - `agy` — preferred Google-family worker and required for personal Google Sign-In.
+   - `gemini` — required only for the AGY-absent Gemini Enterprise OAuth route.
    - `claude` — Claude Code `>= 2.1.170`; bootstrap checks binary presence only
      and does not run a version probe.
 
@@ -61,8 +68,7 @@ section is optional.
    runtime. The runtime dependency is declared in the shipped
    `requirements.txt`. Keep
    `~/.local/bin` on `PATH` (or set `TRIAD_BOOTSTRAP_BIN_DIR` to a directory
-   already on `PATH`). `gemini` is optional — see
-   [Optional / Advanced](#optional--advanced).
+   already on `PATH`). At least one of `agy` or `gemini` must be installed.
 
    Bootstrap pins the installer-selected Python into the generated launchers.
    In credential-compatible/user-site mode, start Codex and the launchers with a
@@ -93,7 +99,8 @@ section is optional.
    command in the Python environment you own, then rerun bootstrap. Bootstrap
    does not install Python packages itself.
 
-   The script installs the three provider wrapper launchers as one staged,
+   The script installs the three provider wrapper launchers and the review-round
+   selector launcher as one staged,
    all-or-nothing command group. It does not install a Codex permission profile,
    command rule, repair-agent registration, or pre-spawn
    `[shell_environment_policy]`. It preserves owner-authored `config.toml`,
@@ -107,10 +114,51 @@ section is optional.
    required explicit `--classifier-file`. There is no installed apply launcher,
    and the owner apply path never recomputes an ambient classifier default.
 
-   Native permission handling is an execution-time boundary, not owner workflow
-   authorization. Commit, push, plugin or dependency installation, release, and
-   publication remain separate owner decisions; the leader must not initiate
-   them merely because `approvals_reviewer = "auto_review"` is active.
+   **Select the Codex host permission mode before using TRIAD.** All TRIAD
+   lifecycle/provider commands, and TRIAD test or development commands launched
+   by Codex, run outside the Codex workspace sandbox. This outer host boundary is
+   separate from AGY's provider-native read-only sandbox and Gemini's native Plan
+   Mode plus packaged read/search-only policy.
+
+   Use an interactive workspace policy that is compatible with managed company
+   environments. Select the Workspace Write / on-request profile with Desktop or
+   CLI `/permissions` when that profile is available. The equivalent persistent
+   setting belongs to the user in `~/.codex/config.toml`, or to a trusted project
+   in `.codex/config.toml`:
+
+   ```toml
+   sandbox_mode = "workspace-write"
+   approval_policy = "on-request"
+   approvals_reviewer = "user"
+   ```
+
+   `approvals_reviewer = "user"` keeps each outside-sandbox request as a human
+   Yes/No decision. Where organization policy permits an agent reviewer for those
+   requests, change only that field:
+
+   ```toml
+   approvals_reviewer = "auto_review"
+   ```
+
+   The leader requests the outside-sandbox launch directly; it does not spend a
+   trial command on a known workspace-sandbox failure. `auto_review` changes who
+   reviews that request; it is not a permission grant. Project config is loaded
+   only for a trusted project. If you use the newer permission-profile system,
+   select its interactive workspace profile with `/permissions` and do not mix
+   that system with legacy `sandbox_mode` keys.
+   See OpenAI's official [sandbox](https://learn.chatgpt.com/docs/sandboxing),
+   [configuration](https://learn.chatgpt.com/docs/config-file/config-basic),
+   [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference),
+   and [plugin](https://learn.chatgpt.com/docs/plugins) documentation.
+
+   OpenAI documents that plugin capabilities inherit the Codex host's sandbox
+   and approval policy; it does not document a plugin-level install-time sandbox
+   Yes/No grant. Connector authentication prompts are separate. Therefore this
+   plugin neither selects nor installs a host permission mode. Native permission
+   handling is an execution-time boundary, not owner workflow authorization.
+   Commit, push, plugin or dependency installation, release, and publication
+   remain separate owner decisions; the leader must not initiate them merely
+   because `approvals_reviewer = "auto_review"` is active.
 
    > **Placement invariant (hard).** Run bootstrap from your project workspace,
    > not from a directory that contains the install targets. Bootstrap writes the
@@ -121,12 +169,13 @@ section is optional.
    > directory it runs from (for example `$HOME`).
 
    Start ordinary `codex` from the same authenticated login terminal and actual
-   project worktree. Authenticate AGY through personal Google Sign-In or its
-   Gemini Enterprise Business Sign-In. Formal review invokes AGY with
-   `--sandbox read-only` under the transient settings lease used by the
-   Claude-led deployment. Trusted Python and `PATH` are
-   prerequisites; wrapper child-process scrubbing remains after the trusted
-   launcher and interpreter start.
+   project worktree. Use the existing AGY sign-in, or the existing Gemini
+   Enterprise OAuth sign-in when AGY is not installed. Formal AGY review uses
+   `--sandbox read-only` under the transient settings lease; formal Gemini review
+   requests native Plan Mode while its mode-independent packaged per-call policy
+   enforces read/search-only behavior. Trusted Python and `PATH` are prerequisites;
+   wrapper child-process scrubbing remains after the trusted launcher and
+   interpreter start.
 
    Then start a fresh ordinary Codex session from the target workspace:
 
@@ -146,18 +195,22 @@ surfaced only when needed (see [Custom Subagents](#custom-subagents) and
 Nothing in this section is needed for a normal individual install. Reach for a
 subsection only when its "do this ONLY if…" line applies to you.
 
-### Gemini Enterprise Business Sign-In
+### Gemini Enterprise OAuth without AGY
 
-*Do this only in a company environment with a GE Standard or GE Plus seat.* Use
-AGY 1.1.20 or newer and select its Business Sign-In with the organization-owned
-Google Cloud project. The same formal AGY wrapper, settings transaction, and
-`--sandbox read-only` plus native `--mode plan` lifecycle apply. The wrapper
-passes a review-bound native `--json-schema`, consumes the terminal
-`structured_output`, and repeats strict local verdict and review-binding checks.
-Human-readable response text is not verdict transport. TRIAD never changes the active account or falls back to
-a personal sign-in. The separate `triad-gemini-dispatch` skill remains a
-standalone compatibility consult; it is not the Gemini Enterprise formal leg.
-See the official [AGY changelog](https://antigravity.google/changelog?plan=free).
+*Do this only for an organization account already authenticated through Gemini
+CLI Sign in with Google.* If AGY is installed, the selector still prefers AGY.
+When AGY is absent, `gemini-enterprise` selects the packaged Gemini wrapper
+before any family starts. It preserves the organization Cloud-project variables,
+injects explicit `-m auto`, requests native `--approval-mode plan`, and applies
+the mode-independent packaged read/search-only policy as its enforcement
+boundary. Effective approval mode remains `unexposed`. It requires all formal
+review bindings and makes one provider call. It never uses API-key, ADC, Vertex,
+or ambient-model fallback and never switches
+routes after a selected provider starts. `triad-gemini-dispatch` remains a
+standalone consult; only `triad-cross-family-review` owns formal route selection.
+The current Gemini JSON envelope has no authoritative single runtime-model
+identity, so the formal audit records exactly `runtime_identity: "unexposed"`
+and never infers identity from `stats.models`, account class, or route.
 
 ### Linux / WSL2 sandbox support
 
@@ -170,7 +223,7 @@ support. The installer does not install OS packages.
 See [SECURITY.md](SECURITY.md) — the durable boundaries are explicit data
 authorization, pinned executables, digest/mutation checks, strict result custody,
 and deterministic owner apply. Provider/user/project settings retain permission
-selection outside the documented formal Claude and packaged AGY routes, and
+selection outside the documented formal Claude, packaged AGY, and formal Gemini routes, and
 no-edit/no-execution containment is prompt-controlled unless a provider actually
 enforces it (summarized under [Security](#security) below).
 
@@ -184,6 +237,25 @@ enforces it (summarized under [Security](#security) below).
   session after install or update.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
+
+### Upgrading to 0.2.548
+
+0.2.548 restores a company-safe formal Google route without making Gemini a
+post-failure retry. Before any family starts, the packaged selector records the
+owner-selected authentication class, prefers AGY, and chooses Gemini CLI only
+for Gemini Enterprise OAuth when AGY is absent. The selector exclusive-creates
+one receipt for the review ID. Preflight produces a second canonical receipt carrying
+that review ID, route, executable, and selector SHA. Its own SHA, exact model, and nullable
+effort enter the common review basis. AGY also proves the exact required slug in its
+tab-separated model catalog. Every family render and the selected wrapper's dispatch
+reject a mismatched pair. The
+reused Gemini wrapper runs provider-free model/Plan/policy help preflight, injects
+explicit `-m auto`, requests native Plan Mode, records effective mode as
+`unexposed`, and exactly checks the mode-independent packaged read/search-only
+policy that supplies the enforcement boundary,
+competing-auth-selector scrubbing, one provider call, exact local review-binding
+checks, and literal `runtime_identity: "unexposed"` recording. Personal Google
+Sign-In still requires AGY.
 
 ### Upgrading to 0.2.547
 
@@ -216,7 +288,7 @@ containment remains enforced by the prompt, native `--mode plan`, and the
 explicit deny transaction; strict local `LegVerdict` and review-binding checks
 plus round-integrity verification remain the admission gates.
 
-The formal Google-family prompt remains explicitly static-only: it permits
+The formal AGY prompt remains explicitly static-only: it permits
 native file read/search and conditionally authorized AGY native official-web
 reads, denies MCP calls, forbids command, write, experiment, notebook, subagent,
 browser-actuation, and scratch tools, and sends unresolved static uncertainty to
@@ -255,7 +327,7 @@ native. Ordinary `codex` remains the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.547-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.548-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -271,7 +343,8 @@ Ask Codex to use these installed skills:
 - `triad-claude-dispatch`: single-shot Claude Code consult.
 - `triad-antigravity-dispatch`: primary Google-family consult through `agy`.
 - `triad-gemini-dispatch`: standalone compatibility consult through the
-  separately installed `gemini` CLI; not the Gemini Enterprise formal leg.
+  separately installed `gemini` CLI. It never leads formal review; the
+  cross-family skill may select its wrapper for the AGY-absent Enterprise route.
 - `triad-cross-family-review`: pre-merge review across Claude, Google-family,
   and a fresh Codex subagent.
 
@@ -314,7 +387,7 @@ repository test source. Normal SDD implementation review includes relevant test
 source. Other advisory review follows its separately owner-approved data scope.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
-body. Record one simple content digest before dispatch and compare it after every
+body. Record one prepared-directory integrity digest before dispatch and compare it after every
 required leg terminates; a mismatch invalidates the round. Before a formal gate,
 classify every test failure as production defect, test-case defect, or intentional
 specification change and resolve or approve it. Reviewers do not run candidate
@@ -324,8 +397,8 @@ The full diff is navigation evidence, not the review boundary. The leader
 prepares one focused directory containing the complete current files,
 configuration, and governing documentation relevant to the decision. Every
 required family reviews that same complete directory once and returns one
-strict `LegVerdict` bound to its family, review ID, and directory digest.
-The leader captures the directory digest and canonical-worktree fingerprint
+strict `LegVerdict` bound to its family, review ID, and route-bound `metadata.content_digest`.
+The leader separately captures the prepared-directory integrity digest and canonical-worktree fingerprint
 before dispatch, verifies both after all legs terminate, and reproduces every
 finding against the canonical worktree. Reviewer coverage is prompt-controlled
 unless the provider exposes a stronger boundary; it is never promoted from a
@@ -347,8 +420,8 @@ immutable-directory digests, and leader mutation checks.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Gemini rejects the project worktree as untrusted | Gemini owns workspace trust after removal of `--skip-trust` | Make the provider-native trust decision for that worktree, or stop. TRIAD has no trust bypass or speculative detector. |
-| A dispatch fails with `oauth-env` | The worker CLI's login expired or is missing | Re-run that vendor's native login (`claude` / `agy` OAuth, or `codex login`). The toolkit never re-authenticates for you — it surfaces the signal so you log in. |
-| The gemini leg fails with `IneligibleTier` | The Gemini CLI *individual* tier is deprecated | Use the `agy` (Antigravity) leg — it is the Google-family leg for individual users. `gemini` is only for business / Vertex / API-key accounts. |
+| A dispatch fails with `oauth-env` | The worker CLI's login expired or is missing | Re-run that vendor's native login (`claude`, native AGY CLI sign-in, Gemini CLI Sign in with Google, or `codex login`). The toolkit never re-authenticates for you — it surfaces the signal so you log in. |
+| The gemini leg fails with `IneligibleTier` | The selected organization account lacks an eligible Gemini CLI entitlement | Repair that same Enterprise OAuth route. Personal Google review uses AGY; do not switch accounts or routes after dispatch. |
 | A new skill isn't available after install/update | Existing Codex sessions don't see newly installed skills | Start a new Codex session (and rerun `bootstrap.sh --install` after a plugin update so launcher paths stay current). |
 | A dispatch returns non-zero and you want to know what happened | The numeric exit code is always authoritative; a completed wrapper failure normally also emits a final classification | See the exit-code legend below. When a final `[wrapper] …` stderr line exists, use its classification; preserve an early no-summary failure as-is. |
 
@@ -358,7 +431,7 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | Exit | Meaning | What to do |
 |---|---|---|
 | `0` | Success — the answer follows | Nothing. |
-| `4` | The configured provider binary was missing or not executable before submission | Fix that binary. Formal Google review requires AGY for both personal and Gemini Enterprise authentication; never switch accounts as recovery. |
+| `4` | The configured provider binary was missing or not executable before submission | Before dispatch, install AGY for personal Google, or AGY/Gemini for Enterprise OAuth. After route selection, repair that same executable; do not fallback after failure. |
 | `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
 | `65` | Authentication, configuration, quota, or another terminal provider failure (for example `oauth-env`, `cli-subscription-cap`, or `token-limit`) | Resolve the cited provider state, then make an explicit new invocation. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
@@ -376,7 +449,8 @@ Honest boundaries, so you know where the toolkit stops:
   flow, or authorization store.
 - **It does NOT install OS or Python packages.** You install the vendor CLIs,
   `python3`, the shipped Python requirements, and (on Linux/WSL2) `bubblewrap`
-  yourself; the installer writes the three provider wrapper launchers while
+  yourself; the installer writes the three provider wrapper launchers plus the
+  review-round selector launcher while
   preserving owner-authored configuration. If the
   selected Python is missing Pydantic 2, bootstrap stops before mutation and
   prints the exact `python3 -m pip install -r .../requirements.txt` command for
@@ -410,7 +484,7 @@ python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex"
 ```
 
 Run the newly printed absolute command. A plain `--install` republishes the
-three provider wrapper launchers and performs exact plugin-owned legacy cleanup
+three provider wrapper launchers plus the review-round selector launcher and performs exact plugin-owned legacy cleanup
 without creating permission state. Start a new ordinary Codex session after
 updating.
 
@@ -470,7 +544,7 @@ codex plugin remove triad-codex-dispatch@triad-codex-dispatch
 codex plugin marketplace remove triad-codex-dispatch
 ```
 
-`--remove` deletes the three provider wrapper launchers and exact plugin-owned
+`--remove` deletes the three provider wrapper launchers, the review-round selector launcher, and exact plugin-owned
 legacy launchers, profiles, command rules, repair-agent registration, and
 `[shell_environment_policy]` fragments only when their markers and expected
 bytes match. It also removes exact legacy three-agent TOMLs. Foreign, edited,
@@ -535,8 +609,8 @@ a perfect garbage collector.
 The durable controls are explicit data authorization, pinned executables,
 digest/mutation checks, strict result custody, and a native proposal-only repair
 child followed by deterministic owner apply. Provider/user/project settings
-retain permission selection outside the documented formal Claude and packaged
-AGY routes.
+retain permission selection outside the documented formal Claude, packaged AGY,
+and formal Gemini routes.
 Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Support
@@ -547,8 +621,9 @@ Full threat model: [SECURITY.md](SECURITY.md).
 
 ## Notes
 
-- Apart from the approved internal AGY flag and the disclosed transient AGY
-  global-settings transaction, TRIAD accepts no caller-supplied yolo, bypass,
+- Apart from the approved internal AGY flag, the disclosed transient AGY
+  global-settings transaction, and wrapper-internal formal Gemini model/Plan
+  request and policy flags, TRIAD accepts no caller-supplied yolo, bypass,
   skip-trust, accept-edits, or equivalent permission controls. The transaction
   changes AGY settings only for its lease and restores the original bytes; a
   hard crash can leave deny residue for the next guarded call to heal.

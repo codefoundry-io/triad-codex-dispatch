@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import stat
+import tomllib
 from pathlib import Path
 
 
@@ -19,7 +20,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.547"
+    assert manifest["version"] == "0.2.548"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -31,7 +32,7 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     version = json.loads(_text(MANIFEST))["version"]
     changelog = _text(ROOT / "CHANGELOG.md")
 
-    assert f"## {version} — 2026-08-25" in changelog
+    assert f"## {version} — 2026-09-02" in changelog
     assert f"### Upgrading to {version}" in _text(ROOT / "README.md")
     assert f"### {version} 업그레이드" in _text(ROOT / "README.ko.md")
     assert "## 0.2.541 — 2026-08-20" in changelog
@@ -58,13 +59,17 @@ def test_distribution_contains_only_the_four_public_skills() -> None:
         assert len(text.splitlines()) <= 200
 
 
-def test_gemini_agent_metadata_is_standalone_not_formal_fallback() -> None:
+def test_gemini_agent_metadata_is_standalone_and_not_the_formal_leader() -> None:
     metadata = _text(SKILLS / "triad-gemini-dispatch" / "agents" / "openai.yaml")
 
     assert "Standalone Gemini CLI compatibility consult" in metadata
-    assert "not a formal Google-family review leg or fallback" in metadata
+    assert "does not lead a formal Google-family review" in metadata
+    assert (
+        "cross-family review may select the packaged Gemini wrapper for Enterprise OAuth"
+        in metadata
+    )
     assert "Vertex, or API-key fallback" not in metadata
-    assert "only after agy is proven unavailable" not in metadata
+    assert "never after AGY has started" in metadata
 
 
 def test_active_skill_links_resolve_inside_each_skill() -> None:
@@ -127,7 +132,15 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     compact_claude = " ".join(claude.split())
 
     assert "Claude's native `--permission-mode plan`" in compact_prompt_contract
-    assert "Google's native `--mode plan`" in compact_prompt_contract
+    assert (
+        "Google requests its selected route's native Plan Mode"
+        in compact_prompt_contract
+    )
+    assert "effective approval mode remains unexposed" in compact_prompt_contract
+    assert (
+        "mode-independent packaged policy is the read-only enforcement boundary"
+        in compact_prompt_contract
+    )
     assert "Fresh Codex remains prompt-controlled" in compact_prompt_contract
     assert "each provider's native Plan Mode" not in compact_prompt_contract
     assert "The prompt and native `--mode plan` define" not in compact_prompt_contract
@@ -182,7 +195,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             "Do not edit files, change external state, or execute candidate code"
             in compact
         )
-        assert "formal Google settings transaction denies all MCP calls" in compact
+        assert "formal AGY settings transaction denies all MCP calls" in compact
         assert "Approved AGY native official-web reads remain available" in compact
     assert "MCP calls are unavailable for the formal Google leg" in compact_antigravity
     assert "AGY native official-web reads" in compact_antigravity
@@ -246,7 +259,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         in compact_leg_contracts
     )
     assert "1.1.20 or newer" in agy
-    assert "AGY 1.1.20 or newer" in reviewer_routing
+    assert "AGY 1.1.20 or newer" in compact_reviewer_routing
     assert "--model gemini-3.1-pro-high" in agy
     assert "--effort high" in agy
     assert "--timeout 1800" in agy
@@ -277,7 +290,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "transient global-settings transaction" in compact_leg_contracts
     assert "restores the original bytes" in compact_leg_contracts
     assert "read-only by intent" in compact_leg_contracts
-    for compact in (compact_agy, compact_leg_contracts):
+    for compact in (compact_agy,):
         normalized = compact.lower()
         assert (
             "formal Google prompt authorizes only AGY native file-read/search tools "
@@ -291,33 +304,85 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         )
         assert "round-integrity mutation detection is separate" in normalized
     assert "Before starting any family" in leg_contracts
+    assert 'review_task_file="$review_shared/TASK.md"' in leg_contracts
+    assert "passed to `render-worktree --task-file`" in leg_contracts
+    assert "preflight's sole prompt input" in leg_contracts
+    assert "select-google-route" in leg_contracts
+    assert 'google_selector_launcher="$(command -v review_round.py)"' in leg_contracts
+    assert '"$google_selector_launcher" select-google-route' in leg_contracts
+    assert (
+        'python3 "$toolkit_root/bin/review_round.py" select-google-route'
+        not in leg_contracts
+    )
+    assert '--review-id "$review_id"' in leg_contracts
+    assert '--output "$google_selector_receipt"' in leg_contracts
+    assert '--google-selector-receipt "$google_selector_receipt"' in leg_contracts
+    assert '--google-preflight-receipt "$google_preflight_file"' in leg_contracts
+    assert "--google-route" not in leg_contracts
+    assert "TRIAD_REQUIRE_PINNED_VENDOR" not in leg_contracts
+    assert '"authentication_class": "gemini-enterprise"' in leg_contracts
+    assert (
+        '{"authentication_class": "gemini-enterprise", "route": "agy"}' in leg_contracts
+    )
+    assert (
+        '{"authentication_class": "gemini-enterprise", "route": "gemini"}'
+        in leg_contracts
+    )
+    assert '`"$google_executable" --version`' in leg_contracts
+    assert '`"$google_executable" models`' in leg_contracts
     assert "--preflight-only" in leg_contracts
     assert '"provider_started": false' in leg_contracts
     assert "personal Google Sign-In" in compact_leg_contracts
-    assert "Business Sign-In for Gemini Enterprise" in compact_leg_contracts
-    assert "GE Standard or GE Plus" in compact_leg_contracts
-    assert "same packaged AGY wrapper" in compact_leg_contracts
-    assert "bin/gemini_wrapper.py" not in leg_contracts
+    assert "Gemini Enterprise OAuth" in compact_leg_contracts
+    assert "AGY is preferred" in leg_contracts
+    assert "bin/gemini_wrapper.py" in leg_contracts
     cross_family_skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
     assert (
-        "missing binary, model, or settings transaction stops with zero "
-        "provider legs started" in " ".join(cross_family_skill.split())
+        "missing route-required executable, AGY model/settings support, Gemini "
+        "policy/CLI support, or receipt binding stops with zero provider legs started"
+        in " ".join(cross_family_skill.split())
     )
+    dispatch_step = cross_family_skill.split(
+        "6. **Select, preflight, render, then dispatch.**", 1
+    )[1].split("7. **Validate provisional results.**", 1)[0]
+    assert (
+        dispatch_step.index("select-google-route")
+        < dispatch_step.index("Preflight only that selected wrapper")
+        < dispatch_step.index("render every requested prompt")
+    )
+    assert "In the normal provider flow, do not render yet" in cross_family_skill
     for compact in (compact_agy, compact_leg_contracts):
         assert "--expected-permission-mode" not in compact
         assert "--init-preflight" not in compact
     log_assignment = 'TRIAD_DISPATCH_LOG_DIR="$review_log_dir"'
-    assert leg_contracts.count(log_assignment) == 3
+    assert leg_contracts.count(log_assignment) == 5
     assert (
         "\n".join(
             (
                 f"{log_assignment} \\",
                 'python3 "$toolkit_root/bin/antigravity_wrapper.py" \\',
-                '  --prompt-file "$review_prompt_file" \\',
+                '  --prompt-file "$review_task_file" \\',
+                '  --google-selector-receipt "$google_selector_receipt" \\',
+                '  --expected-review-id "$review_id" \\',
                 '  --cwd "$review_shared" \\',
                 "  --sandbox read-only \\",
                 "  --model gemini-3.1-pro-high \\",
                 "  --effort high \\",
+                "  --preflight-only \\",
+                '  > "$google_preflight_file"',
+            )
+        )
+        in leg_contracts
+    )
+    assert (
+        "\n".join(
+            (
+                f"{log_assignment} \\",
+                'python3 "$toolkit_root/bin/gemini_wrapper.py" \\',
+                '  --prompt-file "$review_task_file" \\',
+                '  --google-selector-receipt "$google_selector_receipt" \\',
+                '  --expected-review-id "$review_id" \\',
+                '  --cwd "$review_shared" \\',
                 "  --preflight-only \\",
                 '  > "$google_preflight_file"',
             )
@@ -341,10 +406,25 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         (
             "bin/antigravity_wrapper.py",
             '  --prompt-file "$review_prompt_file" \\',
+            '  --google-selector-receipt "$google_selector_receipt" \\',
+            '  --google-preflight-receipt "$google_preflight_file" \\',
             '  --cwd "$review_shared" \\',
             "  --sandbox read-only \\",
             "  --model gemini-3.1-pro-high \\",
             "  --effort high \\",
+            "  --timeout 1800 \\",
+            "  --pydantic verdict_schema:LegVerdict \\",
+            '  --expected-review-id "$review_id" \\',
+            "  --expected-family google \\",
+            '  --expected-content-digest "$review_digest" \\',
+            '  > "$google_result_file"',
+        ),
+        (
+            "bin/gemini_wrapper.py",
+            '  --prompt-file "$review_prompt_file" \\',
+            '  --google-selector-receipt "$google_selector_receipt" \\',
+            '  --google-preflight-receipt "$google_preflight_file" \\',
+            '  --cwd "$review_shared" \\',
             "  --timeout 1800 \\",
             "  --pydantic verdict_schema:LegVerdict \\",
             '  --expected-review-id "$review_id" \\',
@@ -412,12 +492,170 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "MCP calls are denied" in security
     assert "AGY native official-web read path" in security
     assert "voids deny" not in security
-    assert "Gemini is eligible only when AGY is proven unavailable" not in gemini
+    assert "If AGY was selected, started, or later failed" in gemini
     assert "standalone compatibility consult only" in gemini
-    assert (
-        "same packaged AGY wrapper supports either personal Google Sign-In"
-        in leg_contracts
+    assert "Personal Google Sign-In requires AGY" in leg_contracts
+    assert "Gemini Enterprise OAuth" in leg_contracts
+
+
+def test_recipient_guidance_uses_codex_host_policy_for_outside_sandbox_execution() -> None:
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+    security = " ".join(_text(ROOT / "SECURITY.md").split())
+    migration = " ".join(
+        _text(ROOT / "migration" / "AGENTS.recommended.md").split()
     )
+    cross_family = " ".join(
+        _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
+    )
+
+    for public_doc in (readme, readme_ko):
+        assert "https://learn.chatgpt.com/docs/sandboxing" in public_doc
+        assert "https://learn.chatgpt.com/docs/config-file/config-basic" in public_doc
+        assert "https://learn.chatgpt.com/docs/config-file/config-reference" in public_doc
+        assert "https://learn.chatgpt.com/docs/plugins" in public_doc
+        assert 'sandbox_mode = "workspace-write"' in public_doc
+        assert 'approval_policy = "on-request"' in public_doc
+        assert 'approvals_reviewer = "user"' in public_doc
+        assert 'approvals_reviewer = "auto_review"' in public_doc
+        assert "`/permissions`" in public_doc
+        assert 'sandbox_mode = "danger-full-access"' not in public_doc
+        assert 'approval_policy = "never"' not in public_doc
+
+    assert "outside the Codex workspace sandbox" in migration
+    assert "user-selected Codex host policy" in migration
+    assert "no plugin-level install-time sandbox grant" in migration
+    assert "outer Codex host sandbox" in security
+    assert "does not install or mutate that host policy" in security
+    assert (
+        "Launch all TRIAD lifecycle, provider, test, and development commands "
+        "outside the Codex workspace sandbox"
+    ) in cross_family
+    assert "Do not install or mutate the Codex host permission policy" in cross_family
+
+
+def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> None:
+    cross_family = " ".join(
+        _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
+    )
+    routing = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
+        ).split()
+    )
+    leg_contracts = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+    prompt_contract = " ".join(
+        _text(
+            SKILLS
+            / "triad-cross-family-review"
+            / "references"
+            / "review-prompt-contract.md"
+        ).split()
+    )
+    policy_path = ROOT / "bin" / "policies" / "gemini-formal-readonly.toml"
+
+    assert "Select and exclusive-create one Google selector receipt" in cross_family
+    assert "personal Google Sign-In requires AGY" in routing
+    assert "Enterprise OAuth may select Gemini only when AGY is absent" in routing
+    assert "Never switch routes after the selected provider starts" in routing
+    assert "CLI Auto router" in routing
+    assert "`-m auto`" in routing
+    assert "runtime-model identity" in routing
+    assert "unexposed" in routing
+    assert "stats.models" in routing
+    assert "--approval-mode plan" in leg_contracts
+    assert "--policy" in leg_contracts
+    assert "effective approval mode is `unexposed`" in leg_contracts
+    assert "mode-independent packaged policy" in leg_contracts
+    assert "Gemini Enterprise OAuth" in prompt_contract
+    assert "AGY native tool names" in prompt_contract
+    assert "selected Google authentication class" in prompt_contract
+    assert "canonical selector-receipt SHA-256" in prompt_contract
+    assert "the exact selector fields and SHA-256" in prompt_contract
+    assert policy_path.is_file()
+    policy = tomllib.loads(_text(policy_path))
+    rules = policy["rule"]
+    allowed_tools = {
+        tool
+        for rule in rules
+        if rule["decision"] == "allow" and rule["priority"] == 999
+        for tool in (
+            [rule["toolName"]]
+            if isinstance(rule["toolName"], str)
+            else rule["toolName"]
+        )
+    }
+    assert allowed_tools == {
+        "read_file",
+        "read_many_files",
+        "list_directory",
+        "glob",
+        "grep_search",
+        "google_web_search",
+        "web_fetch",
+        "get_internal_docs",
+    }
+    denied_tools = {
+        tool
+        for rule in rules
+        if rule["decision"] == "deny" and rule["priority"] == 999
+        for tool in (
+            [rule["toolName"]]
+            if isinstance(rule["toolName"], str)
+            else rule["toolName"]
+        )
+    }
+    assert denied_tools == {
+        "write_file",
+        "replace",
+        "run_shell_command",
+        "enter_plan_mode",
+        "exit_plan_mode",
+    }
+    assert any(
+        rule["toolName"] == "*"
+        and rule["decision"] == "deny"
+        and rule["priority"] == 998
+        for rule in rules
+    )
+
+    active_contract_paths = (
+        MANIFEST,
+        ROOT / "README.md",
+        ROOT / "README.ko.md",
+        ROOT / "SECURITY.md",
+        ROOT / "CHANGELOG.md",
+        ROOT
+        / "docs"
+        / "status"
+        / "2026-09-02-gemini-enterprise-fallback-checkpoint.md",
+        SKILLS / "triad-cross-family-review" / "SKILL.md",
+        SKILLS / "triad-cross-family-review" / "agents" / "openai.yaml",
+        SKILLS / "triad-cross-family-review" / "references" / "convergence.md",
+        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md",
+        SKILLS
+        / "triad-cross-family-review"
+        / "references"
+        / "review-prompt-contract.md",
+        SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md",
+        SKILLS / "triad-gemini-dispatch" / "SKILL.md",
+        SKILLS / "triad-gemini-dispatch" / "agents" / "openai.yaml",
+        ROOT / "migration" / "AGENTS.recommended.md",
+        policy_path,
+    )
+    shipped = "\n".join(_text(path) for path in active_contract_paths).lower()
+    for workspace_only_marker in (
+        "temporary five-leg formal-review override",
+        "five required independent legs",
+        "all five before consuming a verdict",
+        "temporarily filling the unavailable claude seat",
+        "temporary five-leg gate",
+    ):
+        assert workspace_only_marker not in shipped
 
 
 def test_changelog_marks_the_superseded_google_permission_claim() -> None:
@@ -544,7 +782,23 @@ def test_cross_family_skill_owns_operational_prompts_without_meta_review() -> No
         "Do not invoke `skill-prompt-review` before or during an operational round"
         in compact
     )
-    assert "proceeds directly to provider dispatch" in compact
+    assert "select the receipt and preflight the recorded wrapper" in compact
+    assert (
+        "before invoking packaged `python3 bin/review_round.py render-worktree`"
+        in compact
+    )
+    assert "dispatch only those successfully rendered prompts" in compact
+
+
+def test_cross_family_skill_names_worktree_first_custody_and_run_roots() -> None:
+    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    compact = " ".join(skill.split())
+
+    assert "`review_custody_root`" in compact
+    assert "`review_run_root`" in compact
+    assert "selector and preflight receipts" in compact
+    assert "rendered prompts, provider logs, and results" in compact
+    assert "`render-worktree --output` must resolve outside" in compact
 
 
 def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
@@ -651,8 +905,12 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         in skill
     )
     assert (
-        "Carry the printed digest mechanically through every rendered prompt and every admitted "
-        "result" in skill
+        "The renderer verifies that prepared digest, then binds it with the one canonical Google "
+        "selector receipt into `metadata.content_digest`" in skill
+    )
+    assert (
+        "copy that rendered digest into every provider call and admitted-result validation"
+        in skill
     )
     assert "results and prompts under the returned review root" in skill
     assert "snapshots and verdicts under that same current root" in skill
@@ -682,7 +940,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
     assert skill.index(characterization_marker) < skill.index(branch_selector)
     assert skill.index(branch_selector) < skill.index(reviewer_routing)
     assert (
-        "render every requested prompt with packaged "
+        "then renders every requested prompt with packaged "
         "`python3 bin/review_round.py render`"
     ) in skill
     assert "This branch is not a review round or gate" in skill
@@ -902,12 +1160,12 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
         "skills/triad-cross-family-review/references/reviewer-routing.md"
     ]
     compact_routing = " ".join(routing.split())
-    assert "native AGY CLI sign-in" in compact_routing
+    assert "one frozen route" in compact_routing
     assert "personal Google Sign-In" in compact_routing
-    assert "Business Sign-In for Gemini Enterprise" in compact_routing
+    assert "Gemini Enterprise OAuth" in compact_routing
     assert (
-        "never signs in, changes the active account, or falls back between "
-        "authentication classes" in compact_routing
+        "never signs in, changes accounts, or switches authentication classes"
+        in compact_routing
     )
     temp_root_contracts = {
         "README.md": "must include the canonical system temp base",
@@ -1045,6 +1303,15 @@ def test_provider_wrappers_are_packaged_as_executables() -> None:
     ):
         mode = (ROOT / "bin" / name).stat().st_mode
         assert mode & stat.S_IXUSR, name
+
+
+def test_overviews_distinguish_packet_integrity_from_route_bound_admission() -> None:
+    readme = " ".join(_text(ROOT / "README.md").split())
+    korean = " ".join(_text(ROOT / "README.ko.md").split())
+
+    for overview in (readme, korean):
+        assert "prepared-directory integrity digest" in overview
+        assert "route-bound `metadata.content_digest`" in overview
 
 
 def test_distribution_documents_fresh_process_acceptance() -> None:
