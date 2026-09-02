@@ -20,7 +20,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.549"
+    assert manifest["version"] == "0.2.550"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -840,6 +840,39 @@ def test_cross_family_skill_distinguishes_zero_start_from_partial_start_failure(
     assert "시작된 모든 leg이 끝난 뒤" in readme_ko
     assert "실제 start failure" in readme_ko
     assert "launch가 닫혀 시작하지 않은 상태" in readme_ko
+
+
+def test_cross_family_skill_escalates_repeated_zero_provider_failures_and_distinguishes_cwds() -> (
+    None
+):
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+    leg_contracts = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+
+    for text in (skill, leg_contracts):
+        folded = text.casefold()
+        assert "after a second zero-provider failure in the same attempted workflow" in folded
+        assert "stop allocating fresh review ids" in folded
+        assert "retain and compare every failure receipt" in folded
+        assert "shared root cause" in folded
+        assert "controlled setup-only probe" in folded
+
+    assert "outer host-command working directory" in leg_contracts
+    assert "inner bootstrap child working directory" in leg_contracts
+    assert "bootstrap guard evaluates the child process's `PWD`" in leg_contracts
+    assert "`CODEX_HOME`, not `HOME`" in leg_contracts
+
+
+def test_project_agents_verification_commands_are_workspace_root_safe() -> None:
+    agents = " ".join(_text(ROOT / "AGENTS.md").split())
+
+    assert '"$1/tests" --rootdir "$1"' in agents
+    assert 'bash -n "$1/scripts/bootstrap.sh"' in agents
+    assert 'python3 "$1/scripts/verify_distribution.py" --source-root "$1"' in agents
+    assert "Never use a bare repository-relative path" in agents
 
 
 def test_failed_leg_docs_allow_verified_transient_vendor_recovery() -> None:

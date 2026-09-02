@@ -238,6 +238,18 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.550
+
+0.2.550 hardens recovery from repeated failures that occur before any provider starts.
+After a second zero-provider failure in the same attempted workflow, stop allocating fresh
+review IDs, retain and compare every failure receipt, verify the shared root cause, and run one
+provider-free setup-only probe before preparing another formal round. For source-SOT bootstrap,
+keep the host command at the environment-required outer workdir while the documented subshell
+enters a distinct neutral child cwd. Preserve `HOME` and isolate Codex state with `CODEX_HOME`.
+Repository verification commands likewise bind the intended checkout explicitly so another
+workspace-level `tests/` directory cannot be selected accidentally. Provider composition,
+routing, and the strict `LegVerdict` schema are unchanged.
+
 ### Upgrading to 0.2.549
 
 0.2.549 changes required-leg failure handling once any review family starts.
@@ -339,7 +351,7 @@ native. Ordinary `codex` remains the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.549-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.550-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

@@ -19,6 +19,13 @@ JSON. Never strip or filter a contaminated result; invalidate the round, fix the
 invocation contract, and restart every required family under a fresh ID.
 A preflight or launch-setup failure before any provider leg starts uses cleanup and fresh-ID restart;
 classify and correct the zero-provider failure or verify recovery from a transient vendor incident first.
+After a second zero-provider failure in the same attempted workflow, stop allocating fresh review IDs.
+Retain and compare every failure receipt. For each attempt, record the exact non-secret command, the
+outer host-command working directory, the inner bootstrap child working directory, environment
+override names without secret values, exit status and error, and provider-start evidence. Compare
+those fields with the canonical instruction block, investigate and verify the shared root cause, and
+resume only after one controlled setup-only probe demonstrates the corrected path. A changed command
+alone is not a correction, and the probe is not a formal review round.
 But once any provider leg has started, a later leg start or result failure invalidates admission but
 does not cancel sibling execution; do not launch a not-yet-started leg after the failure; wait for every already-started sibling to terminate,
 strictly validate every terminal result that is structurally available, and confirm that every exact
@@ -109,6 +116,12 @@ working directory and one task-scoped stage. Bind every path first, keep the lau
 the bootstrap `PATH`, and isolate bootstrap's launcher, Codex-home, configuration, classifier, and
 shell-rc targets inside the stage. Run this before packet capture; bootstrap may also create its
 ordinary ignored runtime-log directory under the canonical toolkit root:
+
+Keep any project root required by the host executor as the outer host-command working directory.
+Inside that login-shell invocation, the shown subshell `cd` sets the inner bootstrap child working
+directory; the bootstrap guard evaluates the child process's `PWD`. Do not substitute the toolkit
+root or stage root for that child directory. Preserve the login user's `HOME`; isolate Codex with
+`CODEX_HOME`, not `HOME`, exactly as shown.
 
 ```text
 selector_bootstrap_cwd_raw="$(mktemp -d "${TMPDIR:-/tmp}/triad-selector-cwd.${review_id}.XXXXXX")"
