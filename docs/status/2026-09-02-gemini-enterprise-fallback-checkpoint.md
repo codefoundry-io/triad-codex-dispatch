@@ -10,7 +10,7 @@ the round. `personal-google` continues to require AGY.
 ## Review-unit sizing
 
 - Classification: S/M with the owner-approved 500-1,000-line extension envelope.
-- Current production net delta: 978 lines across `.codex-plugin/`, `bin/`, and
+- Current production net delta: 988 lines across `.codex-plugin/`, `bin/`, and
   `scripts/` relative to the implementation base.
 - Novel deterministic core estimate: 260-290 lines.
 - Behavioral claims: one.
@@ -44,7 +44,7 @@ the round. `personal-google` continues to require AGY.
 - Permission-guidance RED: two focused cases failed while public guidance still
   recommended unrestricted host access. A separate fresh executor then passed
   the corrected three-case selector under `workspace-write` / `on-request`.
-- Full repository suite: 669 tests passed under that fresh GREEN executor.
+- Full repository suite: 671 tests passed on the final integrated candidate.
 - Both skill validators and the plugin validator passed.
 - Ruff passed for every changed Python source and test path. `git diff --check`
   and `bash -n scripts/bootstrap.sh` passed.
