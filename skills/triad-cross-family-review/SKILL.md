@@ -130,22 +130,19 @@ in the round.
    Launch all TRIAD lifecycle, provider, test, and development commands outside the Codex workspace sandbox under the user-selected host policy. In `workspace-write`, request the outside-sandbox execution directly before the first such command; do not spend a trial command on a known sandbox failure. This outer host boundary is separate from every provider-native read/search-only control. Do not install or mutate the Codex host permission policy; recipient setup belongs in the user or trusted-project Codex configuration described by the plugin README.
    TRIAD never signs in, changes accounts or authentication classes, or switches routes after the selected provider starts or fails. Only after preflight succeeds, render every requested prompt with that same selector and preflight receipt, bind both receipts' exact SHA values plus the selected model and effort into the common digest, and start all three independent legs before consuming a verdict; the selected wrapper executes its recorded executable. Reviewers may read and search only; they do not edit or execute candidate code, tests, builds, hooks, or scripts.
    For every provider-wrapper invocation, set `TRIAD_DISPATCH_LOG_DIR="$review_log_dir"` exactly.
-7. **Validate provisional results.** Each family returns one JSON object matching
-   `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with
-   the packaged validator. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical. A missing, refused, malformed, route-mismatched, or
-   incomplete required leg invalidates the round. Successful schema and binding validation keeps a result provisional; it is not admitted as formal review evidence until Step 8 succeeds. At the first required-leg failure, immediately
-   terminate every still-running leg and its exact provider process group. Wait and confirm that every exact
-   provider process tree is gone before integrity verification, then discard every current-round
-   verdict; never continue a sibling merely to collect advisory evidence. After Step 8, clean the
-   exact managed root and repair the infrastructure defect before preparing a fresh review ID.
-8. **Verify integrity and admit results.** For prepared-directory review rounds, after all required legs terminate, run
+7. **Validate provisional results.** Each family returns one JSON object matching `verdict_schema:LegVerdict`. Bind review ID, family, and content digest with the packaged validator. Construct review_id, family, and content_digest by copying their complete string values directly from the single Review metadata JSON record. Before returning, compare each copied value character-for-character with that record; the three pairs must be identical.
+   A preflight or launch-setup failure before any provider leg starts uses cleanup and fresh-ID restart; classify and correct the zero-provider failure or verify recovery from a transient vendor incident first. But once any provider leg has started, a later leg start or result failure that is missing, refused, malformed, route-mismatched, or incomplete invalidates admission but does not cancel sibling execution; do not launch a not-yet-started leg after the failure; wait for every already-started sibling to terminate, strictly validate every structurally available terminal result, and confirm that every exact provider process tree is gone before integrity verification; run it only after every started leg terminates.
+   Structurally valid results remain provisional until post-review integrity succeeds. After a matching Step 8 check, preserve and reproduce every valid sibling finding as advisory only while classifying the failure as a workflow, skill, tool, instruction, operator, or vendor problem.
+   A valid `NOT-SAFE` result is not a failed leg; it receives the same complete sibling collection and blocks a `SAFE` gate. A valid sibling result never admits the failed round or supplies admission credit to a later round. If integrity fails, treat outputs only as untrusted leads and independently reproduce any claim before use; diagnose and correct the integrity mismatch before a fresh round.
+   Before preparing a fresh round, reproduce every collected finding before the next round; correct and verify every reproduced in-scope defect, and correct the classified leg failure or verify recovery from a transient vendor incident. A finding that requires a design expansion still stops for owner approval. Then write the authorized durable handoff, clean the exact managed root, and prepare a fresh review ID for a complete three-family round.
+8. **Verify integrity and admit results.** For prepared-directory review rounds, after every started leg terminates and, for a partial start, the actual start failure is recorded and each remaining unstarted required leg is recorded as not started because launch was closed, run
    `python3 bin/review_round.py verify --prepared-dir "$review_shared" --worktree "$review_worktree" --snapshot "$review_snapshot"`;
    the task-authorized zero-provider characterization runs that same command through the Flow step 4 branch.
-   Do not modify the canonical worktree until every required leg has terminated. The prepared-directory
+   Do not modify the canonical worktree until every started leg has terminated. The prepared-directory
    route requires `ROUND_INTEGRITY_OK`. An explicitly selected worktree-first round instead performs
-   the exact project-required post-review fingerprint check after every required leg terminates.
+   the exact project-required post-review fingerprint check after every started leg terminates.
    Any prepared-directory or worktree fingerprint mismatch invalidates the round; equality is required
-   before result admission. Only after the required integrity check succeeds, admit the provisionally validated results as formal review evidence.
+   before result admission. Only when every required leg has a structurally valid result and the required integrity check succeeds may provisionally validated results be admitted as formal review evidence. A failed round never admits any result.
 9. **Reproduce and converge.** Read
    [convergence](references/convergence.md). Verify every finding against the
    canonical worktree. Apply only the smallest correction inside the approved
@@ -197,4 +194,4 @@ imports, or an already-running session are not acceptance evidence.
 | Design/spec/capability/scope delta | Ask owner before editing |
 | Conflicting verified claims | Ask owner to adjudicate |
 | Alternating advice on unchanged bytes | Stop and ask owner |
-| Missing/invalid required leg | Cancel siblings, discard every verdict, verify and clean, then repair infrastructure |
+| Missing/invalid required leg after any leg starts | Finish started siblings, verify integrity, retain valid findings as advisory only, diagnose, then rerun all three under a fresh ID |

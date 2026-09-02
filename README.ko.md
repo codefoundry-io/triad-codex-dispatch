@@ -217,6 +217,17 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.549 업그레이드
+
+0.2.549는 review family 하나라도 시작된 뒤 required leg의 시작이나 결과가 실패할 때의
+처리를 바꿉니다. 실패한 leg는 계속 admission을 무효화하지만 이미 시작된 sibling을
+취소하지 않습니다. 리더는 이미 시작된 모든 sibling을 기다리고, 구조적으로 사용 가능한 결과를
+엄격히 검증한 뒤 post-review integrity를 확인합니다. 유효한 sibling finding은 advisory로만 유지하며,
+모두 재현하고 확인된 범위 내 결함과 workflow, skill, tool, instruction, operator 또는
+vendor로 분류한 실패 원인을 함께 수정하거나 transient vendor incident의 복구를 검증한 뒤 fresh complete three-family round를
+실행합니다. 이 finding은 실패한 round를 admit하거나 다음 round에 admission credit을
+제공하지 않습니다. provider 구성, routing, strict `LegVerdict` schema는 바뀌지 않습니다.
+
 ### 0.2.548 업그레이드
 
 0.2.548은 Gemini를 사후 재시도로 만들지 않으면서 회사용 정식 Google route를
@@ -276,8 +287,8 @@ review-binding 검증을 반복합니다. 사람이 읽는 response text와 fini
 verdict transport가 아니며,
 개인 또는 Gemini Enterprise Business Sign-In,
 일시적 global-settings transaction, `--sandbox read-only`, operator opt-out, 유료
-API/ADC/Vertex route-selector 제거, local 결과 binding, whole-round fail-fast
-cancellation은 유지합니다.
+API/ADC/Vertex route-selector 제거, local 결과 binding, failed-round 진단 전에 이미
+시작된 sibling을 모두 완료하는 계약을 유지합니다.
 
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
@@ -299,7 +310,7 @@ non-formal Claude permission 선택과 모든 project-trust policy는 native 설
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.548-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.549-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -359,8 +370,9 @@ advisory review는 별도로 owner가 승인한 data scope를 따릅니다.
 Normal SDD implementation review includes relevant test source.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file body.
-Leader는 dispatch 전에 prepared-directory integrity digest를 기록하고 모든 required leg이 끝난
-뒤 다시 비교합니다. 달라지면 round를 무효화합니다. 정식 gate 전에 모든 test failure를
+Leader는 dispatch 전에 prepared-directory integrity digest를 기록하고 시작된 모든 leg이 끝난 뒤
+다시 비교합니다. partial-start round에서는 실제 start failure와 나머지 required leg를
+launch가 닫혀 시작하지 않은 상태로 기록한 뒤 비교합니다. 달라지면 round를 무효화합니다. 정식 gate 전에 모든 test failure를
 production defect, test-case defect, intentional specification change 중 하나로
 분류하고 해결하거나 승인합니다. Reviewer는 candidate code, test, build, hook,
 generated script를 실행하지 않습니다.
@@ -372,7 +384,7 @@ full diff는 navigation evidence이지 review boundary가 아닙니다. Leader�
 directory에 준비합니다. 모든 required family는 그 동일한 complete directory를 한 번씩
 검토하고 family, review ID, route-bound `metadata.content_digest`에 bind된 strict `LegVerdict` 하나를
 반환합니다. Leader는 dispatch 전에 prepared-directory integrity digest와 canonical-worktree fingerprint를
-capture하고 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
+capture하고 시작된 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
 재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는
 prompt-controlled이며, manifest path나 provider confidence만으로 승격하지 않습니다.
 

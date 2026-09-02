@@ -32,6 +32,14 @@ Google dispatch; bind both receipt SHA values plus the selected model and effort
 the common review digest. Never
 switch after the selected provider starts or fails.
 
+Once any provider leg has started, a later required-leg start or result failure invalidates
+admission but already-started sibling families finish. Strictly validate their
+available terminal results and run post-review integrity verification. Preserve
+valid sibling findings as advisory only, reproduce and correct every in-scope
+defect, then classify and correct the failed leg or verify recovery from a transient vendor incident before a fresh complete
+three-family round. No sibling result admits the failed round or supplies later
+admission credit.
+
 Select provider permissions and project trust in that authenticated developer
 environment before dispatch. TRIAD does not install a separate Codex profile,
 rule, permission mode, or pre-spawn `shell_environment_policy`. The Codex-led

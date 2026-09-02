@@ -110,7 +110,8 @@ Every leg receives the same directory and task. No prompt inlines a diff or file
 body. The prepared-directory digest protects packet bytes; the renderer binds it
 with the canonical Google selector receipt into one result-admission content digest shared by
 every family. Compare both packet integrity and result bindings after every
-required leg terminates. Reviewers do not execute candidate code, tests, builds,
+started leg terminates. In a partial-start round, record the actual start failure and each remaining
+required leg as not started because launch was closed before comparison. Reviewers do not execute candidate code, tests, builds,
 hooks, or generated scripts.
 
 Before a formal gate, classify every test failure as production defect,
@@ -122,6 +123,13 @@ The immutable prepared-directory digest, canonical-worktree fingerprint, local s
 validation, independent family review, and leader reproduction protect result
 integrity. They do not prove that a provider read every byte or choose runtime
 permissions.
+
+Once any provider leg has started, a later required-leg start or result failure invalidates
+admission but already-started sibling families finish. Their structurally valid
+results remain provisional until post-review integrity succeeds; valid findings
+are advisory only and must be reproduced. They never admit the failed round or
+supply admission credit to a later round. The leader must correct the classified
+failure or verify recovery from a transient vendor incident, and correct every reproduced in-scope defect before a fresh complete round.
 
 ## Formal Google boundary
 
