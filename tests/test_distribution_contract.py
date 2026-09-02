@@ -20,7 +20,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.548"
+    assert manifest["version"] == "0.2.549"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -32,7 +32,7 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     version = json.loads(_text(MANIFEST))["version"]
     changelog = _text(ROOT / "CHANGELOG.md")
 
-    assert f"## {version} — 2026-09-02" in changelog
+    assert f"## {version} — 2026-09-03" in changelog
     assert f"### Upgrading to {version}" in _text(ROOT / "README.md")
     assert f"### {version} 업그레이드" in _text(ROOT / "README.ko.md")
     assert "## 0.2.541 — 2026-08-20" in changelog
@@ -254,8 +254,9 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "a mid-round mutation may affect another leg's reads before final verification"
         in compact_leg_contracts
     )
+    assert "invalidates admission for the complete round" in compact_leg_contracts
     assert (
-        "invalidates the complete round and discards every verdict"
+        "treat outputs only as untrusted leads that require independent reproduction"
         in compact_leg_contracts
     )
     assert "1.1.20 or newer" in agy
@@ -721,7 +722,7 @@ def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
     assert "After the first or third outcome" in skill
 
 
-def test_cross_family_skill_cancels_every_sibling_on_first_leg_failure() -> None:
+def test_cross_family_skill_collects_started_siblings_after_leg_failure() -> None:
     skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
     leg_contracts = " ".join(
         _text(
@@ -740,17 +741,119 @@ def test_cross_family_skill_cancels_every_sibling_on_first_leg_failure() -> None
     )
 
     for text in (skill, leg_contracts, routing, convergence):
-        assert "first required-leg failure" in text
-        assert "terminate every still-running leg" in text
-        assert "discard every current-round verdict" in text
-        assert "never continue a sibling merely to collect advisory evidence" in text
+        assert "once any provider leg has started" in text
+        assert "later leg start or result failure" in text
+        assert "invalidates admission" in text
+        assert "wait for every already-started sibling" in text
+        assert "remain provisional until post-review integrity succeeds" in text
+        assert "preserve and reproduce every valid sibling finding" in text
+        assert "skill, tool, instruction, operator, or vendor" in text
+        assert "valid `NOT-SAFE`" in text
+        assert "advisory only" in text
+        assert "reproduce every collected finding before the next round" in text
+        assert "correct and verify every reproduced in-scope defect" in text
+        assert "correct the classified leg failure" in text
+        assert "diagnose and correct the integrity mismatch before a fresh round" in text
+        assert "after every started leg terminates" in text
+        assert "terminate every still-running leg" not in text
+        assert "discard every current-round verdict" not in text
+        assert (
+            "never continue a sibling merely to collect advisory evidence" not in text
+        )
     assert (
         "confirm that every exact provider process tree is gone before integrity verification"
         in skill
     )
     assert (
-        "repair the infrastructure defect before preparing a fresh review ID" in skill
+        "never admits the failed round or supplies admission credit to a later round"
+        in skill
     )
+    assert "prepare a fresh review ID for a complete three-family round" in skill
+    assert "discards every verdict" not in leg_contracts
+    assert "treat outputs only as untrusted leads" in leg_contracts
+
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+    security = " ".join(_text(ROOT / "SECURITY.md").split())
+    migration = " ".join(_text(ROOT / "migration" / "AGENTS.recommended.md").split())
+    for text in (readme, readme_ko, security, migration):
+        assert "whole-round fail-fast cancellation" not in text
+        assert "immediate whole-round fail-fast cancellation" not in text
+    assert "valid sibling findings remain advisory only" in readme.lower()
+    assert "유효한 sibling finding은 advisory로만 유지" in readme_ko
+    assert "already-started sibling families finish" in security
+    assert "already-started sibling families finish" in migration
+
+
+def test_cross_family_skill_admits_only_a_complete_healthy_round() -> None:
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+    step_eight = skill.split(
+        "8. **Verify integrity and admit results.**", 1
+    )[1].split("9. **Reproduce and converge.**", 1)[0]
+
+    assert "every required leg has a structurally valid result" in step_eight
+    assert "required integrity check succeeds" in step_eight
+    assert "failed round never admits" in step_eight
+    assert "after every started leg terminates" in step_eight
+    assert "the actual start failure is recorded" in step_eight
+    assert (
+        "each remaining unstarted required leg is recorded as not started because launch "
+        "was closed" in step_eight
+    )
+    assert "after all required legs terminate" not in step_eight
+
+
+def test_cross_family_skill_distinguishes_zero_start_from_partial_start_failure() -> (
+    None
+):
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+    leg_contracts = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+
+    for text in (skill, leg_contracts):
+        assert "before any provider leg starts" in text
+        assert "preflight or launch-setup failure" in text
+        assert "cleanup and fresh-ID restart" in text
+        assert (
+            "classify and correct the zero-provider failure or verify recovery from a "
+            "transient vendor incident" in text
+        )
+        assert "once any provider leg has started" in text
+        assert "later leg start or result failure" in text
+        assert "does not cancel" in text
+        assert "wait for every already-started sibling" in text
+        assert "do not launch a not-yet-started leg after the failure" in text
+        assert "advisory only" in text
+        assert "fresh" in text and "complete three-family round" in text
+        assert "admission credit" in text
+
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+    security = " ".join(_text(ROOT / "SECURITY.md").split())
+    for text in (readme, security):
+        assert "after every started leg terminates" in text
+        assert "record the actual start failure" in text
+        assert "not started because launch was closed" in text
+    assert "시작된 모든 leg이 끝난 뒤" in readme_ko
+    assert "실제 start failure" in readme_ko
+    assert "launch가 닫혀 시작하지 않은 상태" in readme_ko
+
+
+def test_failed_leg_docs_allow_verified_transient_vendor_recovery() -> None:
+    for path in (
+        ROOT / "README.md",
+        ROOT / "SECURITY.md",
+        ROOT / "migration" / "AGENTS.recommended.md",
+        ROOT / "CHANGELOG.md",
+    ):
+        assert "verify recovery from a transient vendor incident" in _text(path)
+
+    readme_ko = _text(ROOT / "README.ko.md")
+    assert "transient vendor incident" in readme_ko
+    assert "복구를 검증" in readme_ko
 
 
 def test_cross_family_skill_uses_current_task_authority_before_preparing() -> None:
@@ -953,7 +1056,9 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         in skill
     )
     assert (
-        "For prepared-directory review rounds, after all required legs terminate, run "
+        "For prepared-directory review rounds, after every started leg terminates and, "
+        "for a partial start, the actual start failure is recorded and each remaining "
+        "unstarted required leg is recorded as not started because launch was closed, run "
         '`python3 bin/review_round.py verify --prepared-dir "$review_shared" '
         '--worktree "$review_worktree" --snapshot "$review_snapshot"`'
     ) in skill
@@ -970,7 +1075,7 @@ def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
         "verify-and-exact-cleanup branch"
     ) in skill
     assert (
-        "Do not modify the canonical worktree until every required leg has terminated"
+        "Do not modify the canonical worktree until every started leg has terminated"
     ) in skill
     assert "The prepared-directory route requires `ROUND_INTEGRITY_OK`" in skill
     assert (

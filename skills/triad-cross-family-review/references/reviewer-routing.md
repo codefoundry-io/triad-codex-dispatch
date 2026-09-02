@@ -64,15 +64,25 @@ receipt compatibility mode is supported. Provider permissions do not prove a
 no-edit boundary; prompt controls and integrity verification decide admission
 within their stated scopes. Round integrity verification binds the selected
 prepared-directory bytes or worktree review digest plus canonical worktree fingerprint.
-At the first required-leg failure, terminate every still-running leg and its
-exact provider process group, discard every current-round verdict, and never
-continue a sibling merely to collect advisory evidence. Confirm termination,
-verify integrity, clean the exact round, and repair the defect before a fresh ID.
+After dispatch begins, once any provider leg has started, a later leg start or result failure invalidates admission but does
+not cancel sibling execution; do not launch a not-yet-started leg after the failure; wait for every already-started sibling to terminate,
+strictly validate every terminal result that is structurally available, and confirm that every exact
+provider process tree is gone before integrity verification; run it only after every started leg terminates. Structurally valid results remain
+provisional until post-review integrity succeeds. After a matching integrity check, preserve and
+reproduce every valid sibling finding as advisory only while classifying the failure as a workflow,
+skill, tool, instruction, operator, or vendor problem. A valid `NOT-SAFE` result is not a failed leg
+and receives the same complete sibling collection. Valid sibling results never admit the failed
+round or supply admission credit to a later round. If integrity fails, treat outputs only as
+untrusted leads and independently reproduce any claim before use; diagnose and correct the integrity mismatch before a fresh round. Before preparing a fresh round,
+reproduce every collected finding before the next round; correct and verify every reproduced
+in-scope defect, and correct the classified leg failure or verify recovery from a transient vendor
+incident. A finding that requires a design expansion still stops for owner approval. Clean the exact
+round, prepare a fresh ID, and rerun a complete three-family round.
 External-state change through a configured
 MCP tool is prompt-controlled and reviewer-disclosed; it is not mechanically
 observed by round integrity.
 
-Use [convergence](convergence.md) after all legs terminate. The leader may fix
+Use [convergence](convergence.md) after every started leg terminates. For a partial start, record the actual start failure and each remaining unstarted required leg as not started because launch was closed. The leader may fix
 only a reproduced bounded defect inside approved design. Design,
 specification, capability, generalization, and scope changes require an owner
 decision before editing. A correction creates a new digest and a fresh

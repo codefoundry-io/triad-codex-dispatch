@@ -238,6 +238,17 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.549
+
+0.2.549 changes required-leg failure handling once any review family starts.
+One failed leg still invalidates admission, but it no longer cancels already-started siblings. The leader waits for every started sibling,
+strictly validates structurally available results, and runs post-review
+integrity verification. Valid sibling findings remain advisory only: reproduce
+them and correct every verified in-scope defect together with the classified
+workflow, skill, tool, instruction, operator, or vendor failure—or verify recovery from a transient vendor incident—before a fresh complete three-family round. Those findings never admit the failed round or
+supply admission credit to a later round. Provider composition, routing, and
+the strict `LegVerdict` schema are unchanged.
+
 ### Upgrading to 0.2.548
 
 0.2.548 restores a company-safe formal Google route without making Gemini a
@@ -304,7 +315,8 @@ local `LegVerdict` plus exact review-binding validation. Human-readable response
 text and finish diagnostics are not verdict transport. It supports personal or
 Gemini Enterprise Business Sign-In, transient global-settings transaction, `--sandbox read-only`,
 operator opt-out, billed API/ADC/Vertex route-selector removal, local result
-binding, and immediate whole-round fail-fast cancellation.
+binding, and completion of already-started siblings before failed-round
+diagnosis and a fresh complete round.
 
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
@@ -327,7 +339,7 @@ native. Ordinary `codex` remains the normal path.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.548-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.549-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -388,7 +400,8 @@ source. Other advisory review follows its separately owner-approved data scope.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
 body. Record one prepared-directory integrity digest before dispatch and compare it after every
-required leg terminates; a mismatch invalidates the round. Before a formal gate,
+started leg terminates. In a partial-start round, record the actual start failure and each remaining
+required leg as not started because launch was closed before comparison; a mismatch invalidates the round. Before a formal gate,
 classify every test failure as production defect, test-case defect, or intentional
 specification change and resolve or approve it. Reviewers do not run candidate
 code, tests, builds, hooks, or generated scripts.
@@ -399,7 +412,7 @@ configuration, and governing documentation relevant to the decision. Every
 required family reviews that same complete directory once and returns one
 strict `LegVerdict` bound to its family, review ID, and route-bound `metadata.content_digest`.
 The leader separately captures the prepared-directory integrity digest and canonical-worktree fingerprint
-before dispatch, verifies both after all legs terminate, and reproduces every
+before dispatch, verifies both after every started leg terminates, and reproduces every
 finding against the canonical worktree. Reviewer coverage is prompt-controlled
 unless the provider exposes a stronger boundary; it is never promoted from a
 manifest path or provider confidence statement alone.

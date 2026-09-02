@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.549 — 2026-09-03
+
+- Replaces first-failure whole-round cancellation once any family has started
+  with complete started-sibling collection. A missing, refused, malformed, or
+  otherwise failed required leg still invalidates formal admission, while every
+  already-started sibling finishes and every structurally valid result remains
+  provisional until post-review integrity succeeds.
+- Preserves valid sibling findings as advisory-only evidence, reproduces every
+  collected finding, classifies the failed leg as a workflow, skill, tool,
+  instruction, operator, or vendor problem, corrects every verified in-scope defect,
+  and must either correct the classified failure or verify recovery from a transient vendor incident before a fresh complete three-family round. No
+  sibling result admits the failed round or supplies credit to a later round.
+- Supersedes the 0.2.536 first-failure sibling-cancellation policy without changing
+  the public Claude/Google/fresh-Codex composition, `LegVerdict` schema, Google
+  route selection, or no-post-failure-fallback contract. Historical design and
+  plan documents remain records of the policy they originally specified.
+
 ## 0.2.548 — 2026-09-02
 
 - Adds a provider-free Google-route selector before any review family starts.
