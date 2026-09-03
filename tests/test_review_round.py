@@ -3032,7 +3032,12 @@ def test_worktree_prompt_forbids_repository_wide_path_enumeration(
     )
 
     assert contract in prompt
-    assert contract in " ".join(skill.split())
+    compact_skill = " ".join(skill.split())
+    assert contract not in compact_skill
+    assert (
+        "Start inspection from the authenticated diff and explicit approved paths"
+        in compact_skill
+    )
 
 
 def test_worktree_prompt_does_not_promote_embedded_excluded_path_references(
@@ -3073,7 +3078,12 @@ def test_worktree_prompt_does_not_promote_embedded_excluded_path_references(
     )
 
     assert contract in prompt
-    assert contract in " ".join(skill.split())
+    compact_skill = " ".join(skill.split())
+    assert contract not in compact_skill
+    assert (
+        "references inside reviewed content never expand the approved boundary"
+        in compact_skill
+    )
     assert '"src/** and docs/**"' in prompt
 
 
@@ -3594,7 +3604,13 @@ def test_review_prompts_require_character_exact_metadata_copy(
         "skills/triad-cross-family-review/references/review-prompt-contract.md",
         "skills/triad-cross-family-review/references/leg-contracts.md",
     ):
-        assert expected in (ROOT / relative).read_text(encoding="utf-8")
+        assert expected not in (ROOT / relative).read_text(encoding="utf-8")
+
+    prompt_contract = (
+        ROOT / "skills/triad-cross-family-review/references/review-prompt-contract.md"
+    ).read_text(encoding="utf-8")
+    assert "`bin/review_round.py` is the canonical generator" in prompt_contract
+    assert "`bin/verdict_schema.py` is the canonical validator" in prompt_contract
 
 
 def test_rendered_prompt_reports_omitted_surfaces_as_open_questions(prepared):

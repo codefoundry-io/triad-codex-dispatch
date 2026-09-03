@@ -217,6 +217,15 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.551 업그레이드
+
+0.2.551은 cross-family skill을 축소하고 기계적으로 검사할 수 있는 안전 규칙을 wrapper,
+bootstrap, contract test로 이동합니다. 완전히 binding된 formal Claude `LegVerdict` route는
+provider resolution 전에 `opus`, `xhigh`, 1,800초 timeout, fallback 없음 조건을 모두
+충족해야 합니다. source-SOT staging은 review basis capture보다 먼저 실행되고, basis
+route마다 하나의 명시적 provider cwd를 사용하며, Python 3.12로 임시 root를 정규화합니다.
+또한 설치 시작 전에 toolkit 또는 review worktree 안의 모든 staged write target을 거부합니다.
+
 ### 0.2.550 업그레이드
 
 0.2.550은 provider가 하나도 시작되기 전에 반복되는 실패의 복구 절차를 강화합니다.
@@ -316,13 +325,15 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
+완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1800`을
+사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
 non-formal Claude permission 선택과 모든 project-trust policy는 native 설정을
 유지합니다. 일반 `codex`가 정상 경로입니다.
 
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.550-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.551-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

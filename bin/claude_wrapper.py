@@ -5,7 +5,8 @@ Forwards a prompt to Claude's JSON output mode along with only native model,
 effort, fallback-model, working-directory, timeout, schema, and debug controls.
 Provider-owned permission and trust settings are left to the native CLI for
 ordinary calls. The exact formally bound ``LegVerdict`` route adds native
-``--permission-mode plan``.
+``--permission-mode plan`` and fails before provider resolution unless it uses
+``opus`` with ``xhigh`` effort, a 1,800-second timeout, and no fallback model.
 
 Stdout is the final answer text from envelope `.result` (or, with
 ``--pydantic``, the validated JSON object). Stderr is wrapper logging and
@@ -33,6 +34,9 @@ from _common import (
 
 
 EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
+FORMAL_CLAUDE_MODEL = "opus"
+FORMAL_CLAUDE_EFFORT = "xhigh"
+FORMAL_CLAUDE_TIMEOUT = 1800
 
 
 def _run_native_structured_once(
@@ -216,6 +220,7 @@ def main() -> int:
         args.expected_family,
         args.expected_content_digest,
     )
+    formal_bindings_complete = all(value is not None for value in binding_values)
     if args.pydantic == "verdict_schema:LegVerdict" and not all(
         value is not None for value in binding_values
     ):
@@ -234,6 +239,17 @@ def main() -> int:
         if re.fullmatch(r"[0-9a-f]{64}", args.expected_content_digest) is None:
             log("expected content digest must be 64 lowercase hexadecimal characters")
             return EXIT_ARG_ERROR
+    if formal_bindings_complete and (
+        args.model != FORMAL_CLAUDE_MODEL
+        or args.effort != FORMAL_CLAUDE_EFFORT
+        or args.timeout != FORMAL_CLAUDE_TIMEOUT
+        or args.fallback_model is not None
+    ):
+        log(
+            "formal Claude route requires --model opus --effort xhigh "
+            "--timeout 1800 and forbids --fallback-model"
+        )
+        return EXIT_ARG_ERROR
 
     claude_bin = require_binary("claude")
 
@@ -251,7 +267,7 @@ def main() -> int:
             cmd += ["--effort", args.effort]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
-        if all(value is not None for value in binding_values):
+        if formal_bindings_complete:
             cmd += ["--permission-mode", "plan"]
         if native_schema is not None:
             cmd += ["--json-schema", native_schema]
@@ -260,7 +276,7 @@ def main() -> int:
     native_schema = None
     if pydantic_cls is not None:
         schema_object = pydantic_cls.model_json_schema()
-        if all(value is not None for value in binding_values):
+        if formal_bindings_complete:
             properties = schema_object["properties"]
             properties["review_id"]["const"] = args.expected_review_id
             properties["family"]["const"] = args.expected_family

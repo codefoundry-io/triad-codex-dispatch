@@ -238,6 +238,15 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.551
+
+0.2.551 makes the cross-family skill smaller while moving machine-checkable safety into
+the wrappers, bootstrap, and contract tests. A fully bound formal Claude `LegVerdict` route
+now requires `opus`, `xhigh`, a 1,800-second timeout, and no fallback before provider
+resolution. Source-SOT staging precedes review-basis capture, uses one explicit provider
+cwd per basis route, canonicalizes temporary roots through Python 3.12, and rejects every
+staged write target inside the toolkit or review worktree before installation begins.
+
 ### Upgrading to 0.2.550
 
 0.2.550 hardens recovery from repeated failures that occur before any provider starts.
@@ -345,13 +354,15 @@ passes native `--json-schema`, consumes `structured_output`, and validates it
 locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
+A fully bound formal Claude route fails closed before provider resolution unless
+it uses `--model opus --effort xhigh --timeout 1800` with no `--fallback-model`.
 Non-formal Claude permission selection and all project-trust policy remain
 native. Ordinary `codex` remains the normal path.
 
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.550-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.551-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

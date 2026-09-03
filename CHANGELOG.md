@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.551 — 2026-09-03
+
+- Adds fail-closed formal Claude route pinning: a fully bound `LegVerdict` call reaches
+  provider resolution only with `opus`, `xhigh`, a 1,800-second timeout, and no fallback.
+- Restores source-SOT launcher staging order and exact temporary-root cleanup, makes
+  bootstrap fail closed when any staged write target is inside the toolkit or review
+  worktree, canonicalizes temporary roots with the required Python runtime, gives both
+  review-basis routes one explicit provider cwd, narrows mechanical ownership claims, and
+  freezes both Google preflight examples under exact tests.
+
 ## 0.2.550 — 2026-09-03
 
 - Distinguishes the host executor's outer working directory from the neutral child working

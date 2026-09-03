@@ -404,6 +404,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
 
     def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
         calls.append(cmd)
+        assert _timeout == 1800
         schema = json.loads(cmd[cmd.index("--json-schema") + 1])
         properties = schema["properties"]
         assert properties["review_id"]["const"] == "review-r1"
@@ -431,6 +432,12 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
             "claude_wrapper.py",
             "--prompt",
             "review",
+            "--model",
+            "opus",
+            "--effort",
+            "xhigh",
+            "--timeout",
+            "1800",
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -445,7 +452,12 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
     assert claude_wrapper.main() == 0
     assert json.loads(capsys.readouterr().out) == payload
     assert len(calls) == 1
+    for option in ("--model", "--effort", "--permission-mode", "--json-schema"):
+        assert calls[0].count(option) == 1
+    assert calls[0][calls[0].index("--model") + 1] == "opus"
+    assert calls[0][calls[0].index("--effort") + 1] == "xhigh"
     assert calls[0][calls[0].index("--permission-mode") + 1] == "plan"
+    assert "--fallback-model" not in calls[0]
 
 
 def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
@@ -493,6 +505,12 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
             "claude_wrapper.py",
             "--prompt",
             "review",
+            "--model",
+            "opus",
+            "--effort",
+            "xhigh",
+            "--timeout",
+            "1800",
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -509,40 +527,131 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
 
 
 @pytest.mark.parametrize(
-    "binding_args",
+    "route_args",
     (
-        (),
-        ("--expected-review-id", "review-r1"),
+        ("--effort", "xhigh", "--timeout", "1800"),
+        ("--model", "sonnet", "--effort", "xhigh", "--timeout", "1800"),
+        ("--model", "opus", "--timeout", "1800"),
+        ("--model", "opus", "--effort", "high", "--timeout", "1800"),
+        ("--model", "opus", "--effort", "xhigh"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "1799"),
         (
-            "--expected-review-id",
-            "review-r1",
-            "--expected-family",
-            "claude",
-            "--expected-content-digest",
-            "a" * 64,
+            "--model",
+            "opus",
+            "--effort",
+            "xhigh",
+            "--timeout",
+            "1800",
+            "--fallback-model",
+            "sonnet",
+        ),
+        (
+            "--model",
+            "opus",
+            "--effort",
+            "xhigh",
+            "--timeout",
+            "1800",
+            "--fallback-model",
+            "",
+        ),
+    ),
+    ids=(
+        "missing-model",
+        "wrong-model",
+        "missing-effort",
+        "wrong-effort",
+        "default-timeout",
+        "wrong-timeout",
+        "fallback-model",
+        "empty-fallback-model",
+    ),
+)
+def test_claude_formal_leg_rejects_unpinned_route_before_provider_resolution(
+    monkeypatch, capsys, route_args
+) -> None:
+    monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(
+        claude_wrapper,
+        "require_binary",
+        lambda _name: pytest.fail("provider resolved"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "claude_wrapper.py",
+            "--prompt",
+            "review",
             "--pydantic",
-            f"{__name__}:_StructuredAnswer",
-        ),
-        (
-            "--expected-review-id",
-            "invalid/review",
-            "--expected-family",
-            "claude",
-            "--expected-content-digest",
-            "a" * 64,
-        ),
-        (
+            "verdict_schema:LegVerdict",
             "--expected-review-id",
             "review-r1",
             "--expected-family",
             "claude",
             "--expected-content-digest",
-            "A" * 64,
+            "a" * 64,
+            *route_args,
+        ],
+    )
+
+    assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
+    assert (
+        "formal Claude route requires --model opus --effort xhigh --timeout 1800 "
+        "and forbids --fallback-model" in capsys.readouterr().err
+    )
+
+
+@pytest.mark.parametrize(
+    ("binding_args", "expected_error"),
+    (
+        (
+            (),
+            "formal verdict schema requires all formal verdict bindings",
+        ),
+        (
+            ("--expected-review-id", "review-r1"),
+            "formal verdict schema requires all formal verdict bindings",
+        ),
+        (
+            (
+                "--expected-review-id",
+                "review-r1",
+                "--expected-family",
+                "claude",
+                "--expected-content-digest",
+                "a" * 64,
+                "--pydantic",
+                f"{__name__}:_StructuredAnswer",
+            ),
+            "formal verdict bindings require --pydantic verdict_schema:LegVerdict",
+        ),
+        (
+            (
+                "--expected-review-id",
+                "invalid/review",
+                "--expected-family",
+                "claude",
+                "--expected-content-digest",
+                "a" * 64,
+            ),
+            "expected review ID has invalid syntax",
+        ),
+        (
+            (
+                "--expected-review-id",
+                "review-r1",
+                "--expected-family",
+                "claude",
+                "--expected-content-digest",
+                "A" * 64,
+            ),
+            "expected content digest must be 64 lowercase hexadecimal characters",
         ),
     ),
 )
 def test_claude_formal_leg_rejects_invalid_bindings_before_provider_resolution(
-    monkeypatch, binding_args
+    monkeypatch, capsys, binding_args, expected_error
 ) -> None:
     monkeypatch.setattr(
         claude_wrapper,
@@ -563,6 +672,7 @@ def test_claude_formal_leg_rejects_invalid_bindings_before_provider_resolution(
     )
 
     assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
+    assert expected_error in capsys.readouterr().err
 
 
 def test_claude_wrapper_rejects_removed_formal_read_tools_flag(

@@ -415,37 +415,25 @@ PY
 }
 
 check_workspace_escape() {
-  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$CODEX_HOME" "$(dirname -- "$CLASSIFIER_PATH")" "$REPO_ROOT" <<'PY'
+  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$CODEX_HOME" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" <<'PY'
 from pathlib import Path
 import os
 import sys
 
-pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, repo_root_raw = sys.argv[1:]
+pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, shell_rc_raw, repo_root_raw, source_sot_review_raw = sys.argv[1:]
 workspace = Path(pwd_raw).resolve()
 
 
-def _fs_case_insensitive(probe):
-    s = str(probe)
-    try:
-        up, lo = s.upper(), s.lower()
-        if not (os.path.exists(up) and os.path.exists(lo)):
-            return False
-        return os.path.samestat(os.stat(up), os.stat(lo))
-    except OSError:
-        return False
-
-
-_CASE_INSENSITIVE = _fs_case_insensitive(workspace)
-
-
 def _within(target, root):
-    t = os.path.normpath(str(target))
-    r = os.path.normpath(str(root))
-    if _CASE_INSENSITIVE:
-        t, r = t.lower(), r.lower()
-    # exact match OR a path-boundary-anchored prefix (so /a/ws-dispatch is NOT
-    # treated as inside /a/ws — the trailing sep prevents the sibling-prefix trap).
-    return t == r or t.startswith(r.rstrip(os.sep) + os.sep)
+    target_path = Path(target).expanduser().resolve(strict=False)
+    root_path = Path(root).expanduser().resolve()
+    for candidate in (target_path, *target_path.parents):
+        try:
+            if candidate.exists() and os.path.samefile(candidate, root_path):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 targets = (
@@ -466,6 +454,44 @@ for label, target in targets:
             f"workspace-escape guard: {label} resolves inside the "
             f"sandbox-writable workspace: {resolved} (workspace root {workspace})"
         )
+if source_sot_review_raw:
+    review_input = Path(source_sot_review_raw).expanduser()
+    if not review_input.is_absolute():
+        failures.append(
+            "source-SOT stage containment guard: "
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT must be absolute"
+        )
+    elif not review_input.is_dir():
+        failures.append(
+            "source-SOT stage containment guard: "
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT must be an existing directory"
+        )
+    else:
+        protected_roots = (
+            ("toolkit", Path(repo_root_raw).resolve()),
+            ("review-worktree", review_input.resolve()),
+        )
+        generated_roots = (
+            ("bootstrap-cwd", workspace),
+            (
+                "stage-root/launcher-dir",
+                Path(launcher_raw).expanduser().resolve(strict=False),
+            ),
+            ("codex-home", Path(codex_home_raw).expanduser().resolve(strict=False)),
+            (
+                "classifier-dir",
+                Path(classifier_dir_raw).expanduser().resolve(strict=False),
+            ),
+            ("shell-rc", Path(shell_rc_raw).expanduser().resolve(strict=False)),
+        )
+        for generated_label, generated_root in generated_roots:
+            for protected_label, protected_root in protected_roots:
+                if _within(generated_root, protected_root):
+                    failures.append(
+                        "source-SOT stage containment guard: "
+                        f"{generated_label} resolves inside {protected_label}: "
+                        f"{generated_root} (protected root {protected_root})"
+                    )
 for line in failures:
     print(line)
 raise SystemExit(1 if failures else 0)
