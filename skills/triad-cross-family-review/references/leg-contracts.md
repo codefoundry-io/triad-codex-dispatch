@@ -63,8 +63,7 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 Claude receives no implementation task. Its terminal validated JSON is the
 provisional Claude leg result until shared final integrity verification succeeds.
 The formal Claude leg uses the explicit 1,800-second
-end-to-end wrapper deadline; shorter polling waits are wake-up boundaries, not
-provider failures. Its exact formally bound `LegVerdict` route adds native
+end-to-end wrapper deadline. Its exact formally bound `LegVerdict` route adds native
 `--permission-mode plan`; the wrapper rejects that formal schema before
 provider resolution when any required binding is absent. Provider-native tools,
 installed CLI tools, and configured
@@ -327,7 +326,7 @@ their values. Native sign-in state remains provider-owned; TRIAD does not log
 in, switch accounts, or choose a billed API route.
 
 The selected formal AGY leg uses the explicit 1,800-second end-to-end wrapper
-deadline; shorter polling waits are wake-up boundaries, not provider failures.
+deadline.
 Its rendered prompt permits AGY native file-read and search tools for local
 inspection but explicitly forbids `run_command`, terminal and shell tools,
 file-write/edit tools, notebook execution, subagents, browser actuation, and

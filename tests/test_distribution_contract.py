@@ -180,7 +180,6 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     assert "--formal-read-tools" not in claude
     assert "--formal-read-tools" not in leg_contracts
     assert "--timeout 1800" in leg_contracts
-    assert "wake-up boundaries" in leg_contracts
     for compact in (compact_leg_contracts, compact_prompt_contract):
         assert "installed CLI tools" in compact
         assert "Configured MCP servers remain available" in compact
