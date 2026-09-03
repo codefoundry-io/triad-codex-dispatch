@@ -3929,6 +3929,221 @@ def test_install_fails_when_repo_root_inside_workspace(tmp_path):
     assert not any(launcher_bin.iterdir())
 
 
+def _snapshot_tree(root: Path):
+    entries = []
+    for path in sorted(root.rglob("*")):
+        metadata = path.lstat()
+        if path.is_symlink():
+            payload = ("symlink", os.readlink(path))
+        elif path.is_file():
+            payload = ("file", path.read_bytes())
+        else:
+            payload = ("directory", b"")
+        entries.append(
+            (path.relative_to(root).as_posix(), stat.S_IMODE(metadata.st_mode), payload)
+        )
+    return stat.S_IMODE(root.lstat().st_mode), tuple(entries)
+
+
+def test_source_sot_stage_accepts_distinct_temp_roots(tmp_path: Path) -> None:
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    review_worktree = tmp_path / "review-worktree"
+    review_worktree.mkdir()
+    neutral_cwd = tmp_path / "neutral-cwd"
+    neutral_cwd.mkdir()
+    stage_root = tmp_path / "source-sot-stage"
+    stage_root.mkdir()
+    launcher_dir = stage_root / "bin"
+    stage_codex_home = stage_root / "codex-home"
+    stage_codex_home.mkdir()
+    legacy_profile = stage_codex_home / "triad-codex-dispatch.config.toml"
+    legacy_profile.write_bytes(FROZEN_LEGACY_PROFILE)
+    stage_shell_rc = stage_root / "shellrc"
+    stage_shell_rc.write_bytes(FROZEN_LEGACY_SHELL_ENTRY)
+    stage_classifier = (
+        stage_root / "config-home" / "triad-codex-dispatch" / "classifier-patches.json"
+    )
+    review_before = _snapshot_tree(review_worktree)
+
+    result, _env, _default_launcher_dir = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=neutral_cwd,
+        repo_root=repo_root,
+        pre_path=(launcher_dir,),
+        env_overrides={
+            "CODEX_HOME": str(stage_codex_home),
+            "XDG_CONFIG_HOME": str(stage_root / "config-home"),
+            "TRIAD_CLASSIFIER_EXTENSION": str(stage_classifier),
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(stage_shell_rc),
+            "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir),
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": str(review_worktree),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert all((launcher_dir / name).is_file() for name in MANAGED_LAUNCHERS)
+    assert not legacy_profile.exists()
+    assert stage_shell_rc.read_bytes() == b""
+    assert stage_classifier.is_file()
+    assert _snapshot_tree(review_worktree) == review_before
+    assert not (tmp_path / "home").exists()
+    assert not (tmp_path / "xdg-config").exists()
+
+
+@pytest.mark.parametrize("review_root_kind", ("relative", "missing-absolute"))
+def test_source_sot_stage_rejects_invalid_review_root_before_mutation(
+    tmp_path: Path, review_root_kind: str
+) -> None:
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    neutral_cwd = tmp_path / "neutral-cwd"
+    neutral_cwd.mkdir()
+    stage_root = tmp_path / "source-sot-stage"
+    stage_root.mkdir()
+    launcher_dir = stage_root / "bin"
+    if review_root_kind == "relative":
+        (neutral_cwd / "relative-review-worktree").mkdir()
+        review_root = "relative-review-worktree"
+        expected = "must be absolute"
+    else:
+        review_root = str(tmp_path / "missing-review-worktree")
+        expected = "must be an existing directory"
+    watched_roots = {repo_root, neutral_cwd, stage_root}
+    before = {root: _snapshot_tree(root) for root in watched_roots}
+
+    result, _env, default_launcher_dir = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=neutral_cwd,
+        repo_root=repo_root,
+        pre_path=(launcher_dir,),
+        env_overrides={
+            "CODEX_HOME": str(stage_root / "codex-home"),
+            "XDG_CONFIG_HOME": str(stage_root / "config-home"),
+            "TRIAD_CLASSIFIER_EXTENSION": str(
+                stage_root / "config-home" / "classifier-patches.json"
+            ),
+            "TRIAD_BOOTSTRAP_SHELL_RC": str(stage_root / "shellrc"),
+            "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir),
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": review_root,
+        },
+    )
+
+    assert result.returncode != 0
+    assert "source-SOT stage containment guard" in result.stderr
+    assert expected in result.stderr
+    assert {root: _snapshot_tree(root) for root in watched_roots} == before
+    assert not any(default_launcher_dir.iterdir())
+    assert not (tmp_path / "home").exists()
+    assert not (tmp_path / "xdg-config").exists()
+
+
+@pytest.mark.parametrize(
+    ("generated_root", "protected_root"),
+    (
+        ("bootstrap-cwd", "toolkit"),
+        ("bootstrap-cwd", "review-worktree"),
+        ("stage-root", "toolkit"),
+        ("stage-root", "review-worktree"),
+        ("launcher-dir", "toolkit"),
+        ("launcher-dir", "review-worktree"),
+        ("codex-home", "toolkit"),
+        ("codex-home", "review-worktree"),
+        ("classifier-dir", "toolkit"),
+        ("classifier-dir", "review-worktree"),
+        ("shell-rc", "toolkit"),
+        ("shell-rc", "review-worktree"),
+    ),
+)
+def test_source_sot_stage_fails_inside_toolkit_or_review_worktree(
+    tmp_path: Path, generated_root: str, protected_root: str
+) -> None:
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    review_worktree = tmp_path / "review-worktree"
+    review_worktree.mkdir()
+    neutral_cwd = tmp_path / "neutral-cwd"
+    neutral_cwd.mkdir()
+    protected = repo_root if protected_root == "toolkit" else review_worktree
+    bootstrap_cwd = neutral_cwd
+    stage_root = tmp_path / "source-sot-stage"
+    if generated_root == "bootstrap-cwd":
+        bootstrap_cwd = protected / "source-sot-bootstrap"
+        bootstrap_cwd.mkdir()
+    elif generated_root == "stage-root":
+        stage_root = protected / "source-sot-stage"
+    stage_root.mkdir(parents=True)
+    launcher_dir = protected if generated_root == "launcher-dir" else stage_root / "bin"
+    env_overrides = {
+        "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir),
+        "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": str(review_worktree),
+    }
+    if generated_root == "codex-home":
+        env_overrides["CODEX_HOME"] = str(protected / "codex-home")
+    elif generated_root == "classifier-dir":
+        env_overrides["TRIAD_CLASSIFIER_EXTENSION"] = str(
+            protected / "config-home" / "classifier-patches.json"
+        )
+    elif generated_root == "shell-rc":
+        env_overrides["TRIAD_BOOTSTRAP_SHELL_RC"] = str(protected / "shellrc")
+    watched_roots = {repo_root, review_worktree, stage_root}
+    before = {root: _snapshot_tree(root) for root in watched_roots}
+
+    result, _env, default_launcher_dir = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=bootstrap_cwd,
+        repo_root=repo_root,
+        pre_path=(launcher_dir,),
+        env_overrides=env_overrides,
+    )
+
+    assert result.returncode != 0
+    assert "source-SOT stage containment guard" in result.stderr
+    assert generated_root in result.stderr
+    assert protected_root in result.stderr
+    assert {root: _snapshot_tree(root) for root in watched_roots} == before
+    assert not any(default_launcher_dir.iterdir())
+    assert not (tmp_path / "home").exists()
+    assert not (tmp_path / "xdg-config").exists()
+
+
+def test_source_sot_stage_rejects_case_variant_inside_review_worktree(
+    tmp_path: Path,
+) -> None:
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    review_worktree = tmp_path / "Review-Worktree"
+    review_worktree.mkdir()
+    if not _fs_case_insensitive(review_worktree):
+        pytest.skip("case-insensitive filesystem required for alias regression")
+    variant_review = tmp_path / "rEVIEW-wORKTREE"
+    stage_root = variant_review / "source-sot-stage"
+    stage_root.mkdir()
+    launcher_dir = stage_root / "bin"
+    neutral_cwd = tmp_path / "neutral-cwd"
+    neutral_cwd.mkdir()
+    before = _snapshot_tree(review_worktree)
+
+    result, _env, default_launcher_dir = _run_bootstrap(
+        tmp_path,
+        arg="--install",
+        cwd=neutral_cwd,
+        repo_root=repo_root,
+        pre_path=(launcher_dir,),
+        env_overrides={
+            "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_dir),
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": str(review_worktree),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "source-SOT stage containment guard" in result.stderr
+    assert "stage-root/launcher-dir" in result.stderr
+    assert _snapshot_tree(review_worktree) == before
+    assert not any(default_launcher_dir.iterdir())
+    assert not (tmp_path / "home").exists()
+    assert not (tmp_path / "xdg-config").exists()
+
+
 # --- Canonical install/remove flags and expired alias rejection --------------
 
 

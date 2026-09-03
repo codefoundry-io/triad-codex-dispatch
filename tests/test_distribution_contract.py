@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import stat
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -20,7 +22,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.550"
+    assert manifest["version"] == "0.2.551"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -59,6 +61,14 @@ def test_distribution_contains_only_the_four_public_skills() -> None:
         assert len(text.splitlines()) <= 200
 
 
+def test_cross_family_skill_entrypoint_has_a_bounded_instruction_budget() -> None:
+    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    body = skill.split("---", 2)[2]
+
+    assert len(body.splitlines()) <= 125
+    assert len(body.split()) <= 1600
+
+
 def test_gemini_agent_metadata_is_standalone_and_not_the_formal_leader() -> None:
     metadata = _text(SKILLS / "triad-gemini-dispatch" / "agents" / "openai.yaml")
 
@@ -88,12 +98,15 @@ def test_cross_family_skill_has_one_round_unit_and_owner_design_gate() -> None:
     )
     compact = " ".join(text.split())
 
-    assert "one Claude LegVerdict" in text
-    assert "one Google LegVerdict" in text
-    assert "one fresh Codex LegVerdict" in text
+    for leg in (
+        "one Claude `LegVerdict`",
+        "one Google `LegVerdict`",
+        "one fresh Codex `LegVerdict`",
+    ):
+        assert leg in compact
     assert "OWNER_DECISION_REQUIRED" in text
-    assert "There is no arbitrary round cap" in text
-    assert "Do not retain review batches" in compact
+    assert "There is no fixed round cap" in " ".join(convergence.split())
+    assert "Batches, shards, and mixed-round evidence are not supported" in compact
     assert "fresh Codex process" in compact
     for owner_slot in (
         "Proposed delta:",
@@ -102,365 +115,373 @@ def test_cross_family_skill_has_one_round_unit_and_owner_design_gate() -> None:
         "Decision needed:",
     ):
         assert owner_slot in convergence
-    assert "Do not implement the proposed delta while asking" in convergence
+    assert "Preserve the affected source while awaiting that decision" in convergence
 
 
 def test_formal_routes_are_explicit_and_reviewer_only() -> None:
-    claude = _text(SKILLS / "triad-claude-dispatch" / "SKILL.md")
-    leg_contracts = _text(
-        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
-    )
-    prompt_contract = _text(
-        SKILLS
-        / "triad-cross-family-review"
-        / "references"
-        / "review-prompt-contract.md"
-    )
-    reviewer_routing = _text(
-        SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
-    )
-    agy = _text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md")
-    gemini = _text(SKILLS / "triad-gemini-dispatch" / "SKILL.md")
-    readme = _text(ROOT / "README.md")
-    readme_ko = _text(ROOT / "README.ko.md")
-    compact_leg_contracts = " ".join(leg_contracts.split())
-    compact_prompt_contract = " ".join(prompt_contract.split())
-    compact_reviewer_routing = " ".join(reviewer_routing.split())
-    compact_antigravity = " ".join(agy.split())
-    compact_readme = " ".join(readme.split())
-    compact_readme_ko = " ".join(readme_ko.split())
-    compact_claude = " ".join(claude.split())
-
-    assert "Claude's native `--permission-mode plan`" in compact_prompt_contract
-    assert (
-        "Google requests its selected route's native Plan Mode"
-        in compact_prompt_contract
-    )
-    assert "effective approval mode remains unexposed" in compact_prompt_contract
-    assert (
-        "mode-independent packaged policy is the read-only enforcement boundary"
-        in compact_prompt_contract
-    )
-    assert "Fresh Codex remains prompt-controlled" in compact_prompt_contract
-    assert "each provider's native Plan Mode" not in compact_prompt_contract
-    assert "The prompt and native `--mode plan` define" not in compact_prompt_contract
-    assert "Ordinary calls leave Claude permission selection native" in compact_claude
-    assert (
-        "fully bound formal `LegVerdict` route adds native per-call Plan Mode"
-        in compact_claude
+    skill_root = SKILLS / "triad-cross-family-review"
+    routing = " ".join(_text(skill_root / "references" / "reviewer-routing.md").split())
+    legs = _text(skill_root / "references" / "leg-contracts.md")
+    prompt_contract = " ".join(
+        _text(skill_root / "references" / "review-prompt-contract.md").split()
     )
 
-    for compact in (compact_readme, compact_readme_ko):
-        assert "`AbsolutePath`" in compact
-        assert "another page" in compact
-        assert "`ContentOffset`" in compact
-        assert "`StartLine`" in compact
-        assert "`EndLine`" in compact
-    assert "uses native `grep_search`" in compact_readme
-    assert "native `grep_search`를 사용합니다" in compact_readme_ko
+    for route_contract in (
+        "Claude | `opus`, `xhigh`, 1,800-second wrapper deadline",
+        "AGY 1.1.20 or newer",
+        "Gemini Enterprise OAuth",
+        'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`',
+    ):
+        assert route_contract in routing
 
-    assert "## Contents" in leg_contracts
-    for entry in (
+    for section in (
         "[Claude](#claude)",
         "[Google family](#google-family)",
         "[Fresh Codex](#fresh-codex)",
         "[Shared containment boundary](#shared-containment-boundary)",
     ):
-        assert entry in leg_contracts
+        assert section in legs
 
-    assert "--model opus" in claude and "--effort xhigh" in claude
-    assert "--timeout 1800" in claude
-    assert '--expected-review-id "$review_id"' in claude
-    assert "--expected-family claude" in claude
-    assert '--expected-content-digest "$review_digest"' in claude
-    assert (
-        "Claude: `opus`, `xhigh`, retained 1,800-second end-to-end wrapper deadline."
-        in compact_reviewer_routing
-    )
-    assert "--formal-read-tools" not in claude
-    assert "--formal-read-tools" not in leg_contracts
-    assert "--timeout 1800" in leg_contracts
-    assert "wake-up boundaries" in leg_contracts
-    for compact in (compact_leg_contracts, compact_prompt_contract):
-        assert "installed CLI tools" in compact
-        assert "Configured MCP servers remain available" in compact
-        assert (
-            "Existing user permission settings continue to govern MCP calls" in compact
-        )
-        assert (
-            "Approved official-web reads through read-only MCP tools remain available"
-            in compact
-        )
-        assert (
-            "Do not edit files, change external state, or execute candidate code"
-            in compact
-        )
-        assert "formal AGY settings transaction denies all MCP calls" in compact
-        assert "Approved AGY native official-web reads remain available" in compact
-    assert "MCP calls are unavailable for the formal Google leg" in compact_antigravity
-    assert "AGY native official-web reads" in compact_antigravity
-    for compact in (
-        compact_leg_contracts,
-        compact_prompt_contract,
-        compact_antigravity,
+    for command_contract in (
+        'python3 "$toolkit_root/bin/claude_wrapper.py"',
+        'python3 "$toolkit_root/bin/antigravity_wrapper.py"',
+        'python3 "$toolkit_root/bin/gemini_wrapper.py"',
+        'python3 "$toolkit_root/bin/verdict_schema.py" validate',
+        '--expected-review-id "$review_id"',
+        '--expected-content-digest "$review_digest"',
+        "--pydantic verdict_schema:LegVerdict",
+        "--timeout 1800",
     ):
-        assert "Use `grep_search` with the required `SearchPath` and `Query`" in compact
-        assert "inside the review target identified by Review metadata" in compact
-        assert "use `list_dir`, `find_by_name`, and `view_file` as needed" in compact
-        assert "For every `view_file` call" in compact
-        assert "explicit positive-integer `StartLine` and `EndLine` ranges" in compact
-        assert "Never request `ContentOffset` or `IsSkillFile`" in compact
-    telemetry_contract = (
-        "Formal `step_update` telemetry is diagnostic vendor output, not an admission "
-        "schema: added fields, changed optional tool arguments, denied attempts, and "
-        "duplicate progress events do not invalidate an otherwise valid terminal "
-        "verdict."
-    )
-    for compact in (
-        compact_leg_contracts,
-        compact_prompt_contract,
-        compact_antigravity,
+        assert command_contract in legs
+
+    assert "`bin/review_round.py` is the canonical generator" in prompt_contract
+    assert "`bin/verdict_schema.py` is the canonical validator" in prompt_contract
+    assert "Evaluate every criterion" in prompt_contract
+    assert "does not implement them or ask the leader how to proceed" in prompt_contract
+    for provider_specific_detail in (
+        "--permission-mode plan",
+        "--approval-mode plan",
+        "gemini-3.1-pro-high",
+        "AGY native tool names",
     ):
-        assert telemetry_contract in compact
-    assert "MCP calls are denied" in compact_readme
-    assert "MCP 호출은 차단" in compact_readme_ko
-    assert (
-        "Round integrity verification binds the selected prepared-directory bytes or "
-        "worktree review digest plus canonical worktree fingerprint"
-        in compact_reviewer_routing
-    )
-    assert (
-        "External-state change through a configured MCP tool is prompt-controlled and "
-        "reviewer-disclosed" in compact_reviewer_routing
-    )
-    assert (
-        "The prepared-directory digest monitors every prepared regular file"
-        in compact_leg_contracts
-    )
-    assert (
-        "the canonical-worktree fingerprint monitors Git HEAD, staged and unstaged "
-        "tracked changes, and non-ignored untracked entries" in compact_leg_contracts
-    )
-    assert (
-        "separate selected-member comparisons cover listed source members even when "
-        "Git-ignored" in compact_leg_contracts
-    )
-    assert (
-        "Mutations in other Git-ignored worktree paths, paths outside both directories, "
-        "and network egress of packet content are neither prevented nor detected"
-        in compact_leg_contracts
-    )
-    assert (
-        "a mid-round mutation may affect another leg's reads before final verification"
-        in compact_leg_contracts
-    )
-    assert "invalidates admission for the complete round" in compact_leg_contracts
-    assert (
-        "treat outputs only as untrusted leads that require independent reproduction"
-        in compact_leg_contracts
-    )
-    assert "1.1.20 or newer" in agy
-    assert "AGY 1.1.20 or newer" in compact_reviewer_routing
-    assert "--model gemini-3.1-pro-high" in agy
-    assert "--effort high" in agy
-    assert "--timeout 1800" in agy
-    assert "stream-json" in agy
-    assert "review-bound native `--json-schema` in plan mode" in agy
-    compact_agy = " ".join(agy.split())
-    compact_leg_contracts = " ".join(leg_contracts.split())
-    assert "internally inserts `--dangerously-skip-permissions`" in compact_agy
-    assert "Callers do not pass this flag" in compact_agy
-    assert "`AGY_NO_HEADLESS_AUTOAPPROVE=1`" in compact_agy
-    assert "transient global-settings transaction" in compact_agy
-    assert "restores the original bytes" in compact_agy
-    assert "read-only by intent" in compact_agy
-    assert "does not edit user settings" not in compact_agy
-    assert "--sandbox read-only" in agy
-    assert "--sandbox read-only" in leg_contracts
-    assert "uses native `--mode plan`" in compact_agy
-    assert "uses native `--mode plan`" in compact_leg_contracts
-    for compact in (compact_agy, compact_leg_contracts):
-        assert "review-bound native `--json-schema` in plan mode" in compact
-        assert "consumes the terminal `structured_output`" in compact
-        assert (
-            "Human-readable response text and diagnostic finish messages are not "
-            "verdict transport" in compact
-        )
-        assert "strict local `LegVerdict` validation" in compact
-        assert "no schema-repair provider call" in compact
-    assert "transient global-settings transaction" in compact_leg_contracts
-    assert "restores the original bytes" in compact_leg_contracts
-    assert "read-only by intent" in compact_leg_contracts
-    for compact in (compact_agy,):
-        normalized = compact.lower()
-        assert (
-            "formal Google prompt authorizes only AGY native file-read/search tools "
-            "for local inspection".lower()
-            in normalized
-        )
-        assert "undecidable uncertainty goes to `open_questions`" in normalized
-        assert (
-            "explicit deny rules remain the action-namespace enforcement backstop"
-            in normalized
-        )
-        assert "round-integrity mutation detection is separate" in normalized
-    assert "Before starting any family" in leg_contracts
-    assert 'review_task_file="$review_shared/TASK.md"' in leg_contracts
-    assert "passed to `render-worktree --task-file`" in leg_contracts
-    assert "preflight's sole prompt input" in leg_contracts
-    assert "select-google-route" in leg_contracts
-    assert 'google_selector_launcher="$(command -v review_round.py)"' in leg_contracts
-    assert '"$google_selector_launcher" select-google-route' in leg_contracts
-    assert (
-        'python3 "$toolkit_root/bin/review_round.py" select-google-route'
-        not in leg_contracts
-    )
-    assert '--review-id "$review_id"' in leg_contracts
-    assert '--output "$google_selector_receipt"' in leg_contracts
-    assert '--google-selector-receipt "$google_selector_receipt"' in leg_contracts
-    assert '--google-preflight-receipt "$google_preflight_file"' in leg_contracts
-    assert "--google-route" not in leg_contracts
-    assert "TRIAD_REQUIRE_PINNED_VENDOR" not in leg_contracts
-    assert '"authentication_class": "gemini-enterprise"' in leg_contracts
-    assert (
-        '{"authentication_class": "gemini-enterprise", "route": "agy"}' in leg_contracts
-    )
-    assert (
-        '{"authentication_class": "gemini-enterprise", "route": "gemini"}'
-        in leg_contracts
-    )
-    assert '`"$google_executable" --version`' in leg_contracts
-    assert '`"$google_executable" models`' in leg_contracts
-    assert "--preflight-only" in leg_contracts
-    assert '"provider_started": false' in leg_contracts
-    assert "personal Google Sign-In" in compact_leg_contracts
-    assert "Gemini Enterprise OAuth" in compact_leg_contracts
-    assert "AGY is preferred" in leg_contracts
-    assert "bin/gemini_wrapper.py" in leg_contracts
-    cross_family_skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
-    assert (
-        "missing route-required executable, AGY model/settings support, Gemini "
-        "policy/CLI support, or receipt binding stops with zero provider legs started"
-        in " ".join(cross_family_skill.split())
-    )
-    dispatch_step = cross_family_skill.split(
-        "6. **Select, preflight, render, then dispatch.**", 1
-    )[1].split("7. **Validate provisional results.**", 1)[0]
-    assert (
-        dispatch_step.index("select-google-route")
-        < dispatch_step.index("Preflight only that selected wrapper")
-        < dispatch_step.index("render every requested prompt")
-    )
-    assert "In the normal provider flow, do not render yet" in cross_family_skill
-    for compact in (compact_agy, compact_leg_contracts):
-        assert "--expected-permission-mode" not in compact
-        assert "--init-preflight" not in compact
-    log_assignment = 'TRIAD_DISPATCH_LOG_DIR="$review_log_dir"'
-    assert leg_contracts.count(log_assignment) == 5
-    assert (
-        "\n".join(
-            (
-                f"{log_assignment} \\",
-                'python3 "$toolkit_root/bin/antigravity_wrapper.py" \\',
-                '  --prompt-file "$review_task_file" \\',
-                '  --google-selector-receipt "$google_selector_receipt" \\',
-                '  --expected-review-id "$review_id" \\',
-                '  --cwd "$review_shared" \\',
-                "  --sandbox read-only \\",
-                "  --model gemini-3.1-pro-high \\",
-                "  --effort high \\",
-                "  --preflight-only \\",
-                '  > "$google_preflight_file"',
-            )
-        )
-        in leg_contracts
-    )
-    assert (
-        "\n".join(
-            (
-                f"{log_assignment} \\",
-                'python3 "$toolkit_root/bin/gemini_wrapper.py" \\',
-                '  --prompt-file "$review_task_file" \\',
-                '  --google-selector-receipt "$google_selector_receipt" \\',
-                '  --expected-review-id "$review_id" \\',
-                '  --cwd "$review_shared" \\',
-                "  --preflight-only \\",
-                '  > "$google_preflight_file"',
-            )
-        )
-        in leg_contracts
-    )
-    provider_commands = (
-        (
-            "bin/claude_wrapper.py",
-            '  --prompt-file "$review_prompt_file" \\',
-            '  --cwd "$review_shared" \\',
-            "  --model opus \\",
-            "  --effort xhigh \\",
-            "  --timeout 1800 \\",
-            "  --pydantic verdict_schema:LegVerdict \\",
-            '  --expected-review-id "$review_id" \\',
-            "  --expected-family claude \\",
-            '  --expected-content-digest "$review_digest" \\',
-            '  > "$claude_result_file"',
+        assert provider_specific_detail not in prompt_contract
+
+    for standalone_skill in (
+        SKILLS / "triad-claude-dispatch" / "SKILL.md",
+        SKILLS / "triad-antigravity-dispatch" / "SKILL.md",
+        SKILLS / "triad-gemini-dispatch" / "SKILL.md",
+    ):
+        assert "reviews only" in _text(standalone_skill)
+
+    fenced_blocks = re.findall(r"```text\n(.*?)\n```", legs, re.DOTALL)
+
+    def one_wrapper_block(wrapper: str, discriminator: str) -> str:
+        matches = [
+            block
+            for block in fenced_blocks
+            if f'python3 "$toolkit_root/bin/{wrapper}"' in block
+            and discriminator in block
+        ]
+        assert len(matches) == 1
+        return matches[0]
+
+    provider_blocks = {
+        "claude_wrapper.py": one_wrapper_block(
+            "claude_wrapper.py", "--expected-family claude"
         ),
-        (
-            "bin/antigravity_wrapper.py",
-            '  --prompt-file "$review_prompt_file" \\',
-            '  --google-selector-receipt "$google_selector_receipt" \\',
-            '  --google-preflight-receipt "$google_preflight_file" \\',
-            '  --cwd "$review_shared" \\',
-            "  --sandbox read-only \\",
-            "  --model gemini-3.1-pro-high \\",
-            "  --effort high \\",
-            "  --timeout 1800 \\",
-            "  --pydantic verdict_schema:LegVerdict \\",
-            '  --expected-review-id "$review_id" \\',
-            "  --expected-family google \\",
-            '  --expected-content-digest "$review_digest" \\',
-            '  > "$google_result_file"',
+        "antigravity_wrapper.py": one_wrapper_block(
+            "antigravity_wrapper.py", "--expected-family google"
         ),
-        (
-            "bin/gemini_wrapper.py",
-            '  --prompt-file "$review_prompt_file" \\',
-            '  --google-selector-receipt "$google_selector_receipt" \\',
-            '  --google-preflight-receipt "$google_preflight_file" \\',
-            '  --cwd "$review_shared" \\',
-            "  --timeout 1800 \\",
-            "  --pydantic verdict_schema:LegVerdict \\",
-            '  --expected-review-id "$review_id" \\',
-            "  --expected-family google \\",
-            '  --expected-content-digest "$review_digest" \\',
-            '  > "$google_result_file"',
+        "gemini_wrapper.py": one_wrapper_block(
+            "gemini_wrapper.py", "--expected-family google"
         ),
-    )
-    for wrapper, *options in provider_commands:
-        expected = "\n".join(
-            (
-                f"{log_assignment} \\",
-                f'python3 "$toolkit_root/{wrapper}" \\',
-                *options,
-            )
+    }
+    required_arguments = {
+        "claude_wrapper.py": (
+            '--prompt-file "$review_prompt_file"',
+            '--cwd "$review_target_cwd"',
+            "--model opus",
+            "--effort xhigh",
+            "--timeout 1800",
+            "--pydantic verdict_schema:LegVerdict",
+            '--expected-review-id "$review_id"',
+            "--expected-family claude",
+            '--expected-content-digest "$review_digest"',
+            '> "$claude_result_file"',
+        ),
+        "antigravity_wrapper.py": (
+            '--prompt-file "$review_prompt_file"',
+            '--google-selector-receipt "$google_selector_receipt"',
+            '--google-preflight-receipt "$google_preflight_file"',
+            '--cwd "$review_target_cwd"',
+            "--sandbox read-only",
+            "--model gemini-3.1-pro-high",
+            "--effort high",
+            "--timeout 1800",
+            "--pydantic verdict_schema:LegVerdict",
+            '--expected-review-id "$review_id"',
+            "--expected-family google",
+            '--expected-content-digest "$review_digest"',
+            '> "$google_result_file"',
+        ),
+        "gemini_wrapper.py": (
+            '--prompt-file "$review_prompt_file"',
+            '--google-selector-receipt "$google_selector_receipt"',
+            '--google-preflight-receipt "$google_preflight_file"',
+            '--cwd "$review_target_cwd"',
+            "--timeout 1800",
+            "--pydantic verdict_schema:LegVerdict",
+            '--expected-review-id "$review_id"',
+            "--expected-family google",
+            '--expected-content-digest "$review_digest"',
+            '> "$google_result_file"',
+        ),
+    }
+    for wrapper, expected_arguments in required_arguments.items():
+        block = provider_blocks[wrapper]
+        assert block.startswith('TRIAD_DISPATCH_LOG_DIR="$review_log_dir"')
+        for argument in expected_arguments:
+            assert argument in block
+
+    claude_block = provider_blocks["claude_wrapper.py"]
+    for option in ("--model", "--effort", "--timeout"):
+        assert (
+            len(re.findall(rf"(?m)^\s+{re.escape(option)}(?:\s|=)", claude_block)) == 1
         )
-        assert expected in leg_contracts
-    assert "inside that launcher command" in compact_leg_contracts
-    assert "Never strip or filter a contaminated result" in compact_leg_contracts
+    assert "--fallback-model" not in claude_block
+    for binding in (
+        'review_target_cwd="$review_shared"',
+        'review_target_cwd="$review_worktree"',
+    ):
+        assert binding in legs
+    assert legs.count('  --cwd "$review_target_cwd" \\') == 5
+    assert '--cwd "$review_shared"' not in legs
+
     for family in ("claude", "google", "codex"):
-        assert (
+        validator_blocks = [
+            block
+            for block in fenced_blocks
+            if 'python3 "$toolkit_root/bin/verdict_schema.py" validate' in block
+            and f'--result-file "${family}_result_file"' in block
+        ]
+        assert len(validator_blocks) == 1
+        validator = validator_blocks[0]
+        assert '--expected-review-id "$review_id"' in validator
+        assert f"--expected-family {family}" in validator
+        assert '--expected-content-digest "$review_digest"' in validator
+
+    assert legs.count('TRIAD_DISPATCH_LOG_DIR="$review_log_dir"') == 5
+    for retired_argument in (
+        "--formal-read-tools",
+        "--expected-permission-mode",
+        "--init-preflight",
+        "--google-route",
+        "TRIAD_REQUIRE_PINNED_VENDOR",
+    ):
+        assert retired_argument not in legs
+
+
+def test_google_preflight_blocks_bind_exact_provider_free_contract() -> None:
+    legs = _text(
+        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+    )
+    fenced_blocks = re.findall(r"```text\n(.*?)\n```", legs, re.DOTALL)
+    preflight_blocks = [block for block in fenced_blocks if "--preflight-only" in block]
+
+    assert len(preflight_blocks) == 2
+    blocks_by_wrapper = {
+        wrapper: next(
+            block
+            for block in preflight_blocks
+            if f'python3 "$toolkit_root/bin/{wrapper}"' in block
+        )
+        for wrapper in ("antigravity_wrapper.py", "gemini_wrapper.py")
+    }
+    assert blocks_by_wrapper["antigravity_wrapper.py"].splitlines() == [
+        'TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \\',
+        'python3 "$toolkit_root/bin/antigravity_wrapper.py" \\',
+        '  --prompt-file "$review_task_file" \\',
+        '  --google-selector-receipt "$google_selector_receipt" \\',
+        '  --expected-review-id "$review_id" \\',
+        '  --cwd "$review_target_cwd" \\',
+        "  --sandbox read-only \\",
+        "  --model gemini-3.1-pro-high \\",
+        "  --effort high \\",
+        "  --preflight-only \\",
+        '  > "$google_preflight_file"',
+    ]
+    assert blocks_by_wrapper["gemini_wrapper.py"].splitlines() == [
+        'TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \\',
+        'python3 "$toolkit_root/bin/gemini_wrapper.py" \\',
+        '  --prompt-file "$review_task_file" \\',
+        '  --google-selector-receipt "$google_selector_receipt" \\',
+        '  --expected-review-id "$review_id" \\',
+        '  --cwd "$review_target_cwd" \\',
+        "  --preflight-only \\",
+        '  > "$google_preflight_file"',
+    ]
+
+
+def test_source_sot_launcher_stage_precedes_basis_and_cleans_exact_handles() -> None:
+    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    legs_raw = _text(
+        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+    )
+    legs = " ".join(legs_raw.split())
+    staging_clause = (
+        "For source-SOT pre-deployment, stage the isolated launcher group from "
+        "[leg contracts](references/leg-contracts.md) before creating or capturing "
+        "the review basis."
+    )
+
+    assert skill.index("2. **Resolve one toolkit.**") < skill.index(staging_clause)
+    assert skill.index(staging_clause) < skill.index("3. **Create the basis.**")
+    assert (
+        "After normal terminal completion or any failure before a provider starts, remove "
+        "only `selector_bootstrap_cwd` and `selector_stage_root`, then confirm both "
+        "paths are absent." in legs
+    )
+    assert (
+        "The bootstrap guard rejects the bootstrap cwd, staged launcher directory, Codex "
+        "home, classifier directory, or shell rc when it resolves inside the toolkit or "
+        "review worktree; this check runs before any installation step." in legs
+    )
+    assert 'TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT="$review_worktree" \\' in legs_raw
+
+
+def test_source_sot_stage_recipe_canonicalizes_with_required_python(
+    tmp_path: Path,
+) -> None:
+    legs = _text(
+        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+    )
+    stage_block = next(
+        block
+        for block in re.findall(r"```text\n(.*?)\n```", legs, re.DOTALL)
+        if "selector_bootstrap_cwd_raw=" in block
+    )
+    setup_lines = stage_block.splitlines()[:4]
+
+    assert "realpath" not in "\n".join(setup_lines)
+    assert sum("python3 -c" in line for line in setup_lines) == 2
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
             "\n".join(
                 (
-                    'python3 "$toolkit_root/bin/verdict_schema.py" validate \\',
-                    f'  --result-file "${family}_result_file" \\',
-                    '  --expected-review-id "$review_id" \\',
-                    f"  --expected-family {family} \\",
-                    '  --expected-content-digest "$review_digest"',
+                    "set -eu",
+                    'review_id="portable-paths"',
+                    *setup_lines,
+                    "printf '%s\\n' \"$selector_bootstrap_cwd\" \"$selector_stage_root\"",
                 )
-            )
-            in leg_contracts
-        )
-    assert "reviews only" in claude
-    assert "reviews only" in agy
-    assert "reviews only" in gemini
+            ),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "TMPDIR": str(tmp_path)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    resolved = [Path(line) for line in result.stdout.splitlines()]
+    assert len(resolved) == 2
+    assert resolved[0].is_absolute() and resolved[0].is_dir()
+    assert resolved[1].is_absolute() and resolved[1].is_dir()
+    assert resolved[0] != resolved[1]
+
+
+def test_leg_contract_assigns_mechanical_ownership_truthfully() -> None:
+    legs = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+
+    assert (
+        "packaged renderer and wrappers own argument, route, binding, schema, and "
+        "output validation" not in legs
+    )
+    for ownership_clause in (
+        "`review_round.py` owns lifecycle paths, inventory, collision checks, prompt "
+        "metadata, and Google receipt selection and binding.",
+        "Google selectors and wrappers enforce the selected Google route; the Claude "
+        "wrapper enforces formal binding completeness, native Plan Mode, schema, "
+        "local verdict validation, and output handling.",
+        "The exact argv below owns Claude and fresh Codex route parameters.",
+    ):
+        assert ownership_clause in legs
+
+
+def test_standalone_skills_and_public_docs_keep_provider_read_contracts() -> None:
+    claude = " ".join(_text(SKILLS / "triad-claude-dispatch" / "SKILL.md").split())
+    agy = " ".join(_text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md").split())
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+
+    for clause in (
+        "Ordinary calls leave Claude permission selection native",
+        "fully bound formal `LegVerdict` route adds native per-call Plan Mode",
+        "--model opus --effort xhigh --timeout 1800",
+        '--expected-review-id "$review_id" --expected-family claude',
+    ):
+        assert clause in claude
+
+    for clause in (
+        "AGY 1.1.20 or newer",
+        "`AGY_NO_HEADLESS_AUTOAPPROVE=1`",
+        "uses native `--mode plan`",
+        "review-bound native `--json-schema` in plan mode",
+        "consumes the terminal `structured_output`",
+        "strict local `LegVerdict` validation",
+        "no schema-repair provider call",
+        "MCP calls are unavailable for the formal Google leg",
+        "undecidable uncertainty goes to `open_questions`",
+        "Round-integrity mutation detection is separate",
+    ):
+        assert clause in agy
+
+    for public_doc in (readme, readme_ko):
+        for tool_argument in (
+            "`AbsolutePath`",
+            "`ContentOffset`",
+            "`StartLine`",
+            "`EndLine`",
+        ):
+            assert tool_argument in public_doc
+    assert "uses native `grep_search`" in readme
+    assert "native `grep_search`를 사용합니다" in readme_ko
+    assert "MCP calls are denied" in readme
+    assert "MCP 호출은 차단" in readme_ko
+
+
+def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> None:
+    claude = " ".join(_text(SKILLS / "triad-claude-dispatch" / "SKILL.md").split())
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+    changelog = " ".join(_text(ROOT / "CHANGELOG.md").split())
+    wrapper = _text(ROOT / "bin" / "claude_wrapper.py")
+
+    assert (
+        "The fully bound formal route rejects any model other than `opus`, any "
+        "effort other than `xhigh`, any timeout other than `1800`, and every "
+        "`--fallback-model` before provider resolution." in claude
+    )
+    assert (
+        "A fully bound formal Claude route fails closed before provider resolution "
+        "unless it uses `--model opus --effort xhigh --timeout 1800` with no "
+        "`--fallback-model`." in readme
+    )
+    assert (
+        "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh "
+        "--timeout 1800`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
+        "provider resolution 전에 통과합니다." in readme_ko
+    )
+    assert "fail-closed formal Claude route pinning" in changelog
+    assert 'FORMAL_CLAUDE_MODEL = "opus"' in wrapper
+    assert 'FORMAL_CLAUDE_EFFORT = "xhigh"' in wrapper
+    assert "FORMAL_CLAUDE_TIMEOUT = 1800" in wrapper
 
 
 def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
@@ -471,6 +492,11 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     leg_contracts = " ".join(
         _text(
             SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
+        ).split()
+    )
+    routing = " ".join(
+        _text(
+            SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
         ).split()
     )
 
@@ -495,17 +521,18 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "voids deny" not in security
     assert "If AGY was selected, started, or later failed" in gemini
     assert "standalone compatibility consult only" in gemini
-    assert "Personal Google Sign-In requires AGY" in leg_contracts
-    assert "Gemini Enterprise OAuth" in leg_contracts
+    assert "Personal Google Sign-In requires AGY" in routing
+    assert "Gemini Enterprise OAuth" in routing
+    assert "transient deny transaction" in leg_contracts
 
 
-def test_recipient_guidance_uses_codex_host_policy_for_outside_sandbox_execution() -> None:
+def test_recipient_guidance_uses_codex_host_policy_for_outside_sandbox_execution() -> (
+    None
+):
     readme = " ".join(_text(ROOT / "README.md").split())
     readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
     security = " ".join(_text(ROOT / "SECURITY.md").split())
-    migration = " ".join(
-        _text(ROOT / "migration" / "AGENTS.recommended.md").split()
-    )
+    migration = " ".join(_text(ROOT / "migration" / "AGENTS.recommended.md").split())
     cross_family = " ".join(
         _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
     )
@@ -513,7 +540,9 @@ def test_recipient_guidance_uses_codex_host_policy_for_outside_sandbox_execution
     for public_doc in (readme, readme_ko):
         assert "https://learn.chatgpt.com/docs/sandboxing" in public_doc
         assert "https://learn.chatgpt.com/docs/config-file/config-basic" in public_doc
-        assert "https://learn.chatgpt.com/docs/config-file/config-reference" in public_doc
+        assert (
+            "https://learn.chatgpt.com/docs/config-file/config-reference" in public_doc
+        )
         assert "https://learn.chatgpt.com/docs/plugins" in public_doc
         assert 'sandbox_mode = "workspace-write"' in public_doc
         assert 'approval_policy = "on-request"' in public_doc
@@ -536,48 +565,44 @@ def test_recipient_guidance_uses_codex_host_policy_for_outside_sandbox_execution
 
 
 def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> None:
-    cross_family = " ".join(
-        _text(SKILLS / "triad-cross-family-review" / "SKILL.md").split()
-    )
-    routing = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
-        ).split()
-    )
-    leg_contracts = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
-        ).split()
-    )
+    skill_root = SKILLS / "triad-cross-family-review"
+    cross_family = " ".join(_text(skill_root / "SKILL.md").split())
+    routing = " ".join(_text(skill_root / "references" / "reviewer-routing.md").split())
+    leg_contracts = _text(skill_root / "references" / "leg-contracts.md")
     prompt_contract = " ".join(
-        _text(
-            SKILLS
-            / "triad-cross-family-review"
-            / "references"
-            / "review-prompt-contract.md"
-        ).split()
+        _text(skill_root / "references" / "review-prompt-contract.md").split()
     )
     policy_path = ROOT / "bin" / "policies" / "gemini-formal-readonly.toml"
 
     assert "Select and exclusive-create one Google selector receipt" in cross_family
-    assert "personal Google Sign-In requires AGY" in routing
-    assert "Enterprise OAuth may select Gemini only when AGY is absent" in routing
-    assert "Never switch routes after the selected provider starts" in routing
-    assert "CLI Auto router" in routing
-    assert "`-m auto`" in routing
-    assert "runtime-model identity" in routing
-    assert "unexposed" in routing
-    assert "stats.models" in routing
-    assert "--approval-mode plan" in leg_contracts
-    assert "--policy" in leg_contracts
-    assert "effective approval mode is `unexposed`" in leg_contracts
-    assert "mode-independent packaged policy" in leg_contracts
-    assert "Gemini Enterprise OAuth" in prompt_contract
-    assert "AGY native tool names" in prompt_contract
+    for route_clause in (
+        "Personal Google Sign-In requires AGY",
+        "Gemini Enterprise OAuth may select Gemini only when AGY is absent",
+        "one frozen route",
+        "CLI Auto with `-m auto`",
+        "runtime-model identity",
+        '`runtime_identity: "unexposed"`',
+        "`stats.models`",
+    ):
+        assert route_clause in routing
+
+    for mechanical_contract in (
+        '"$google_selector_launcher" select-google-route',
+        '--google-selector-receipt "$google_selector_receipt"',
+        '--google-preflight-receipt "$google_preflight_file"',
+        'python3 "$toolkit_root/bin/antigravity_wrapper.py"',
+        'python3 "$toolkit_root/bin/gemini_wrapper.py"',
+        "--preflight-only",
+        "bin/policies/gemini-formal-readonly.toml",
+        "TRIAD never adds `--skip-trust`",
+    ):
+        assert mechanical_contract in leg_contracts
+
     assert "selected Google authentication class" in prompt_contract
-    assert "canonical selector-receipt SHA-256" in prompt_contract
-    assert "the exact selector fields and SHA-256" in prompt_contract
-    assert policy_path.is_file()
+    assert "selector and preflight receipt hashes" in prompt_contract
+    assert "Gemini Enterprise OAuth" not in prompt_contract
+    assert "AGY native tool names" not in prompt_contract
+
     policy = tomllib.loads(_text(policy_path))
     rules = policy["rule"]
     allowed_tools = {
@@ -634,15 +659,12 @@ def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> No
         / "docs"
         / "status"
         / "2026-09-02-gemini-enterprise-fallback-checkpoint.md",
-        SKILLS / "triad-cross-family-review" / "SKILL.md",
-        SKILLS / "triad-cross-family-review" / "agents" / "openai.yaml",
-        SKILLS / "triad-cross-family-review" / "references" / "convergence.md",
-        SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md",
-        SKILLS
-        / "triad-cross-family-review"
-        / "references"
-        / "review-prompt-contract.md",
-        SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md",
+        skill_root / "SKILL.md",
+        skill_root / "agents" / "openai.yaml",
+        skill_root / "references" / "convergence.md",
+        skill_root / "references" / "leg-contracts.md",
+        skill_root / "references" / "review-prompt-contract.md",
+        skill_root / "references" / "reviewer-routing.md",
         SKILLS / "triad-gemini-dispatch" / "SKILL.md",
         SKILLS / "triad-gemini-dispatch" / "agents" / "openai.yaml",
         ROOT / "migration" / "AGENTS.recommended.md",
@@ -700,77 +722,75 @@ def test_leg_contract_scopes_mechanical_denial_to_named_namespaces() -> None:
     assert "Local verdict and review-binding checks" in leg_contracts
 
 
-def test_cross_family_skill_stops_on_packet_workflow_bugs() -> None:
-    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+def test_cross_family_skill_routes_workflow_failures_to_one_contract() -> None:
+    skill_root = SKILLS / "triad-cross-family-review"
+    skill = " ".join(_text(skill_root / "SKILL.md").split())
+    convergence = " ".join(_text(skill_root / "references" / "convergence.md").split())
 
-    assert "A packet workflow defect invalidates the round" in skill
-    assert (
-        "fix the skill or tool and its regression test before another dispatch" in skill
-    )
-    assert "start again from preparation with a fresh review ID" in skill
-    assert "Never reuse an earlier review ID" in skill
-    assert "Never manually rebuild or alter a packet to bypass the defect" in skill
-    assert (
-        "If it neither returned a review root nor named an undeletable partial root, "
-        "record the failure; there is no root to clean up" in skill
-    )
-    assert (
-        "If it names a partial review root that could not be removed, stop and report "
-        "that exact path; do not retry deletion or redispatch" in skill
-    )
-    assert "If it returned a review root, clean up that returned root" in skill
-    assert "After the first or third outcome" in skill
+    assert "[convergence](references/convergence.md)" in skill
+    for recovery_clause in (
+        "zero started provider legs invalidates the attempt",
+        "supported cleanup for an exact managed root",
+        "restart with a fresh review ID",
+        "controlled setup-only probe",
+        "not a formal review round",
+    ):
+        assert recovery_clause in convergence
+
+    for code_owned_detail in (
+        "absolute canonical no-symlink paths",
+        "sorted JSON array of non-empty normalized POSIX relative paths",
+        "If it neither returned a review root",
+        "Never manually rebuild or alter a packet",
+    ):
+        assert code_owned_detail not in skill
 
 
-def test_cross_family_skill_collects_started_siblings_after_leg_failure() -> None:
-    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
-    leg_contracts = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
-        ).split()
-    )
-    routing = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "reviewer-routing.md"
-        ).split()
-    )
-    convergence = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "convergence.md"
-        ).split()
-    )
+def test_cross_family_skill_has_one_partial_start_contract_owner() -> None:
+    skill_root = SKILLS / "triad-cross-family-review"
+    sources = {
+        "skill": _text(skill_root / "SKILL.md"),
+        "leg_contracts": _text(skill_root / "references" / "leg-contracts.md"),
+        "routing": _text(skill_root / "references" / "reviewer-routing.md"),
+        "convergence": _text(skill_root / "references" / "convergence.md"),
+    }
+    normalized = {name: " ".join(text.split()) for name, text in sources.items()}
+    convergence = normalized["convergence"]
 
-    for text in (skill, leg_contracts, routing, convergence):
-        assert "once any provider leg has started" in text
-        assert "later leg start or result failure" in text
-        assert "invalidates admission" in text
-        assert "wait for every already-started sibling" in text
-        assert "remain provisional until post-review integrity succeeds" in text
-        assert "preserve and reproduce every valid sibling finding" in text
-        assert "skill, tool, instruction, operator, or vendor" in text
-        assert "valid `NOT-SAFE`" in text
-        assert "advisory only" in text
-        assert "reproduce every collected finding before the next round" in text
-        assert "correct and verify every reproduced in-scope defect" in text
-        assert "correct the classified leg failure" in text
-        assert "diagnose and correct the integrity mismatch before a fresh round" in text
-        assert "after every started leg terminates" in text
-        assert "terminate every still-running leg" not in text
-        assert "discard every current-round verdict" not in text
+    assert sources["convergence"].count("<!-- PARTIAL_START_CONTRACT_START -->") == 1
+    assert sources["convergence"].count("<!-- PARTIAL_START_CONTRACT_END -->") == 1
+    for name in ("skill", "leg_contracts", "routing"):
+        assert "[convergence](" in sources[name]
+        assert "once any provider leg has started" not in normalized[name]
+        assert "wait for every already-started sibling" not in normalized[name]
         assert (
-            "never continue a sibling merely to collect advisory evidence" not in text
+            "preserve and reproduce every valid sibling finding" not in normalized[name]
         )
+
+    for contract_clause in (
+        "once any provider leg has started",
+        "later leg start or result failure",
+        "invalidates admission",
+        "wait for every already-started sibling",
+        "remain provisional until post-review integrity succeeds",
+        "preserve and reproduce every valid sibling finding",
+        "skill, tool, instruction, operator, or vendor",
+        "valid `NOT-SAFE`",
+        "advisory only",
+        "reproduce every collected finding before the next round",
+        "correct and verify every reproduced in-scope defect",
+        "correct the classified leg failure",
+        "diagnose and correct the integrity mismatch before a fresh round",
+        "after every started leg terminates",
+    ):
+        assert contract_clause in convergence
+
+    assert "terminate every still-running leg" not in convergence
+    assert "discard every current-round verdict" not in convergence
     assert (
-        "confirm that every exact provider process tree is gone before integrity verification"
-        in skill
+        "never continue a sibling merely to collect advisory evidence"
+        not in convergence
     )
-    assert (
-        "never admits the failed round or supplies admission credit to a later round"
-        in skill
-    )
-    assert "prepare a fresh review ID for a complete three-family round" in skill
-    assert "discards every verdict" not in leg_contracts
-    assert "treat outputs only as untrusted leads" in leg_contracts
 
     readme = " ".join(_text(ROOT / "README.md").split())
     readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
@@ -787,48 +807,35 @@ def test_cross_family_skill_collects_started_siblings_after_leg_failure() -> Non
 
 def test_cross_family_skill_admits_only_a_complete_healthy_round() -> None:
     skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
-    step_eight = skill.split(
-        "8. **Verify integrity and admit results.**", 1
-    )[1].split("9. **Reproduce and converge.**", 1)[0]
+    admission = skill.split("9. **Verify before admission.**", 1)[1].split(
+        "10. **Reproduce and converge.**", 1
+    )[0]
 
-    assert "every required leg has a structurally valid result" in step_eight
-    assert "required integrity check succeeds" in step_eight
-    assert "failed round never admits" in step_eight
-    assert "after every started leg terminates" in step_eight
-    assert "the actual start failure is recorded" in step_eight
-    assert (
-        "each remaining unstarted required leg is recorded as not started because launch "
-        "was closed" in step_eight
-    )
-    assert "after all required legs terminate" not in step_eight
+    assert "Wait for every started leg to terminate" in admission
+    assert "ROUND_INTEGRITY_OK" in admission
+    assert "post-review fingerprint" in admission
+    assert "Admit evidence only when integrity matches" in admission
+    assert "all three required families" in admission
+    assert "same digest" in admission
 
 
-def test_cross_family_skill_distinguishes_zero_start_from_partial_start_failure() -> (
-    None
-):
-    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+def test_cross_family_contract_distinguishes_zero_start_from_partial_start() -> None:
+    skill_root = SKILLS / "triad-cross-family-review"
+    convergence = " ".join(_text(skill_root / "references" / "convergence.md").split())
+    skill = " ".join(_text(skill_root / "SKILL.md").split())
     leg_contracts = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
-        ).split()
+        _text(skill_root / "references" / "leg-contracts.md").split()
     )
 
-    for text in (skill, leg_contracts):
-        assert "before any provider leg starts" in text
-        assert "preflight or launch-setup failure" in text
-        assert "cleanup and fresh-ID restart" in text
-        assert (
-            "classify and correct the zero-provider failure or verify recovery from a "
-            "transient vendor incident" in text
-        )
-        assert "once any provider leg has started" in text
-        assert "later leg start or result failure" in text
-        assert "does not cancel" in text
-        assert "wait for every already-started sibling" in text
-        assert "do not launch a not-yet-started leg after the failure" in text
-        assert "advisory only" in text
-        assert "fresh" in text and "complete three-family round" in text
-        assert "admission credit" in text
+    assert "Failure before any provider starts" in convergence
+    assert "zero started provider legs invalidates the attempt" in convergence
+    assert "Failure after a provider starts" in convergence
+    assert "partial-start contract" in convergence
+    assert "Close further launch" in convergence
+    assert "advisory only" in convergence
+    assert "fresh ID" in convergence
+    assert "once any provider leg has started" not in skill
+    assert "once any provider leg has started" not in leg_contracts
 
     readme = " ".join(_text(ROOT / "README.md").split())
     readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
@@ -842,28 +849,26 @@ def test_cross_family_skill_distinguishes_zero_start_from_partial_start_failure(
     assert "launch가 닫혀 시작하지 않은 상태" in readme_ko
 
 
-def test_cross_family_skill_escalates_repeated_zero_provider_failures_and_distinguishes_cwds() -> (
-    None
-):
-    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+def test_cross_family_contract_escalates_repeated_zero_provider_failures() -> None:
+    skill_root = SKILLS / "triad-cross-family-review"
+    convergence = " ".join(_text(skill_root / "references" / "convergence.md").split())
     leg_contracts = " ".join(
-        _text(
-            SKILLS / "triad-cross-family-review" / "references" / "leg-contracts.md"
-        ).split()
+        _text(skill_root / "references" / "leg-contracts.md").split()
     )
 
-    for text in (skill, leg_contracts):
-        folded = text.casefold()
-        assert "after a second zero-provider failure in the same attempted workflow" in folded
-        assert "stop allocating fresh review ids" in folded
-        assert "retain and compare every failure receipt" in folded
-        assert "shared root cause" in folded
-        assert "controlled setup-only probe" in folded
+    for recovery_clause in (
+        "After a second comparable zero-provider failure",
+        "stop allocating review IDs",
+        "retained receipts and command context",
+        "identify and verify the shared cause",
+        "controlled setup-only probe",
+    ):
+        assert recovery_clause in convergence
 
-    assert "outer host-command working directory" in leg_contracts
-    assert "inner bootstrap child working directory" in leg_contracts
-    assert "bootstrap guard evaluates the child process's `PWD`" in leg_contracts
-    assert "`CODEX_HOME`, not `HOME`" in leg_contracts
+    assert "outer host working directory" in leg_contracts
+    assert "inner bootstrap child" in leg_contracts
+    assert "Preserve the login user's `HOME`" in leg_contracts
+    assert "isolate Codex with `CODEX_HOME`" in leg_contracts
 
 
 def test_project_agents_verification_commands_are_workspace_root_safe() -> None:
@@ -890,307 +895,150 @@ def test_failed_leg_docs_allow_verified_transient_vendor_recovery() -> None:
 
 
 def test_cross_family_skill_uses_current_task_authority_before_preparing() -> None:
-    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
 
     authority_rule = (
         "The current owner-supplied task or explicitly designated executable plan "
         "is the execution authority for the round."
     )
+    assert authority_rule in skill
+    assert "Ask the owner when a required product or design decision is absent" in skill
+    assert "fresh review ID" in skill
     assert "[CHANGELOG.md](../../CHANGELOG.md)" not in skill
     assert "Read only the current release section of" not in skill
-    assert "1. **Authorize and bound.**" in skill
-    assert authority_rule in skill
-    assert "Never invert a retained or rejected release decision in `TASK.md`" in skill
-    assert skill.index(authority_rule) < skill.index("Record a fresh review ID")
 
 
 def test_cross_family_skill_owns_operational_prompts_without_meta_review() -> None:
-    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
-    compact = " ".join(skill.split())
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
 
-    assert "render-worktree" in compact
-    assert "project instructions explicitly select worktree-first review" in compact
-    assert (
-        "task, status, and diff as canonical regular files inside that worktree"
-        in compact
-    )
-    assert (
-        "Do not invoke `skill-prompt-review` before or during an operational round"
-        in compact
-    )
-    assert "select the receipt and preflight the recorded wrapper" in compact
-    assert (
-        "before invoking packaged `python3 bin/review_round.py render-worktree`"
-        in compact
-    )
-    assert "dispatch only those successfully rendered prompts" in compact
+    assert "project instructions explicitly select worktree-first review" in skill
+    assert "current task, status, and diff as regular files" in skill
+    assert "`render-worktree --output` path resolves there" in skill
+    assert "prepared-directory prompt contract does not apply" in skill
+    assert "its renderer supplies the result contract" in skill
+    assert "`skill-prompt-review` stays outside every operational round" in skill
+    assert "Dispatch only successfully rendered prompts" in skill
 
 
 def test_cross_family_skill_names_worktree_first_custody_and_run_roots() -> None:
-    skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
-    compact = " ".join(skill.split())
+    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
 
-    assert "`review_custody_root`" in compact
-    assert "`review_run_root`" in compact
-    assert "selector and preflight receipts" in compact
-    assert "rendered prompts, provider logs, and results" in compact
-    assert "`render-worktree --output` must resolve outside" in compact
+    assert "`review_custody_root`" in skill
+    assert "`review_run_root`" in skill
+    for run_artifact in ("selector receipts", "prompts", "logs", "results"):
+        assert run_artifact in skill
+    assert "`render-worktree --output`" in skill
+    assert "path resolves there" in skill
 
 
-def test_cross_family_skill_uses_managed_review_workspace_lifecycle() -> None:
-    raw_skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
-    skill = " ".join(raw_skill.split())
-    prompt_contract = "[review prompt contract](references/review-prompt-contract.md)"
-    leg_contracts = "[leg contracts](references/leg-contracts.md)"
-    reviewer_routing = "[reviewer routing](references/reviewer-routing.md)"
-    characterization_marker = (
-        "A current task may explicitly authorize a lifecycle characterization "
-        "with zero provider legs."
-    )
-    branch_selector = (
-        "A current task authorizes this branch only when it both prohibits provider "
-        "dispatch and directs the lifecycle through verify and exact cleanup."
-    )
-    canonical_prepare_inputs = (
-        "Both `--source-root` and `--member-list` inputs must be absolute canonical "
-        "no-symlink paths, and `--member-list` must name an existing regular file; "
-        "any violation is a workflow failure that invalidates the round and requires "
-        "a fresh review ID."
-    )
+def test_cross_family_skill_delegates_mechanical_lifecycle_to_code() -> None:
+    skill_path = SKILLS / "triad-cross-family-review" / "SKILL.md"
+    skill_raw = _text(skill_path)
+    skill = " ".join(skill_raw.split())
+    lifecycle = _text(ROOT / "bin" / "review_round.py")
+    lifecycle_tests = _text(ROOT / "tests" / "test_review_round.py")
 
-    for subcommand in ("prepare", "manifest", "capture", "render", "verify", "cleanup"):
-        assert f"python3 bin/review_round.py {subcommand}" in skill
-    assert (
-        "Resolve the canonical toolkit root from the canonical realpath of this `SKILL.md`"
-        in skill
-    )
-    assert (
-        "never search for or substitute another checkout or installed-cache copy"
-        in skill
-    )
-    assert (
-        'python3 bin/review_round.py capture --prepared-dir "$review_shared" '
-        '--worktree "$review_worktree" --output "$review_snapshot"'
-    ) in skill
-    assert "bin/review_round.py prepare" in skill
-    assert '--source-root "$review_source_root"' in skill
-    assert '--member-list "$review_member_list"' in skill
-    assert '--required-members-json "$review_members_json"' in skill
-    assert 'manifest --prepared-dir "$review_shared"' in skill
-    assert '--expected-root "$review_root"' in skill
-    assert canonical_prepare_inputs in skill
-    assert (
-        "For every JSON-valued lifecycle option, pass the serialized JSON as one "
-        "shell argument"
-    ) in skill
-    assert (
-        "pass a placeholder command name before the serialized JSON so zsh assigns "
-        "that name to `$0` and the JSON to `$1`" in skill
-    )
-    assert (
-        "Assign `$1` to a task-specific variable and expand that variable double-quoted"
-        in skill
-    )
-    assert (
-        "Bind every dynamic path, review ID, and model value to a task-specific shell "
-        "variable before invocation" in skill
-    )
-    assert (
-        "never splice nested quote fragments or leave JSON exposed to glob expansion"
-        in skill
-    )
-    assert "Use the exact digest printed by `capture`" in skill
-    assert "Do not parse the snapshot JSON to recover or recheck that digest" in skill
-    assert skill.index("Record a fresh review ID") < skill.index(
-        "bin/review_round.py prepare"
-    )
-    assert "reserved `triad-review-<review-id>` system-temp namespace" in skill
-    assert "creates the root exclusively" in skill
-    assert "exact member list from the canonical source root" in skill
-    assert (
-        "Use the canonical Git worktree root as `--source-root`; it must be the same "
-        "canonical worktree root passed to `capture` and `verify`" in skill
-    )
-    assert "member-list file is the only source-copy IPC" in skill
-    assert "`shared/source/product/<member>`" in skill
-    assert "no unlisted source member is copied" in skill
-    assert (
-        "`capture` and `verify` also compare every selected prepared source member with "
-        "that worktree before and after worktree fingerprinting" in skill
-    )
-    assert "Never copy an earlier prepared packet" in skill
-    for prior_round_artifact in (
-        "task",
-        "diff",
-        "manifest",
-        "snapshot",
-        "prompt",
-        "status",
-        "verdict",
+    for link in (
+        "[review prompt contract](references/review-prompt-contract.md)",
+        "[reviewer routing](references/reviewer-routing.md)",
+        "[leg contracts](references/leg-contracts.md)",
+        "[convergence](references/convergence.md)",
     ):
-        assert f"prior-round {prior_round_artifact}" in skill
+        assert link in skill_raw
+
+    for subcommand in (
+        "prepare",
+        "manifest",
+        "capture",
+        "fingerprint-worktree",
+        "select-google-route",
+        "render",
+        "render-worktree",
+        "verify",
+        "cleanup",
+    ):
+        assert subcommand in skill
+        assert f'commands.add_parser("{subcommand}")' in lifecycle
+
+    for implementation in (
+        "def prepare_review_workspace(",
+        "def create_source_manifest(",
+        "def capture_round(",
+        "def verify_round(",
+        "def select_google_route(",
+        "def render_review_prompt(",
+        "def render_worktree_review_prompt(",
+        "def cleanup_review_workspace(",
+    ):
+        assert implementation in lifecycle
+
+    assert "lifecycle code owns path grammar, inventory, collision" in skill
     assert (
-        "Outside `shared/source/product/`, the prepared `shared/` inventory is exactly "
-        "`TASK.md`, `REVIEW.diff`, `SOURCE_SHA256SUMS`, and optional `EVIDENCE.md`"
-        in skill
+        "renderer owns metadata serialization, route binding, tool contracts" in skill
     )
-    assert "same-ID collision" in skill
-    assert "different review IDs remain isolated" in skill
-    assert (
-        "Record the review ID and returned root in the active `TASK.md` or plan"
-        in skill
-    )
-    assert (
-        "The renderer verifies that prepared digest, then binds it with the one canonical Google "
-        "selector receipt into `metadata.content_digest`" in skill
-    )
-    assert (
-        "copy that rendered digest into every provider call and admitted-result validation"
-        in skill
-    )
-    assert "results and prompts under the returned review root" in skill
-    assert "snapshots and verdicts under that same current root" in skill
-    assert '`TRIAD_DISPATCH_LOG_DIR="$review_log_dir"`' in skill
-    assert "bin/review_round.py cleanup" in skill
-    assert (
-        "Normal cleanup occurs only after final integrity verification and adjudication"
-        in skill
-    )
-    assert "compare the expected root" in skill
-    assert "first cleanup result reports `removed: true`" in skill
-    assert "including a shell invocation that fails before Python starts" in skill
-    assert "never retry a corrected command under the same ID" in skill
-    assert "confirm that exact root is absent" in skill
-    assert "other managed sibling roots remain untouched" in skill
-    assert "strictly more than 30 days" in skill
-    assert (
-        "Prepare a durable handoff directly at its owner-approved destination" in skill
-    )
-    assert prompt_contract in raw_skill
-    assert leg_contracts in raw_skill
-    assert reviewer_routing in raw_skill
-    assert raw_skill.index(prompt_contract) < raw_skill.index(reviewer_routing)
-    assert raw_skill.index(leg_contracts) < raw_skill.index(reviewer_routing)
-    assert characterization_marker in skill
-    assert branch_selector in skill
-    assert skill.index(characterization_marker) < skill.index(branch_selector)
-    assert skill.index(branch_selector) < skill.index(reviewer_routing)
-    assert (
-        "then renders every requested prompt with packaged "
-        "`python3 bin/review_round.py render`"
-    ) in skill
-    assert "This branch is not a review round or gate" in skill
-    assert (
-        "make no review-admission, convergence, adjudication, or gate-passage claim"
-        in skill
-    )
-    assert (
-        "use supported exact cleanup, and return without entering provider dispatch"
-        in skill
-    )
-    assert (
-        "For prepared-directory review rounds, after every started leg terminates and, "
-        "for a partial start, the actual start failure is recorded and each remaining "
-        "unstarted required leg is recorded as not started because launch was closed, run "
-        '`python3 bin/review_round.py verify --prepared-dir "$review_shared" '
-        '--worktree "$review_worktree" --snapshot "$review_snapshot"`'
-    ) in skill
-    assert (
-        "the task-authorized zero-provider characterization runs "
-        "that same command through the Flow step 4 branch"
-    ) in skill
-    assert "For review rounds, the gate passes only when all required families" in skill
-    assert (
-        "For review rounds: Normal cleanup occurs only after final integrity" in skill
-    )
-    assert (
-        "the task-authorized zero-provider characterization uses the Flow step 4 "
-        "verify-and-exact-cleanup branch"
-    ) in skill
-    assert (
-        "Do not modify the canonical worktree until every started leg has terminated"
-    ) in skill
-    assert "The prepared-directory route requires `ROUND_INTEGRITY_OK`" in skill
-    assert (
-        "An explicitly selected worktree-first round instead performs the exact "
-        "project-required post-review fingerprint check"
-    ) in skill
+    for duplicated_parser_detail in (
+        "sorted JSON array of non-empty normalized POSIX relative paths",
+        "absolute canonical no-symlink paths",
+        "reserved `triad-review-<review-id>` system-temp namespace",
+        "member-list file is the only source-copy IPC",
+        "prior-round snapshot",
+        "prior-round verdict",
+    ):
+        assert duplicated_parser_detail not in skill
+    assert "python3 bin/review_round.py" not in skill
+
+    for behavior_test in (
+        "test_prepare_copies_exact_members_and_isolates_review_ids",
+        "test_capture_and_verify_bind_prepare_source_root_to_worktree",
+        "test_rendered_prompt_binds_focused_round_once",
+        "test_cli_prepare_and_cleanup_round_trip",
+        "test_cli_select_google_route_exclusive_creates_canonical_receipt",
+    ):
+        assert behavior_test in lifecycle_tests
+
+    assert "provider-free lifecycle characterization" in skill
+    assert "not a review round or admission result" in skill
+    assert "ROUND_INTEGRITY_OK" in skill
+    assert "project-required post-review fingerprint" in skill
+    assert "Clean the exact round" in skill
 
 
 def test_cross_family_skill_requires_the_review_source_manifest() -> None:
-    skill = " ".join(_text(SKILLS / "triad-cross-family-review" / "SKILL.md").split())
+    skill_root = SKILLS / "triad-cross-family-review"
+    skill = " ".join(_text(skill_root / "SKILL.md").split())
     prompt_contract = " ".join(
-        _text(
-            SKILLS
-            / "triad-cross-family-review"
-            / "references"
-            / "review-prompt-contract.md"
-        ).split()
+        _text(skill_root / "references" / "review-prompt-contract.md").split()
     )
-    release_plan = " ".join(
-        _text(
-            ROOT
-            / "docs"
-            / "superpowers"
-            / "plans"
-            / "2026-08-05-triad-0.2.533-owner-decisions-and-release.md"
-        ).split()
-    )
-    changelog = " ".join(_text(ROOT / "CHANGELOG.md").split())
+    lifecycle = _text(ROOT / "bin" / "review_round.py")
+    lifecycle_tests = _text(ROOT / "tests" / "test_review_round.py")
 
-    assert "`TASK.md`, `REVIEW.diff`, and optional `EVIDENCE.md` only" in skill
-    fixed_members = (
-        "`TASK.md`, `REVIEW.diff`, optional `EVIDENCE.md`, and `SOURCE_SHA256SUMS`"
-    )
-    assert fixed_members in prompt_contract
-    assert fixed_members in release_plan
-    member_rule = "sorted JSON array of non-empty normalized POSIX relative paths"
-    assert member_rule in skill
-    assert (
-        'python3 bin/review_round.py manifest --prepared-dir "$review_shared"' in skill
-    )
-    inventory_rule = "sorted JSON array of exact decoded `{path, sha256}` objects"
-    assert inventory_rule in skill
-    assert inventory_rule in prompt_contract
-    assert inventory_rule in release_plan
-    assert inventory_rule in changelog
-    manifest_coverage_rule = (
-        "The manifest covers every regular file in the prepared directory except "
-        "the root `SOURCE_SHA256SUMS` manifest itself"
-    )
-    assert manifest_coverage_rule in skill
-    assert manifest_coverage_rule in prompt_contract
-    assert (
-        '"affected_surfaces_inspected": ["source/product/bin/review_round.py", '
-        '"source/product/skills/triad-cross-family-review/SKILL.md"]' in prompt_contract
-    )
-    metadata_rule = (
-        "Every rendered prompt carries dynamic values only in one canonical "
-        "`Review metadata: ` JSON record"
-    )
-    assert metadata_rule in skill
-    assert metadata_rule in prompt_contract
-    assert metadata_rule in release_plan
-    assert metadata_rule in changelog
-    binding_rule = (
-        "Set `review_id`, `family`, and `content_digest` exactly to "
-        "`metadata.review_id`, `metadata.family`, and `metadata.content_digest`"
-    )
-    assert binding_rule in prompt_contract
-    assert (
-        "This workflow prepares `source/product/` from the canonical worktree root"
-        in prompt_contract
-    )
-    assert (
-        "Do not ask how to proceed, omit the verdict, wrap JSON in prose"
-        in prompt_contract
-    )
-    for placeholder in (
-        '"review_id": "<metadata.review_id>"',
-        '"family": "<metadata.family>"',
-        '"content_digest": "<metadata.content_digest>"',
+    assert "exact approved members" in skill
+    assert "Add only current `TASK.md`, `REVIEW.diff`, optional `EVIDENCE.md`" in skill
+    assert "run `manifest` last" in skill
+    for packet_member in (
+        "`source/product/`",
+        "current `TASK.md`",
+        "current `REVIEW.diff`",
+        "optional bounded `EVIDENCE.md`",
+        "generated `SOURCE_SHA256SUMS`",
     ):
-        assert placeholder in prompt_contract
+        assert packet_member in prompt_contract
+
+    for code_owned_contract in (
+        "SOURCE_SHA256SUMS must be a JSON array",
+        "SOURCE_SHA256SUMS must use canonical JSON",
+        "SOURCE_SHA256SUMS paths must be sorted",
+        "SOURCE_SHA256SUMS path inventory mismatch",
+        "SOURCE_SHA256SUMS digest mismatch",
+    ):
+        assert code_owned_contract in lifecycle
+
+    for behavior_test in (
+        "test_capture_rejects_unsorted_lifecycle_manifest",
+        "test_capture_rejects_lifecycle_manifest_digest_mismatch",
+        "test_capture_rejects_extra_prior_round_artifact_in_lifecycle_packet",
+    ):
+        assert behavior_test in lifecycle_tests
 
 
 def test_retired_review_runtime_is_absent() -> None:
@@ -1299,12 +1147,10 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
     ]
     compact_routing = " ".join(routing.split())
     assert "one frozen route" in compact_routing
-    assert "personal Google Sign-In" in compact_routing
+    assert "Personal Google Sign-In" in compact_routing
     assert "Gemini Enterprise OAuth" in compact_routing
-    assert (
-        "never signs in, changes accounts, or switches authentication classes"
-        in compact_routing
-    )
+    assert "does not sign in, change accounts" in compact_routing
+    assert "authentication class and route stay fixed" in compact_routing
     temp_root_contracts = {
         "README.md": "must include the canonical system temp base",
         "README.ko.md": "canonical system temp base를 포함해야",
@@ -1457,5 +1303,6 @@ def test_distribution_documents_fresh_process_acceptance() -> None:
     skill = _text(SKILLS / "triad-cross-family-review" / "SKILL.md")
 
     assert "session after install or update" in readme
-    assert "packaged manifest and skill bytes" in skill
-    assert "exact current marker" in skill
+    compact_skill = " ".join(skill.split())
+    assert "packaged manifest and skill bytes" in compact_skill
+    assert "exact current marker" in compact_skill

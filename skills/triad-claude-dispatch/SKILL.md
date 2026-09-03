@@ -9,6 +9,9 @@ Use the packaged `bin/claude_wrapper.py`; do not call provider internals or
 modify Claude authentication or user configuration. Ordinary calls leave Claude
 permission selection native. The fully bound formal `LegVerdict` route adds
 native per-call Plan Mode without changing persistent user configuration.
+The fully bound formal route rejects any model other than `opus`, any effort
+other than `xhigh`, any timeout other than `1800`, and every `--fallback-model`
+before provider resolution.
 
 ## Ordinary bounded dispatch
 
