@@ -989,6 +989,8 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
 
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log, remove_env):
         calls.append(cmd)
+        assert _timeout == 600
+        assert cmd[cmd.index("--print-timeout") + 1] == "590s"
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
         schema_index = cmd.index("--json-schema")
         schema = json.loads(cmd[schema_index + 1])
@@ -1021,6 +1023,8 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
             "gemini-3.1-pro-high",
             "--effort",
             "high",
+            "--timeout",
+            "600",
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -1497,6 +1501,53 @@ def test_formal_agy_rejects_arguments_different_from_bound_preflight_before_prob
     assert "formal AGY arguments do not match bound preflight" in (
         capsys.readouterr().err
     )
+
+
+@pytest.mark.parametrize("timeout", ("599", "601"))
+def test_formal_agy_rejects_non_600_timeout_before_binary_probe(
+    monkeypatch, capsys, tmp_path, timeout
+) -> None:
+    selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
+    preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
+    monkeypatch.setattr(wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(
+        wrapper,
+        "_probe_agy_version",
+        lambda _bin: pytest.fail("binary probed"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "antigravity_wrapper.py",
+            "--prompt",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "--timeout",
+            timeout,
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "google",
+            "--expected-content-digest",
+            "a" * 64,
+            "--sandbox",
+            "read-only",
+        ],
+    )
+
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert "formal AGY review requires --timeout 600" in capsys.readouterr().err
 
 
 def test_formal_agy_rejects_non_google_prompt_before_binary_probe(

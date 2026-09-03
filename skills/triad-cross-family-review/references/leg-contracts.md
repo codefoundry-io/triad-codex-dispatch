@@ -38,7 +38,7 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
   --cwd "$review_target_cwd" \
   --model opus \
   --effort xhigh \
-  --timeout 1800 \
+  --timeout 1200 \
   --pydantic verdict_schema:LegVerdict \
   --expected-review-id "$review_id" \
   --expected-family claude \
@@ -47,7 +47,7 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 ```
 
 The wrapper adds Claude's native `--permission-mode plan` and requires the exact
-`opus`/`xhigh`/1,800-second/no-fallback route before provider resolution. It also
+`opus`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
 checks formal bindings and locally validates the terminal JSON. Read/search tools
 remain available inside the authorized boundary under existing user permissions.
 The result stays provisional until final integrity succeeds.
@@ -199,7 +199,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --sandbox read-only \
   --model gemini-3.1-pro-high \
   --effort high \
-  --timeout 1800 \
+  --timeout 600 \
   --pydantic verdict_schema:LegVerdict \
   --expected-review-id "$review_id" \
   --expected-family google \
@@ -216,7 +216,7 @@ python3 "$toolkit_root/bin/gemini_wrapper.py" \
   --google-selector-receipt "$google_selector_receipt" \
   --google-preflight-receipt "$google_preflight_file" \
   --cwd "$review_target_cwd" \
-  --timeout 1800 \
+  --timeout 600 \
   --pydantic verdict_schema:LegVerdict \
   --expected-review-id "$review_id" \
   --expected-family google \
@@ -269,7 +269,10 @@ agent_type omitted
 
 Give it the rendered Codex prompt and the same guarded target. Keep available
 read/search tools inside the authorized boundary, save terminal JSON outside the
-target, and validate it with:
+target, and observe it with a native `1,200,000`-millisecond observation wait.
+If the child is still running when that observation returns, issue the same wait again.
+Apply [convergence](convergence.md) to each observation and eventual
+terminal result, then validate it with:
 
 ```text
 python3 "$toolkit_root/bin/verdict_schema.py" validate \

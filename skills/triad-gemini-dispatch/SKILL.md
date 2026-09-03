@@ -28,6 +28,9 @@ When the cross-family skill selects it, the exact formally bound
 Mode, and uses the mode-independent packaged read/search-only policy as its
 enforcement boundary. The effective approval mode is `unexposed`. It consumes the
 one review-ID selector receipt and makes one provider call.
+The fully bound route accepts only `--timeout 600` before provider resolution.
+Apply [convergence](../triad-cross-family-review/references/convergence.md) to
+observation waits and terminal outcomes.
 The current JSON envelope exposes no authoritative single runtime-model identity,
 so formal audit records exactly `runtime_identity: "unexposed"` and never infers
 identity from `stats.models`, authentication class, or route. Capacity failure or invalid

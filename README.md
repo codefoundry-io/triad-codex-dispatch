@@ -238,6 +238,16 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.552
+
+0.2.552 assigns each formal review route its intended duration: an exact
+1,200-second Claude wrapper deadline, an exact 600-second AGY or Gemini wrapper
+deadline, and repeatable 1,200-second fresh Codex observation waits. Poll,
+snapshot, and wait wake-ups remain nonterminal; the cross-family
+`references/convergence.md` contract owns terminal-outcome interpretation.
+Provider prompt framing, renderer metadata, three-family composition, verdict
+schema, and `_common.py` process termination are unchanged.
+
 ### Upgrading to 0.2.551
 
 0.2.551 makes the cross-family skill smaller while moving machine-checkable safety into
@@ -355,14 +365,18 @@ locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
-it uses `--model opus --effort xhigh --timeout 1800` with no `--fallback-model`.
+it uses `--model opus --effort xhigh --timeout 1200` with no `--fallback-model`.
+Current route timing is a 1,200-second Claude wrapper deadline, a 600-second AGY
+or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex observation
+waits. Terminal-outcome interpretation is owned by the cross-family
+`references/convergence.md` contract.
 Non-formal Claude permission selection and all project-trust policy remain
 native. Ordinary `codex` remains the normal path.
 
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.551-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.552-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

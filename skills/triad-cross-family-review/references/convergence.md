@@ -30,6 +30,17 @@ Decision needed: <one concrete owner choice>
 Preserve the affected source while awaiting that decision. Continue unrelated
 bounded work only when it cannot pre-decide or conflict with the owner's choice.
 
+## Observation waits and terminal outcome ownership
+
+<!-- TERMINAL_OUTCOME_CONTRACT_START -->
+A poll, snapshot, or wait timeout is only a nonterminal wake-up boundary. It is
+not evidence of leg failure and does not authorize the leader to interrupt a
+still-running leg. Only the route-owning wrapper's full provider-process
+deadline or another observable terminal result may classify a provider leg
+failure. Leader elapsed time, poll count, and observation timeout never do. For
+fresh Codex, repeat observation waits until its terminal result arrives.
+<!-- TERMINAL_OUTCOME_CONTRACT_END -->
+
 ## Failure before any provider starts
 
 A packet, selector, preflight, or launch-setup defect with zero started provider

@@ -32,6 +32,7 @@ MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
 FORMAL_AGY_MODEL = "gemini-3.1-pro-high"
 FORMAL_AGY_EFFORT = "high"
+FORMAL_AGY_TIMEOUT = 600
 FORMAL_AGY_ENV_REMOVE = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -398,6 +399,9 @@ def main() -> int:
         return _common.EXIT_ARG_ERROR
 
     formal_bindings = all(value is not None for value in binding_values)
+    if formal_bindings and args.timeout != FORMAL_AGY_TIMEOUT:
+        _common.log("formal AGY review requires --timeout 600")
+        return _common.EXIT_ARG_ERROR
     selected_context = args.preflight_only or formal_bindings
     if selected_context and args.google_selector_receipt is None:
         _common.log("formal AGY route requires --google-selector-receipt")
