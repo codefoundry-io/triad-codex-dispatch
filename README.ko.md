@@ -217,6 +217,20 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.552 업그레이드
+
+source-SOT staging은 이제 `TRIAD_BOOTSTRAP_CODEX_ROOT`로 bootstrap의 Codex directory를
+선택하고 login `HOME`과 `CODEX_HOME`은 보존합니다. 명시한 root가 우선하며, 미설정 또는
+빈 값이면 기존 `CODEX_HOME`, 이후 `$HOME/.codex` 기본값을 사용합니다. 동일한 absolute-path,
+containment, provenance 검사를 적용하며 provider authentication은 변경하지 않습니다.
+
+0.2.552는 formal review route별 의도된 시간을 고정합니다. Claude wrapper deadline
+1,200초, AGY 또는 Gemini wrapper deadline 600초, fresh Codex의 반복 가능한 1,200초
+observation wait를 사용합니다. poll, snapshot, wait wake-up은 nonterminal이며 terminal
+outcome 해석은 cross-family `references/convergence.md` 계약이 전담합니다. provider
+prompt framing, renderer metadata, three-family 구성, verdict schema, `_common.py`의
+process termination 동작은 변경하지 않습니다.
+
 ### 0.2.551 업그레이드
 
 0.2.551은 cross-family skill을 축소하고 기계적으로 검사할 수 있는 안전 규칙을 wrapper,
@@ -233,7 +247,8 @@ route마다 하나의 명시적 provider cwd를 사용하며, Python 3.12로 임
 모든 failure receipt를 보존·비교해 공통 원인을 검증한 뒤 provider-free setup-only probe
 하나를 통과해야 다음 formal round를 준비할 수 있습니다. source-SOT bootstrap에서는 host
 command의 outer workdir를 환경 요구대로 유지하고, 문서화된 subshell만 별도의 neutral child
-cwd로 들어갑니다. `HOME`은 보존하고 Codex 상태만 `CODEX_HOME`으로 격리합니다. repository
+cwd로 들어갑니다. 현재 bootstrap에서는 `HOME`과 `CODEX_HOME`을 보존하고
+`TRIAD_BOOTSTRAP_CODEX_ROOT`로 bootstrap의 Codex directory를 격리합니다. repository
 검증 명령도 의도한 checkout을 명시적으로 binding하므로 workspace root의 다른 `tests/`
 directory를 실수로 선택하지 않습니다. provider 구성, routing, strict `LegVerdict` schema는
 바뀌지 않습니다.
@@ -325,15 +340,18 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
-완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1800`을
+완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1200`을
 사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
+현재 route timing은 Claude wrapper deadline 1,200초, AGY 또는 Gemini wrapper deadline
+600초, fresh Codex의 반복 가능한 1,200초 observation wait입니다. terminal outcome 해석은
+cross-family `references/convergence.md` 계약이 전담합니다.
 non-formal Claude permission 선택과 모든 project-trust policy는 native 설정을
 유지합니다. 일반 `codex`가 정상 경로입니다.
 
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.551-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.552-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

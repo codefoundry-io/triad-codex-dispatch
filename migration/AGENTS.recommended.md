@@ -77,6 +77,11 @@ returned `installedPath`. Run that printed absolute bootstrap command exactly
 from a normal terminal outside the plugin cache or checkout. Do not carry a
 temporary plugin-path variable across terminal or process boundaries.
 
+For source-SOT pre-deployment staging, follow the canonical leg-contract recipe:
+preserve login `HOME` and `CODEX_HOME`, and scope bootstrap's Codex directory with
+`TRIAD_BOOTSTRAP_CODEX_ROOT`. This does not change provider authentication or grant
+authority over other user-global paths.
+
 Claude, AGY, and organization Gemini Enterprise OAuth are managed independently
 from Codex auth. Auth failures should be surfaced to the user, not repaired by
 editing the wrapper engine.

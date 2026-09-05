@@ -3991,6 +3991,80 @@ def test_source_sot_stage_accepts_distinct_temp_roots(tmp_path: Path) -> None:
     assert not (tmp_path / "xdg-config").exists()
 
 
+@pytest.mark.parametrize("mode", ("--install", "--remove"))
+def test_explicit_codex_root_limits_legacy_cleanup_to_selected_root(
+    tmp_path: Path, mode: str
+) -> None:
+    # Ignoring the explicit root must not clean the owner's default Codex directory.
+    selected = tmp_path / "selected-codex"
+    default = tmp_path / "home" / ".codex"
+    for directory in (selected, default):
+        directory.mkdir(parents=True)
+        (directory / "triad-codex-dispatch.config.toml").write_bytes(FROZEN_LEGACY_PROFILE)
+        (directory / "config.toml").write_bytes(b'model = "owner-selected"\n')
+    default_before = _snapshot_tree(default)
+    neutral = tmp_path / "neutral"
+    neutral.mkdir()
+
+    result, _, launchers = _run_bootstrap(
+        tmp_path,
+        arg=mode,
+        cwd=neutral,
+        env_overrides={"TRIAD_BOOTSTRAP_CODEX_ROOT": str(selected)},
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (selected / "triad-codex-dispatch.config.toml").exists()
+    assert (selected / "config.toml").read_bytes() == b'model = "owner-selected"\n'
+    assert _snapshot_tree(default) == default_before
+    if mode == "--install":
+        assert all((launchers / name).is_file() for name in MANAGED_LAUNCHERS)
+
+
+@pytest.mark.parametrize("mode", ("--install", "--remove"))
+def test_explicit_codex_root_rejects_relative_path_before_cleanup(
+    tmp_path: Path, mode: str
+) -> None:
+    default = tmp_path / "home" / ".codex"
+    default.mkdir(parents=True)
+    (default / "triad-codex-dispatch.config.toml").write_bytes(FROZEN_LEGACY_PROFILE)
+    before = _snapshot_tree(default)
+
+    result, _, launchers = _run_bootstrap(
+        tmp_path,
+        arg=mode,
+        env_overrides={"TRIAD_BOOTSTRAP_CODEX_ROOT": "relative-codex-root"},
+    )
+
+    assert result.returncode != 0
+    assert _snapshot_tree(default) == before
+    assert not any((launchers / name).exists() for name in MANAGED_LAUNCHERS)
+
+
+def test_explicit_codex_root_preserves_source_sot_containment(tmp_path: Path) -> None:
+    review = tmp_path / "review"
+    selected = review / "codex-root"
+    selected.mkdir(parents=True)
+    (selected / "triad-codex-dispatch.config.toml").write_bytes(FROZEN_LEGACY_PROFILE)
+    before = _snapshot_tree(review)
+    neutral = tmp_path / "neutral"
+    neutral.mkdir()
+
+    result, _, launchers = _run_bootstrap(
+        tmp_path,
+        cwd=neutral,
+        env_overrides={
+            "TRIAD_BOOTSTRAP_CODEX_ROOT": str(selected),
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": str(review),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "source-SOT stage containment guard" in result.stderr
+    assert _snapshot_tree(review) == before
+    assert not any((launchers / name).exists() for name in MANAGED_LAUNCHERS)
+
+
 @pytest.mark.parametrize("review_root_kind", ("relative", "missing-absolute"))
 def test_source_sot_stage_rejects_invalid_review_root_before_mutation(
     tmp_path: Path, review_root_kind: str

@@ -8,10 +8,10 @@ provider beyond the current task's objective and external-data boundary.
 
 | Family | Formal route |
 |---|---|
-| Claude | `opus`, `xhigh`, 1,800-second wrapper deadline |
-| Google with `personal-google` | AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 1,800-second wrapper deadline |
-| Google with `gemini-enterprise` | Prefer the same AGY route; when AGY is absent, use Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 1,800-second wrapper deadline |
-| Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent |
+| Claude | `opus`, `xhigh`, 1,200-second wrapper deadline |
+| Google with `personal-google` | AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline |
+| Google with `gemini-enterprise` | Prefer the same AGY route; when AGY is absent, use Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline |
+| Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits |
 
 Use [leg contracts](leg-contracts.md) for exact invocation and containment
 details. Use [convergence](convergence.md) for every setup failure, started-leg

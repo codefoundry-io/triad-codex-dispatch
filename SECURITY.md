@@ -45,6 +45,11 @@ credential-compatible/user-site mode requires a trusted `HOME` because
 trusted isolated Python environment is acceptable only when it preserves the
 provider login workflow.
 
+Source-SOT staging uses `TRIAD_BOOTSTRAP_CODEX_ROOT` to scope bootstrap's Codex
+checks and provenance-managed cleanup without assigning `HOME` or `CODEX_HOME`.
+It reuses the absolute-path and containment checks; it does not redirect provider
+authentication or broaden permission to mutate a user-global target.
+
 Formal AGY calls use owner-provisioned native AGY CLI sign-in and the same transaction
 lifecycle. Formal Gemini calls preserve the existing organization Sign in with
 Google/OAuth cache and Cloud-project selection while removing competing API-key,

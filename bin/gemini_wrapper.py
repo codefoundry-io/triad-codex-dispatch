@@ -41,6 +41,7 @@ FORMAL_VERDICT_SPECS = {
     "verdict_schema:LegVerdict",
     "verdict_schema.LegVerdict",
 }
+FORMAL_GEMINI_TIMEOUT = 600
 FORMAL_GEMINI_REMOVED_ENV = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -294,9 +295,11 @@ def main() -> int:
     ):
         log("expected review ID has invalid syntax")
         return EXIT_ARG_ERROR
-    if formal_verdict and (args.timeout <= 0 or args.model is not None):
+    if formal_verdict and not args.preflight_only and (
+        args.timeout != FORMAL_GEMINI_TIMEOUT or args.model is not None
+    ):
         log(
-            "formal Gemini review requires a positive timeout and CLI Auto model routing"
+            "formal Gemini review requires --timeout 600 and CLI Auto model routing"
         )
         return EXIT_ARG_ERROR
     if args.preflight_only and (

@@ -12,6 +12,13 @@
 - When user-visible behavior, authentication, security posture, or update flow changes, update the affected English, Korean, security, migration, and contract-test surfaces in the same bounded change.
 - Preserve the bootstrap runtime requirement of Python 3.12 or newer unless the owner explicitly approves a compatibility change.
 
+## Formal review
+
+- Select guarded existing-worktree review for this repository. Before a formal
+  cross-family gate under the workspace's temporary five-leg overlay, read
+  `docs/agent-policies/formal-review-perspectives.md` completely. The root leader
+  applies its two additive lenses; governance files are not reviewer evidence.
+
 ## Verification
 
 - Resolve this checkout's canonical absolute root before invocation and pass it as `$1` while the

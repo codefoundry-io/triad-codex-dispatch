@@ -404,7 +404,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
 
     def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
         calls.append(cmd)
-        assert _timeout == 1800
+        assert _timeout == 1200
         schema = json.loads(cmd[cmd.index("--json-schema") + 1])
         properties = schema["properties"]
         assert properties["review_id"]["const"] == "review-r1"
@@ -437,7 +437,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
             "--effort",
             "xhigh",
             "--timeout",
-            "1800",
+            "1200",
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -510,7 +510,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
             "--effort",
             "xhigh",
             "--timeout",
-            "1800",
+            "1200",
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -529,19 +529,20 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
 @pytest.mark.parametrize(
     "route_args",
     (
-        ("--effort", "xhigh", "--timeout", "1800"),
-        ("--model", "sonnet", "--effort", "xhigh", "--timeout", "1800"),
-        ("--model", "opus", "--timeout", "1800"),
-        ("--model", "opus", "--effort", "high", "--timeout", "1800"),
+        ("--effort", "xhigh", "--timeout", "1200"),
+        ("--model", "sonnet", "--effort", "xhigh", "--timeout", "1200"),
+        ("--model", "opus", "--timeout", "1200"),
+        ("--model", "opus", "--effort", "high", "--timeout", "1200"),
         ("--model", "opus", "--effort", "xhigh"),
-        ("--model", "opus", "--effort", "xhigh", "--timeout", "1799"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "1199"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "1201"),
         (
             "--model",
             "opus",
             "--effort",
             "xhigh",
             "--timeout",
-            "1800",
+            "1200",
             "--fallback-model",
             "sonnet",
         ),
@@ -551,7 +552,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
             "--effort",
             "xhigh",
             "--timeout",
-            "1800",
+            "1200",
             "--fallback-model",
             "",
         ),
@@ -562,7 +563,8 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
         "missing-effort",
         "wrong-effort",
         "default-timeout",
-        "wrong-timeout",
+        "timeout-below",
+        "timeout-above",
         "fallback-model",
         "empty-fallback-model",
     ),
@@ -597,7 +599,7 @@ def test_claude_formal_leg_rejects_unpinned_route_before_provider_resolution(
 
     assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
     assert (
-        "formal Claude route requires --model opus --effort xhigh --timeout 1800 "
+        "formal Claude route requires --model opus --effort xhigh --timeout 1200 "
         "and forbids --fallback-model" in capsys.readouterr().err
     )
 
@@ -864,6 +866,8 @@ def test_gemini_formal_leg_uses_plan_policy_scrubbed_oauth_and_bound_result(
             "google",
             "--expected-content-digest",
             "a" * 64,
+            "--timeout",
+            "600",
         ],
     )
 
@@ -878,6 +882,7 @@ def test_gemini_formal_leg_uses_plan_policy_scrubbed_oauth_and_bound_result(
     assert cmd.count("-m") == 1
     assert cmd[cmd.index("-m") + 1] == "auto"
     kwargs = captured["kwargs"]
+    assert kwargs["timeout"] == 600
     assert kwargs["single_provider_call"] is True
     assert set(kwargs["remove_env"]) == {
         "GEMINI_API_KEY",
@@ -1092,6 +1097,85 @@ def test_gemini_formal_leg_rejects_invalid_bindings_before_provider_resolution(
     )
 
     assert gemini_wrapper.main() == _common.EXIT_ARG_ERROR
+
+
+@pytest.mark.parametrize("timeout", ("599", "601"))
+def test_gemini_formal_leg_rejects_non_600_timeout_before_provider_resolution(
+    monkeypatch, capsys, tmp_path, timeout
+) -> None:
+    selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
+    preflight_receipt = _google_preflight_fixture(
+        tmp_path, selector_receipt, selected
+    )
+    monkeypatch.setattr(
+        gemini_wrapper, "load_pydantic_class", lambda _spec: LegVerdict
+    )
+    monkeypatch.setattr(
+        gemini_wrapper.subprocess,
+        "run",
+        lambda *_a, **_k: pytest.fail("provider resolved"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gemini_wrapper.py",
+            "--prompt",
+            prompt,
+            "--google-selector-receipt",
+            str(selector_receipt),
+            "--google-preflight-receipt",
+            str(preflight_receipt),
+            "--timeout",
+            timeout,
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--expected-family",
+            "google",
+            "--expected-content-digest",
+            "a" * 64,
+        ],
+    )
+
+    assert gemini_wrapper.main() == _common.EXIT_ARG_ERROR
+    assert (
+        "formal Gemini review requires --timeout 600 and CLI Auto model routing"
+        in capsys.readouterr().err
+    )
+
+
+def test_gemini_preflight_reports_schema_control_before_dispatch_timeout(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(
+        gemini_wrapper,
+        "require_binary",
+        lambda _name: pytest.fail("provider resolved"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gemini_wrapper.py",
+            "--prompt",
+            "preflight",
+            "--preflight-only",
+            "--pydantic",
+            "verdict_schema:LegVerdict",
+            "--expected-review-id",
+            "review-r1",
+            "--timeout",
+            "599",
+        ],
+    )
+
+    assert gemini_wrapper.main() == _common.EXIT_ARG_ERROR
+    assert (
+        "Gemini formal preflight does not accept model, schema, or repair controls"
+        in capsys.readouterr().err
+    )
 
 
 def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(

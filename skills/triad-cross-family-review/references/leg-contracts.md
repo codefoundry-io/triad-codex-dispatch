@@ -38,7 +38,7 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
   --cwd "$review_target_cwd" \
   --model opus \
   --effort xhigh \
-  --timeout 1800 \
+  --timeout 1200 \
   --pydantic verdict_schema:LegVerdict \
   --expected-review-id "$review_id" \
   --expected-family claude \
@@ -47,7 +47,7 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 ```
 
 The wrapper adds Claude's native `--permission-mode plan` and requires the exact
-`opus`/`xhigh`/1,800-second/no-fallback route before provider resolution. It also
+`opus`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
 checks formal bindings and locally validates the terminal JSON. Read/search tools
 remain available inside the authorized boundary under existing user permissions.
 The result stays provisional until final integrity succeeds.
@@ -86,7 +86,8 @@ google_selector_launcher="$(command -v review_round.py)"
 For source-SOT pre-deployment, stage an isolated launcher group from that exact
 toolkit before packet capture. Keep the required project root as the outer host
 working directory; the inner bootstrap child uses the neutral temporary working
-directory. Preserve the login user's `HOME`, isolate Codex with `CODEX_HOME`,
+directory. Preserve the login user's `HOME` and `CODEX_HOME`; isolate bootstrap's
+Codex directory with `TRIAD_BOOTSTRAP_CODEX_ROOT`,
 and pass the canonical review worktree for deterministic containment checks:
 
 ```text
@@ -101,7 +102,7 @@ selector_stage_classifier="$selector_stage_config_home/triad-codex-dispatch/clas
 selector_stage_shell_rc="$selector_stage_root/shellrc"
 (
   cd "$selector_bootstrap_cwd" &&
-  CODEX_HOME="$selector_stage_codex_home" \
+  TRIAD_BOOTSTRAP_CODEX_ROOT="$selector_stage_codex_home" \
   XDG_CONFIG_HOME="$selector_stage_config_home" \
   TRIAD_CLASSIFIER_EXTENSION="$selector_stage_classifier" \
   TRIAD_BOOTSTRAP_SHELL_RC="$selector_stage_shell_rc" \
@@ -199,7 +200,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --sandbox read-only \
   --model gemini-3.1-pro-high \
   --effort high \
-  --timeout 1800 \
+  --timeout 600 \
   --pydantic verdict_schema:LegVerdict \
   --expected-review-id "$review_id" \
   --expected-family google \
@@ -216,7 +217,7 @@ python3 "$toolkit_root/bin/gemini_wrapper.py" \
   --google-selector-receipt "$google_selector_receipt" \
   --google-preflight-receipt "$google_preflight_file" \
   --cwd "$review_target_cwd" \
-  --timeout 1800 \
+  --timeout 600 \
   --pydantic verdict_schema:LegVerdict \
   --expected-review-id "$review_id" \
   --expected-family google \
@@ -269,7 +270,10 @@ agent_type omitted
 
 Give it the rendered Codex prompt and the same guarded target. Keep available
 read/search tools inside the authorized boundary, save terminal JSON outside the
-target, and validate it with:
+target, and observe it with a native `1,200,000`-millisecond observation wait.
+If the child is still running when that observation returns, issue the same wait again.
+Apply [convergence](convergence.md) to each observation and eventual
+terminal result, then validate it with:
 
 ```text
 python3 "$toolkit_root/bin/verdict_schema.py" validate \

@@ -22,7 +22,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.551"
+    assert manifest["version"] == "0.2.552"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -33,10 +33,22 @@ def test_manifest_describes_the_convergent_distribution() -> None:
 def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     version = json.loads(_text(MANIFEST))["version"]
     changelog = _text(ROOT / "CHANGELOG.md")
+    readme = _text(ROOT / "README.md")
+    readme_ko = _text(ROOT / "README.ko.md")
 
-    assert f"## {version} — 2026-09-03" in changelog
-    assert f"### Upgrading to {version}" in _text(ROOT / "README.md")
-    assert f"### {version} 업그레이드" in _text(ROOT / "README.ko.md")
+    assert f"## {version} — 2026-09-04" in changelog
+    assert f"### Upgrading to {version}" in readme
+    assert f"### {version} 업그레이드" in readme_ko
+    assert f"_runs/distribution/{version}-final-r1" in readme
+    assert f"_runs/distribution/{version}-final-r1" in readme_ko
+    historical_en = readme.split("### Upgrading to 0.2.551", 1)[1].split(
+        "### Upgrading to 0.2.550", 1
+    )[0]
+    historical_ko = readme_ko.split("### 0.2.551 업그레이드", 1)[1].split(
+        "### 0.2.550 업그레이드", 1
+    )[0]
+    assert "1,800-second timeout" in historical_en
+    assert "1,800초 timeout" in historical_ko
     assert "## 0.2.541 — 2026-08-20" in changelog
     assert "Formal review excludes `grep_search` because AGY 1.1.16" in changelog
     assert (
@@ -127,10 +139,10 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     )
 
     for route_contract in (
-        "Claude | `opus`, `xhigh`, 1,800-second wrapper deadline",
-        "AGY 1.1.20 or newer",
-        "Gemini Enterprise OAuth",
-        'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`',
+        "Claude | `opus`, `xhigh`, 1,200-second wrapper deadline",
+        "AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline",
+        "Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline",
+        'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits',
     ):
         assert route_contract in routing
 
@@ -150,7 +162,6 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         '--expected-review-id "$review_id"',
         '--expected-content-digest "$review_digest"',
         "--pydantic verdict_schema:LegVerdict",
-        "--timeout 1800",
     ):
         assert command_contract in legs
 
@@ -172,7 +183,6 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         SKILLS / "triad-gemini-dispatch" / "SKILL.md",
     ):
         assert "reviews only" in _text(standalone_skill)
-
     fenced_blocks = re.findall(r"```text\n(.*?)\n```", legs, re.DOTALL)
 
     def one_wrapper_block(wrapper: str, discriminator: str) -> str:
@@ -202,7 +212,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             '--cwd "$review_target_cwd"',
             "--model opus",
             "--effort xhigh",
-            "--timeout 1800",
+            "--timeout 1200",
             "--pydantic verdict_schema:LegVerdict",
             '--expected-review-id "$review_id"',
             "--expected-family claude",
@@ -217,7 +227,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             "--sandbox read-only",
             "--model gemini-3.1-pro-high",
             "--effort high",
-            "--timeout 1800",
+            "--timeout 600",
             "--pydantic verdict_schema:LegVerdict",
             '--expected-review-id "$review_id"',
             "--expected-family google",
@@ -229,7 +239,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             '--google-selector-receipt "$google_selector_receipt"',
             '--google-preflight-receipt "$google_preflight_file"',
             '--cwd "$review_target_cwd"',
-            "--timeout 1800",
+            "--timeout 600",
             "--pydantic verdict_schema:LegVerdict",
             '--expected-review-id "$review_id"',
             "--expected-family google",
@@ -279,6 +289,80 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "TRIAD_REQUIRE_PINNED_VENDOR",
     ):
         assert retired_argument not in legs
+
+
+def test_formal_duration_and_terminal_outcome_contract_is_single_sourced() -> None:
+    skill_root = SKILLS / "triad-cross-family-review"
+    convergence = _text(skill_root / "references" / "convergence.md")
+    legs = _text(skill_root / "references" / "leg-contracts.md")
+    routing = _text(skill_root / "references" / "reviewer-routing.md")
+    claude = _text(SKILLS / "triad-claude-dispatch" / "SKILL.md")
+    agy = _text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md")
+    gemini = _text(SKILLS / "triad-gemini-dispatch" / "SKILL.md")
+    readme = " ".join(_text(ROOT / "README.md").split())
+    readme_ko = " ".join(_text(ROOT / "README.ko.md").split())
+
+    assert convergence.count("<!-- TERMINAL_OUTCOME_CONTRACT_START -->") == 1
+    assert convergence.count("<!-- TERMINAL_OUTCOME_CONTRACT_END -->") == 1
+    for clause in (
+        "A poll, snapshot, or wait timeout is only a nonterminal wake-up boundary",
+        "does not authorize the leader to interrupt a still-running leg",
+        "Only the route-owning wrapper's full provider-process deadline or another "
+        "observable terminal result may classify a provider leg failure",
+        "Leader elapsed time, poll count, and observation timeout never do",
+        "For fresh Codex, repeat observation waits until its terminal result arrives",
+    ):
+        assert clause in " ".join(convergence.split())
+
+    assert "native `1,200,000`-millisecond observation wait" in legs
+    assert "issue the same wait again" in legs
+    assert "FORMAL_CLAUDE_TIMEOUT = 1200" in _text(ROOT / "bin" / "claude_wrapper.py")
+    assert "FORMAL_AGY_TIMEOUT = 600" in _text(ROOT / "bin" / "antigravity_wrapper.py")
+    assert "FORMAL_GEMINI_TIMEOUT = 600" in _text(ROOT / "bin" / "gemini_wrapper.py")
+    assert "any timeout other than `1200`" in claude
+    assert "--timeout 600" in agy
+    assert "--timeout 600" in gemini
+    for clause in (
+        "1,200-second Claude wrapper deadline",
+        "600-second AGY or Gemini wrapper deadline",
+        "repeatable 1,200-second fresh Codex observation waits",
+    ):
+        assert clause in readme
+    for clause in (
+        "Claude wrapper deadline 1,200초",
+        "AGY 또는 Gemini wrapper deadline 600초",
+        "fresh Codex의 반복 가능한 1,200초 observation wait",
+    ):
+        assert clause in readme_ko
+
+    convergence_link = "../triad-cross-family-review/references/convergence.md"
+    assert f"[convergence]({convergence_link})" in agy
+    assert f"[convergence]({convergence_link})" in gemini
+    assert "shorter leader polling waits do not terminate it" not in agy
+
+    single_owner_clause = (
+        "A poll, snapshot, or wait timeout is only a nonterminal wake-up boundary"
+    )
+    for non_owner in (
+        _text(skill_root / "SKILL.md"),
+        legs,
+        routing,
+        claude,
+        agy,
+        gemini,
+    ):
+        assert single_owner_clause not in " ".join(non_owner.split())
+
+    route_neutral_surfaces = (
+        _text(ROOT / "bin" / "review_round.py"),
+        _text(skill_root / "references" / "review-prompt-contract.md"),
+        *(_text(path) for path in SKILLS.glob("*/agents/openai.yaml")),
+    )
+    for route_neutral in route_neutral_surfaces:
+        assert "1,200-second wrapper deadline" not in route_neutral
+        assert "1,200,000" not in route_neutral
+        assert "600-second wrapper deadline" not in route_neutral
+        assert single_owner_clause not in " ".join(route_neutral.split())
 
 
 def test_google_preflight_blocks_bind_exact_provider_free_contract() -> None:
@@ -423,7 +507,7 @@ def test_standalone_skills_and_public_docs_keep_provider_read_contracts() -> Non
     for clause in (
         "Ordinary calls leave Claude permission selection native",
         "fully bound formal `LegVerdict` route adds native per-call Plan Mode",
-        "--model opus --effort xhigh --timeout 1800",
+        "--model opus --effort xhigh --timeout 1200",
         '--expected-review-id "$review_id" --expected-family claude',
     ):
         assert clause in claude
@@ -465,23 +549,23 @@ def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> N
 
     assert (
         "The fully bound formal route rejects any model other than `opus`, any "
-        "effort other than `xhigh`, any timeout other than `1800`, and every "
+        "effort other than `xhigh`, any timeout other than `1200`, and every "
         "`--fallback-model` before provider resolution." in claude
     )
     assert (
         "A fully bound formal Claude route fails closed before provider resolution "
-        "unless it uses `--model opus --effort xhigh --timeout 1800` with no "
+        "unless it uses `--model opus --effort xhigh --timeout 1200` with no "
         "`--fallback-model`." in readme
     )
     assert (
         "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh "
-        "--timeout 1800`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
+        "--timeout 1200`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
         "provider resolution 전에 통과합니다." in readme_ko
     )
     assert "fail-closed formal Claude route pinning" in changelog
     assert 'FORMAL_CLAUDE_MODEL = "opus"' in wrapper
     assert 'FORMAL_CLAUDE_EFFORT = "xhigh"' in wrapper
-    assert "FORMAL_CLAUDE_TIMEOUT = 1800" in wrapper
+    assert "FORMAL_CLAUDE_TIMEOUT = 1200" in wrapper
 
 
 def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
@@ -868,7 +952,7 @@ def test_cross_family_contract_escalates_repeated_zero_provider_failures() -> No
     assert "outer host working directory" in leg_contracts
     assert "inner bootstrap child" in leg_contracts
     assert "Preserve the login user's `HOME`" in leg_contracts
-    assert "isolate Codex with `CODEX_HOME`" in leg_contracts
+    assert "Codex directory with `TRIAD_BOOTSTRAP_CODEX_ROOT`" in leg_contracts
 
 
 def test_project_agents_verification_commands_are_workspace_root_safe() -> None:

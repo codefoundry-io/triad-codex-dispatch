@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.552 — 2026-09-04
+
+- Adds `TRIAD_BOOTSTRAP_CODEX_ROOT` for scoped bootstrap Codex-directory selection,
+  preserving the `CODEX_HOME` and login-home defaults, path validation, and
+  provenance cleanup. Source-SOT staging no longer assigns `HOME` or `CODEX_HOME`.
+- Pins the fully bound formal Claude wrapper deadline to 1,200 seconds and the
+  selected AGY or Gemini wrapper deadline to 600 seconds before provider
+  resolution. AGY derives its child `--print-timeout 590s` from that wrapper
+  deadline.
+- Gives fresh Codex repeatable 1,200-second native observation waits and makes
+  `references/convergence.md` the single normative owner of the rule that a
+  poll, snapshot, or wait timeout is nonterminal. Only a route-owning wrapper's
+  full provider-process deadline or another observable terminal result can
+  classify a leg failure.
+- Preserves provider prompt framing, renderer metadata, three-family
+  composition, verdict schema, and `_common.py` process termination behavior.
+
 ## 0.2.551 — 2026-09-03
 
 - Adds fail-closed formal Claude route pinning: a fully bound `LegVerdict` call reaches

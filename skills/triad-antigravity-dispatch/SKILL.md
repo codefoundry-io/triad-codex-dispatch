@@ -65,7 +65,7 @@ formal wrapper arguments are:
   --sandbox read-only
   --model gemini-3.1-pro-high
   --effort high
-  --timeout 1800
+  --timeout 600
   --pydantic verdict_schema:LegVerdict
   --expected-review-id "$review_id"
   --expected-family google
@@ -77,8 +77,10 @@ The formal plan-mode route passes native `--json-schema`, admits only the
 terminal result event's `structured_output`, and repeats strict local
 `LegVerdict` validation. It checks the exact review ID,
 Google family, content digest, and review-relative path shape locally. Invalid
-output is terminal and causes no schema-repair provider call. The formal leg uses this explicit 1,800-second end-to-end deadline;
-shorter leader polling waits do not terminate it. The formal Google prompt
+output is terminal and causes no schema-repair provider call. The formal leg uses
+an explicit 600-second wrapper provider-process deadline, and the AGY child gets
+`--print-timeout 590s`. Apply [convergence](../triad-cross-family-review/references/convergence.md)
+to observation waits and terminal outcomes. The formal Google prompt
 authorizes only AGY native file-read/search tools for local inspection plus
 expressly authorized AGY native official-web reads. MCP calls are denied by the
 formal settings transaction. It forbids command, shell, terminal,
