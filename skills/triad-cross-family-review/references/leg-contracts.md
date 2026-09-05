@@ -86,7 +86,8 @@ google_selector_launcher="$(command -v review_round.py)"
 For source-SOT pre-deployment, stage an isolated launcher group from that exact
 toolkit before packet capture. Keep the required project root as the outer host
 working directory; the inner bootstrap child uses the neutral temporary working
-directory. Preserve the login user's `HOME`, isolate Codex with `CODEX_HOME`,
+directory. Preserve the login user's `HOME` and `CODEX_HOME`; isolate bootstrap's
+Codex directory with `TRIAD_BOOTSTRAP_CODEX_ROOT`,
 and pass the canonical review worktree for deterministic containment checks:
 
 ```text
@@ -101,7 +102,7 @@ selector_stage_classifier="$selector_stage_config_home/triad-codex-dispatch/clas
 selector_stage_shell_rc="$selector_stage_root/shellrc"
 (
   cd "$selector_bootstrap_cwd" &&
-  CODEX_HOME="$selector_stage_codex_home" \
+  TRIAD_BOOTSTRAP_CODEX_ROOT="$selector_stage_codex_home" \
   XDG_CONFIG_HOME="$selector_stage_config_home" \
   TRIAD_CLASSIFIER_EXTENSION="$selector_stage_classifier" \
   TRIAD_BOOTSTRAP_SHELL_RC="$selector_stage_shell_rc" \

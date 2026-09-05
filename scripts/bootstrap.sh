@@ -28,6 +28,11 @@ also removes any bootstrap-managed (provenance-matched) legacy personal-scope
 repair-agent TOMLs left by an older install; a non-matching same-name file is
 preserved. Learned classifier patches are preserved.
 
+TRIAD_BOOTSTRAP_CODEX_ROOT selects only bootstrap's Codex-directory targets and
+checks. It must resolve to an absolute path outside the guarded worktree.
+When unset or empty, CODEX_HOME and then $HOME/.codex remain the defaults.
+Bootstrap does not assign HOME or CODEX_HOME or redirect provider authentication.
+
 Assumes codex and claude are installed. Formal Google review prefers agy;
 personal Google Sign-In requires agy, while Gemini Enterprise OAuth may use
 gemini when agy is absent.
@@ -72,8 +77,8 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RAW_REPO_ROOT="${TRIAD_BOOTSTRAP_REPO_ROOT:-$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)}"
 RAW_LAUNCHER_DIR="${TRIAD_BOOTSTRAP_BIN_DIR:-$HOME/.local/bin}"
 LAUNCHER_DIR="$RAW_LAUNCHER_DIR"
-RAW_CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-CODEX_HOME="$RAW_CODEX_HOME"
+RAW_BOOTSTRAP_CODEX_ROOT="${TRIAD_BOOTSTRAP_CODEX_ROOT:-${CODEX_HOME:-$HOME/.codex}}"
+BOOTSTRAP_CODEX_ROOT="$RAW_BOOTSTRAP_CODEX_ROOT"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 RAW_CLASSIFIER_PATH="${TRIAD_CLASSIFIER_EXTENSION:-$CONFIG_HOME/triad-codex-dispatch/classifier-patches.json}"
 REPO_ROOT="$RAW_REPO_ROOT"
@@ -304,8 +309,8 @@ PY
 run_repair_lifecycle() {
   action="$1"
   python3 "$REPO_ROOT/bin/bootstrap_repair.py" "$action" \
-    --config "$CODEX_HOME/config.toml" \
-    --analyzer "$CODEX_HOME/agents/$REPAIR_ANALYZER_NAME.toml" \
+    --config "$BOOTSTRAP_CODEX_ROOT/config.toml" \
+    --analyzer "$BOOTSTRAP_CODEX_ROOT/agents/$REPAIR_ANALYZER_NAME.toml" \
     --launcher "$LAUNCHER_DIR/$APPLY_REPAIR_LAUNCHER"
   if [ "$?" -eq 0 ]; then
     ok "repair artifacts $action completed"
@@ -415,7 +420,7 @@ PY
 }
 
 check_workspace_escape() {
-  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$CODEX_HOME" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" <<'PY'
+  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$BOOTSTRAP_CODEX_ROOT" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" <<'PY'
 from pathlib import Path
 import os
 import sys
@@ -438,7 +443,7 @@ def _within(target, root):
 
 targets = (
     ("launcher directory (TRIAD_BOOTSTRAP_BIN_DIR)", Path(launcher_raw)),
-    ("CODEX_HOME", Path(codex_home_raw)),
+    ("Codex root (TRIAD_BOOTSTRAP_CODEX_ROOT / CODEX_HOME)", Path(codex_home_raw)),
     (
         "classifier directory (TRIAD_CLASSIFIER_EXTENSION / XDG_CONFIG_HOME)",
         Path(classifier_dir_raw),
@@ -509,7 +514,7 @@ EOF
 
 # Read enabled triad plugin selectors through TOML, never line parsing.
 read_plugin_selectors() {
-  python3 - "$CODEX_HOME/config.toml" <<'PY'
+  python3 - "$BOOTSTRAP_CODEX_ROOT/config.toml" <<'PY'
 import sys
 import tomllib
 
@@ -540,7 +545,7 @@ PY
 
 # Classify cached write-capable legacy repair agents without glob error suppression.
 cache_write_capable_state() {
-  python3 - "$CODEX_HOME/plugins/cache" "$1" <<'PY'
+  python3 - "$BOOTSTRAP_CODEX_ROOT/plugins/cache" "$1" <<'PY'
 import sys
 import tomllib
 from pathlib import Path
@@ -586,7 +591,7 @@ PY
 
 # check_local_writable_agent_residual — SEC-2 preflight (read-only,
 # NON-fatal — only ever calls warn, never fail; mutates nothing). Co-located
-# with the duplicate-selector preflight, canonicalized CODEX_HOME, using the
+# with the duplicate-selector preflight, canonicalized Codex root, using the
 # shared read_plugin_selectors tomllib reader.
 #
 # Confused-deputy write-capable discovery path: an ENABLED
@@ -614,7 +619,7 @@ check_local_writable_agent_residual() {
   selectors="$(read_plugin_selectors)"
   read_rc=$?
   if [ "$read_rc" -ne 0 ]; then
-    warn "could not read or parse $CODEX_HOME/config.toml to check for a local-scope write-capable plugin-agent residual (SEC-2); verify manually: codex plugin list --json"
+    warn "could not read or parse $BOOTSTRAP_CODEX_ROOT/config.toml to check for a local-scope write-capable plugin-agent residual (SEC-2); verify manually: codex plugin list --json"
     return
   fi
   while IFS= read -r line; do
@@ -630,11 +635,11 @@ check_local_writable_agent_residual() {
     state="$(cache_write_capable_state "$marketplace")"
     case "$state" in
       found)
-        warn "confused-deputy write-capable discovery path: $name is ENABLED and its plugin cache ($CODEX_HOME/plugins/cache/$marketplace/triad-codex-dispatch/) bundles a write-capable agent TOML (default_permissions = \"triad_repair\"); a local-scope selector should not stay registered alongside the real plugin — remediation: codex plugin remove $name"
+        warn "confused-deputy write-capable discovery path: $name is ENABLED and its plugin cache ($BOOTSTRAP_CODEX_ROOT/plugins/cache/$marketplace/triad-codex-dispatch/) bundles a write-capable agent TOML (default_permissions = \"triad_repair\"); a local-scope selector should not stay registered alongside the real plugin — remediation: codex plugin remove $name"
         add_flagged_selector "$name"
         ;;
       unreadable)
-        warn "could not verify the plugin cache for $name (unreadable: $CODEX_HOME/plugins/cache/$marketplace/triad-codex-dispatch/) — cannot rule out a confused-deputy write-capable discovery path; verify manually, then: codex plugin remove $name"
+        warn "could not verify the plugin cache for $name (unreadable: $BOOTSTRAP_CODEX_ROOT/plugins/cache/$marketplace/triad-codex-dispatch/) — cannot rule out a confused-deputy write-capable discovery path; verify manually, then: codex plugin remove $name"
         add_flagged_selector "$name"
         ;;
       absent | clean) ;;
@@ -646,7 +651,7 @@ EOF
 
 # check_duplicate_selectors — DIST-1 preflight (read-only, NON-fatal — only
 # ever calls warn, never fail; mutates nothing). Co-located with the local
-# write-capable-agent residual check, canonicalized CODEX_HOME, using the
+# write-capable-agent residual check, canonicalized Codex root, using the
 # shared read_plugin_selectors tomllib reader. Counts ENABLED
 # `triad-codex-dispatch@*` plugin selectors in
 # config.toml; more than one enabled at once is a distribution hygiene
@@ -710,16 +715,16 @@ EOF
     return
   fi
   if [ "$stale_count" -eq 1 ]; then
-    warn "duplicate ENABLED triad-codex-dispatch plugin selectors in $CODEX_HOME/config.toml: $names_joined; remove the stale one: $stale_cmds"
+    warn "duplicate ENABLED triad-codex-dispatch plugin selectors in $BOOTSTRAP_CODEX_ROOT/config.toml: $names_joined; remove the stale one: $stale_cmds"
   elif [ "$stale_count" -gt 1 ]; then
-    warn "duplicate ENABLED triad-codex-dispatch plugin selectors in $CODEX_HOME/config.toml: $names_joined; remove each of the stale ones ($stale_names): $stale_cmds"
+    warn "duplicate ENABLED triad-codex-dispatch plugin selectors in $BOOTSTRAP_CODEX_ROOT/config.toml: $names_joined; remove each of the stale ones ($stale_names): $stale_cmds"
   else
-    warn "duplicate ENABLED triad-codex-dispatch plugin selectors in $CODEX_HOME/config.toml: $names_joined; keep only one of them (codex plugin remove <selector>)"
+    warn "duplicate ENABLED triad-codex-dispatch plugin selectors in $BOOTSTRAP_CODEX_ROOT/config.toml: $names_joined; keep only one of them (codex plugin remove <selector>)"
   fi
 }
 
 # migrate_legacy_repair_agents — SEC-1 (--install side). QUARANTINES any
-# provenance-managed legacy repair-agent TOML found at $CODEX_HOME/agents/
+# provenance-managed legacy repair-agent TOML found at $BOOTSTRAP_CODEX_ROOT/agents/
 # into a timestamped sibling directory OUTSIDE agents/ (Codex only discovers
 # agents under agents/, so a sibling dir is provably not a discovery path).
 # Idempotent (a second --install finds nothing left to quarantine). Never
@@ -728,9 +733,9 @@ EOF
 # gate and retained read-only preflights, BEFORE install_launchers.
 migrate_legacy_repair_agents() {
   for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
-    agent_file="$CODEX_HOME/agents/$name.toml"
+    agent_file="$BOOTSTRAP_CODEX_ROOT/agents/$name.toml"
     if quarantine_status="$(python3 "$REPO_ROOT/bin/bootstrap_repair.py" managed-quarantine \
-      --kind legacy-agent --path "$agent_file" --quarantine-parent "$CODEX_HOME" \
+      --kind legacy-agent --path "$agent_file" --quarantine-parent "$BOOTSTRAP_CODEX_ROOT" \
       2>/dev/null)"; then
       case "$quarantine_status" in
         quarantined)
@@ -756,7 +761,7 @@ canonicalize_path_inputs() {
     fail "could not create temporary file for path canonicalization"
     return
   }
-  canonicalized="$(python3 - "$RAW_REPO_ROOT" "$RAW_CLASSIFIER_PATH" "$RAW_LAUNCHER_DIR" "$RAW_CODEX_HOME" 2>"$canonicalize_err" <<'PY'
+  canonicalized="$(python3 - "$RAW_REPO_ROOT" "$RAW_CLASSIFIER_PATH" "$RAW_LAUNCHER_DIR" "$RAW_BOOTSTRAP_CODEX_ROOT" 2>"$canonicalize_err" <<'PY'
 from pathlib import Path
 import shutil
 import sys
@@ -776,7 +781,7 @@ if not classifier.is_absolute():
 if not launcher.is_absolute():
     errors.append(f"TRIAD_BOOTSTRAP_BIN_DIR must be an absolute path: {launcher_raw}")
 if not codex_home.is_absolute():
-    errors.append(f"CODEX_HOME must be an absolute path: {codex_home_raw}")
+    errors.append(f"TRIAD_BOOTSTRAP_CODEX_ROOT / CODEX_HOME must be an absolute path: {codex_home_raw}")
 if errors:
     for error in errors:
         print(error)
@@ -809,7 +814,7 @@ EOF
   REPO_ROOT="$(printf '%s\n' "$canonicalized" | sed -n '1p')"
   CLASSIFIER_PATH="$(printf '%s\n' "$canonicalized" | sed -n '2p')"
   LAUNCHER_DIR="$(printf '%s\n' "$canonicalized" | sed -n '3p')"
-  CODEX_HOME="$(printf '%s\n' "$canonicalized" | sed -n '4p')"
+  BOOTSTRAP_CODEX_ROOT="$(printf '%s\n' "$canonicalized" | sed -n '4p')"
 }
 
 resolve_python_runtime() {
@@ -1087,7 +1092,7 @@ ensure_log_dir() {
 
 # Remove the exact current or legacy managed configuration fragment.
 # Removes exactly one literal current or legacy managed
-# [shell_environment_policy] block from $CODEX_HOME/config.toml. Any edited,
+# [shell_environment_policy] block from $BOOTSTRAP_CODEX_ROOT/config.toml. Any edited,
 # duplicate, incomplete, or otherwise unrecognized marker state is left
 # byte-for-byte untouched. Removal is literal replacement, never a marker-range
 # scan or newline-normalizing reserialization. Fragment cleanup preserves any
@@ -1097,7 +1102,7 @@ remove_codex_config_fragment() {
   if [ "$errors" -ne 0 ]; then
     return
   fi
-  config_path="$CODEX_HOME/config.toml"
+  config_path="$BOOTSTRAP_CODEX_ROOT/config.toml"
   remove_err="$(mktemp "${TMPDIR:-/tmp}/triad-config-remove-err.XXXXXX")" || {
     fail "could not create temporary file for config fragment removal stderr"
     return 1
@@ -1140,7 +1145,7 @@ remove_legacy_permission_artifacts() {
     return 1
   fi
 
-  rules_path="$CODEX_HOME/rules/$CODEX_RULES_NAME"
+  rules_path="$BOOTSTRAP_CODEX_ROOT/rules/$CODEX_RULES_NAME"
   if ! remove_owned_artifact \
     rules \
     "$rules_path" \
@@ -1149,7 +1154,7 @@ remove_legacy_permission_artifacts() {
     return 1
   fi
 
-  profile_path="$CODEX_HOME/$CODEX_PROFILE_NAME.config.toml"
+  profile_path="$BOOTSTRAP_CODEX_ROOT/$CODEX_PROFILE_NAME.config.toml"
   if ! remove_owned_artifact \
     profile \
     "$profile_path" \
@@ -1192,8 +1197,8 @@ run_remove() {
     return
   fi
   # Use the same trusted-root spelling as install. Nested paths such as
-  # CODEX_HOME/agents remain unresolved and are checked separately, but a
-  # stable operator-selected root alias (`/tmp` on macOS or a CODEX_HOME
+  # BOOTSTRAP_CODEX_ROOT/agents remain unresolved and are checked separately, but a
+  # stable operator-selected root alias (`/tmp` on macOS or a Codex-root
   # symlink) must not make install succeed and the matching remove fail.
   canonicalize_path_inputs
   if [ "$errors" -ne 0 ]; then
@@ -1234,7 +1239,7 @@ run_remove() {
   fi
 
   for name in claude-wrapper-repair gemini-wrapper-repair agy-wrapper-repair; do
-    agent_file="$CODEX_HOME/agents/$name.toml"
+    agent_file="$BOOTSTRAP_CODEX_ROOT/agents/$name.toml"
     if [ -L "$agent_file" ]; then
       warn "leaving legacy repair-agent symlink in place (never following a symlink target): $agent_file"
       continue

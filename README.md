@@ -240,6 +240,12 @@ enforces it (summarized under [Security](#security) below).
 
 ### Upgrading to 0.2.552
 
+Source-SOT staging now selects bootstrap's Codex directory with
+`TRIAD_BOOTSTRAP_CODEX_ROOT`, preserving the login `HOME` and `CODEX_HOME`.
+The explicit root takes precedence; unset or empty retains the `CODEX_HOME`, then
+`$HOME/.codex` fallback. The same absolute-path, containment, and provenance checks
+apply. This input scopes bootstrap checks and cleanup, not provider authentication.
+
 0.2.552 assigns each formal review route its intended duration: an exact
 1,200-second Claude wrapper deadline, an exact 600-second AGY or Gemini wrapper
 deadline, and repeatable 1,200-second fresh Codex observation waits. Poll,
@@ -264,7 +270,8 @@ After a second zero-provider failure in the same attempted workflow, stop alloca
 review IDs, retain and compare every failure receipt, verify the shared root cause, and run one
 provider-free setup-only probe before preparing another formal round. For source-SOT bootstrap,
 keep the host command at the environment-required outer workdir while the documented subshell
-enters a distinct neutral child cwd. Preserve `HOME` and isolate Codex state with `CODEX_HOME`.
+enters a distinct neutral child cwd. With current bootstrap, preserve `HOME` and `CODEX_HOME`
+and select its isolated Codex directory with `TRIAD_BOOTSTRAP_CODEX_ROOT`.
 Repository verification commands likewise bind the intended checkout explicitly so another
 workspace-level `tests/` directory cannot be selected accidentally. Provider composition,
 routing, and the strict `LegVerdict` schema are unchanged.

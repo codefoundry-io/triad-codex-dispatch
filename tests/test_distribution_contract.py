@@ -952,7 +952,7 @@ def test_cross_family_contract_escalates_repeated_zero_provider_failures() -> No
     assert "outer host working directory" in leg_contracts
     assert "inner bootstrap child" in leg_contracts
     assert "Preserve the login user's `HOME`" in leg_contracts
-    assert "isolate Codex with `CODEX_HOME`" in leg_contracts
+    assert "Codex directory with `TRIAD_BOOTSTRAP_CODEX_ROOT`" in leg_contracts
 
 
 def test_project_agents_verification_commands_are_workspace_root_safe() -> None:

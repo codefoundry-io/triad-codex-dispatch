@@ -219,6 +219,11 @@ class, route에서 identity를 추론하지 않습니다.
 
 ### 0.2.552 업그레이드
 
+source-SOT staging은 이제 `TRIAD_BOOTSTRAP_CODEX_ROOT`로 bootstrap의 Codex directory를
+선택하고 login `HOME`과 `CODEX_HOME`은 보존합니다. 명시한 root가 우선하며, 미설정 또는
+빈 값이면 기존 `CODEX_HOME`, 이후 `$HOME/.codex` 기본값을 사용합니다. 동일한 absolute-path,
+containment, provenance 검사를 적용하며 provider authentication은 변경하지 않습니다.
+
 0.2.552는 formal review route별 의도된 시간을 고정합니다. Claude wrapper deadline
 1,200초, AGY 또는 Gemini wrapper deadline 600초, fresh Codex의 반복 가능한 1,200초
 observation wait를 사용합니다. poll, snapshot, wait wake-up은 nonterminal이며 terminal
@@ -242,7 +247,8 @@ route마다 하나의 명시적 provider cwd를 사용하며, Python 3.12로 임
 모든 failure receipt를 보존·비교해 공통 원인을 검증한 뒤 provider-free setup-only probe
 하나를 통과해야 다음 formal round를 준비할 수 있습니다. source-SOT bootstrap에서는 host
 command의 outer workdir를 환경 요구대로 유지하고, 문서화된 subshell만 별도의 neutral child
-cwd로 들어갑니다. `HOME`은 보존하고 Codex 상태만 `CODEX_HOME`으로 격리합니다. repository
+cwd로 들어갑니다. 현재 bootstrap에서는 `HOME`과 `CODEX_HOME`을 보존하고
+`TRIAD_BOOTSTRAP_CODEX_ROOT`로 bootstrap의 Codex directory를 격리합니다. repository
 검증 명령도 의도한 checkout을 명시적으로 binding하므로 workspace root의 다른 `tests/`
 directory를 실수로 선택하지 않습니다. provider 구성, routing, strict `LegVerdict` schema는
 바뀌지 않습니다.
