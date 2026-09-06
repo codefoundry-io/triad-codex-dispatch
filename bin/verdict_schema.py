@@ -24,13 +24,20 @@ from pydantic import (
 
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 _REVIEW_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-_PATH_COMPONENT_PATTERN = (
-    r"(?:[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
-    r"\.[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
+_DOT_PATH_COMPONENT_PATTERN = (
+    r"(?:\.[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
     r"\.\.[^/\\\x00-\x1f\x7f]+)"
 )
+_PATH_COMPONENT_PATTERN = (
+    rf"(?:[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|{_DOT_PATH_COMPONENT_PATTERN})"
+)
+# A slash makes a multi-component path nonblank. A single component must
+# contain a non-whitespace character without using Rust-unsupported lookaround.
 _NATIVE_REVIEW_PATH_PATTERN = (
-    rf"^{_PATH_COMPONENT_PATTERN}(?:/{_PATH_COMPONENT_PATTERN})*$"
+    rf"^(?:{_PATH_COMPONENT_PATTERN}(?:/{_PATH_COMPONENT_PATTERN})+|"
+    r"[^./\\\s\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
+    r"[^\S\x00-\x1f\x7f]+[^/\\\s\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*|"
+    rf"{_DOT_PATH_COMPONENT_PATTERN})$"
 )
 ReviewRelativePath = Annotated[
     str,

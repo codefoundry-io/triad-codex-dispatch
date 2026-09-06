@@ -429,6 +429,10 @@ capture하고 시작된 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 fi
 재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는
 prompt-controlled이며, manifest path나 provider confidence만으로 승격하지 않습니다.
 
+Finding path와 inspected surface는 공백만으로 이루어지지 않은 canonical POSIX
+review-relative path여야 합니다. Native schema와 local validation은 공백뿐인 전체
+경로를 거부하되, 정상 파일명의 공백을 잘라내거나 공백이 포함된 component를 거부하지 않습니다.
+
 이 계약은 credential, token, cookie, authentication file, environment dump, provider
 log, 관련 없는 path를 provider-visible input에서 제외한다는 보안 경계를 바꾸지
 않습니다. Commit, push, install/update, merge, release, publication은 계속 각각 별도의
