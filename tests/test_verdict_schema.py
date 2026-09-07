@@ -5,9 +5,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import pytest
-from pydantic import ValidationError
+from pydantic import StringConstraints, TypeAdapter, ValidationError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -136,6 +137,66 @@ def test_native_schema_rejects_noncanonical_review_paths():
         assert not re.search(pattern, "src/../a.py")
         assert not re.search(pattern, "line\nbreak.py")
         assert not re.search(pattern, "del\x7fname.py")
+
+
+@pytest.mark.parametrize("field", ["affected_surfaces_inspected", "findings"])
+@pytest.mark.parametrize(
+    ("path", "accepted"),
+    [
+        (" ", False),
+        ("   ", False),
+        ("\u00a0", False),
+        ("\u2003", False),
+        (" \u00a0\u3000", False),
+        (" leading.py", True),
+        ("trailing.py ", True),
+        ("src/ /file.py", True),
+        (" / ", True),
+        (" .", True),
+        (". ", True),
+        (".. ", True),
+        ("\u00a0name.py", True),
+        (".gitignore", True),
+        ("..hidden", True),
+        ("src/a.py", True),
+    ],
+)
+def test_native_and_local_review_path_whitespace_contract(field, path, accepted):
+    schema = LegVerdict.model_json_schema()
+    if field == "affected_surfaces_inspected":
+        pattern = schema["properties"][field]["items"]["pattern"]
+        changes = {field: [path]}
+    else:
+        pattern = schema["$defs"]["LegFinding"]["properties"]["path"]["pattern"]
+        changes = {
+            field: [
+                {
+                    "severity": "Minor",
+                    "path": path,
+                    "trigger": "a reviewer cites this path",
+                    "evidence": "the path identifies the affected source",
+                    "correction": "preserve the existing path contract",
+                }
+            ]
+        }
+
+    # Exercise the emitted constraint in both Python and Pydantic's Rust engine.
+    assert bool(re.search(pattern, path)) is accepted
+    native = TypeAdapter(Annotated[str, StringConstraints(pattern=pattern)])
+    if accepted:
+        assert native.validate_python(path) == path
+        verdict = LegVerdict.model_validate({**VALID, **changes})
+        actual = (
+            verdict.affected_surfaces_inspected[0]
+            if field == "affected_surfaces_inspected"
+            else verdict.findings[0].path
+        )
+        assert actual == path
+    else:
+        with pytest.raises(ValidationError):
+            native.validate_python(path)
+        with pytest.raises(ValidationError):
+            LegVerdict.model_validate({**VALID, **changes})
 
 
 def test_file_validation_binds_review_family_and_digest(tmp_path):

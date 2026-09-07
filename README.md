@@ -461,6 +461,10 @@ finding against the canonical worktree. Reviewer coverage is prompt-controlled
 unless the provider exposes a stronger boundary; it is never promoted from a
 manifest path or provider confidence statement alone.
 
+Finding paths and inspected surfaces must be nonblank, canonical POSIX
+review-relative paths. Native schema and local validation reject whitespace-only
+whole paths without trimming valid filenames or rejecting space-containing components.
+
 Commit, push, install/update, merge, release, and publication still require
 their own owner authorization.
 
