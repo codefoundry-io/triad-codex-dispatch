@@ -217,6 +217,15 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.553 업그레이드
+
+0.2.553은 아래에 설명한 guarded-worktree Pro/Flash preflight pair를 명시적으로
+지원합니다. 두 receipt를 공통 digest에 포함하고, 각 Google dispatch는 선택한
+model 자신의 receipt와 high effort를 사용합니다. AGY preflight는 요청한 model을
+검사하며 native verdict validation은 공백만 있는 path를 거부합니다. 공개
+three-family 기본값, prepared-directory route, `LegVerdict` schema는 유지하고,
+four-leg admission gate는 workspace policy가 정합니다.
+
 ### 0.2.552 업그레이드
 
 source-SOT staging은 이제 `TRIAD_BOOTSTRAP_CODEX_ROOT`로 bootstrap의 Codex directory를
@@ -348,10 +357,22 @@ cross-family `references/convergence.md` 계약이 전담합니다.
 non-formal Claude permission 선택과 모든 project-trust policy는 native 설정을
 유지합니다. 일반 `codex`가 정상 경로입니다.
 
+명시적인 workspace four-leg gate는 guarded-worktree renderer에서 AGY
+`gemini-3.8-flash-high`, `high`를 추가로 사용할 수 있습니다. AGY route 하나를
+선택하고 Pro와 Flash를 별도로 preflight한 뒤, **모든** `render-worktree` 호출에
+Pro receipt를 `--google-preflight-receipt`, Flash receipt를
+`--google-flash-preflight-receipt`로 전달합니다. 두 receipt가 공통 digest에
+포함됩니다. Flash prompt에는
+`--family google --google-review-model gemini-3.8-flash-high`를 추가하고,
+dispatch 시 Flash 자신의 receipt와 일치하는 model/high 인자를 사용합니다.
+수정한 Pro prompt나 Pro receipt로 Flash custody를 대체할 수 없습니다. 이 고정
+opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdict`
+필드를 바꾸지 않으며 workspace admission 구성을 자동 설정하지 않습니다.
+
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.552-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.553-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

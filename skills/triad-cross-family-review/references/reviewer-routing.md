@@ -45,6 +45,23 @@ different billing route.
 
 ## Route-specific identity
 
+### Explicit workspace paired worktree opt-in
+
+Only when owner-governed workspace instructions require both Pro and Flash, use
+the fixed paired `render-worktree` path. Keep one AGY selector and preflight
+`gemini-3.1-pro-high` / `high` and `gemini-3.8-flash-high` / `high` separately.
+Every family render receives the Pro receipt as `--google-preflight-receipt` and
+the Flash receipt as `--google-flash-preflight-receipt`. For Flash only, add
+`--google-review-model gemini-3.8-flash-high` to the Google-family render. The
+renderer binds both receipts into the common digest and selects the correct
+member for dispatch. Each Google wrapper invocation uses its own selected
+preflight receipt and exact model/high arguments. Do not edit rendered metadata
+or use the focus overlay to turn Pro into Flash. The public default remains
+three-family; prepared rendering has no paired opt-in. Workspace instructions
+own extra-leg admission and conditional native advice, not this public schema.
+
+### Runtime identity
+
 AGY preflight proves the exact model from the selected executable's literal
 tabular catalog. A mismatched exposed model invalidates that leg.
 

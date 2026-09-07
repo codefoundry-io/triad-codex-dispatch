@@ -14,10 +14,10 @@
 
 ## Formal review
 
-- Select guarded existing-worktree review for this repository. Before a formal
-  cross-family gate under the workspace's temporary five-leg overlay, read
-  `docs/agent-policies/formal-review-perspectives.md` completely. The root leader
-  applies its two additive lenses; governance files are not reviewer evidence.
+- Select guarded existing-worktree review for this repository. The workspace's
+  current four-leg policy supplies common full-scope criteria and conditional
+  native advice; the former two-focus reference is historical, not an extra-leg
+  requirement. Governance files are not reviewer evidence.
 
 ## Verification
 

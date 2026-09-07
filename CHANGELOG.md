@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.553 — 2026-09-07
+
+- Adds an explicit guarded-worktree Pro/Flash preflight pair for workspace
+  four-leg review. Both receipts bind one common review digest; each Google
+  dispatch must use its selected model's own receipt and high effort.
+- Makes AGY preflight probe the requested supported model, including
+  `gemini-3.8-flash-high`, instead of always probing Pro.
+- Rejects whitespace-only native review paths, matching wrapper-side validation.
+- Preserves the public three-family default, prepared-directory route, and
+  `LegVerdict` schema. Workspace admission composition remains workspace policy.
+
 ## 0.2.552 — 2026-09-04
 
 - Adds `TRIAD_BOOTSTRAP_CODEX_ROOT` for scoped bootstrap Codex-directory selection,
