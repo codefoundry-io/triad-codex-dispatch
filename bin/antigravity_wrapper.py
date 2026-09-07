@@ -452,10 +452,10 @@ def main() -> int:
             return _common.EXIT_ARG_ERROR
 
     if args.preflight_only and (
-        args.model != FORMAL_AGY_MODEL or args.effort != FORMAL_AGY_EFFORT
+        args.model not in (FORMAL_AGY_MODEL, "gemini-3.8-flash-high") or args.effort != FORMAL_AGY_EFFORT
     ):
         _common.log(
-            "formal AGY preflight requires --model gemini-3.1-pro-high --effort high"
+            "formal AGY preflight requires Pro High or Flash High with --effort high"
         )
         return _common.EXIT_ARG_ERROR
 
@@ -475,9 +475,9 @@ def main() -> int:
         if advertised_models is None:
             _common.log("agy model catalog is unprobeable")
             return _common.EXIT_TERMINAL
-        if FORMAL_AGY_MODEL not in advertised_models:
+        if args.model not in advertised_models:
             _common.log(
-                f"agy model catalog does not advertise required model {FORMAL_AGY_MODEL}"
+                f"agy model catalog does not advertise required model {args.model}"
             )
             return _common.EXIT_TERMINAL
 

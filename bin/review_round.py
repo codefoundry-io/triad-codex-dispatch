@@ -122,6 +122,8 @@ class WorktreeReviewBrief:
     review_points: tuple[str, ...]
     approved_boundary: tuple[str, ...]
     google_selector_receipt: GooglePreflightReceipt | None = None
+    google_flash_preflight_receipt: GooglePreflightReceipt | None = None
+    google_review_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -216,10 +218,10 @@ def _google_preflight_metadata(
         or (
             receipt.route == "agy"
             and (
-                receipt.model != "gemini-3.1-pro-high"
+                receipt.model not in ("gemini-3.1-pro-high", "gemini-3.8-flash-high")
                 or receipt.effort != "high"
                 or receipt.route_args
-                != ("--model", "gemini-3.1-pro-high", "--effort", "high")
+                != ("--model", receipt.model, "--effort", "high")
             )
         )
         or (
@@ -482,10 +484,10 @@ def validate_google_preflight_receipt(
             or not isinstance(record["route_args"], list)
             or not all(isinstance(value, str) for value in record["route_args"])
             or not record["agy_version"].strip()
-            or record["model"] != "gemini-3.1-pro-high"
+            or record["model"] not in ("gemini-3.1-pro-high", "gemini-3.8-flash-high")
             or record["effort"] != "high"
             or record["route_args"]
-            != ["--model", "gemini-3.1-pro-high", "--effort", "high"]
+            != ["--model", record["model"], "--effort", "high"]
         ):
             raise RoundIntegrityError("Google AGY preflight fields are invalid")
     else:
@@ -550,6 +552,30 @@ def validate_google_selector_prompt(
         metadata.get(key) != value for key, value in expected.items()
     ):
         raise RoundIntegrityError("formal prompt selector binding mismatch")
+    if "google_preflight_pair" in metadata or receipt.model == "gemini-3.8-flash-high":
+        validate_google_pair_metadata(metadata, receipt.model)
+
+
+def validate_google_pair_metadata(metadata: dict[str, object], model: str) -> None:
+    """Validate the fixed opt-in pair and its shared guarded-worktree digest."""
+    pair = metadata.get("google_preflight_pair")
+    models = {"gemini-3.1-pro-high", "gemini-3.8-flash-high"}
+    fields = {"google_preflight_model", "google_preflight_effort", "google_preflight_receipt_sha256"}
+    if not isinstance(pair, dict) or set(pair) != models or model not in models:
+        raise RoundIntegrityError("formal prompt requires the fixed Google preflight pair")
+    for selected, member in pair.items():
+        if (not isinstance(member, dict) or set(member) != fields
+                or member["google_preflight_model"] != selected
+                or member["google_preflight_effort"] != "high"
+                or re.fullmatch(r"[0-9a-f]{64}", str(member["google_preflight_receipt_sha256"])) is None):
+            raise RoundIntegrityError("formal prompt Google preflight pair is invalid")
+    if any(metadata.get(key) != value for key, value in pair[model].items()):
+        raise RoundIntegrityError("formal prompt selected preflight is not the paired member")
+    common = {key: value for key, value in metadata.items()
+              if key not in fields | {"content_digest", "family", "worktree_review_digest"}}
+    digest = hashlib.sha256(_canonical_json_bytes(common)).hexdigest()
+    if metadata.get("content_digest") != digest or metadata.get("worktree_review_digest") != digest:
+        raise RoundIntegrityError("formal prompt Google pair digest mismatch")
 
 
 def _validate_review_id(review_id: str) -> str:
@@ -1597,6 +1623,8 @@ def _prepared_review_digest(
     prepared_digest: str,
     receipt: GooglePreflightReceipt,
 ) -> str:
+    if receipt.model == "gemini-3.8-flash-high":
+        raise RoundIntegrityError("Flash requires the paired guarded-worktree route")
     return hashlib.sha256(
         _canonical_json_bytes(
             {
@@ -1833,11 +1861,31 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         "worktree": str(worktree),
         "worktree_fingerprint": brief.worktree_fingerprint,
     }
+    flash = brief.google_flash_preflight_receipt
+    selected = receipt
+    requested_model = brief.google_review_model or receipt.model
+    if flash is not None:
+        if (receipt.route != "agy" or receipt.model != "gemini-3.1-pro-high"
+                or flash.model != "gemini-3.8-flash-high" or flash.review_id != review_id
+                or _google_selector_metadata(flash) != _google_selector_metadata(receipt)
+                or flash.preflight_receipt_sha256 == receipt.preflight_receipt_sha256):
+            raise RoundIntegrityError("paired Google preflights must bind Pro and Flash to one selector")
+        pair = {receipt.model: _google_preflight_metadata(receipt),
+                flash.model: _google_preflight_metadata(flash)}
+        if requested_model not in pair or (brief.family != "google" and requested_model != receipt.model):
+            raise RoundIntegrityError("invalid paired Google review model selection")
+        selected = flash if requested_model == flash.model else receipt
+        for key in _google_preflight_metadata(receipt):
+            del common_metadata[key]
+        common_metadata["google_preflight_pair"] = pair
+    elif requested_model != receipt.model or receipt.model == "gemini-3.8-flash-high":
+        raise RoundIntegrityError("Flash requires the paired guarded-worktree route")
     worktree_review_digest = hashlib.sha256(
         _canonical_json_bytes(common_metadata)
     ).hexdigest()
     metadata = {
         **common_metadata,
+        **(_google_preflight_metadata(selected) if flash is not None else {}),
         "content_digest": worktree_review_digest,
         "family": brief.family,
         "worktree_review_digest": worktree_review_digest,
@@ -1984,6 +2032,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     render_worktree.add_argument("--google-selector-receipt", type=Path, required=True)
     render_worktree.add_argument("--google-preflight-receipt", type=Path, required=True)
+    render_worktree.add_argument("--google-flash-preflight-receipt", type=Path)
+    render_worktree.add_argument("--google-review-model", choices=("gemini-3.1-pro-high", "gemini-3.8-flash-high"))
     render_worktree.add_argument("--objective", required=True)
     render_worktree.add_argument("--worktree", type=Path, required=True)
     render_worktree.add_argument("--worktree-fingerprint", required=True)
@@ -2078,6 +2128,12 @@ def main(argv: list[str] | None = None) -> int:
                 selector_receipt,
                 expected_review_id=arguments.review_id,
             )
+            flash_receipt = (
+                validate_google_preflight_receipt(
+                    arguments.google_flash_preflight_receipt, selector_receipt,
+                    expected_review_id=arguments.review_id,
+                ) if arguments.google_flash_preflight_receipt is not None else None
+            )
             brief = WorktreeReviewBrief(
                 review_id=arguments.review_id,
                 review_kind=arguments.review_kind,
@@ -2092,6 +2148,8 @@ def main(argv: list[str] | None = None) -> int:
                 review_points=tuple(arguments.review_point),
                 approved_boundary=tuple(arguments.approved_boundary),
                 google_selector_receipt=selector_receipt,
+                google_flash_preflight_receipt=flash_receipt,
+                google_review_model=arguments.google_review_model,
             )
             try:
                 arguments.output.parent.resolve(strict=True).relative_to(

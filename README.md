@@ -238,6 +238,15 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.553
+
+0.2.553 adds the explicit guarded-worktree Pro/Flash preflight pair described
+below. Both receipts enter the shared digest, while each Google dispatch uses
+its own selected model's receipt at high effort. AGY preflight checks that
+requested model, and native verdict validation rejects whitespace-only paths.
+The public three-family default, prepared-directory route, and `LegVerdict`
+schema are unchanged; workspace policy owns any four-leg admission gate.
+
 ### Upgrading to 0.2.552
 
 Source-SOT staging now selects bootstrap's Codex directory with
@@ -380,10 +389,22 @@ waits. Terminal-outcome interpretation is owned by the cross-family
 Non-formal Claude permission selection and all project-trust policy remain
 native. Ordinary `codex` remains the normal path.
 
+An explicit workspace four-leg gate can additionally use AGY
+`gemini-3.8-flash-high` at `high` through the guarded-worktree renderer. Select
+one AGY route, preflight Pro and Flash separately, and pass the Pro receipt as
+`--google-preflight-receipt` plus the Flash receipt as
+`--google-flash-preflight-receipt` to **every** `render-worktree` call. Both exact
+receipts enter the common digest. For the Flash prompt add
+`--family google --google-review-model gemini-3.8-flash-high`; dispatch it with
+its own Flash preflight receipt and matching model/high arguments. No hand-edited
+Pro prompt or Pro receipt can stand in for Flash custody. This fixed opt-in does
+not change the public three-family default, prepared-directory renderer, or
+`LegVerdict` fields, and does not configure a workspace's admission composition.
+
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.552-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.553-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

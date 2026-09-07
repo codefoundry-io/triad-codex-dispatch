@@ -1144,8 +1144,9 @@ def test_formal_main_stops_before_provider_without_read_only_sandbox(
     assert "--sandbox read-only" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("model", ["gemini-3.1-pro-high", "gemini-3.8-flash-high"])
 def test_preflight_proves_version_and_route_without_provider_submission(
-    monkeypatch, capsys, tmp_path
+    monkeypatch, capsys, tmp_path, model
 ) -> None:
     pruned: list[str] = []
     guarded: list[list[str]] = []
@@ -1155,7 +1156,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     monkeypatch.setattr(
         wrapper,
         "_probe_agy_models",
-        lambda binary: catalog_probes.append(binary) or {"gemini-3.1-pro-high"},
+        lambda binary: catalog_probes.append(binary) or {model},
     )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
@@ -1179,7 +1180,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
             "--prompt",
             "route proof",
             "--model",
-            "gemini-3.1-pro-high",
+            model,
             "--effort",
             "high",
             "--sandbox",
@@ -1201,11 +1202,11 @@ def test_preflight_proves_version_and_route_without_provider_submission(
         "google_selector_receipt_sha256": hashlib.sha256(
             selector_receipt.read_bytes()
         ).hexdigest(),
-        "model": "gemini-3.1-pro-high",
+        "model": model,
         "provider_started": False,
         "review_id": "review-r1",
         "route": "agy",
-        "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
+        "route_args": ["--model", model, "--effort", "high"],
     }
     assert pruned == ["antigravity"]
     assert catalog_probes == [str(selected)]

@@ -22,7 +22,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.552"
+    assert manifest["version"] == "0.2.553"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -36,7 +36,7 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     readme = _text(ROOT / "README.md")
     readme_ko = _text(ROOT / "README.ko.md")
 
-    assert f"## {version} — 2026-09-04" in changelog
+    assert f"## {version} — 2026-09-07" in changelog
     assert f"### Upgrading to {version}" in readme
     assert f"### {version} 업그레이드" in readme_ko
     assert f"_runs/distribution/{version}-final-r1" in readme
