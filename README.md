@@ -609,6 +609,14 @@ cd triad-codex-dispatch
 python3 -m pytest -q tests/ -p no:cacheprovider   # expect all tests to pass
 ```
 
+For an explicitly provider-free synthetic lifecycle check, run
+`python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py` from the
+checkout. It reuses the packaged CLI and isolated bootstrap, probes AGY version
+and catalog without inference, and prints actual command outcomes, packaged-source
+hashes and cleanup evidence as JSON. It needs Git, Python 3.12+ and AGY on PATH.
+Temporary `AGY_SETTINGS_PATH` isolates only the wrapper transaction, not vendor
+configuration. Success is neither a review verdict nor release certification.
+
 ## Remove
 
 Resolve the current installed plugin path in a fresh shell and print the managed

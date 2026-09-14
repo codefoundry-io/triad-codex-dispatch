@@ -95,7 +95,7 @@ zero-start, partial-start, finding, and rerun handling.
    partial start, missing or malformed result, valid `NOT-SAFE`, or provider
    failure. A provider-free lifecycle characterization is allowed only when the
    current task explicitly prohibits dispatch and requires verify plus exact
-   cleanup; it is not a review round or admission result.
+    cleanup; it is not a review round or admission result. For a synthetic characterization, run `python3` on [the fixed lifecycle verifier](scripts/verify_lifecycle.py), not inline fixture/JSON/cleanup commands.
 
 9. **Verify before admission.** Wait for every started leg to terminate. The
    prepared route must then return `ROUND_INTEGRITY_OK` from packaged `verify`;
