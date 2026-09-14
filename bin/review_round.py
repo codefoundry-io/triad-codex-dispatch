@@ -69,7 +69,7 @@ _AGY_GOOGLE_TOOL_CONTRACT = (
     "the limit in open_questions. "
     "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
     "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-    "The formal read-only settings transaction denies all MCP calls. Approved AGY native official-web "
+    "The formal read-only permission rules deny all MCP calls. Approved AGY native official-web "
     "reads remain available only when the review objective and authorized external data boundary "
     "expressly permit them. Do not create or execute an experiment "
     "to resolve uncertainty. If static inspection and any expressly authorized read-only external "
@@ -209,6 +209,23 @@ def _google_selector_metadata(receipt: GoogleSelectorReceipt) -> dict[str, objec
     }
 
 
+def _valid_agy_route_args(route_args, model: str) -> bool:
+    if not isinstance(route_args, (list, tuple)) or not all(
+        isinstance(arg, str) for arg in route_args
+    ):
+        return False
+    if tuple(route_args[:4]) != ("--model", model, "--effort", "high"):
+        return False
+    return len(route_args) == 4 or (
+        len(route_args) == 6
+        and route_args[4] == "--project"
+        and re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            route_args[5],
+        ) is not None
+    )
+
+
 def _google_preflight_metadata(
     receipt: GooglePreflightReceipt,
 ) -> dict[str, object]:
@@ -220,8 +237,7 @@ def _google_preflight_metadata(
             and (
                 receipt.model not in ("gemini-3.1-pro-high", "gemini-3.8-flash-high")
                 or receipt.effort != "high"
-                or receipt.route_args
-                != ("--model", receipt.model, "--effort", "high")
+                or not _valid_agy_route_args(receipt.route_args, receipt.model)
             )
         )
         or (
@@ -486,8 +502,7 @@ def validate_google_preflight_receipt(
             or not record["agy_version"].strip()
             or record["model"] not in ("gemini-3.1-pro-high", "gemini-3.8-flash-high")
             or record["effort"] != "high"
-            or record["route_args"]
-            != ["--model", record["model"], "--effort", "high"]
+            or not _valid_agy_route_args(record["route_args"], record["model"])
         ):
             raise RoundIntegrityError("Google AGY preflight fields are invalid")
     else:
@@ -1868,6 +1883,7 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         if (receipt.route != "agy" or receipt.model != "gemini-3.1-pro-high"
                 or flash.model != "gemini-3.8-flash-high" or flash.review_id != review_id
                 or _google_selector_metadata(flash) != _google_selector_metadata(receipt)
+                or flash.route_args[4:] != receipt.route_args[4:]
                 or flash.preflight_receipt_sha256 == receipt.preflight_receipt_sha256):
             raise RoundIntegrityError("paired Google preflights must bind Pro and Flash to one selector")
         pair = {receipt.model: _google_preflight_metadata(receipt),

@@ -1350,7 +1350,6 @@ def test_wrapper_sources_have_no_retired_permission_or_packet_transport() -> Non
         assert stale not in antigravity
         assert stale not in other_wrappers
     assert '"--sandbox"' in antigravity
-    assert '"--project"' not in antigravity
     assert antigravity.count('"--dangerously-skip-permissions"') == 1
     assert (
         "Formal plan-mode calls pass the review-bound native finish schema"

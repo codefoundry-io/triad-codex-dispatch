@@ -82,6 +82,15 @@ preserve login `HOME` and `CODEX_HOME`, and scope bootstrap's Codex directory wi
 `TRIAD_BOOTSTRAP_CODEX_ROOT`. This does not change provider authentication or grant
 authority over other user-global paths.
 
+An owner-provisioned dedicated AGY project can be selected with
+`--project <canonical-lowercase-UUID> --cwd <absolute-review-root> --sandbox read-only`.
+Follow the canonical leg contract's project record and five-deny prerequisites.
+The wrapper validates that record without a global settings lease or permission
+mutation; provisioning remains separately authorized owner work. Use the same
+project for preflight and dispatch, and both Pro/Flash preflights when paired.
+The existing receipt hash binds its route arguments. Keep the project record
+stable during the call; omission preserves the legacy global transaction.
+
 Claude, AGY, and organization Gemini Enterprise OAuth are managed independently
 from Codex auth. Auth failures should be surfaced to the user, not repaired by
 editing the wrapper engine.

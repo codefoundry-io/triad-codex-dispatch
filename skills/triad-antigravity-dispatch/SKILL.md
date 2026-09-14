@@ -8,7 +8,8 @@ description: Use when a bounded task needs one authorized AGY Google-family answ
 Use the packaged `bin/antigravity_wrapper.py`. The wrapper internally inserts
 `--dangerously-skip-permissions` for AGY headless calls unless the operator
 sets `AGY_NO_HEADLESS_AUTOAPPROVE=1`. Callers do not pass this flag. Formal
-calls use `--sandbox read-only`. The route uses native `--mode plan` with a transient global-settings transaction
+calls use `--sandbox read-only`. Without an explicit project, the route uses
+native `--mode plan` with a transient global-settings transaction
 that unions the five write/command/unsandboxed/URL/MCP deny rules, then
 restores the original bytes. On AGY 1.1.20 or newer, the formal route passes a
 review-bound native `--json-schema` in plan mode and consumes the terminal
@@ -44,6 +45,15 @@ The route remains read-only by intent plus explicit deny, local result
 admission, and separate round-integrity checks.
 
 ## Route proof
+
+An owner-provisioned dedicated project may use `--project <canonical-lowercase-UUID>`
+with an explicit `--cwd` and `--sandbox read-only`. The wrapper checks the project
+record's ID, single cwd resource, and all five read-only deny entries without a
+global settings lease or permission-file writes. Use the same UUID for preflight
+and dispatch, and for both Pro/Flash preflights in a paired review. Keep the
+project configuration stable during the call. Follow the exact
+[project invocation contract](../triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project);
+the wrapper does not create or modify projects.
 
 Before formal review, require authenticated output proving:
 
@@ -83,7 +93,7 @@ an explicit 600-second wrapper provider-process deadline, and the AGY child gets
 to observation waits and terminal outcomes. The formal Google prompt
 authorizes only AGY native file-read/search tools for local inspection plus
 expressly authorized AGY native official-web reads. MCP calls are denied by the
-formal settings transaction. It forbids command, shell, terminal,
+formal read-only permission rules. It forbids command, shell, terminal,
 file-write/edit, notebook-execution, subagent, browser-actuation, and
 scratch-space tools plus experiments; undecidable uncertainty goes to
 `open_questions`. AGY reviews only and makes no external-state changes or

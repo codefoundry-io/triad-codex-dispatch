@@ -4,9 +4,9 @@
 The wrapper forwards one prompt through ``stream-json``, admits only the
 terminal ``result`` event, and validates contracted output locally. Formal
 plan-mode calls pass the review-bound native finish schema, admit terminal
-``structured_output``, and repeat local verdict binding. Read-only calls use the
-same transient global-settings transaction and headless adaptation as the
-deployed Claude-led TRIAD wrapper.
+``structured_output``, and repeat local verdict binding. Explicit project calls
+validate owner-provisioned read-only permissions without a global lease. Other
+calls retain the transient global-settings transaction and headless adaptation.
 """
 
 from __future__ import annotations
@@ -93,12 +93,16 @@ def _probe_agy_models(agy_bin: str) -> set[str] | None:
     return models
 
 
-def _route_args(model: str | None, effort: str | None) -> list[str]:
+def _route_args(
+    model: str | None, effort: str | None, project: str | None = None
+) -> list[str]:
     args: list[str] = []
     if model:
         args += ["--model", model]
     if effort:
         args += ["--effort", effort]
+    if project is not None:
+        args += ["--project", project]
     return args
 
 
@@ -118,6 +122,7 @@ def _build_cmd(
     json_schema: str | None,
     sandbox: bool = False,
     skip_permissions: bool = True,
+    project: str | None = None,
 ) -> list[str]:
     print_timeout = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = [agy_bin]
@@ -135,7 +140,7 @@ def _build_cmd(
         cmd += ["--json-schema", json_schema]
     if sandbox:
         cmd += ["--mode", "plan", "--sandbox"]
-    return cmd + _route_args(model, effort)
+    return cmd + _route_args(model, effort, project)
 
 
 def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -325,6 +330,10 @@ def main() -> int:
     prompt_group.add_argument("--prompt-file", help="Read a UTF-8 prompt file")
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--sandbox", choices=("read-only",), default=None)
+    parser.add_argument(
+        "--project",
+        help="Existing AGY project UUID; requires --cwd and --sandbox read-only",
+    )
     parser.add_argument("--model", default=None)
     parser.add_argument("--effort", choices=("low", "medium", "high"), default=None)
     parser.add_argument("--timeout", type=int, default=600)
@@ -345,6 +354,10 @@ def main() -> int:
     try:
         prompt = _common.load_prompt_text(args.prompt, args.prompt_file)
         cwd = _common.validate_wrapper_cwd(args.cwd)
+        if args.project is not None:
+            _agy_settings.validate_project_id(args.project)
+            if cwd is None or args.sandbox != "read-only":
+                raise ValueError("--project requires --cwd and --sandbox read-only")
     except Exception as exc:
         _common.log(f"argument validation failed: {exc}")
         return _common.EXIT_ARG_ERROR
@@ -435,7 +448,7 @@ def main() -> int:
                 if (
                     args.model != selector_receipt.model
                     or args.effort != selector_receipt.effort
-                    or tuple(_route_args(args.model, args.effort))
+                    or tuple(_route_args(args.model, args.effort, args.project))
                     != selector_receipt.route_args
                 ):
                     raise review_round.RoundIntegrityError(
@@ -484,18 +497,21 @@ def main() -> int:
     deny_rules = (
         _agy_settings.build_deny_rules(args.sandbox) if args.sandbox is not None else []
     )
-    try:
-        lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
-    except ValueError:
-        _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
-        return _common.EXIT_ARG_ERROR
+    if args.project is not None:
+        settings_guard = _agy_settings.agy_project_guard(args.project, cwd)
+    else:
+        try:
+            lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
+        except ValueError:
+            _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
+            return _common.EXIT_ARG_ERROR
+        settings_guard = _agy_settings.agy_settings_guard(
+            deny_rules, lock_timeout=lock_timeout
+        )
 
     if args.preflight_only:
         try:
-            with _agy_settings.agy_settings_guard(
-                deny_rules,
-                lock_timeout=lock_timeout,
-            ):
+            with settings_guard:
                 pass
         except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
             _common.log(f"AGY settings/config conflict: {exc}")
@@ -509,7 +525,7 @@ def main() -> int:
             "provider_started": False,
             "review_id": selector_receipt.review_id,
             "route": "agy",
-            "route_args": _route_args(args.model, args.effort),
+            "route_args": _route_args(args.model, args.effort, args.project),
         }
         sys.stdout.write(
             json.dumps(
@@ -551,15 +567,13 @@ def main() -> int:
         json_schema=schema,
         sandbox=args.sandbox == "read-only",
         skip_permissions=_agy_needs_skip_permissions(version),
+        project=args.project,
     )
     run_options: dict[str, Any] = {"classify_and_log": False}
     if formal_bindings:
         run_options["remove_env"] = FORMAL_AGY_ENV_REMOVE
     try:
-        with _agy_settings.agy_settings_guard(
-            deny_rules,
-            lock_timeout=lock_timeout,
-        ):
+        with settings_guard:
             raw = _common._run_once(
                 "antigravity",
                 cmd,
