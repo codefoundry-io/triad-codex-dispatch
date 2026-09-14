@@ -111,6 +111,15 @@ def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
     assert wrapper.main() == 0
     assert len(calls) == 1
     assert json.loads(capsys.readouterr().out) == verdict
+    # Formal dispatch rechecks the record even when the receipt and UUID still match.
+    original_project = project_path.read_bytes()
+    project_path.write_bytes(_canonical({"id": PROJECT}))
+    invalid_project = project_path.read_bytes()
+    assert wrapper.main() == wrapper._common.EXIT_TERMINAL
+    assert len(calls) == 1
+    assert capsys.readouterr().out == ""
+    assert project_path.read_bytes() == invalid_project
+    project_path.write_bytes(original_project)
     # Switching or dropping the project after preflight must reject before inference.
     args[args.index("--project") + 1] = OTHER_PROJECT
     assert wrapper.main() == wrapper._common.EXIT_ARG_ERROR
@@ -122,7 +131,8 @@ def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
     assert {str(p): p.read_bytes() for p in home.rglob("*") if p.is_file()} == before
 
 
-@pytest.mark.parametrize("defect", ["missing", "json", "id", "cwd", "multi-root", "deny-shape", *DENIES])
+@pytest.mark.parametrize("defect", ["missing", "json", "id", "cwd", "multi-root", "deny-shape",
+                                  "missing-grants", "resources-shape", "root-shape", "nonstring-deny", *DENIES])
 def test_project_configuration_defect_rejects_before_inference(project_case, monkeypatch, capsys, defect):
     home, cwd, path, record, _, args = project_case
     if defect == "missing":
@@ -138,6 +148,14 @@ def test_project_configuration_defect_rejects_before_inference(project_case, mon
             record["projectResources"]["resources"].append({"folderUri": home.as_uri()})
         elif defect == "deny-shape":
             record["permissionGrants"]["permissionGrants"]["deny"] = {d: True for d in DENIES}
+        elif defect == "missing-grants":
+            del record["permissionGrants"]
+        elif defect == "resources-shape":
+            record["projectResources"] = []
+        elif defect == "root-shape":
+            record = []
+        elif defect == "nonstring-deny":
+            record["permissionGrants"]["permissionGrants"]["deny"].append(None)
         else:
             record["permissionGrants"]["permissionGrants"]["deny"].remove(defect)
         path.write_bytes(_canonical(record))

@@ -550,13 +550,15 @@ Honest boundaries, so you know where the toolkit stops:
 - **Wrapper containment is process-level, not OS-level confinement.**
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
   they are not a claim of OS-level isolation. Formal AGY uses `--sandbox`, the
-  transient deny lease, the disposable `--cwd` review directory, digest and
-  mutation checks, and your review before commit. On AGY 1.1.3+ the headless
-  auto-approve removes interactive approval prompts, while the transaction's
-  explicit deny rules still block their named action namespaces. The sandbox
+  selected `--cwd` review root, digest and mutation checks, and your review before
+  commit. Without `--project`, it also uses the transient deny lease; with
+  `--project`, it validates the owner-provisioned project permission record.
+  On AGY 1.1.3+ the headless auto-approve removes interactive approval prompts,
+  while the configured explicit deny rules still block their named action
+  namespaces. The sandbox
   remains provider-managed rather than OS-level confinement; round-integrity
   mutation detection is a separate fail-closed check.
-  Formal review places wrapper `--cwd` and `--prompt-file` paths under the reserved
+  Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.
 
@@ -733,7 +735,8 @@ preserves the existing global transaction. See the
 ## Notes
 
 - Apart from the approved internal AGY flag, the disclosed transient AGY
-  global-settings transaction, and wrapper-internal formal Gemini model/Plan
+  global-settings transaction, the owner-provisioned `--project` selector,
+  and wrapper-internal formal Gemini model/Plan
   request and policy flags, TRIAD accepts no caller-supplied yolo, bypass,
   skip-trust, accept-edits, or equivalent permission controls. The transaction
   changes AGY settings only for its lease and restores the original bytes; a

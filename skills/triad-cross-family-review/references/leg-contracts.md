@@ -221,6 +221,11 @@ Additional owner rules remain untouched. Invalid configuration stops before
 inference. This mode validates the project instead of entering a global settings
 transaction; it never creates or edits a project or permission record.
 
+The sole `folderUri` must name the exact current `review_target_cwd`. A fixed
+project fits a stable worktree-first root. Prepared-directory rounds need a
+matching owner-provisioned project for each new per-round cwd, or the default
+route without `--project`; do not silently repoint an existing project.
+
 The existing preflight `route_args` ends with `--project <UUID>` and is bound by
 the receipt hash. Pass the identical UUID at dispatch; keep the project record
 stable for the full call. In a paired Pro/Flash review, both preflights use the

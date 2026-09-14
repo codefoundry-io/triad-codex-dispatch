@@ -513,13 +513,14 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   `TRIAD_CLASSIFIER_EXTENSION`을 바꾸면 bootstrap을 다시 실행해야 합니다.
 - **wrapper containment은 프로세스 수준이지 OS 수준 confinement이 아닙니다.**
   wrapper-containment env는 wrapper 프로세스의 path/pydantic 처리를 gate할 뿐, OS
-  수준 격리 주장이 아닙니다. 정식 AGY는 일시적 deny lease, `--sandbox`, disposable
-  `--cwd` review directory, digest/mutation check, 커밋 전 사용자 검토를 결합합니다.
+  수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
+  digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
+  일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
   AGY 1.1.3+의 headless auto-approve는 interactive approval prompt를 제거하지만
-  transaction의 explicit deny rule은 지정된 action namespace를 계속 차단합니다.
+  설정된 explicit deny rule은 지정된 action namespace를 계속 차단합니다.
   sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
   mutation detection은 별도의 fail-closed 검사입니다.
-  Formal review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
+  Prepared-directory review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
   system-temp root 아래에 있습니다. `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정했다면 hardened
   mode를 포함해 canonical system temp base를 포함해야 합니다.
 
@@ -687,7 +688,8 @@ native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙�
 ## 참고
 
 - 위에서 공개한 승인된 내부 AGY flag, 일시적 AGY global-settings transaction,
-  wrapper 내부 formal Gemini model/Plan 요청 및 policy flag 외에는
+  사용자가 준비한 프로젝트를 선택하는 `--project`, wrapper 내부 formal Gemini
+  model/Plan 요청 및 policy flag 외에는
   TRIAD가 caller-supplied yolo, bypass, skip-trust, accept-edits 또는 동등한 permission
   control을 받지 않습니다. transaction은 lease 동안만 AGY setting을 변경하고 원래
   바이트를 복원하며, hard crash가 남긴 deny residue는 다음 guarded call이 복구합니다.

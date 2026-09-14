@@ -589,11 +589,11 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "transient AGY global-settings transaction" in readme
     assert "일시적 AGY global-settings transaction" in readme_ko
     assert (
-        "auto-approve removes interactive approval prompts, while the transaction's "
+        "auto-approve removes interactive approval prompts, while the configured "
         "explicit deny rules still block their named action namespaces" in readme
     )
     assert (
-        "auto-approve는 interactive approval prompt를 제거하지만 transaction의 "
+        "auto-approve는 interactive approval prompt를 제거하지만 설정된 "
         "explicit deny rule은 지정된 action namespace를 계속 차단합니다" in readme_ko
     )
     assert (
