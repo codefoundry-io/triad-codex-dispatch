@@ -18,6 +18,7 @@ HASH_TARGETS = (
     ".codex-plugin/plugin.json",
     "skills/triad-cross-family-review/SKILL.md",
     "skills/triad-cross-family-review/agents/openai.yaml",
+    "skills/triad-cross-family-review/scripts/verify_lifecycle.py",
     "skills/triad-cross-family-review/references/convergence.md",
     "skills/triad-cross-family-review/references/leg-contracts.md",
     "skills/triad-cross-family-review/references/review-prompt-contract.md",
