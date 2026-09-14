@@ -1,4 +1,4 @@
-"""Provider-free integration checks; only the vendor catalog is a test double."""
+"""Real lifecycle/guard checks with catalog and CLI-presence doubles; no inference."""
 from __future__ import annotations
 
 import importlib.util
@@ -32,6 +32,10 @@ def catalog_only_vendor(tmp_path, monkeypatch):
     )
     agy.chmod(0o755)
     (vendor / "python3").symlink_to(Path(sys.executable).resolve())
+    for name in ("codex", "claude"):
+        presence_only = vendor / name
+        presence_only.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+        presence_only.chmod(0o755)
     monkeypatch.setenv("PATH", str(vendor) + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("LIFECYCLE_TEST_CALLS", str(calls))
     return calls
@@ -62,6 +66,26 @@ def test_fixed_lifecycle_cli_preserves_json_and_never_dispatches(catalog_only_ve
     assert all(command["returncode"] == 0 for command in report["commands"])
     assert_cleanup_and_source(report)
     assert set(catalog_only_vendor.read_text().splitlines()) == {"--version", "models"}
+
+
+def test_lifecycle_test_does_not_need_host_codex_or_claude(catalog_only_vendor, monkeypatch):
+    vendor = catalog_only_vendor.parent / "vendor"
+    remaining = [entry for entry in os.environ["PATH"].split(os.pathsep)
+                 if Path(entry) != vendor and not any((Path(entry) / name).exists()
+                                                      for name in ("codex", "claude"))]
+    monkeypatch.setenv("PATH", os.pathsep.join([str(vendor), *remaining]))
+    result = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout or result.stderr
+    assert json.loads(result.stdout)["status"] == "SUCCESS"
+
+
+def test_lifecycle_documentation_states_bootstrap_prerequisites_and_write_scope():
+    for name in ("README.md", "README.ko.md"):
+        paragraph = (ROOT / name).read_text().split("verify_lifecycle.py", 1)[1].split("\n##", 1)[0]
+        assert all(dependency in paragraph for dependency in ("Codex", "Claude", "Pydantic 2"))
+    docstring = SCRIPT.read_text().split('"""', 2)[1]
+    assert "All writes are confined" not in docstring
+    assert "ignored" in docstring
 
 
 @pytest.mark.parametrize("failure_step", ["render", "cleanup"])

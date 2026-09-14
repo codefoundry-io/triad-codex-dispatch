@@ -613,7 +613,8 @@ For an explicitly provider-free synthetic lifecycle check, run
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py` from the
 checkout. It reuses the packaged CLI and isolated bootstrap, probes AGY version
 and catalog without inference, and prints actual command outcomes, packaged-source
-hashes and cleanup evidence as JSON. It needs Git, Python 3.12+ and AGY on PATH.
+hashes and cleanup evidence as JSON. It needs Git and the Codex, Claude and AGY
+CLIs on PATH, plus Python 3.12+ with Pydantic 2.
 Temporary `AGY_SETTINGS_PATH` isolates only the wrapper transaction, not vendor
 configuration. Success is neither a review verdict nor release certification.
 

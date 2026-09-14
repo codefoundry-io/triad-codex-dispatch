@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Verify one synthetic lifecycle; version/catalog probes only, never inference.
 
-Run from a source checkout with Python 3.12+, Git and AGY available. The JSON
-report contains synthetic data and actual subprocess results, not a review verdict.
-All writes are confined to newly allocated temporary roots. AGY_SETTINGS_PATH
+Run from a source checkout with the bootstrap prerequisites listed in README.
+The JSON report contains synthetic data and subprocess results, not a review verdict.
+Fixture, stage and review writes use newly allocated temporary roots; bootstrap
+and Python may also create ignored toolkit logs and bytecode. AGY_SETTINGS_PATH
 isolates the Python guard only; this is not a vendor-settings isolation test.
 """
 from __future__ import annotations

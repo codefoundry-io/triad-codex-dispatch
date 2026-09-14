@@ -574,7 +574,8 @@ provider-free 합성 lifecycle 검증을 명시적으로 요청한 경우 checko
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py`를 실행합니다.
 기존 CLI와 격리 bootstrap을 재사용하며, 추론 없이 AGY 버전·모델 목록만 조회합니다.
 실제 명령 결과, 패키지 소스 해시와 정리 증거를 JSON으로 출력합니다.
-PATH에 Git, Python 3.12+, AGY가 필요합니다. 임시 `AGY_SETTINGS_PATH`는 wrapper
+PATH에 Git과 Codex, Claude, AGY CLI가, Python 3.12+ 환경에 Pydantic 2가 필요합니다.
+임시 `AGY_SETTINGS_PATH`는 wrapper
 트랜잭션만 격리하며 vendor 설정 격리를 증명하지 않습니다. 성공은 리뷰 판정이나
 릴리스 인증이 아닙니다.
 
