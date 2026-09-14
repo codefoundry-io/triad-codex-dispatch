@@ -10,7 +10,7 @@ strict result custody, and deterministic owner apply.
 Formal Google review selects and freezes one route before any family starts.
 AGY is preferred and personal Google Sign-In requires it. When the owner selects
 Gemini Enterprise OAuth and AGY is absent, the selector may choose the already
-authenticated Gemini CLI instead. Matching the deployed Claude-led TRIAD, the
+authenticated Gemini CLI instead. Without an explicit project, the
 AGY wrapper brackets `--sandbox read-only` in a transient global-settings
 transaction, unions the exact write/command/unsandboxed/URL/MCP deny set, and
 restores the original bytes. Unless the operator sets
@@ -50,8 +50,20 @@ checks and provenance-managed cleanup without assigning `HOME` or `CODEX_HOME`.
 It reuses the absolute-path and containment checks; it does not redirect provider
 authentication or broaden permission to mutate a user-global target.
 
-Formal AGY calls use owner-provisioned native AGY CLI sign-in and the same transaction
-lifecycle. Formal Gemini calls preserve the existing organization Sign in with
+An explicit `--project <canonical-lowercase-UUID>` with `--cwd` and
+`--sandbox read-only` selects an owner-provisioned AGY project record under
+`~/.gemini/config/projects/<UUID>.json`. Before inference, the wrapper checks
+its ID, its single cwd resource, and the five read-only deny entries. This path
+does not enter the global transaction or create/edit permission or lease files.
+Additional project denies remain intact. Preflight and dispatch must select the
+same UUID, bound through the existing hashed `route_args`; a paired Pro/Flash
+review must use one project. The owner keeps the project configuration stable
+during the call. Neither this local check nor the legacy cooperative global
+lease prevents arbitrary external configuration edits or proves runtime policy
+attestation. Project provisioning remains an explicit owner operation.
+
+Formal AGY calls use owner-provisioned native AGY CLI sign-in. Formal Gemini
+calls preserve the existing organization Sign in with
 Google/OAuth cache and Cloud-project selection while removing competing API-key,
 ADC, and Vertex selectors without reading their values. TRIAD does not change an
 active account or workspace-trust decision.
@@ -148,7 +160,7 @@ SHA, exact model, and nullable effort are bound into every family digest, and ev
 render and dispatch rejects a mismatch. The selected wrapper executes the receipt
 executable directly. Its provider-free preflight finishes before any family starts;
 the route is then immutable. AGY
-version, executable, exact tabular model-catalog, and settings-transaction checks precede
+version, executable, exact tabular model-catalog, and selected project or settings-transaction checks precede
 submission. Gemini preflight validates the receipt binary, model/Plan Mode/policy
 CLI surfaces, and mode-independent packaged policy without a model call. It
 records requested Plan Mode and effective mode `unexposed`; the policy, not a

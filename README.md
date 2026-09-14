@@ -31,13 +31,13 @@ reaches out to the other families for you.
   AGY is preferred and is required for personal Google Sign-In. For an
   owner-selected Gemini Enterprise OAuth account, an absent AGY executable
   selects the existing Gemini CLI wrapper immediately; later AGY failure never
-  triggers that fallback. Like the deployed Claude-led TRIAD, `--sandbox read-only` brackets AGY in a transient
+  triggers that fallback. Without an explicit `--project`, `--sandbox read-only` brackets AGY in a transient
   global-settings transaction that unions five deny rules and restores the
   original bytes. AGY 1.1.3+ also needs the wrapper-owned
   `--dangerously-skip-permissions` headless adaptation unless the operator sets
   `AGY_NO_HEADLESS_AUTOAPPROVE=1`. The auto-approve removes interactive approval
-  prompts, while the transaction's explicit deny rules still block their named
-  action namespaces. On the AGY route, MCP calls are denied in the formal AGY transaction;
+  prompts, while the explicit deny rules still block their named
+  action namespaces. On the AGY route, MCP calls are denied by the formal permission rules;
   conditionally authorized external evidence uses AGY's native official-web read
   path. The Enterprise Gemini route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
@@ -171,7 +171,9 @@ section is optional.
    Start ordinary `codex` from the same authenticated login terminal and actual
    project worktree. Use the existing AGY sign-in, or the existing Gemini
    Enterprise OAuth sign-in when AGY is not installed. Formal AGY review uses
-   `--sandbox read-only` under the transient settings lease; formal Gemini review
+   `--sandbox read-only` under the transient settings lease by default; an explicit
+   dedicated project can use its preconfigured permissions without that lease.
+   Formal Gemini review
    requests native Plan Mode while its mode-independent packaged per-call policy
    enforces read/search-only behavior. Trusted Python and `PATH` are prerequisites;
    wrapper child-process scrubbing remains after the trusted launcher and
@@ -548,13 +550,15 @@ Honest boundaries, so you know where the toolkit stops:
 - **Wrapper containment is process-level, not OS-level confinement.**
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
   they are not a claim of OS-level isolation. Formal AGY uses `--sandbox`, the
-  transient deny lease, the disposable `--cwd` review directory, digest and
-  mutation checks, and your review before commit. On AGY 1.1.3+ the headless
-  auto-approve removes interactive approval prompts, while the transaction's
-  explicit deny rules still block their named action namespaces. The sandbox
+  selected `--cwd` review root, digest and mutation checks, and your review before
+  commit. Without `--project`, it also uses the transient deny lease; with
+  `--project`, it validates the owner-provisioned project permission record.
+  On AGY 1.1.3+ the headless auto-approve removes interactive approval prompts,
+  while the configured explicit deny rules still block their named action
+  namespaces. The sandbox
   remains provider-managed rather than OS-level confinement; round-integrity
   mutation detection is a separate fail-closed check.
-  Formal review places wrapper `--cwd` and `--prompt-file` paths under the reserved
+  Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.
 
@@ -710,10 +714,29 @@ Full threat model: [SECURITY.md](SECURITY.md).
 - Security-sensitive reports: same tracker, title prefixed `[security]`; do not
   include secrets or tokens in the report body.
 
+## Optional dedicated AGY project
+
+For an owner-provisioned AGY project, pass `--project <canonical-lowercase-UUID>`
+and an explicit `--cwd` with `--sandbox read-only`. The wrapper reads
+`~/.gemini/config/projects/<UUID>.json` and requires the matching `id`, exactly
+one resource whose `folderUri` matches the canonical cwd, and all five deny rules:
+`write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, and `mcp(*)`.
+Additional owner-defined denies remain in place. The wrapper creates or edits no
+project record, global settings, or global lease artifact in this mode.
+
+For formal review, use the same project UUID for preflight and dispatch. The
+existing preflight `route_args` and receipt hash bind it to the rendered review;
+paired Pro/Flash preflights must select the same project. Keep the project
+configuration stable throughout the call. This is a configured native permission
+boundary, not OS confinement or runtime policy attestation. Omitting `--project`
+preserves the existing global transaction. See the
+[invocation contract](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project).
+
 ## Notes
 
 - Apart from the approved internal AGY flag, the disclosed transient AGY
-  global-settings transaction, and wrapper-internal formal Gemini model/Plan
+  global-settings transaction, the owner-provisioned `--project` selector,
+  and wrapper-internal formal Gemini model/Plan
   request and policy flags, TRIAD accepts no caller-supplied yolo, bypass,
   skip-trust, accept-edits, or equivalent permission controls. The transaction
   changes AGY settings only for its lease and restores the original bytes; a

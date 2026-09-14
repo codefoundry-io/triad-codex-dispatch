@@ -27,13 +27,13 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   AGY를 우선하며 개인 Google Sign-In에는 AGY가 필요합니다. owner가 Gemini
   Enterprise OAuth를 선택했고 AGY 실행 파일이 없을 때만 기존 Gemini CLI wrapper로
   즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
-  않습니다. AGY route는 배포된 Claude 주최 TRIAD와 같이 `--sandbox read-only`
+  않습니다. 명시적 `--project`가 없는 AGY route는 `--sandbox read-only`
   호출 동안 일시적 global-settings transaction으로
   다섯 deny를 합치고 원래 바이트를 복원합니다. AGY 1.1.3+에서는 operator가
   `AGY_NO_HEADLESS_AUTOAPPROVE=1`을 설정하지 않은 한 headless 실행에 wrapper 소유
   `--dangerously-skip-permissions`가 필요합니다. auto-approve는 interactive approval
-  prompt를 제거하지만 transaction의 explicit deny rule은 지정된 action namespace를
-  계속 차단합니다. AGY route의 formal AGY transaction에서 MCP 호출은 차단되고, 조건부로
+  prompt를 제거하지만 explicit deny rule은 지정된 action namespace를
+  계속 차단합니다. AGY route의 formal permission rule로 MCP 호출은 차단되고, 조건부로
   승인된 외부 근거는 AGY native official-web read 경로를 사용합니다. Enterprise
   Gemini route는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
@@ -156,8 +156,9 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 
    일반 `codex`는 동일한 인증된 로그인 터미널의 실제 project/worktree root에서
    시작하세요. 기존 AGY 로그인 또는 AGY가 없을 때 기존 Gemini Enterprise OAuth
-   로그인을 사용합니다. 정식 AGY review는 일시적 settings lease 아래
-   `--sandbox read-only`로 실행하고, 정식 Gemini review는 native Plan Mode를 요청하며
+   로그인을 사용합니다. 정식 AGY review는 기본적으로 일시적 settings lease 아래
+   `--sandbox read-only`로 실행합니다. 전용 프로젝트를 명시하면 미리 설정된 프로젝트
+   권한을 사용해 이 lease를 생략합니다. 정식 Gemini review는 native Plan Mode를 요청하며
    mode-independent packaged per-call policy가 read/search-only behavior를 enforce합니다. Trusted
    Python과 `PATH`가 prerequisite이며 trusted launcher와 interpreter가 시작된 뒤
    wrapper child-process scrubbing은 유지됩니다.
@@ -512,13 +513,14 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   `TRIAD_CLASSIFIER_EXTENSION`을 바꾸면 bootstrap을 다시 실행해야 합니다.
 - **wrapper containment은 프로세스 수준이지 OS 수준 confinement이 아닙니다.**
   wrapper-containment env는 wrapper 프로세스의 path/pydantic 처리를 gate할 뿐, OS
-  수준 격리 주장이 아닙니다. 정식 AGY는 일시적 deny lease, `--sandbox`, disposable
-  `--cwd` review directory, digest/mutation check, 커밋 전 사용자 검토를 결합합니다.
+  수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
+  digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
+  일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
   AGY 1.1.3+의 headless auto-approve는 interactive approval prompt를 제거하지만
-  transaction의 explicit deny rule은 지정된 action namespace를 계속 차단합니다.
+  설정된 explicit deny rule은 지정된 action namespace를 계속 차단합니다.
   sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
   mutation detection은 별도의 fail-closed 검사입니다.
-  Formal review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
+  Prepared-directory review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
   system-temp root 아래에 있습니다. `TRIAD_WRAPPER_ALLOWED_ROOTS`를 설정했다면 hardened
   mode를 포함해 canonical system temp base를 포함해야 합니다.
 
@@ -666,10 +668,28 @@ permission 선택은 provider/user/project setting에 남습니다. 전체 threa
 - 보안에 민감한 신고: 같은 tracker에 제목 앞에 `[security]`를 붙여 올리세요.
   신고 본문에 secret이나 token은 넣지 마세요.
 
+## 선택: 전용 AGY 프로젝트
+
+owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-lowercase-UUID>`와
+명시적 `--cwd`, `--sandbox read-only`를 함께 전달합니다. wrapper는
+`~/.gemini/config/projects/<UUID>.json`에서 일치하는 `id`, canonical cwd URI와
+같은 `folderUri`를 가진 단일 resource, 다음 다섯 deny rule을 확인합니다:
+`write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`.
+추가 owner deny rule은 보존하며, 이 모드에서는 프로젝트·전역 설정·전역 lease 파일을
+생성하거나 수정하지 않습니다.
+
+정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다. 기존 preflight의
+`route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
+프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
+native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙니다. `--project`를
+생략하면 기존 전역 transaction을 사용합니다. 정확한 명령은
+[호출 계약](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project)을 따릅니다.
+
 ## 참고
 
 - 위에서 공개한 승인된 내부 AGY flag, 일시적 AGY global-settings transaction,
-  wrapper 내부 formal Gemini model/Plan 요청 및 policy flag 외에는
+  사용자가 준비한 프로젝트를 선택하는 `--project`, wrapper 내부 formal Gemini
+  model/Plan 요청 및 policy flag 외에는
   TRIAD가 caller-supplied yolo, bypass, skip-trust, accept-edits 또는 동등한 permission
   control을 받지 않습니다. transaction은 lease 동안만 AGY setting을 변경하고 원래
   바이트를 복원하며, hard crash가 남긴 deny residue는 다음 guarded call이 복구합니다.

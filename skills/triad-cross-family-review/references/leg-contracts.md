@@ -208,6 +208,32 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   > "$google_result_file"
 ```
 
+### Optional dedicated AGY project
+
+When the owner supplies an existing dedicated AGY project, add
+`--project "$agy_project_id"` to both AGY commands above, retaining the same
+explicit `--cwd "$review_target_cwd"` and `--sandbox read-only`. The UUID must
+use canonical lowercase spelling. The wrapper reads
+`~/.gemini/config/projects/<UUID>.json` and requires a matching ID, exactly one
+resource whose `folderUri` equals the canonical cwd URI, and these deny entries:
+`write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`.
+Additional owner rules remain untouched. Invalid configuration stops before
+inference. This mode validates the project instead of entering a global settings
+transaction; it never creates or edits a project or permission record.
+
+The sole `folderUri` must name the exact current `review_target_cwd`. A fixed
+project fits a stable worktree-first root. Prepared-directory rounds need a
+matching owner-provisioned project for each new per-round cwd, or the default
+route without `--project`; do not silently repoint an existing project.
+
+The existing preflight `route_args` ends with `--project <UUID>` and is bound by
+the receipt hash. Pass the identical UUID at dispatch; keep the project record
+stable for the full call. In a paired Pro/Flash review, both preflights use the
+same project UUID. Each family render still receives the unchanged receipts;
+do not add metadata fields or rewrite rendered prompts. Omit `--project` to use
+the existing global transaction. Project provisioning requires owner authority
+for that exact external configuration; the wrapper does not provision it.
+
 For a Gemini receipt, dispatch the same rendered Google prompt and bindings with:
 
 ```text
@@ -232,8 +258,8 @@ The wrappers own the mechanical formal contracts:
   selectors without reading them and records runtime identity and effective
   approval mode as `unexposed`. TRIAD never adds `--skip-trust`.
 - AGY validates the pinned version/model catalog, uses native Plan Mode and a
-  review-bound JSON schema, applies the transient deny transaction, restores its
-  original settings bytes, and consumes terminal `structured_output`. A tool
+  review-bound JSON schema, validates the explicit project or applies and restores
+  the transient deny transaction, and consumes terminal `structured_output`. A tool
   attempt in a named denied namespace is also blocked by its matching deny entry.
   Preserve `AGY_NO_HEADLESS_AUTOAPPROVE=1` when the operator sets it.
 - Both routes make one provider call, validate the terminal `LegVerdict` and

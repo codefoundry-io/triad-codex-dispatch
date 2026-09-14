@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Per-call isolation for the Antigravity (agy) wrapper.
 
-agy exposes NO per-call permission/settings surface (its per-call flags are
-session/transport-only); fs-write isolation lives
-only in the single global ~/.gemini/antigravity-cli/settings.json (no
-per-directory file, no profile, no --settings flag, no config-dir env — proven
-4-source). So a per-call read-only worker is implemented as a global-settings
-transaction: merge the per-call permissions.deny, run agy, then byte-exactly
-restore. An flock serializes settings state transitions; identical read-only
+An explicit AGY project uses its owner-provisioned project permission record,
+validated without writing permission state. Calls without a project retain the
+global-settings transaction: merge the per-call permissions.deny, run agy, then
+byte-exactly restore. An flock serializes settings state transitions; identical read-only
 calls share the active deny lease, while the permissive (no --sandbox)
 baseline stays exclusive. Read-only holder liveness is proven by per-holder
 flock files rather than PIDs, so stale holders can be pruned safely after
@@ -51,6 +48,45 @@ def build_deny_rules(mode: str) -> list:
     if mode == "read-only":
         return list(_READ_ONLY_DENY)
     raise ValueError(f"unknown sandbox mode: {mode!r}")
+
+
+def validate_project_id(project: str) -> None:
+    """Accept only the canonical UUID spelling used by an explicit AGY project."""
+    if str(uuid.UUID(project)) != project:
+        raise ValueError("--project must be a canonical lowercase UUID")
+
+
+@contextlib.contextmanager
+def agy_project_guard(project: str, cwd: str):
+    """Check the owner's project configuration without acquiring a global lease.
+
+    The owner keeps this configuration stable during the call. This local check
+    is not runtime policy attestation or a lock against external configuration edits.
+    """
+    validate_project_id(project)
+    path = Path.home() / ".gemini" / "config" / "projects" / f"{project}.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        if not isinstance(record, dict) or record.get("id") != project:
+            raise ValueError("AGY project ID mismatch")
+        resources = record["projectResources"]["resources"]
+        if (
+            not isinstance(resources, list)
+            or len(resources) != 1
+            or not isinstance(resources[0], dict)
+            or resources[0].get("folderUri") != Path(cwd).resolve(strict=True).as_uri()
+        ):
+            raise ValueError("AGY project must contain only the current --cwd resource")
+        deny = record["permissionGrants"]["permissionGrants"]["deny"]
+        if (
+            not isinstance(deny, list)
+            or not all(isinstance(rule, str) for rule in deny)
+            or not set(_READ_ONLY_DENY).issubset(deny)
+        ):
+            raise ValueError("AGY project is missing the read-only deny rules")
+    except (KeyError, TypeError) as exc:
+        raise ValueError("AGY project permission configuration is invalid") from exc
+    yield
 
 
 def _settings_path() -> Path:
