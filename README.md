@@ -794,6 +794,34 @@ boundary, not OS confinement or runtime policy attestation. Omitting `--project`
 preserves the existing global transaction. See the
 [invocation contract](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project).
 
+## Optional AGY hook artifact (disabled)
+
+`bin/agy_hook.py` is a packaged, offline-tested PreToolUse name filter. To print
+an inactive configuration for inspection, run from your trusted toolkit root:
+
+```sh
+python3 bin/agy_hook.py --render-config
+```
+
+It prints a named hook with `enabled:false` and a shell-quoted absolute helper
+path. It writes no configuration, installs no hook, and changes no wrapper or
+project permissions. Bootstrap does not activate it. The normal stdin interface
+returns JSON `allow` only for exact names `view_file`, `grep_search`, `list_dir`,
+`find_by_name`, `search_web`, and `read_url_content`; all other names are denied.
+The documented `toolCall.name` string and `toolCall.args` object are required.
+Invalid UTF-8/JSON, duplicate members, excessive nesting, and input over 1 MiB
+return bounded deny JSON without echoing the input. Handled decisions exit 0.
+
+This filters tool names, not paths, contents or network destinations. `allow` is
+an explicit permission decision, not a neutral continuation. Live hook loading,
+normal reading, off-list denial without effects, and preservation of existing
+deny rules have not been certified by the offline tests. Before activation,
+obtain authorization for the exact hook path/configuration and existing target
+UUID/cwd, then prove each behavior in that environment. Keep it disabled without
+that proof. Provider behavior after a helper crash or timeout is unverified;
+process exit alone is not enforcement evidence. No review admission or coverage
+credit comes from this helper. See the [official hook contract](https://antigravity.google/docs/hooks).
+
 ## Notes
 
 - Apart from the approved internal AGY flag, the disclosed transient AGY
