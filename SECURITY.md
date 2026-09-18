@@ -251,6 +251,13 @@ at the exact target UUID/cwd. Offline tests prove only the helper contract.
 Helper crash/timeout handling is not certified as fail-closed. The helper is
 outside verdict transport and admission; bootstrap and wrappers do not wire it.
 
+The disabled renderer's bare `python3` must be replaced with a verified trusted
+absolute interpreter before authorized activation. Matcher `*` covers every
+tool call in that enabled session: prove complete review completion while
+off-list tools remain denied. Include oversized-input stdin-write/broken-pipe
+and helper process-failure outcomes in the live proof; a local deny response
+does not by itself establish the provider's enforcement.
+
 ## Standalone Google diagnostics
 
 `bin/google_diagnostics.py` only invokes fixed version/help commands and opt-in,

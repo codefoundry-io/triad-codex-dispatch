@@ -2860,6 +2860,21 @@ def _committed_input_cli(worktree: Path, commit: str | None):
     return subprocess.run(argv, text=True, capture_output=True, check=False)
 
 
+def test_committed_input_accepts_only_ignored_build_artifacts(worktree: Path) -> None:
+    (worktree / ".gitignore").write_text("build/\n")
+    _git(worktree, "add", ".gitignore")
+    _git(worktree, "commit", "-m", "Ignore generated build artifacts")
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    (worktree / "build").mkdir()
+    artifact = worktree / "build/output.txt"
+    artifact.write_text("ignored generated content\n")
+    assert _git(worktree, "status", "--porcelain=v1", "--untracked-files=all") == ""
+    completed = _committed_input_cli(worktree, commit)
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == review_round._worktree_fingerprint(worktree)
+    assert artifact.read_text() == "ignored generated content\n"
+
+
 def test_committed_input_detached_fixture_excludes_developer_changes(
     worktree: Path, tmp_path: Path
 ) -> None:

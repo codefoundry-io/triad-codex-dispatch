@@ -64,9 +64,9 @@ repository as `$1` and using `PYTHONDONTWRITEBYTECODE=1`:
 ```sh
 python3 -m pytest -q "$1/tests/test_effective_cwd_receipt.py" --rootdir "$1" -p no:cacheprovider
 python3 -m pytest -q "$1/tests" --rootdir "$1" -p no:cacheprovider
-python3 /Users/chaniri/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$1/skills/triad-cross-family-review"
+python3 "$TRIAD_SKILL_VALIDATOR" "$1/skills/triad-cross-family-review"
 python3 "$1/skills/triad-cross-family-review/scripts/verify_lifecycle.py"
 ```
 
-Resolve the system validator path for the host; never substitute installed
+Resolve the system validator path for the host into `TRIAD_SKILL_VALIDATOR`; never substitute installed
 TRIAD cache content for the canonical source.

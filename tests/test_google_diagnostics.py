@@ -104,6 +104,29 @@ def test_selection_preserves_nonstrict_fallback_and_strict_refusal(tmp_path, pin
         assert [x["args"] for x in calls] == [["--version"], ["--help"]]
 
 
+def test_fake_observes_every_production_google_selector():
+    assert set(GOOGLE_ENV) == set(_load().FORMAL_AGY_ENV_REMOVE)
+
+
+@pytest.mark.parametrize("version", [
+    "development build\n", "1234567.1.2\n", "1.1234567.2\n", "1.2.1234567\n",
+])
+def test_unrecognized_version_retains_only_raw_hash_and_count(tmp_path, version):
+    responses = {**RESPONSES, "--version": {"out": version}}
+    result, snapshot, calls = _invoke(tmp_path, responses=responses)
+    assert result.returncode == 0 and snapshot["status"] == "complete"
+    assert "version" not in snapshot
+    assert snapshot["probes"][0]["stdout_bytes"] == len(version.encode())
+    assert snapshot["probes"][0]["stdout_sha256"] == hashlib.sha256(version.encode()).hexdigest()
+    assert [call["args"] for call in calls] == [["--version"], ["--help"]]
+
+
+def test_version_accepts_exact_component_limit(tmp_path):
+    version = "123456.123456.123456"
+    result, snapshot, _ = _invoke(tmp_path, responses={**RESPONSES, "--version": {"out": version}})
+    assert result.returncode == 0 and snapshot["version"] == version
+
+
 def _load():
     assert SCRIPT.is_file(), "missing diagnostic helper"
     sys.path.insert(0, str(ROOT / "bin"))
