@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -246,3 +247,60 @@ def test_stdin_incomplete_writer_uses_bounded_join_and_cleanup(monkeypatch, tmp_
     assert len(cleanups) == 1
     assert result.exit_code == _common.EXIT_CLI_FAIL
     assert result.extraction_error == "stdin delivery failed (incomplete)"
+
+
+def test_stdin_reconciliation_interrupt_rethrows_and_cleans_up(
+        monkeypatch, tmp_path):
+    interruption = KeyboardInterrupt("cancel during stdin reconciliation")
+    joins = []
+    cleanups = []
+    real_thread = _common.threading.Thread
+
+    class InterruptingWriter:
+        def __init__(self, target):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+        def join(self, timeout):
+            joins.append(timeout)
+            if len(joins) == 1:
+                raise interruption
+
+    class Process:
+        pid = 4242
+        returncode = 0
+        stdin = io.TextIOWrapper(io.BytesIO())
+        stdout = io.StringIO(SUCCESS)
+        stderr = io.StringIO("")
+
+        def wait(self, timeout):
+            return 0
+
+    process = Process()
+
+    def thread(*args, **kwargs):
+        if kwargs.get("target").__name__ == "_feed_stdin":
+            return InterruptingWriter(kwargs["target"])
+        return real_thread(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(_common.threading, "Thread", thread)
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(os, "getpgrp", lambda: 7)
+    monkeypatch.setattr(
+        _common,
+        "_terminate_provider_process_group",
+        lambda *args: cleanups.append(args),
+    )
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        _common._run_once(
+            "claude", ["claude", "-p", "review"], str(tmp_path), 60,
+            stdin_text="input",
+        )
+
+    assert caught.value is interruption
+    assert cleanups == [(process, "wrapper interrupted", process.pid)]
+    assert joins == [2, 2]

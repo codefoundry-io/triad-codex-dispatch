@@ -1390,12 +1390,14 @@ def _run_once(
 
     timed_out = False
     try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _terminate_provider_process_group(
-            proc, f"timeout after {timeout}s", provider_pgid
-        )
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _terminate_provider_process_group(
+                proc, f"timeout after {timeout}s", provider_pgid
+            )
+        _finish_stdin()
     except BaseException:
         _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
         _finish_stdin()
@@ -1403,7 +1405,6 @@ def _run_once(
         t_err.join(timeout=2)
         raise
 
-    _finish_stdin()
     t_out.join(timeout=2)
     t_err.join(timeout=2)
 
