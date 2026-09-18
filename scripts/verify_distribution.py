@@ -31,6 +31,7 @@ HASH_TARGETS = (
     "bin/antigravity_wrapper.py",
     "bin/claude_wrapper.py",
     "bin/gemini_wrapper.py",
+    "bin/google_diagnostics.py",
     "bin/policies/gemini-formal-readonly.toml",
     "bin/review_round.py",
     "bin/verdict_schema.py",

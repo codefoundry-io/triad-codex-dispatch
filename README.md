@@ -835,6 +835,40 @@ that proof. Provider behavior after a helper crash or timeout is unverified;
 process exit alone is not enforcement evidence. No review admission or coverage
 credit comes from this helper. See the [official hook contract](https://antigravity.google/docs/hooks).
 
+## Google CLI metadata snapshot
+
+Run `python3 bin/google_diagnostics.py --cli agy` (or `--cli gemini`) to print
+one JSON metadata snapshot. It runs `--version` then `--help`, without a prompt
+or inference call. Exit 0 means all invoked probes completed; exit 1 means a
+handled selection, host or probe failure. Unsupported capabilities are observations,
+not failures. This standalone command does not affect wrappers or review admission.
+
+Add `--inventory` to request advertised inventory commands. The helper checks
+root and subcommand help before invoking `agy models`, `agy plugin list`, or
+`gemini extensions list`; it never guesses aliases or runs install/update/auth
+commands. It records fixed probe arguments, status, exit code, stdout byte count
+and SHA-256, plus a bounded parsed version and capability flags. Recognized
+tab-separated AGY catalogs expose at most 128 unique model slugs, each at most
+128 ASCII characters. Empty, unrecognized or oversized catalogs retain their
+hash with `model_format: unrecognized` and no slugs. Plugin/extension output stays
+opaque; no private labels, paths, raw stdout/stderr or environment dump is printed.
+
+Executable selection preserves existing pin/PATH rules: a valid pin wins;
+non-strict missing or invalid pins may fall back to PATH, while strict mode
+refuses that fallback. Relative PATH results retain their selection-cwd meaning
+when launched from the neutral directory. Probes use closed stdin, an owned neutral temporary cwd,
+and the existing injection/Google-selector environment scrubbers. Each probe has
+a five-second deadline plus bounded process cleanup grace; it is not a strict
+five-second total wall-clock promise. Failures stop the sequence. The command
+keeps no baseline/history and therefore supplies no automatic drift verdict.
+Vendor CLIs may still maintain their own caches or telemetry; this is not an OS
+sandbox or an installed-runtime side-effect certification.
+
+Documented inventory commands: [AGY models](https://antigravity.google/docs/cli/headless/),
+[AGY plugins](https://antigravity.google/docs/plugins?tab=cli), and
+[Gemini extensions](https://geminicli.com/docs/extensions/). Installed help gates
+availability; synthetic tests verify this helper's behavior without real inference.
+
 ## Notes
 
 - Apart from the approved internal AGY flag, the disclosed transient AGY
