@@ -637,6 +637,11 @@ unredacted non-launcher path는 전체 stdout/stderr stream을 보존할 수 있
 failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor transcript를
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
+AGY terminal failure는 `extraction_error`에 `terminal_error`를 덧붙일 수 있습니다.
+문자열 오류 또는 `message`, `error`, `detail`, `code` 순서에서 처음 찾은 유효한
+문자열의 첫 비어 있지 않은 줄을 최대 512자로 보존합니다. 진단 데이터이며
+분류·재시도·admission은 바뀌지 않습니다. 합쳐진 필드에는 기존 audit redaction과
+길이 제한이 적용되고, failure run log는 계속 민감한 untrusted data입니다.
 
 Cross-family review는 focused prepared-directory digest, canonical worktree
 fingerprint, family별 하나의 strict `LegVerdict`를 사용합니다. 리더는 result와

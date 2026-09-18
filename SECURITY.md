@@ -95,6 +95,10 @@ child with prompt-controlled no-edit behavior. The child receives an absolute
 run-log path as data and returns only a proposal or escalation; it cannot apply
 a classifier change.
 
+Bounded AGY terminal-error summaries remain untrusted diagnostic data under the
+existing audit redaction and failure-log retention rules; they do not drive
+classification, retries, or admission.
+
 The leader stores a proposal in one unique UTF-8 JSON file. Bootstrap prints a
 direct owner argv using Python `shlex.join` for login-shell
 `python3 bin/apply_patch.py --cli <cli> --proposal-file <absolute-path>

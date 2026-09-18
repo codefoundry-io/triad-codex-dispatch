@@ -612,6 +612,7 @@ def test_plan_mode_admits_valid_verdict_after_denied_post_completion_write() -> 
 
     assert admitted.exit_code == _common.EXIT_OK
     assert admitted.classification == "ok"
+    assert admitted.extraction_error is None
     assert admitted.validated == payload
     assert admitted.final_answer == json.dumps(payload)
 
@@ -863,6 +864,86 @@ def test_non_success_terminal_result_is_never_admitted() -> None:
     assert admitted.exit_code == _common.EXIT_TERMINAL
     assert admitted.classification == "vendor-error"
     assert admitted.final_answer == ""
+
+
+@pytest.mark.parametrize("rc", [0, 1])
+@pytest.mark.parametrize(
+    "error,summary",
+    [
+        ("backend failed", "backend failed"),
+        ({"code": "RESOURCE_EXHAUSTED", "message": "backend failed"}, "backend failed"),
+        ({"message": "", "error": "denied", "detail": "later"}, "denied"),
+        ({"message": {"private": "hidden"}, "code": "UNAVAILABLE"}, "UNAVAILABLE"),
+    ],
+)
+def test_terminal_diagnostic_retains_typed_error_without_reclassification(
+    rc: int, error: object, summary: str
+) -> None:
+    payload = {"status": "ERROR", "response": "never admit this"}
+    baseline = wrapper._interpret_run(_run_result(_stream(payload), rc=rc), None)
+    result = wrapper._interpret_run(
+        _run_result(_stream({**payload, "error": error}), rc=rc), None
+    )
+
+    assert (result.classification, result.exit_code) == (
+        baseline.classification,
+        baseline.exit_code,
+    )
+    assert result.final_answer == ""
+    assert result.extraction_error == baseline.extraction_error + "; terminal_error=" + summary
+
+
+@pytest.mark.parametrize(
+    "error",
+    [None, 42, [], {"nested": {"message": "hidden"}}, {"code": False}, " \n\t "],
+)
+def test_terminal_diagnostic_ignores_unsupported_or_empty_values(error: object) -> None:
+    result = wrapper._interpret_run(
+        _run_result(_stream({"status": "ERROR", "error": error})), None
+    )
+
+    assert result.extraction_error == "terminal result status is 'ERROR'"
+    assert result.classification == "vendor-error"
+    assert result.exit_code == _common.EXIT_TERMINAL
+
+
+def test_terminal_diagnostic_is_one_bounded_nonempty_line() -> None:
+    error = {"message": " \n  " + "x" * 700 + "\nprivate second line", "code": "later"}
+    result = wrapper._interpret_run(
+        _run_result(_stream({"status": "ERROR", "error": error})), None
+    )
+
+    assert result.extraction_error == (
+        "terminal result status is 'ERROR'; terminal_error=" + "x" * 512
+    )
+
+
+@pytest.mark.parametrize("error", ["rate limit exceeded", "invalid authentication credentials"])
+def test_terminal_diagnostic_does_not_feed_nonzero_exit_classifier(error: str) -> None:
+    payload = {"status": "ERROR"}
+    baseline = wrapper._interpret_run(_run_result(_stream(payload), rc=1), None)
+    result = wrapper._interpret_run(
+        _run_result(_stream({**payload, "error": error}), rc=1), None
+    )
+
+    assert (result.classification, result.exit_code) == (
+        baseline.classification,
+        baseline.exit_code,
+    )
+    assert result.extraction_error.endswith("; terminal_error=" + error)
+
+
+def test_terminal_diagnostic_does_not_annotate_success() -> None:
+    result = wrapper._interpret_run(
+        _run_result(
+            _stream({"status": "SUCCESS", "response": "done", "error": "ignored"})
+        ),
+        None,
+    )
+
+    assert result.exit_code == _common.EXIT_OK
+    assert result.final_answer == "done"
+    assert result.extraction_error is None
 
 
 def test_step_text_without_terminal_result_is_extraction_error() -> None:

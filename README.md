@@ -688,6 +688,12 @@ non-launcher path may retain full stdout/stderr streams. Failure run logs keep
 full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
+AGY terminal failures may add `terminal_error` to `extraction_error`: the first
+nonempty line from a string error or the first usable string field among
+`message`, `error`, `detail`, and `code`, capped at 512 characters. This is
+diagnostic data; classification, retries, and admission are unchanged. Existing
+audit redaction/capping still applies to the combined field, and failure run
+logs remain sensitive untrusted data.
 
 Cross-family review uses the focused prepared-directory digest, the canonical
 worktree fingerprint, and one strict `LegVerdict` per family. The leader keeps
