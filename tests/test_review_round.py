@@ -2903,12 +2903,19 @@ def test_committed_input_rejects_dirty_but_preserves_default_mode(
     assert path.read_text() == "CHANGED = True\n"
 
 
-@pytest.mark.parametrize("commit", ["0" * 40, "HEAD", "abc", "A" * 40])
-def test_committed_input_rejects_wrong_or_nonliteral_head(worktree: Path, commit: str) -> None:
+@pytest.mark.parametrize("commit, message", [
+    ("0" * 40, "exact requested HEAD"),
+    ("HEAD", "full lowercase commit ID"),
+    ("abc", "full lowercase commit ID"),
+    ("A" * 40, "full lowercase commit ID"),
+])
+def test_committed_input_rejects_wrong_or_nonliteral_head(
+    worktree: Path, commit: str, message: str
+) -> None:
     rejected = _committed_input_cli(worktree, commit)
     assert rejected.returncode == 2
     assert rejected.stdout == ""
-    assert "committed input" in rejected.stderr
+    assert message in rejected.stderr
     assert _git(worktree, "status", "--porcelain=v1") == ""
 
 
@@ -2936,6 +2943,52 @@ def test_committed_input_rechecks_clean_state_after_fingerprinting(
     monkeypatch.setattr(review_round, "_git", mutate_during_inspection)
     with pytest.raises(RoundIntegrityError, match="committed input requires a clean Git status"):
         review_round._worktree_fingerprint(worktree, require_clean_head=commit)
+
+
+@pytest.mark.parametrize("kind", ["modified", "untracked", "head"])
+def test_committed_input_rejects_submodule_changes_hidden_by_git_config(
+    worktree: Path, tmp_path: Path, kind: str
+) -> None:
+    child = tmp_path / "child"
+    child.mkdir()
+    _git(child, "init", "-q")
+    (child / "tracked.txt").write_text("committed\n")
+    _git(child, "add", "tracked.txt")
+    _git(child, "commit", "-qm", "child fixture")
+    _git(worktree, "-c", "protocol.file.allow=always", "submodule", "add", str(child), "module")
+    _git(worktree, "commit", "-qam", "submodule fixture")
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    assert _committed_input_cli(worktree, commit).returncode == 0
+    _git(worktree, "config", "submodule.module.ignore", "all")
+    module = worktree / "module"
+    if kind == "head":
+        _git(module, "commit", "--allow-empty", "-qm", "new child head")
+    else:
+        (module / ("tracked.txt" if kind == "modified" else "extra.txt")).write_text("dirty\n")
+    assert _git(worktree, "status", "--porcelain=v1", "--untracked-files=all") == ""
+    assert _git(worktree, "status", "--porcelain=v1", "--ignore-submodules=none")
+    default = _committed_input_cli(worktree, None)
+    assert default.returncode == 0, default.stderr
+    rejected = _committed_input_cli(worktree, commit)
+    assert rejected.returncode == 2
+    assert rejected.stdout == ""
+    assert "committed input requires a clean Git status" in rejected.stderr
+    assert _git(worktree, "config", "submodule.module.ignore").strip() == "all"
+
+
+def test_committed_input_rechecks_head_after_fingerprinting(worktree: Path, monkeypatch) -> None:
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    original = review_round._git
+
+    def move_head_during_inspection(root, *args):
+        if args[:2] == ("diff", "--cached"):
+            _git(root, "commit", "--allow-empty", "-qm", "head moved during inspection")
+        return original(root, *args)
+
+    monkeypatch.setattr(review_round, "_git", move_head_during_inspection)
+    with pytest.raises(RoundIntegrityError, match="exact requested HEAD"):
+        review_round._worktree_fingerprint(worktree, require_clean_head=commit)
+    assert _git(worktree, "status", "--porcelain=v1") == ""
 
 
 def test_worktree_prompt_preserves_leader_authored_review_points(

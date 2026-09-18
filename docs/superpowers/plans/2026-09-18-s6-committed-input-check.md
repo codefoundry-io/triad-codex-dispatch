@@ -10,7 +10,9 @@ Add `fingerprint-worktree --require-clean-head <full-commit-id>` as an opt-in
 check for a caller-provided existing checkout. Require the exact HEAD and an
 empty Git status before and after the existing fingerprint operation. Preserve
 the existing index-flag/sparse-checkout refusal. Without this option, retain the
-current dirty-worktree fingerprint behavior.
+current dirty-worktree fingerprint behavior. The opt-in status predicate passes
+`--ignore-submodules=none` so configured submodule ignoring cannot hide modified,
+untracked, or changed-HEAD submodule state from these checks.
 
 This is a setup check, not a checkout creator, OS isolation, admission, or an
 immutable-byte guarantee. Git-ignored material remains outside the clean-state
@@ -40,7 +42,9 @@ runtime dependency, bootstrap, version, or installation change.
    while its developer fixture is dirty; exact clean HEAD succeeds; wrong or
    symbolic commit, staged/unstaged/untracked input and hidden index flags fail;
    the default dirty-worktree mode still succeeds; inspection does not mutate
-   either fixture checkout. A drift injected during fingerprinting is rejected.
+   either fixture checkout. Dirty submodules remain refused even when the
+   superproject config ignores them. File or clean-HEAD drift injected during
+   fingerprinting is rejected.
 2. A fresh dedicated source executor records the intended focused RED.
 3. Add only the optional CLI argument and bounded clean-state checks around the
    existing fingerprint. Accept full lowercase SHA-1 or SHA-256 commit IDs.

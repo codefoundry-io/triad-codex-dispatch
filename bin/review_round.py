@@ -1257,7 +1257,8 @@ def _require_clean_head(worktree: Path, commit: str) -> None:
         raise RoundIntegrityError("committed input requires a full lowercase commit ID")
     if _git(worktree, "rev-parse", "HEAD").decode().strip() != commit:
         raise RoundIntegrityError("committed input requires the exact requested HEAD")
-    if _git(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"):
+    if _git(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all",
+            "--ignore-submodules=none"):
         raise RoundIntegrityError("committed input requires a clean Git status")
 
 
