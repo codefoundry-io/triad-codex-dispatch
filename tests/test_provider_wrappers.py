@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -170,13 +171,455 @@ def _formal_gemini_help() -> str:
     )
 
 
-def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> None:
+_POSIX_PROCESS_GROUPS = all(
+    hasattr(os, name) for name in ("setsid", "getpgid", "getsid", "killpg")
+)
+
+
+def _fixture_process_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    if sys.platform.startswith("linux"):
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        if state.rsplit(") ", 1)[-1].split(maxsplit=1)[0] == "Z":
+            return False
+    return True
+
+
+def _wait_for_fixture_path(path: Path, timeout_s: float) -> None:
+    deadline = time.monotonic() + timeout_s
+    while not path.exists():
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"fixture did not publish {path.name}")
+        time.sleep(0.02)
+
+
+def _wait_for_fixture_exit(pid: int, timeout_s: float) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while _fixture_process_is_running(pid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
+def _cleanup_recorded_fixture_process(
+    pid: int,
+    *,
+    expected_pgrp: int,
+    expected_sid: int,
+    wrapper_pgrp: int,
+    wrapper_sid: int,
+) -> None:
+    if not _fixture_process_is_running(pid):
+        return
+    try:
+        actual_pgrp = os.getpgid(pid)
+        actual_sid = os.getsid(pid)
+    except ProcessLookupError:
+        return
+    assert actual_pgrp == expected_pgrp
+    assert actual_sid == expected_sid
+    assert actual_pgrp != wrapper_pgrp
+    assert actual_sid != wrapper_sid
+    os.kill(pid, signal.SIGKILL)
+    assert _wait_for_fixture_exit(pid, 3.0)
+
+
+def _read_fixture_identity(path: Path) -> tuple[int, int, int] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return (
+            int(payload["pid"]),
+            int(payload["pgrp"]),
+            int(payload["sid"]),
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _cleanup_available_fixture_receipts(
+    receipt_paths: tuple[Path, ...],
+    *,
+    wrapper_pgrp: int,
+    wrapper_sid: int,
+) -> None:
+    errors: list[Exception] = []
+    for path in receipt_paths:
+        identity = _read_fixture_identity(path)
+        if identity is None:
+            continue
+        pid, expected_pgrp, expected_sid = identity
+        try:
+            _cleanup_recorded_fixture_process(
+                pid,
+                expected_pgrp=expected_pgrp,
+                expected_sid=expected_sid,
+                wrapper_pgrp=wrapper_pgrp,
+                wrapper_sid=wrapper_sid,
+            )
+        except Exception as error:
+            errors.append(error)
+    if errors:
+        raise AssertionError("fixture receipt cleanup failed") from errors[0]
+
+
+def _reap_directly_owned_fixture_process(
+    process: subprocess.Popen[str] | None,
+) -> None:
+    if process is None:
+        return
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=3.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=3.0)
+        except subprocess.TimeoutExpired as error:
+            raise AssertionError("owned fixture process did not exit") from error
+
+
+def _cleanup_fixture_processes(
+    process: subprocess.Popen[str] | None,
+    receipt_paths: tuple[Path, ...],
+    *,
+    wrapper_pgrp: int,
+    wrapper_sid: int,
+) -> None:
+    errors: list[Exception] = []
+    try:
+        _reap_directly_owned_fixture_process(process)
+    except Exception as error:
+        errors.append(error)
+    try:
+        _cleanup_available_fixture_receipts(
+            receipt_paths,
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+    except Exception as error:
+        errors.append(error)
+    if errors:
+        raise AssertionError("fixture cleanup failed") from errors[0]
+
+
+def _write_provider_fixture(path: Path) -> None:
+    path.write_text(
+        """\
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+
+role = sys.argv[1]
+state_dir = Path(sys.argv[2])
+omit_aggregate = len(sys.argv) > 3 and sys.argv[3] == "omit-aggregate"
+
+
+def write_receipt(path, payload):
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+if role == "descendant":
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    write_receipt(
+        state_dir / "descendant-ready.json",
+        {"pid": os.getpid(), "pgrp": os.getpgrp(), "sid": os.getsid(0)},
+    )
+    while True:
+        time.sleep(0.05)
+
+if role == "direct":
+    term_log = state_dir / "direct-term.log"
+    direct = {"pid": os.getpid(), "pgrp": os.getpgrp(), "sid": os.getsid(0)}
+    write_receipt(state_dir / "direct-ready.json", direct)
+
+    def exit_on_term(_signum, _frame):
+        term_log.write_text("direct-child-received-SIGTERM\\n", encoding="utf-8")
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, exit_on_term)
+    subprocess.Popen(
+        [sys.executable, __file__, "descendant", str(state_dir)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + 3.0
+    descendant_receipt = state_dir / "descendant-ready.json"
+    while not descendant_receipt.exists():
+        if time.monotonic() >= deadline:
+            raise SystemExit("descendant did not become ready")
+        time.sleep(0.02)
+    if not omit_aggregate:
+        write_receipt(
+            state_dir / "fixture-ready.json",
+            {
+                "direct": direct,
+                "descendant": json.loads(descendant_receipt.read_text(encoding="utf-8")),
+            },
+        )
+    while True:
+        time.sleep(0.05)
+
+raise SystemExit(f"unknown fixture role: {role}")
+""",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_run_once_timeout_kills_provider_descendant_after_direct_exit(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    _write_provider_fixture(fixture_script)
+    ready_path = state_dir / "fixture-ready.json"
+    direct_receipt = state_dir / "direct-ready.json"
+    descendant_receipt = state_dir / "descendant-ready.json"
+    term_log = state_dir / "direct-term.log"
+    wrapper_pgrp = os.getpgrp()
+    wrapper_sid = os.getsid(0)
+
+    try:
+        result = _common._run_once(
+            "fixture",
+            [sys.executable, str(fixture_script), "direct", str(state_dir)],
+            None,
+            timeout=1,
+            classify_and_log=False,
+        )
+        _wait_for_fixture_path(ready_path, 1.0)
+        direct = _read_fixture_identity(direct_receipt)
+        descendant = _read_fixture_identity(descendant_receipt)
+
+        assert result.exit_code == _common.EXIT_TIMEOUT
+        assert term_log.read_text(encoding="utf-8") == "direct-child-received-SIGTERM\n"
+        assert direct is not None
+        assert descendant is not None
+        assert direct[1] == direct[0]
+        assert descendant[1] == direct[1]
+        assert descendant[2] == direct[2]
+        assert _wait_for_fixture_exit(descendant[0], 3.0)
+    finally:
+        _cleanup_available_fixture_receipts(
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_provider_descendant_fixture_cleanup_recovers_when_aggregate_is_missing(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    _write_provider_fixture(fixture_script)
+    direct_receipt = state_dir / "direct-ready.json"
+    descendant_receipt = state_dir / "descendant-ready.json"
+    aggregate_receipt = state_dir / "fixture-ready.json"
+    wrapper_pgrp = os.getpgrp()
+    wrapper_sid = os.getsid(0)
+    direct_process: subprocess.Popen[str] | None = None
+    direct_identity: tuple[int, int, int] | None = None
+    descendant: tuple[int, int, int] | None = None
+
+    try:
+        direct_process = subprocess.Popen(
+            [
+                sys.executable,
+                str(fixture_script),
+                "direct",
+                str(state_dir),
+                "omit-aggregate",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _wait_for_fixture_path(direct_receipt, 3.0)
+        _wait_for_fixture_path(descendant_receipt, 3.0)
+        direct_identity = _read_fixture_identity(direct_receipt)
+        descendant = _read_fixture_identity(descendant_receipt)
+        assert direct_identity is not None
+        assert descendant is not None
+        assert direct_identity[0] == direct_process.pid
+        assert direct_identity[1] == direct_identity[0]
+        assert direct_identity[1] != wrapper_pgrp
+        assert direct_identity[2] != wrapper_sid
+        assert not aggregate_receipt.exists()
+
+        os.kill(direct_process.pid, signal.SIGTERM)
+        assert direct_process.wait(timeout=3.0) == 0
+        assert _fixture_process_is_running(descendant[0])
+        direct_receipt.unlink()
+        assert _read_fixture_identity(direct_receipt) is None
+    finally:
+        _cleanup_fixture_processes(
+            direct_process,
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+
+    assert descendant is not None
+    assert not _fixture_process_is_running(descendant[0])
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_provider_descendant_fixture_cleanup_reaps_owned_direct_before_receipts(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    _write_provider_fixture(fixture_script)
+    direct_receipt = state_dir / "direct-ready.json"
+    descendant_receipt = state_dir / "descendant-ready.json"
+    wrapper_pgrp = os.getpgrp()
+    wrapper_sid = os.getsid(0)
+    direct_process: subprocess.Popen[str] | None = None
+    descendant: tuple[int, int, int] | None = None
+
+    try:
+        direct_process = subprocess.Popen(
+            [
+                sys.executable,
+                str(fixture_script),
+                "direct",
+                str(state_dir),
+                "omit-aggregate",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _wait_for_fixture_path(direct_receipt, 3.0)
+        _wait_for_fixture_path(descendant_receipt, 3.0)
+        descendant = _read_fixture_identity(descendant_receipt)
+        assert descendant is not None
+        assert direct_process.poll() is None
+
+        _cleanup_fixture_processes(
+            direct_process,
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+    finally:
+        _cleanup_fixture_processes(
+            direct_process,
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+
+    assert descendant is not None
+    assert not _fixture_process_is_running(descendant[0])
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS or not hasattr(os, "fork"),
+    reason="requires POSIX process-group APIs and fork",
+)
+def test_run_once_inherited_stdin_is_reconciled(tmp_path, monkeypatch):
+    direct_receipt = tmp_path / "direct.json"
+    descendant_receipt = tmp_path / "descendant.json"
+    script = tmp_path / "inherited_stdin.py"
+    script.write_text('''import json,os,sys,time
+from pathlib import Path
+def receipt(path):
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps({"pid":os.getpid(),"pgrp":os.getpgrp(),"sid":os.getsid(0)}), encoding="utf-8")
+    os.replace(temporary, path)
+receipt(Path(sys.argv[1]))
+child = os.fork()
+if child == 0:
+    receipt(Path(sys.argv[2]))
+    os.close(1)
+    os.close(2)
+    time.sleep(30)
+    os._exit(0)
+deadline = time.monotonic()+3
+while not Path(sys.argv[2]).exists():
+    if time.monotonic() > deadline:
+        os._exit(90)
+    time.sleep(.01)
+descendant = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert descendant["pid"] == child
+print('{"is_error":false,"result":"success"}', flush=True)
+os._exit(0)
+''', encoding="utf-8")
+    wrapper_pgrp, wrapper_sid = os.getpgrp(), os.getsid(0)
+    direct_process = None
+    real_popen = subprocess.Popen
+
+    def capture_owned_process(*args, **kwargs):
+        nonlocal direct_process
+        assert direct_process is None
+        direct_process = real_popen(*args, **kwargs)
+        return direct_process
+
+    monkeypatch.setattr(subprocess, "Popen", capture_owned_process)
+    try:
+        started = time.monotonic()
+        result = _common._run_once(
+            "claude", [sys.executable, str(script), str(direct_receipt),
+                       str(descendant_receipt)], str(tmp_path), 5,
+            stdin_text="input" * 400000)
+        assert time.monotonic() - started < 20
+        assert result.vendor_exit_code == 0
+        assert result.exit_code == _common.EXIT_CLI_FAIL
+        descendant = _read_fixture_identity(descendant_receipt)
+        assert descendant is not None
+        assert _wait_for_fixture_exit(descendant[0], 3)
+    finally:
+        _cleanup_fixture_processes(
+            direct_process, (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp, wrapper_sid=wrapper_sid)
+
+
+@pytest.mark.parametrize("stdin_text", [None, "input"])
+def test_run_once_interrupt_terminates_provider_process_group(
+    monkeypatch, stdin_text
+) -> None:
     interruption = KeyboardInterrupt("cancel invalid round")
     signals: list[tuple[int, int]] = []
+    getpgid_calls: list[int] = []
 
     class InterruptingProcess:
         pid = 4242
-        stdin = None
+        stdin = io.TextIOWrapper(io.BytesIO()) if stdin_text is not None else None
         stdout = io.StringIO("")
         stderr = io.StringIO("")
         returncode = None
@@ -193,15 +636,115 @@ def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> No
 
     process = InterruptingProcess()
     monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: process)
-    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(
+        os,
+        "getpgid",
+        lambda pid: getpgid_calls.append(pid) or pid,
+    )
+    monkeypatch.setattr(os, "getpgrp", lambda: 7)
     monkeypatch.setattr(os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
 
     with pytest.raises(KeyboardInterrupt) as caught:
-        _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+        _common._run_once("claude", ["claude", "-p", "review"], None, 60,
+                          stdin_text=stdin_text)
 
     assert caught.value is interruption
-    assert signals == [(process.pid, signal.SIGTERM)]
-    assert process.wait_calls == [60, 5]
+    assert getpgid_calls == [process.pid]
+    assert signals == [
+        (process.pid, signal.SIGTERM),
+        (process.pid, 0),
+        (process.pid, signal.SIGKILL),
+    ]
+    assert process.wait_calls == [60, 5, 5]
+
+
+def test_run_once_uses_direct_fallback_for_an_unsafe_child_process_group(
+    monkeypatch,
+) -> None:
+    group_signals: list[tuple[int, int]] = []
+
+    class TimeoutProcess:
+        pid = 4242
+        stdin = None
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = None
+
+        def __init__(self) -> None:
+            self.terminate_calls = 0
+            self.kill_calls = 0
+            self.wait_calls: list[int] = []
+
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+
+        def kill(self) -> None:
+            self.kill_calls += 1
+
+        def wait(self, timeout: int) -> int:
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise subprocess.TimeoutExpired("fixture", timeout)
+            self.returncode = -signal.SIGTERM
+            return self.returncode
+
+    process = TimeoutProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: process)
+    monkeypatch.setattr(os, "getpgid", lambda _pid: process.pid)
+    monkeypatch.setattr(os, "getpgrp", lambda: process.pid)
+    monkeypatch.setattr(
+        os,
+        "killpg",
+        lambda pgid, sig: group_signals.append((pgid, sig)),
+    )
+
+    result = _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+
+    assert result.exit_code == _common.EXIT_TIMEOUT
+    assert group_signals == []
+    assert process.terminate_calls == 1
+    assert process.kill_calls == 0
+    assert process.wait_calls == [60, 5, 5]
+
+
+def test_terminate_provider_process_group_fallback_kills_unreaped_child(
+    monkeypatch,
+) -> None:
+    group_signals: list[tuple[int, int]] = []
+
+    class UnreapedProcess:
+        pid = 4242
+
+        def __init__(self) -> None:
+            self.terminate_calls = 0
+            self.kill_calls = 0
+            self.wait_calls: list[int] = []
+
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+
+        def kill(self) -> None:
+            self.kill_calls += 1
+
+        def wait(self, timeout: int) -> int:
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise subprocess.TimeoutExpired("fixture", timeout)
+            return -signal.SIGKILL
+
+    process = UnreapedProcess()
+    monkeypatch.setattr(
+        os,
+        "killpg",
+        lambda pgid, sig: group_signals.append((pgid, sig)),
+    )
+
+    _common._terminate_provider_process_group(process, "fixture", None)
+
+    assert group_signals == []
+    assert process.terminate_calls == 1
+    assert process.kill_calls == 1
+    assert process.wait_calls == [5, 5]
 
 
 def test_packaged_leg_verdict_loads_under_hardened_wrapper(monkeypatch) -> None:
@@ -301,8 +844,9 @@ def test_claude_route_forwards_model_effort_and_native_json(
     assert capsys.readouterr().out == "ok\n"
     assert captured["cmd"] == [
         "/opt/bin/claude",
-        "-p",
-        "review",
+        "--print",
+        "--input-format",
+        "text",
         "--output-format",
         "json",
         "--model",
@@ -310,6 +854,7 @@ def test_claude_route_forwards_model_effort_and_native_json(
         "--effort",
         "xhigh",
     ]
+    assert captured["kwargs"]["prompt_via_stdin"] is True
 
 
 def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) -> None:
@@ -333,8 +878,11 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
         ),
     )
 
-    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log, stdin_text=None):
         calls.append(cmd)
+        assert stdin_text == "review"
+        assert "review" not in cmd
+        assert cmd[1:6] == ["--print", "--input-format", "text", "--output-format", "json"]
         assert classify_and_log is False
         return _common.RunResult(
             exit_code=0,
@@ -402,8 +950,11 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
     )
     monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
 
-    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log, stdin_text=None):
         calls.append(cmd)
+        assert stdin_text == "review"
+        assert "review" not in cmd
+        assert cmd[1:6] == ["--print", "--input-format", "text", "--output-format", "json"]
         assert _timeout == 1200
         schema = json.loads(cmd[cmd.index("--json-schema") + 1])
         properties = schema["properties"]
@@ -720,9 +1271,10 @@ def test_claude_structured_route_rejects_result_text_fallback(
     )
     monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
 
-    def fake_once(_cli, _cmd, _cwd, _timeout, *, classify_and_log):
+    def fake_once(_cli, _cmd, _cwd, _timeout, *, classify_and_log, stdin_text=None):
         nonlocal calls
         calls += 1
+        assert stdin_text == "review"
         assert classify_and_log is False
         return _common.RunResult(
             exit_code=0,

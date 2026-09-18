@@ -164,6 +164,26 @@ def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | 
     return events, terminal
 
 
+def _terminal_error_suffix(result: dict[str, Any] | None) -> str:
+    error = result.get("error") if result is not None else None
+    if isinstance(error, str):
+        candidates = (error,)
+    elif isinstance(error, dict):
+        candidates = tuple(
+            error.get(key) for key in ("message", "error", "detail", "code")
+        )
+    else:
+        return ""
+    for value in candidates:
+        if not isinstance(value, str):
+            continue
+        for raw_line in value.splitlines():
+            line = raw_line.strip()
+            if line:
+                return f"; terminal_error={line[:512]}"
+    return ""
+
+
 def _fail(
     run: _common.RunResult,
     classification: str,
@@ -226,7 +246,8 @@ def _interpret_run(
             run,
             classification,
             _common.map_classification_to_exit(classification),
-            detail or "AGY exited without an admissible result",
+            (detail or "AGY exited without an admissible result")
+            + _terminal_error_suffix(result),
         )
 
     if result is None:
@@ -250,7 +271,7 @@ def _interpret_run(
             run,
             "vendor-error",
             _common.EXIT_TERMINAL,
-            f"terminal result status is {status!r}",
+            f"terminal result status is {status!r}" + _terminal_error_suffix(result),
         )
     if expected_model is not None and route_conflict is not None:
         return _fail(

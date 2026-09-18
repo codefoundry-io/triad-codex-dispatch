@@ -467,6 +467,8 @@ approved-path containment는 provider가 실제로 enforce하지 않는 한 prom
 그 외 경계는 선택한 `--cwd` worktree, native provider permission,
 immutable-directory digest, leader mutation check에 의존합니다.
 
+로컬 Claude wrapper는 실제 전달할 prompt를 UTF-8 text stdin으로 provider에 보내며 JSON 및 native-schema 출력을 유지합니다. 바깥쪽 wrapper 명령줄에서도 prompt를 제외하려면 `--prompt-file`을 사용하세요. Claude 문서는 stdin의 [10MB 한도](https://code.claude.com/docs/en/headless#pipe-data-through-claude)를 명시하며 이 한도는 vendor가 적용합니다. 모델의 context/token 한도도 그대로 적용됩니다. Wrapper는 한도를 피하려고 prompt를 자르거나 나누거나 요청을 추가하지 않습니다. Stdin 전달 실패를 성공으로 받아들이지 않습니다. Stdin은 안쪽 provider argv에서 prompt를 제외합니다. 기존 argv 배열도 shell expansion을 방지합니다. 민감한 prompt/transcript 로그는 그대로 남으며 stdin이 입력 암호화, prompt injection 방지, token 사용량 감소를 제공하지는 않습니다.
+
 ## 문제 해결 (Troubleshooting)
 
 | 증상 | 원인 | 해결 |
@@ -638,6 +640,23 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
 
+Claude audit에는 stdout preview와 별도로 `claude_receipt`가 남을 수 있습니다.
+검증된 session UUID, 전체 token 수, 최대 16개 model의 사용량(식별자는 최대
+128 ASCII 문자), 추정 USD 비용, permission denial 개수만 보존합니다.
+Token 수는 `2**53 - 1` 이하의 음이 아닌 정수, 비용은 USD 1,000,000 이하의
+유한한 값만 허용하고 잘못된 field는 생략합니다. Redacted mode에서는 session과
+전체 per-model map을 제외하고 aggregate 숫자만 보존합니다. 마지막 envelope를
+사용하며 tool 이름·인자와 denial 상세는 receipt에 넣지 않습니다. 기존 audit의
+권한과 보관 정책을 따릅니다. 보고된 model 목록은 실제 reviewer model의 증명이
+아니며 비용은 청구액이 아닌 [provider 추정치](https://code.claude.com/docs/en/headless)입니다.
+Receipt는 응답·재시도·종료 상태·admission에 영향을 주지 않습니다.
+
+AGY terminal failure는 `extraction_error`에 `terminal_error`를 덧붙일 수 있습니다.
+문자열 오류 또는 `message`, `error`, `detail`, `code` 순서에서 처음 찾은 유효한
+문자열의 첫 비어 있지 않은 줄을 최대 512자로 보존합니다. 진단 데이터이며
+분류·재시도·admission은 바뀌지 않습니다. 합쳐진 필드에는 기존 audit redaction과
+길이 제한이 적용되고, failure run log는 계속 민감한 untrusted data입니다.
+
 Cross-family review는 focused prepared-directory digest, canonical worktree
 fingerprint, family별 하나의 strict `LegVerdict`를 사용합니다. 리더는 result와
 snapshot을 reviewed evidence 밖에 두며 bounded correction 뒤에는 fresh complete
@@ -653,6 +672,14 @@ Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocatio
 실행 전에 3,600 seconds보다 오래된 managed UUID/file-IPC entry를 best-effort
 cleanup합니다. Antigravity는 `--preflight-only` 전에도 cleanup합니다. Cleanup error는
 dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니다.
+
+- **Timeout cleanup은 best effort이며 containment가 아닙니다.** POSIX에서 wrapper는
+  새 child의 group이고 wrapper group과 다른 경우에만 provider group을 기록합니다.
+  Timeout 또는 interruption은 TERM을 보내고 direct child를 reap한 뒤, 저장한 group을
+  probe하여 살아 있는 member에게 KILL을 보냅니다. 지원하지 않거나 안전하지 않은 group
+  identity에서는 direct-process cleanup을 사용합니다. captured group을 벗어난 child
+  (새 session 시작 포함)는 이 보장의 범위 밖이며 OS identifier reuse race도 남습니다.
+  이것은 OS sandbox가 아닙니다.
 
 ## 보안 (Security)
 

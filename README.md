@@ -499,6 +499,8 @@ prompt-controlled unless a provider actually enforces it. The boundary otherwise
 rests on the selected `--cwd` worktree, native provider permissions,
 immutable-directory digests, and leader mutation checks.
 
+The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -561,6 +563,13 @@ Honest boundaries, so you know where the toolkit stops:
   Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.
+- **Timeout cleanup is best effort, not containment.** On POSIX, a wrapper only
+  records a provider group when it is the new child's group and differs from the
+  wrapper's group. Timeout or interruption sends TERM, reaps the direct child,
+  then probes that saved group and sends KILL to surviving members. Unsupported
+  or unsafe group identity uses direct-process cleanup. A child that leaves the
+  captured group, including by starting a new session, is outside this guarantee;
+  OS identifier reuse remains a residual race, and this is not an OS sandbox.
 
 ## Update
 
@@ -681,6 +690,25 @@ non-launcher path may retain full stdout/stderr streams. Failure run logs keep
 full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
+
+Claude audit records may include `claude_receipt`, independently of the stdout
+preview: a validated session UUID, aggregate token counters, up to 16 reported
+model-usage entries with identifiers of at most 128 ASCII characters, estimated
+USD cost, and permission-denial count. Only nonnegative integer token counts up
+to `2**53 - 1` and finite costs up to USD 1,000,000 are retained; invalid fields
+are omitted. Redacted mode omits the session and entire per-model map, retaining
+only aggregate numeric metadata. The receipt uses the final envelope, excludes
+tool names/arguments and denial details, and shares existing audit permissions
+and retention. Reported models do not attest which model performed a review;
+cost is a [provider estimate](https://code.claude.com/docs/en/headless), not billing.
+Receipt data does not affect answers, retries, exit status or admission.
+
+AGY terminal failures may add `terminal_error` to `extraction_error`: the first
+nonempty line from a string error or the first usable string field among
+`message`, `error`, `detail`, and `code`, capped at 512 characters. This is
+diagnostic data; classification, retries, and admission are unchanged. Existing
+audit redaction/capping still applies to the combined field, and failure run
+logs remain sensitive untrusted data.
 
 Cross-family review uses the focused prepared-directory digest, the canonical
 worktree fingerprint, and one strict `LegVerdict` per family. The leader keeps

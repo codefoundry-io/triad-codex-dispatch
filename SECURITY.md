@@ -80,12 +80,35 @@ Wrappers build argv arrays, validate prompt and result paths, and pin the
 install-resolved provider executable and classifier paths. These are data and
 executable-custody controls, not provider or OS sandbox enforcement.
 
+The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
+
+Provider timeout cleanup is best-effort POSIX lifecycle hygiene, not OS
+containment. A wrapper targets a saved group only when it belonged to the new
+provider child and differed from the wrapper group; otherwise it terminates the
+direct process. After TERM and bounded direct-child reaping, it probes the saved
+group and sends KILL to surviving members. A child that leaves the captured
+group, including by starting a new session, is outside this guarantee, and OS
+identifier reuse remains a residual race.
+
 ## Repair boundary
+
+Claude's optional audit `claude_receipt` projects only validated session/model
+identifiers, bounded numeric usage/cost estimates, and an array-length denial
+count (omitted above 1,000,000). It never copies tool arguments, denial objects,
+answer text or arbitrary envelope fields into that receipt. Redacted audit mode
+omits the session and entire model map. This projection does not sanitize the
+existing unredacted streams or failure run logs; those remain sensitive under
+the existing retention policy. Receipt persistence is advisory and does not
+control classification, retries, model attestation or review admission.
 
 Vendor run logs are untrusted. Repair analysis uses a fresh native proposal-only
 child with prompt-controlled no-edit behavior. The child receives an absolute
 run-log path as data and returns only a proposal or escalation; it cannot apply
 a classifier change.
+
+Bounded AGY terminal-error summaries remain untrusted diagnostic data under the
+existing audit redaction and failure-log retention rules; they do not drive
+classification, retries, or admission.
 
 The leader stores a proposal in one unique UTF-8 JSON file. Bootstrap prints a
 direct owner argv using Python `shlex.join` for login-shell
