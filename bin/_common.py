@@ -302,6 +302,8 @@ class RunResult:
     _stdin_delivery_failed: bool = False
     # Sanitized Claude audit evidence only; excluded from failure/repair IPC.
     _claude_receipt: Optional[dict] = None
+    # Host-resolved launch cwd; audit-only evidence, not provider attestation.
+    _effective_cwd: Optional[str] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -1291,8 +1293,9 @@ def _run_once(
     flush, and close phases within bounded reconciliation joins. When None
     (default), stdin is DEVNULL (gemini/claude behavior unchanged).
     """
+    effective_cwd = os.path.realpath(cwd or os.getcwd())
     log(
-        f"exec cwd={cwd or os.getcwd()} timeout={timeout}s "
+        f"exec cwd={effective_cwd} timeout={timeout}s "
         f"argv={_redact_prompt_args(cmd)}"
     )
     start = time.monotonic()
@@ -1433,6 +1436,7 @@ def _run_once(
             result._stdin_delivery_failed = True
             log(result.extraction_error)
 
+    result._effective_cwd = effective_cwd
     result.vendor_exit_code = rc
     if classify_and_log:
         if not result._stdin_delivery_failed:
@@ -1950,6 +1954,8 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
         "extraction_error": _redact_cap(result.extraction_error),
         "validation_error": _redact_cap(result.validation_error),
     }
+    if result._effective_cwd is not None:
+        rec["effective_cwd"] = "<redacted:cwd-path>" if redact else result._effective_cwd
     if cli == "claude" and result._claude_receipt:
         receipt = result._claude_receipt
         if redact:

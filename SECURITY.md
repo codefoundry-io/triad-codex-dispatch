@@ -92,6 +92,12 @@ identifier reuse remains a residual race.
 
 ## Repair boundary
 
+The optional audit `effective_cwd` records the host-resolved launch directory
+only after a child starts. Hardened/redacted mode masks the entire path. It
+shares existing private audit retention and is excluded from failure/repair IPC;
+it does not attest the provider's later cwd or read coverage. No environment dump
+is added. Existing unredacted streams and human stderr remain sensitive.
+
 Claude's optional audit `claude_receipt` projects only validated session/model
 identifiers, bounded numeric usage/cost estimates, and an array-length denial
 count (omitted above 1,000,000). It never copies tool arguments, denial objects,
