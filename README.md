@@ -245,8 +245,16 @@ enforces it (summarized under [Security](#security) below).
 0.2.554 adds bounded process-group cleanup, Claude stdin transport and sanitized
 audit receipts, AGY error/read diagnostics, an opt-in committed-input check,
 read-only Google CLI diagnostics, and raw verdict-file duplicate-member rejection.
-Review composition, provider permissions and the public verdict schema remain
-unchanged. Diagnostics do not supply review admission or coverage credit.
+Review composition, the public verdict schema and the default AGY permission
+path without `--project` remain unchanged. Diagnostics do not supply review
+admission or coverage credit.
+
+The opt-in, receipt-bound AGY `--project` mode validates an existing
+owner-provisioned project for the exact `--cwd` and required read-only deny rules
+with `--sandbox read-only`, instead of entering the global settings transaction.
+It provisions or edits no project or permissions. Provider-free skill
+characterization now uses the packaged fixed lifecycle verifier; it is not a
+review round or admission result.
 
 The packaged AGY hook is disabled and bootstrap does not activate it. Follow the
 separate live-verification prerequisites before any authorized activation. The

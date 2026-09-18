@@ -9,15 +9,22 @@
   provenance and redactable effective launch-directory audit receipts.
 - Retains bounded AGY terminal-error details and observed-read diagnostics without
   making either a new retry, coverage or admission signal.
+- Adds receipt-bound AGY `--project` mode for an existing owner-provisioned
+  project with the exact review cwd and required read-only deny rules. It
+  validates that record instead of entering the global settings transaction;
+  it requires `--cwd` and `--sandbox read-only` and provisions or edits nothing.
 - Adds an opt-in exact clean-commit check for an existing review worktree and
   standalone read-only Google CLI version/help/inventory diagnostics.
 - Packages an unactivated AGY tool-name allowlist helper and disabled configuration
   renderer. Live activation still requires separate authorization and verification.
+- Packages a fixed lifecycle verifier and routes provider-free skill
+  characterization through it; this is not a review round or admission result.
 - Rejects duplicate decoded member names in raw verdict files before strict
   semantic and identity validation; earlier provider deserialization is outside
   this lexical guard.
 - Adds boundary regressions and documents source-test, packaging and activation
-  limits. Preserves public review composition, provider permissions and schemas.
+  limits. Preserves public review composition, schemas and the default AGY
+  permission path when `--project` is omitted.
 
 ## 0.2.553 — 2026-09-07
 
