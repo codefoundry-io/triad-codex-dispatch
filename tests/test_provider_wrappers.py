@@ -251,18 +251,65 @@ def _cleanup_available_fixture_receipts(
     wrapper_pgrp: int,
     wrapper_sid: int,
 ) -> None:
+    errors: list[Exception] = []
     for path in receipt_paths:
         identity = _read_fixture_identity(path)
         if identity is None:
             continue
         pid, expected_pgrp, expected_sid = identity
-        _cleanup_recorded_fixture_process(
-            pid,
-            expected_pgrp=expected_pgrp,
-            expected_sid=expected_sid,
+        try:
+            _cleanup_recorded_fixture_process(
+                pid,
+                expected_pgrp=expected_pgrp,
+                expected_sid=expected_sid,
+                wrapper_pgrp=wrapper_pgrp,
+                wrapper_sid=wrapper_sid,
+            )
+        except Exception as error:
+            errors.append(error)
+    if errors:
+        raise AssertionError("fixture receipt cleanup failed") from errors[0]
+
+
+def _reap_directly_owned_fixture_process(
+    process: subprocess.Popen[str] | None,
+) -> None:
+    if process is None:
+        return
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=3.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=3.0)
+        except subprocess.TimeoutExpired as error:
+            raise AssertionError("owned fixture process did not exit") from error
+
+
+def _cleanup_fixture_processes(
+    process: subprocess.Popen[str] | None,
+    receipt_paths: tuple[Path, ...],
+    *,
+    wrapper_pgrp: int,
+    wrapper_sid: int,
+) -> None:
+    errors: list[Exception] = []
+    try:
+        _reap_directly_owned_fixture_process(process)
+    except Exception as error:
+        errors.append(error)
+    try:
+        _cleanup_available_fixture_receipts(
+            receipt_paths,
             wrapper_pgrp=wrapper_pgrp,
             wrapper_sid=wrapper_sid,
         )
+    except Exception as error:
+        errors.append(error)
+    if errors:
+        raise AssertionError("fixture cleanup failed") from errors[0]
 
 
 def _write_provider_fixture(path: Path) -> None:
@@ -434,21 +481,68 @@ def test_provider_descendant_fixture_cleanup_recovers_when_aggregate_is_missing(
         direct_receipt.unlink()
         assert _read_fixture_identity(direct_receipt) is None
     finally:
-        _cleanup_available_fixture_receipts(
+        _cleanup_fixture_processes(
+            direct_process,
             (direct_receipt, descendant_receipt),
             wrapper_pgrp=wrapper_pgrp,
             wrapper_sid=wrapper_sid,
         )
-        if direct_process is not None and direct_process.poll() is None:
-            direct_process.terminate()
-            try:
-                direct_process.wait(timeout=3.0)
-            except subprocess.TimeoutExpired:
-                direct_process.kill()
-                try:
-                    direct_process.wait(timeout=3.0)
-                except subprocess.TimeoutExpired:
-                    pass
+
+    assert descendant is not None
+    assert not _fixture_process_is_running(descendant[0])
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_provider_descendant_fixture_cleanup_reaps_owned_direct_before_receipts(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    _write_provider_fixture(fixture_script)
+    direct_receipt = state_dir / "direct-ready.json"
+    descendant_receipt = state_dir / "descendant-ready.json"
+    wrapper_pgrp = os.getpgrp()
+    wrapper_sid = os.getsid(0)
+    direct_process: subprocess.Popen[str] | None = None
+    descendant: tuple[int, int, int] | None = None
+
+    try:
+        direct_process = subprocess.Popen(
+            [
+                sys.executable,
+                str(fixture_script),
+                "direct",
+                str(state_dir),
+                "omit-aggregate",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _wait_for_fixture_path(direct_receipt, 3.0)
+        _wait_for_fixture_path(descendant_receipt, 3.0)
+        descendant = _read_fixture_identity(descendant_receipt)
+        assert descendant is not None
+        assert direct_process.poll() is None
+
+        _cleanup_fixture_processes(
+            direct_process,
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+    finally:
+        _cleanup_fixture_processes(
+            direct_process,
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
 
     assert descendant is not None
     assert not _fixture_process_is_running(descendant[0])
