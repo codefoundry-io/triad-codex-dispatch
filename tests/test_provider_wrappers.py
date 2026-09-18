@@ -233,17 +233,40 @@ def _cleanup_recorded_fixture_process(
     assert _wait_for_fixture_exit(pid, 3.0)
 
 
-@pytest.mark.skipif(
-    not _POSIX_PROCESS_GROUPS,
-    reason="requires POSIX process-group APIs",
-)
-def test_run_once_timeout_kills_provider_descendant_after_direct_exit(
-    tmp_path: Path,
+def _read_fixture_identity(path: Path) -> tuple[int, int, int] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return (
+            int(payload["pid"]),
+            int(payload["pgrp"]),
+            int(payload["sid"]),
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _cleanup_available_fixture_receipts(
+    receipt_paths: tuple[Path, ...],
+    *,
+    wrapper_pgrp: int,
+    wrapper_sid: int,
 ) -> None:
-    fixture_script = tmp_path / "provider_fixture.py"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    fixture_script.write_text(
+    for path in receipt_paths:
+        identity = _read_fixture_identity(path)
+        if identity is None:
+            continue
+        pid, expected_pgrp, expected_sid = identity
+        _cleanup_recorded_fixture_process(
+            pid,
+            expected_pgrp=expected_pgrp,
+            expected_sid=expected_sid,
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+
+
+def _write_provider_fixture(path: Path) -> None:
+    path.write_text(
         """\
 import json
 import os
@@ -256,10 +279,13 @@ import time
 
 role = sys.argv[1]
 state_dir = Path(sys.argv[2])
+omit_aggregate = len(sys.argv) > 3 and sys.argv[3] == "omit-aggregate"
 
 
 def write_receipt(path, payload):
-    path.write_text(json.dumps(payload, sort_keys=True) + "\\n", encoding="utf-8")
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\\n", encoding="utf-8")
+    os.replace(temporary, path)
 
 
 if role == "descendant":
@@ -273,6 +299,8 @@ if role == "descendant":
 
 if role == "direct":
     term_log = state_dir / "direct-term.log"
+    direct = {"pid": os.getpid(), "pgrp": os.getpgrp(), "sid": os.getsid(0)}
+    write_receipt(state_dir / "direct-ready.json", direct)
 
     def exit_on_term(_signum, _frame):
         term_log.write_text("direct-child-received-SIGTERM\\n", encoding="utf-8")
@@ -291,13 +319,14 @@ if role == "direct":
         if time.monotonic() >= deadline:
             raise SystemExit("descendant did not become ready")
         time.sleep(0.02)
-    write_receipt(
-        state_dir / "fixture-ready.json",
-        {
-            "direct": {"pid": os.getpid(), "pgrp": os.getpgrp(), "sid": os.getsid(0)},
-            "descendant": json.loads(descendant_receipt.read_text(encoding="utf-8")),
-        },
-    )
+    if not omit_aggregate:
+        write_receipt(
+            state_dir / "fixture-ready.json",
+            {
+                "direct": direct,
+                "descendant": json.loads(descendant_receipt.read_text(encoding="utf-8")),
+            },
+        )
     while True:
         time.sleep(0.05)
 
@@ -305,9 +334,23 @@ raise SystemExit(f"unknown fixture role: {role}")
 """,
         encoding="utf-8",
     )
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_run_once_timeout_kills_provider_descendant_after_direct_exit(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    _write_provider_fixture(fixture_script)
     ready_path = state_dir / "fixture-ready.json"
+    direct_receipt = state_dir / "direct-ready.json"
+    descendant_receipt = state_dir / "descendant-ready.json"
     term_log = state_dir / "direct-term.log"
-    recorded: list[tuple[int, int, int]] = []
     wrapper_pgrp = os.getpgrp()
     wrapper_sid = os.getsid(0)
 
@@ -320,33 +363,95 @@ raise SystemExit(f"unknown fixture role: {role}")
             classify_and_log=False,
         )
         _wait_for_fixture_path(ready_path, 1.0)
-        fixture = json.loads(ready_path.read_text(encoding="utf-8"))
-        direct = fixture["direct"]
-        descendant = fixture["descendant"]
-        recorded = [
-            (int(direct["pid"]), int(direct["pgrp"]), int(direct["sid"])),
-            (
-                int(descendant["pid"]),
-                int(descendant["pgrp"]),
-                int(descendant["sid"]),
-            ),
-        ]
+        direct = _read_fixture_identity(direct_receipt)
+        descendant = _read_fixture_identity(descendant_receipt)
 
         assert result.exit_code == _common.EXIT_TIMEOUT
         assert term_log.read_text(encoding="utf-8") == "direct-child-received-SIGTERM\n"
-        assert direct["pgrp"] == direct["pid"]
-        assert descendant["pgrp"] == direct["pgrp"]
-        assert descendant["sid"] == direct["sid"]
-        assert _wait_for_fixture_exit(int(descendant["pid"]), 3.0)
+        assert direct is not None
+        assert descendant is not None
+        assert direct[1] == direct[0]
+        assert descendant[1] == direct[1]
+        assert descendant[2] == direct[2]
+        assert _wait_for_fixture_exit(descendant[0], 3.0)
     finally:
-        for pid, expected_pgrp, expected_sid in recorded:
-            _cleanup_recorded_fixture_process(
-                pid,
-                expected_pgrp=expected_pgrp,
-                expected_sid=expected_sid,
-                wrapper_pgrp=wrapper_pgrp,
-                wrapper_sid=wrapper_sid,
-            )
+        _cleanup_available_fixture_receipts(
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_provider_descendant_fixture_cleanup_recovers_when_aggregate_is_missing(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    _write_provider_fixture(fixture_script)
+    direct_receipt = state_dir / "direct-ready.json"
+    descendant_receipt = state_dir / "descendant-ready.json"
+    aggregate_receipt = state_dir / "fixture-ready.json"
+    wrapper_pgrp = os.getpgrp()
+    wrapper_sid = os.getsid(0)
+    direct_process: subprocess.Popen[str] | None = None
+    direct_identity: tuple[int, int, int] | None = None
+    descendant: tuple[int, int, int] | None = None
+
+    try:
+        direct_process = subprocess.Popen(
+            [
+                sys.executable,
+                str(fixture_script),
+                "direct",
+                str(state_dir),
+                "omit-aggregate",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _wait_for_fixture_path(direct_receipt, 3.0)
+        _wait_for_fixture_path(descendant_receipt, 3.0)
+        direct_identity = _read_fixture_identity(direct_receipt)
+        descendant = _read_fixture_identity(descendant_receipt)
+        assert direct_identity is not None
+        assert descendant is not None
+        assert direct_identity[0] == direct_process.pid
+        assert direct_identity[1] == direct_identity[0]
+        assert direct_identity[1] != wrapper_pgrp
+        assert direct_identity[2] != wrapper_sid
+        assert not aggregate_receipt.exists()
+
+        os.kill(direct_process.pid, signal.SIGTERM)
+        assert direct_process.wait(timeout=3.0) == 0
+        assert _fixture_process_is_running(descendant[0])
+        direct_receipt.unlink()
+        assert _read_fixture_identity(direct_receipt) is None
+    finally:
+        _cleanup_available_fixture_receipts(
+            (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp,
+            wrapper_sid=wrapper_sid,
+        )
+        if direct_process is not None and direct_process.poll() is None:
+            direct_process.terminate()
+            try:
+                direct_process.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                direct_process.kill()
+                try:
+                    direct_process.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    pass
+
+    assert descendant is not None
+    assert not _fixture_process_is_running(descendant[0])
 
 
 def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> None:
