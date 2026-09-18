@@ -782,6 +782,37 @@ bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이�
 이 도구는 리뷰 승인이나 읽기 coverage 증거를 제공하지 않습니다.
 [공식 훅 계약](https://antigravity.google/docs/hooks)을 참고하세요.
 
+## Google CLI 메타데이터 스냅샷
+
+`python3 bin/google_diagnostics.py --cli agy` 또는 `--cli gemini`를 실행하면
+JSON 스냅샷 하나를 출력합니다. 프롬프트나 추론 호출 없이 `--version`, `--help`
+순서로 조회합니다. 실행한 조회가 모두 끝나면 종료 코드 0, 처리된 선택·호스트·조회
+실패는 1입니다. 지원하지 않는 기능은 관찰 결과이며 실패가 아닙니다. 이 독립 도구는
+wrapper나 리뷰 승인에 영향을 주지 않습니다.
+
+`--inventory`를 추가하면 루트와 하위 명령 도움말을 확인한 뒤 지원되는
+`agy models`, `agy plugin list`, `gemini extensions list`만 조회합니다.
+별칭을 추측하거나 설치·업데이트·인증 명령을 실행하지 않습니다. 고정된 조회 인수,
+상태, 종료 코드, stdout 바이트 수·SHA-256, 제한된 버전·지원 여부만 기록합니다.
+인식한 탭 구분 AGY 목록은 중복 없는 모델 slug 최대 128개, 각 ASCII 128자까지
+반영합니다. 비어 있거나 형식을 알 수 없거나 상한을 넘으면 해시를 보존하고
+`model_format: unrecognized`, 빈 slug 목록을 반환합니다. 플러그인·확장 출력은
+해시로만 표현하며 비공개 이름·경로, stdout/stderr 원문, 환경 덤프를 출력하지 않습니다.
+
+기존 실행 파일 선택 규칙을 유지합니다. 유효한 고정 경로를 우선하며, 엄격 모드가
+아니면 누락·무효 고정 경로에서 PATH로 대체할 수 있습니다. 엄격 모드는 대체를
+거부합니다. 상대 PATH의 선택 결과는 선택 시점 cwd를 기준으로 고정해 중립 디렉터리에서도
+같은 실행 파일을 사용합니다. stdin을 닫고 도구 소유의 중립 임시 cwd 및 기존 주입·Google 환경 선택자
+제거 함수를 사용합니다. 각 조회는 5초 기한과 제한된 프로세스 정리 유예를 가지므로
+전체 실행이 정확히 5초 안에 끝난다는 보장은 아닙니다. 실패하면 후속 조회를 멈춥니다.
+기준선·이력을 저장하지 않아 자동 변경 판정을 제공하지 않습니다. Vendor CLI 자체의
+캐시·텔레메트리는 발생할 수 있으며, OS 격리나 실제 설치 환경의 부작용 검증은 아닙니다.
+
+공식 명령 근거: [AGY 모델](https://antigravity.google/docs/cli/headless/),
+[AGY 플러그인](https://antigravity.google/docs/plugins?tab=cli),
+[Gemini 확장](https://geminicli.com/docs/extensions/). 실제 도움말로 지원 여부를
+판단하며, 가짜 CLI 테스트는 실제 추론 없이 이 도구의 동작을 검증합니다.
+
 ## 참고
 
 - 위에서 공개한 승인된 내부 AGY flag, 일시적 AGY global-settings transaction,

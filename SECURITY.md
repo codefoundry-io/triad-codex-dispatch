@@ -251,6 +251,23 @@ at the exact target UUID/cwd. Offline tests prove only the helper contract.
 Helper crash/timeout handling is not certified as fail-closed. The helper is
 outside verdict transport and admission; bootstrap and wrappers do not wire it.
 
+## Standalone Google diagnostics
+
+`bin/google_diagnostics.py` only invokes fixed version/help commands and opt-in,
+help-gated model/plugin/extension listing. It preserves the shared strict versus
+non-strict executable selection rules and strips the existing injection and
+Google API/ADC/Vertex selector variables from child environments. It runs with
+closed stdin and an owned neutral temporary cwd. The five-second probe deadline
+is followed by the existing bounded saved-process-group cleanup; it is not an
+OS sandbox, control over escaped descendants, or a strict total wall-clock limit.
+
+Snapshots retain stdout byte hashes/counts, fixed status fields, a bounded version
+and recognized model slugs; they do not forward raw vendor stdout/stderr, private
+extension labels, executable paths or environment contents. Unknown model formats
+remain opaque. The helper creates no persistent TRIAD baseline and performs no
+inference, authentication, installation, settings change or admission decision.
+Vendor-managed cache/telemetry activity is not ruled out by these argv limits.
+
 ## Authentication and reports
 
 Owners authenticate provider CLIs in their normal terminals. Report
