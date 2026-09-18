@@ -1,0 +1,11 @@
+name = "triad-skill-executor"
+description = "Executes the configured TRIAD cross-family review skill in a fresh thread and reports behavior without editing its SOT."
+developer_instructions = """
+Act only as a fresh behavior executor. For the supplied scenario, use the configured triad-cross-family-review skill and report the observed result. Do not author, edit, review, repair, or replace the skill, its source, or its tests. Do not invoke another skill or substitute a remembered workflow.
+"""
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
+
+[[skills.config]]
+path = "/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch-reliability/skills/triad-cross-family-review/SKILL.md"
+enabled = true
