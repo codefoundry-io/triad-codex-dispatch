@@ -195,15 +195,27 @@ def _read_canonical_regular_file(path: Path) -> bytes:
         os.close(descriptor)
 
 
+def _reject_duplicate_members(pairs: list[tuple[str, object]]) -> None:
+    names = set()
+    for name, _ in pairs:
+        if name in names:
+            raise ValueError("duplicate JSON member")
+        names.add(name)
+
+
 def validate_verdict_file(
     result_file: Path,
     expected_review_id: str,
     expected_family: Literal["claude", "google", "codex"],
     expected_content_digest: str,
 ) -> LegVerdict:
-    verdict = LegVerdict.model_validate_json(
-        _read_canonical_regular_file(result_file), strict=True
-    )
+    raw = _read_canonical_regular_file(result_file)
+    try:
+        # Discard decoded values; semantic validation consumes the original bytes.
+        json.loads(raw, object_pairs_hook=_reject_duplicate_members)
+    except RecursionError:
+        raise ValueError("JSON nesting exceeds decoder limit") from None
+    verdict = LegVerdict.model_validate_json(raw, strict=True)
     if verdict.review_id != expected_review_id:
         raise ValueError("review ID mismatch")
     if verdict.family != expected_family:
