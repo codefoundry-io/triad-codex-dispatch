@@ -78,6 +78,41 @@ race. No new process registry, daemon, provider retry, or runtime dependency is
 needed. Planned net production delta is below 100 lines, novel core below 100,
 and one behavioral claim, within the S/M slice budget.
 
+## S2 behavior and implementation boundary
+
+**One behavioral claim:** an existing AGY terminal failure retains a bounded
+provider error summary in `extraction_error` without changing its classification,
+exit code, admission, or number of provider calls.
+
+Start S2 from S1 commit `46dab9f388ff0a3992a2889061aa2563b74d11c0` on the stacked
+branch `codex/triad-adoption-agy-diagnostics`. Preserve the unrelated dirty
+`AGENTS.md` and S1 bytes. The owner requested the next planned slice.
+
+The source already retains the last terminal result but constructs failure
+detail from stderr/status only. Accept `result.error` as a string or a JSON
+object containing string fields in priority order `message`, `error`, `detail`,
+`code`. Select the first field with a nonempty line; strip that line and retain
+at most 512 characters. Ignore unsupported types, nested values, and empty
+strings. Do not serialize arbitrary objects or copy response text.
+
+Append `; terminal_error=<summary>` only to the existing nonzero-vendor-exit or
+non-success-status failure detail. In the nonzero-exit path, classify the
+original stderr/status first, then append the summary. Existing classification
+may vary with stderr; S2 must not change it. Preserve timeout/missing-result
+handling and the formal post-completion permission-denial success exception.
+
+This is diagnostic data, not a new routing, retry, or admission signal. Existing
+audit redaction/capping and sensitive failure-run-log handling remain unchanged;
+the audit may truncate the combined field further. The 512-character bound
+applies to the newly selected provider text, not to existing stderr or the whole
+run log. Historical changelog entries and shared logging behavior are outside
+this slice. Nested error objects are defensive fixture compatibility, not a
+claim about Google's documented payload schema.
+
+Expected production net delta <50 lines, novel core <50, one behavioral claim.
+Use offline interpreter regressions and the existing formal/main integration
+tests; no provider call, settings change, new dependency, install, or merge.
+
 ## Retained contracts and excluded imports
 
 Keep Claude's native schema constants and local binding validation, AGY's exact
