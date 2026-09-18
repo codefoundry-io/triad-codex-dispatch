@@ -561,6 +561,13 @@ Honest boundaries, so you know where the toolkit stops:
   Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.
+- **Timeout cleanup is best effort, not containment.** On POSIX, a wrapper only
+  records a provider group when it is the new child's group and differs from the
+  wrapper's group. Timeout or interruption sends TERM, reaps the direct child,
+  then probes that saved group and sends KILL to surviving members. Unsupported
+  or unsafe group identity uses direct-process cleanup. A child that leaves the
+  captured group, including by starting a new session, is outside this guarantee;
+  OS identifier reuse remains a residual race, and this is not an OS sandbox.
 
 ## Update
 

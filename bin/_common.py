@@ -1224,31 +1224,48 @@ def _drain(stream, accum: list[str], passthrough) -> None:
         log(f"reader thread error: {e}")
 
 
-def _terminate_provider_process_group(proc, reason: str) -> None:
-    """Terminate and reap the exact provider process group for one wrapper."""
+def _terminate_provider_process_group(
+    proc, reason: str, provider_pgid: Optional[int] = None
+) -> None:
+    """Terminate and reap one saved provider process group or direct child."""
     log(f"{reason}; sending SIGTERM")
     try:
-        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        if provider_pgid is not None:
+            os.killpg(provider_pgid, signal.SIGTERM)
         else:
             proc.terminate()
     except (ProcessLookupError, PermissionError) as error:
         log(f"SIGTERM failed: {error}")
+    direct_child_unreaped = False
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
+        direct_child_unreaped = True
+
+    group_survives = False
+    if provider_pgid is not None:
+        try:
+            os.killpg(provider_pgid, 0)
+            group_survives = True
+        except ProcessLookupError:
+            pass
+        except PermissionError as error:
+            log(f"process-group liveness check failed: {error}")
+
+    if group_survives or (provider_pgid is None and direct_child_unreaped):
         log("SIGTERM ignored; sending SIGKILL")
         try:
-            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            if group_survives:
+                os.killpg(provider_pgid, signal.SIGKILL)
             else:
                 proc.kill()
         except (ProcessLookupError, PermissionError):
             pass
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            log("zombie: SIGKILL also unresponsive")
+
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        log("zombie: SIGKILL also unresponsive")
 
 
 def _run_once(
@@ -1303,6 +1320,15 @@ def _run_once(
             classification="unknown",
         )
 
+    provider_pgid: Optional[int] = None
+    if all(hasattr(os, name) for name in ("killpg", "getpgid", "getpgrp")):
+        try:
+            candidate_pgid = os.getpgid(proc.pid)
+            if candidate_pgid == proc.pid and candidate_pgid != os.getpgrp():
+                provider_pgid = candidate_pgid
+        except (AttributeError, OSError):
+            pass
+
     if stdin_text is not None and proc.stdin is not None:
         def _feed_stdin() -> None:
             try:
@@ -1333,9 +1359,11 @@ def _run_once(
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        _terminate_provider_process_group(proc, f"timeout after {timeout}s")
+        _terminate_provider_process_group(
+            proc, f"timeout after {timeout}s", provider_pgid
+        )
     except BaseException:
-        _terminate_provider_process_group(proc, "wrapper interrupted")
+        _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
         t_out.join(timeout=2)
         t_err.join(timeout=2)
         raise

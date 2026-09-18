@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -170,9 +171,188 @@ def _formal_gemini_help() -> str:
     )
 
 
+_POSIX_PROCESS_GROUPS = all(
+    hasattr(os, name) for name in ("setsid", "getpgid", "getsid", "killpg")
+)
+
+
+def _fixture_process_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    if sys.platform.startswith("linux"):
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        if state.rsplit(") ", 1)[-1].split(maxsplit=1)[0] == "Z":
+            return False
+    return True
+
+
+def _wait_for_fixture_path(path: Path, timeout_s: float) -> None:
+    deadline = time.monotonic() + timeout_s
+    while not path.exists():
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"fixture did not publish {path.name}")
+        time.sleep(0.02)
+
+
+def _wait_for_fixture_exit(pid: int, timeout_s: float) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while _fixture_process_is_running(pid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
+def _cleanup_recorded_fixture_process(
+    pid: int,
+    *,
+    expected_pgrp: int,
+    expected_sid: int,
+    wrapper_pgrp: int,
+    wrapper_sid: int,
+) -> None:
+    if not _fixture_process_is_running(pid):
+        return
+    try:
+        actual_pgrp = os.getpgid(pid)
+        actual_sid = os.getsid(pid)
+    except ProcessLookupError:
+        return
+    assert actual_pgrp == expected_pgrp
+    assert actual_sid == expected_sid
+    assert actual_pgrp != wrapper_pgrp
+    assert actual_sid != wrapper_sid
+    os.kill(pid, signal.SIGKILL)
+    assert _wait_for_fixture_exit(pid, 3.0)
+
+
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS,
+    reason="requires POSIX process-group APIs",
+)
+def test_run_once_timeout_kills_provider_descendant_after_direct_exit(
+    tmp_path: Path,
+) -> None:
+    fixture_script = tmp_path / "provider_fixture.py"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    fixture_script.write_text(
+        """\
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+
+role = sys.argv[1]
+state_dir = Path(sys.argv[2])
+
+
+def write_receipt(path, payload):
+    path.write_text(json.dumps(payload, sort_keys=True) + "\\n", encoding="utf-8")
+
+
+if role == "descendant":
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    write_receipt(
+        state_dir / "descendant-ready.json",
+        {"pid": os.getpid(), "pgrp": os.getpgrp(), "sid": os.getsid(0)},
+    )
+    while True:
+        time.sleep(0.05)
+
+if role == "direct":
+    term_log = state_dir / "direct-term.log"
+
+    def exit_on_term(_signum, _frame):
+        term_log.write_text("direct-child-received-SIGTERM\\n", encoding="utf-8")
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, exit_on_term)
+    subprocess.Popen(
+        [sys.executable, __file__, "descendant", str(state_dir)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + 3.0
+    descendant_receipt = state_dir / "descendant-ready.json"
+    while not descendant_receipt.exists():
+        if time.monotonic() >= deadline:
+            raise SystemExit("descendant did not become ready")
+        time.sleep(0.02)
+    write_receipt(
+        state_dir / "fixture-ready.json",
+        {
+            "direct": {"pid": os.getpid(), "pgrp": os.getpgrp(), "sid": os.getsid(0)},
+            "descendant": json.loads(descendant_receipt.read_text(encoding="utf-8")),
+        },
+    )
+    while True:
+        time.sleep(0.05)
+
+raise SystemExit(f"unknown fixture role: {role}")
+""",
+        encoding="utf-8",
+    )
+    ready_path = state_dir / "fixture-ready.json"
+    term_log = state_dir / "direct-term.log"
+    recorded: list[tuple[int, int, int]] = []
+    wrapper_pgrp = os.getpgrp()
+    wrapper_sid = os.getsid(0)
+
+    try:
+        result = _common._run_once(
+            "fixture",
+            [sys.executable, str(fixture_script), "direct", str(state_dir)],
+            None,
+            timeout=1,
+            classify_and_log=False,
+        )
+        _wait_for_fixture_path(ready_path, 1.0)
+        fixture = json.loads(ready_path.read_text(encoding="utf-8"))
+        direct = fixture["direct"]
+        descendant = fixture["descendant"]
+        recorded = [
+            (int(direct["pid"]), int(direct["pgrp"]), int(direct["sid"])),
+            (
+                int(descendant["pid"]),
+                int(descendant["pgrp"]),
+                int(descendant["sid"]),
+            ),
+        ]
+
+        assert result.exit_code == _common.EXIT_TIMEOUT
+        assert term_log.read_text(encoding="utf-8") == "direct-child-received-SIGTERM\n"
+        assert direct["pgrp"] == direct["pid"]
+        assert descendant["pgrp"] == direct["pgrp"]
+        assert descendant["sid"] == direct["sid"]
+        assert _wait_for_fixture_exit(int(descendant["pid"]), 3.0)
+    finally:
+        for pid, expected_pgrp, expected_sid in recorded:
+            _cleanup_recorded_fixture_process(
+                pid,
+                expected_pgrp=expected_pgrp,
+                expected_sid=expected_sid,
+                wrapper_pgrp=wrapper_pgrp,
+                wrapper_sid=wrapper_sid,
+            )
+
+
 def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> None:
     interruption = KeyboardInterrupt("cancel invalid round")
     signals: list[tuple[int, int]] = []
+    getpgid_calls: list[int] = []
 
     class InterruptingProcess:
         pid = 4242
@@ -193,15 +373,114 @@ def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> No
 
     process = InterruptingProcess()
     monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: process)
-    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(
+        os,
+        "getpgid",
+        lambda pid: getpgid_calls.append(pid) or pid,
+    )
+    monkeypatch.setattr(os, "getpgrp", lambda: 7)
     monkeypatch.setattr(os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
 
     with pytest.raises(KeyboardInterrupt) as caught:
         _common._run_once("claude", ["claude", "-p", "review"], None, 60)
 
     assert caught.value is interruption
-    assert signals == [(process.pid, signal.SIGTERM)]
-    assert process.wait_calls == [60, 5]
+    assert getpgid_calls == [process.pid]
+    assert signals == [
+        (process.pid, signal.SIGTERM),
+        (process.pid, 0),
+        (process.pid, signal.SIGKILL),
+    ]
+    assert process.wait_calls == [60, 5, 5]
+
+
+def test_run_once_uses_direct_fallback_for_an_unsafe_child_process_group(
+    monkeypatch,
+) -> None:
+    group_signals: list[tuple[int, int]] = []
+
+    class TimeoutProcess:
+        pid = 4242
+        stdin = None
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = None
+
+        def __init__(self) -> None:
+            self.terminate_calls = 0
+            self.kill_calls = 0
+            self.wait_calls: list[int] = []
+
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+
+        def kill(self) -> None:
+            self.kill_calls += 1
+
+        def wait(self, timeout: int) -> int:
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise subprocess.TimeoutExpired("fixture", timeout)
+            self.returncode = -signal.SIGTERM
+            return self.returncode
+
+    process = TimeoutProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: process)
+    monkeypatch.setattr(os, "getpgid", lambda _pid: process.pid)
+    monkeypatch.setattr(os, "getpgrp", lambda: process.pid)
+    monkeypatch.setattr(
+        os,
+        "killpg",
+        lambda pgid, sig: group_signals.append((pgid, sig)),
+    )
+
+    result = _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+
+    assert result.exit_code == _common.EXIT_TIMEOUT
+    assert group_signals == []
+    assert process.terminate_calls == 1
+    assert process.kill_calls == 0
+    assert process.wait_calls == [60, 5, 5]
+
+
+def test_terminate_provider_process_group_fallback_kills_unreaped_child(
+    monkeypatch,
+) -> None:
+    group_signals: list[tuple[int, int]] = []
+
+    class UnreapedProcess:
+        pid = 4242
+
+        def __init__(self) -> None:
+            self.terminate_calls = 0
+            self.kill_calls = 0
+            self.wait_calls: list[int] = []
+
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+
+        def kill(self) -> None:
+            self.kill_calls += 1
+
+        def wait(self, timeout: int) -> int:
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise subprocess.TimeoutExpired("fixture", timeout)
+            return -signal.SIGKILL
+
+    process = UnreapedProcess()
+    monkeypatch.setattr(
+        os,
+        "killpg",
+        lambda pgid, sig: group_signals.append((pgid, sig)),
+    )
+
+    _common._terminate_provider_process_group(process, "fixture", None)
+
+    assert group_signals == []
+    assert process.terminate_calls == 1
+    assert process.kill_calls == 1
+    assert process.wait_calls == [5, 5]
 
 
 def test_packaged_leg_verdict_loads_under_hardened_wrapper(monkeypatch) -> None:

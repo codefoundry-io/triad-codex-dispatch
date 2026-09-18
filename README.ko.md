@@ -654,6 +654,14 @@ Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocatio
 cleanup합니다. Antigravity는 `--preflight-only` 전에도 cleanup합니다. Cleanup error는
 dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니다.
 
+- **Timeout cleanup은 best effort이며 containment가 아닙니다.** POSIX에서 wrapper는
+  새 child의 group이고 wrapper group과 다른 경우에만 provider group을 기록합니다.
+  Timeout 또는 interruption은 TERM을 보내고 direct child를 reap한 뒤, 저장한 group을
+  probe하여 살아 있는 member에게 KILL을 보냅니다. 지원하지 않거나 안전하지 않은 group
+  identity에서는 direct-process cleanup을 사용합니다. captured group을 벗어난 child
+  (새 session 시작 포함)는 이 보장의 범위 밖이며 OS identifier reuse race도 남습니다.
+  이것은 OS sandbox가 아닙니다.
+
 ## 보안 (Security)
 
 지속적인 control은 explicit data authorization, pinned executable,

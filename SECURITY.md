@@ -80,6 +80,14 @@ Wrappers build argv arrays, validate prompt and result paths, and pin the
 install-resolved provider executable and classifier paths. These are data and
 executable-custody controls, not provider or OS sandbox enforcement.
 
+Provider timeout cleanup is best-effort POSIX lifecycle hygiene, not OS
+containment. A wrapper targets a saved group only when it belonged to the new
+provider child and differed from the wrapper group; otherwise it terminates the
+direct process. After TERM and bounded direct-child reaping, it probes the saved
+group and sends KILL to surviving members. A child that leaves the captured
+group, including by starting a new session, is outside this guarantee, and OS
+identifier reuse remains a residual race.
+
 ## Repair boundary
 
 Vendor run logs are untrusted. Repair analysis uses a fresh native proposal-only
