@@ -743,6 +743,34 @@ native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙�
 생략하면 기존 전역 transaction을 사용합니다. 정확한 명령은
 [호출 계약](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project)을 따릅니다.
 
+## 선택적 AGY 훅 도구 (비활성)
+
+`bin/agy_hook.py`는 패키지에 포함된 PreToolUse 도구 이름 필터입니다.
+신뢰하는 toolkit 루트에서 다음 명령으로 비활성 설정을 출력할 수 있습니다.
+
+```sh
+python3 bin/agy_hook.py --render-config
+```
+
+항상 `enabled:false`와 shell quoting된 helper 절대 경로를 출력합니다.
+설정 파일 생성·설치·활성화나 wrapper/project 권한 변경은 하지 않으며,
+bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이스는 정확한
+이름 `view_file`, `grep_search`, `list_dir`, `find_by_name`, `search_web`,
+`read_url_content`에만 JSON `allow`를 반환합니다. 나머지 이름은 거부합니다.
+`toolCall.name` 문자열과 `toolCall.args` 객체가 필요합니다. 잘못된 UTF-8/JSON,
+중복 키, 객체·배열 64단계 초과 중첩(루트가 1단계), 1 MiB 초과 입력은
+원문을 반영하지 않는 짧은 deny JSON을
+반환합니다. 처리된 allow/deny 응답의 종료 코드는 0입니다.
+
+이름 필터는 경로·내용·네트워크 목적지 격리가 아닙니다. `allow`는 명시적 권한
+결정이며 중립적 통과가 아닙니다. 실제 훅 로딩, 정상 읽기, off-list 거부와 효과
+부재, 기존 deny 규칙 보존은 offline 테스트로 입증되지 않았습니다. 활성화 전에
+정확한 훅 경로·설정과 기존 대상 UUID/cwd의 사용 승인을 받고 해당 환경에서 각각
+검증해야 합니다. 증거가 없으면 비활성 상태를 유지합니다. helper crash/timeout에
+대한 provider의 권한 처리는 미검증이며, 종료 코드만으로 차단을 입증할 수 없습니다.
+이 도구는 리뷰 승인이나 읽기 coverage 증거를 제공하지 않습니다.
+[공식 훅 계약](https://antigravity.google/docs/hooks)을 참고하세요.
+
 ## 참고
 
 - 위에서 공개한 승인된 내부 AGY flag, 일시적 AGY global-settings transaction,

@@ -225,6 +225,22 @@ Commit, push, install/update, merge, tag, release, publication, and every new
 provider/data boundary require their own owner authorization. Native permission
 success is not workflow authority.
 
+## Disabled AGY hook helper
+
+The packaged `bin/agy_hook.py` only evaluates a fixed tool-name allowlist and
+prints decisions or an always-disabled configuration. It never executes the
+requested action, follows payload paths, records input, or installs policy.
+Its bounded JSON adapter rejects malformed, duplicate-member, oversized and
+over-64-container-depth input (root counts as one); a name allowance is not
+path/content/egress containment.
+
+The explicit `allow` decision may interact with existing permissions. Do not
+enable the helper without separate authorized live proof of discovery, normal
+reads, off-list denial without effects, and preservation of existing deny rules
+at the exact target UUID/cwd. Offline tests prove only the helper contract.
+Helper crash/timeout handling is not certified as fail-closed. The helper is
+outside verdict transport and admission; bootstrap and wrappers do not wire it.
+
 ## Authentication and reports
 
 Owners authenticate provider CLIs in their normal terminals. Report

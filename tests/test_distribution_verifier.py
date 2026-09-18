@@ -27,6 +27,7 @@ EXPECTED_HASH_TARGETS = (
     "skills/triad-gemini-dispatch/agents/openai.yaml",
     "bin/_common.py",
     "bin/_agy_settings.py",
+    "bin/agy_hook.py",
     "bin/antigravity_wrapper.py",
     "bin/claude_wrapper.py",
     "bin/gemini_wrapper.py",
