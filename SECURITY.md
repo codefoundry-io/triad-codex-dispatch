@@ -105,6 +105,16 @@ shares existing private audit retention and is excluded from failure/repair IPC;
 it does not attest the provider's later cwd or read coverage. No environment dump
 is added. Existing unredacted streams and human stderr remain sensitive.
 
+AGY plan-mode `agy_read_telemetry` counts observed DONE view_file tool events,
+including repeated or failed reads. It projects only up to 128 unique relative
+paths (1024 valid-UTF-8 characters each) currently resolving inside that captured
+cwd; malformed/relative/`..`-containing/outside/symlink-escaping paths are omitted.
+It retains no tool output, error, unrelated argument or provider identifier. Redacted/hardened
+audit retains only the count. The projection cannot change a verdict and is
+excluded from result and failure/repair IPC. It is neither coverage/permission
+proof nor historical filesystem attestation; existing raw-stream custody and
+private audit retention remain unchanged.
+
 Claude's optional audit `claude_receipt` projects only validated session/model
 identifiers, bounded numeric usage/cost estimates, and an array-length denial
 count (omitted above 1,000,000). It never copies tool arguments, denial objects,

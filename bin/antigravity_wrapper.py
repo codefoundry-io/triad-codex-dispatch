@@ -164,6 +164,42 @@ def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | 
     return events, terminal
 
 
+def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) -> dict | None:
+    """Bounded diagnostics from observed events, never evidence of read coverage."""
+    try:
+        if not isinstance(cwd, str) or not Path(cwd).is_absolute():
+            return None
+        cwd.encode("utf-8")
+        root = Path(cwd).resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    count = 0
+    paths: list[str] = []
+    for event in events:
+        step = event.get("step_update")
+        if (event.get("event") != "step_update" or not isinstance(step, dict)
+                or step.get("state") != "DONE" or step.get("step_type") != "tool"
+                or step.get("tool_name") != "view_file"):
+            continue
+        count += 1
+        info = step.get("tool_info")
+        params = info.get("parameters") if isinstance(info, dict) else None
+        raw = params.get("AbsolutePath") if isinstance(params, dict) else None
+        if not isinstance(raw, str) or len(paths) >= 128:
+            continue
+        try:
+            path = Path(raw)
+            if not path.is_absolute() or ".." in path.parts:
+                continue
+            relative = path.resolve(strict=False).relative_to(root).as_posix()
+            relative.encode("utf-8")
+            if len(relative) <= 1024 and relative not in paths:
+                paths.append(relative)
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return {"done_view_file_event_count": count, "relative_paths": paths} if count else None
+
+
 def _terminal_error_suffix(result: dict[str, Any] | None) -> str:
     error = result.get("error") if result is not None else None
     if isinstance(error, str):
@@ -211,6 +247,8 @@ def _interpret_run(
     """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
     events, result = parse_agy_stream(run.stdout)
+    if plan_mode:
+        run._agy_read_telemetry = _project_agy_done_view_files(events, run._effective_cwd)
     exposed_model = None
     route_conflict = None
     for event in events:
