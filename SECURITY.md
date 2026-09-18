@@ -258,6 +258,16 @@ off-list tools remain denied. Include oversized-input stdin-write/broken-pipe
 and helper process-failure outcomes in the live proof; a local deny response
 does not by itself establish the provider's enforcement.
 
+## Raw verdict-file member validation
+
+The canonical regular-file reader still reads once. `validate_verdict_file`
+rejects duplicate decoded member names at any object level before passing the
+same raw bytes to strict schema and identity validation. Duplicate errors do
+not reflect names or values; decoder recursion failure follows the existing
+invalid-result CLI path. This lexical guard cannot detect duplicates removed by
+earlier wrapper deserialization. It introduces no provider re-ask, permission
+change, or broader transport/admission guarantee.
+
 ## Standalone Google diagnostics
 
 `bin/google_diagnostics.py` only invokes fixed version/help commands and opt-in,

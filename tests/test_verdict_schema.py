@@ -253,3 +253,59 @@ def test_cli_schema_and_validation(tmp_path):
     )
     assert validated.returncode == 0
     assert json.loads(validated.stdout)["family"] == "claude"
+
+
+def _duplicate_raw_verdicts():
+    raw = json.dumps(VALID)
+    yield raw.replace('"verdict": "SAFE"', '"verdict": "NOT-SAFE", "verdict": "SAFE"')
+    yield raw.replace('"family": "claude"', '"family": "claude", "family": "claude"')
+    yield raw.replace('"verdict": "SAFE"', r'"verdict": "NOT-SAFE", "verd\u0069ct": "SAFE"')
+    finding = {
+        "severity": "Minor", "path": "src/parser.py", "line": 7,
+        "trigger": "a repeated member is read", "evidence": "last value hides the first",
+        "correction": "reject duplicate members",
+    }
+    nested = json.dumps({**VALID, "findings": [finding]})
+    yield nested.replace('"severity": "Minor"', '"severity": "Major", "severity": "Minor"')
+
+
+@pytest.mark.parametrize("raw", list(_duplicate_raw_verdicts()), ids=[
+    "conflicting-verdict", "identical-family", "escaped-equivalent", "nested-severity",
+])
+def test_raw_file_rejects_duplicate_members_before_semantic_validation(tmp_path, raw):
+    # Last-value semantics alone would accept every fixture as a valid SAFE result.
+    assert LegVerdict.model_validate_json(raw, strict=True).verdict == "SAFE"
+    result = tmp_path / "duplicate.json"
+    result.write_text(raw, encoding="utf-8")
+    with pytest.raises(ValueError, match="^duplicate JSON member$"):
+        validate_verdict_file(result.resolve(), "review-r1", "claude", "a" * 64)
+
+
+def test_raw_file_duplicate_cli_refuses_without_reflecting_member(tmp_path):
+    result = tmp_path / "duplicate.json"
+    result.write_text(next(_duplicate_raw_verdicts()), encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(BIN / "verdict_schema.py"), "validate", "--result-file",
+         str(result.resolve()), "--expected-review-id", "review-r1", "--expected-family",
+         "claude", "--expected-content-digest", "a" * 64],
+        text=True, capture_output=True, check=False,
+    )
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr == "invalid LegVerdict: duplicate JSON member\n"
+
+
+@pytest.mark.parametrize("raw", ['{"review_id":', '[' * 2000 + '0' + ']' * 2000],
+                         ids=["malformed", "deep"])
+def test_raw_file_malformed_or_deep_input_remains_invalid(tmp_path, raw):
+    result = tmp_path / "invalid.json"
+    result.write_text(raw, encoding="utf-8")
+    with pytest.raises(ValueError):
+        validate_verdict_file(result.resolve(), "review-r1", "claude", "a" * 64)
+
+
+def test_raw_file_unique_members_preserve_valid_verdict(tmp_path):
+    result = tmp_path / "valid.json"
+    result.write_text(json.dumps(VALID), encoding="utf-8")
+    verdict = validate_verdict_file(result.resolve(), "review-r1", "claude", "a" * 64)
+    assert verdict.model_dump() == VALID

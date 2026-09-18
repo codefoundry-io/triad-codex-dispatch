@@ -845,6 +845,19 @@ that a complete review finishes while off-list tools remain denied. Also verify
 oversized-input stdin-write/broken-pipe and helper process-failure outcomes;
 emitting deny JSON alone does not establish that the provider enforces it.
 
+## Raw verdict-file validation
+
+`bin/verdict_schema.py validate --result-file` and `validate_verdict_file()`
+reject repeated JSON member names, including identical, nested and
+escaped-equivalent names. The secured file is read once; a lexical scan and the
+existing strict semantic and review/family/digest checks use those same bytes.
+Duplicate input exits 2 with the fixed error `duplicate JSON member`, without
+reflecting the key or value. Unique valid verdicts keep their existing output.
+
+This guard covers raw result-file validation. It cannot recover duplicates
+already collapsed by a provider wrapper's earlier JSON decoding/reserialization.
+It adds no provider call, repair/retry, schema field or review-composition change.
+
 ## Google CLI metadata snapshot
 
 Run `python3 bin/google_diagnostics.py --cli agy` (or `--cli gemini`) to print

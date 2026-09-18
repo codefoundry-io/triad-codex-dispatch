@@ -791,6 +791,18 @@ bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이�
 완료되는지 입증해야 합니다. 초과 입력의 stdin 쓰기·broken pipe 및 helper 프로세스
 실패 결과도 확인해야 하며, deny JSON 출력만으로 provider의 차단을 증명하지 않습니다.
 
+## 원본 판정 파일 검증
+
+`bin/verdict_schema.py validate --result-file`과 `validate_verdict_file()`은
+값이 같거나 중첩된 중복 JSON 키와, 이스케이프 표기만 다른 동일 키도 거부합니다.
+검증된 파일을 한 번 읽고 같은 원본 바이트에 중복 검사와 기존 strict semantic 및
+review/family/digest 검증을 적용합니다. 중복 입력은 키·값을 반영하지 않는 고정 오류
+`duplicate JSON member`와 종료 코드 2를 반환합니다. 정상 판정의 출력은 유지합니다.
+
+이 검사는 원본 result-file 검증에 적용됩니다. provider wrapper가 앞서 JSON을
+디코딩·재직렬화하면서 이미 없앤 중복은 복원할 수 없습니다. provider 호출,
+repair/retry, schema field나 리뷰 구성 변경을 추가하지 않습니다.
+
 ## Google CLI 메타데이터 스냅샷
 
 `python3 bin/google_diagnostics.py --cli agy` 또는 `--cli gemini`를 실행하면
