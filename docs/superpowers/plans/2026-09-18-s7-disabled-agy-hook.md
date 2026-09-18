@@ -27,7 +27,9 @@ shapes. Exact names `view_file`, `grep_search`, `list_dir`, `find_by_name`,
 whitespace/case normalization or input reflection. Paths and URLs are not opened.
 
 `handle(raw: bytes) -> dict[str, str]` accepts strict UTF-8 JSON <=1 MiB;
-malformed, deep, duplicate-member or invalid-shaped input returns deny. The CLI
+malformed, duplicate-member or invalid-shaped input returns deny. Reject more
+than 64 nested object/array containers across the payload, with root counting as
+one; parser recursion failures also deny. The CLI
 reads at most limit+1 bytes and prints one JSON response with exit 0 for handled
 decisions. Process crashes/timeouts have no claimed provider permission outcome.
 
@@ -45,7 +47,8 @@ proof at the exact existing UUID/cwd. Keep disabled without that proof.
 ## Task 1: JSON adapter and packaging
 
 - [ ] Write real subprocess tests for allowed/denied names, malformed/duplicate/
-  deep/oversize input, fixed non-reflecting output, no fixture writes, disabled
+  deep/oversize input (including valid on-list JSON at exact and exceeded depth/
+  byte limits), fixed non-reflecting output, no fixture writes, disabled
   renderer and shell-special path round-trip. Example acceptance:
 
   ```python

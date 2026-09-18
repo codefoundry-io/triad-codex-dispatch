@@ -809,8 +809,9 @@ project permissions. Bootstrap does not activate it. The normal stdin interface
 returns JSON `allow` only for exact names `view_file`, `grep_search`, `list_dir`,
 `find_by_name`, `search_web`, and `read_url_content`; all other names are denied.
 The documented `toolCall.name` string and `toolCall.args` object are required.
-Invalid UTF-8/JSON, duplicate members, excessive nesting, and input over 1 MiB
-return bounded deny JSON without echoing the input. Handled decisions exit 0.
+Invalid UTF-8/JSON, duplicate members, more than 64 nested object/array containers
+(root counts as one), and input over 1 MiB return bounded deny JSON without
+echoing the input. Handled decisions exit 0.
 
 This filters tool names, not paths, contents or network destinations. `allow` is
 an explicit permission decision, not a neutral continuation. Live hook loading,

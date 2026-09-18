@@ -758,7 +758,8 @@ bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이�
 이름 `view_file`, `grep_search`, `list_dir`, `find_by_name`, `search_web`,
 `read_url_content`에만 JSON `allow`를 반환합니다. 나머지 이름은 거부합니다.
 `toolCall.name` 문자열과 `toolCall.args` 객체가 필요합니다. 잘못된 UTF-8/JSON,
-중복 키, 과도한 중첩, 1 MiB 초과 입력은 원문을 반영하지 않는 짧은 deny JSON을
+중복 키, 객체·배열 64단계 초과 중첩(루트가 1단계), 1 MiB 초과 입력은
+원문을 반영하지 않는 짧은 deny JSON을
 반환합니다. 처리된 allow/deny 응답의 종료 코드는 0입니다.
 
 이름 필터는 경로·내용·네트워크 목적지 격리가 아닙니다. `allow`는 명시적 권한

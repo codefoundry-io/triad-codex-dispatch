@@ -96,3 +96,37 @@ def test_renderer_quotes_shell_special_script_path_without_executing_it(tmp_path
     command = config["triad-readonly-allowlist"]["PreToolUse"][0]["hooks"][0]["command"]
     assert shlex.split(command) == ["python3", str(path.resolve())]
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("kind", ["object", "array"])
+@pytest.mark.parametrize("depth, decision", [(64, "allow"), (65, "deny")])
+def test_valid_on_list_request_obeys_container_depth_limit(tmp_path, kind, depth, decision):
+    value = 0
+    for _ in range(depth - 3):
+        value = {"nested": value} if kind == "object" else [value]
+    raw = json.dumps({"toolCall": {"name": "view_file", "args": {"value": value}}}).encode()
+    result = _invoke(tmp_path, raw)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == decision
+
+
+def test_depth_limit_also_covers_other_payload_members(tmp_path):
+    value = 0
+    for _ in range(64):
+        value = [value]
+    raw = json.dumps({"toolCall": {"name": "view_file", "args": {}}, "extra": value}).encode()
+    result = _invoke(tmp_path, raw)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "deny"
+
+
+@pytest.mark.parametrize("size, decision", [(1024 * 1024, "allow"), (1024 * 1024 + 1, "deny")])
+def test_valid_on_list_request_obeys_byte_limit(tmp_path, size, decision):
+    prefix = b'{"toolCall":{"name":"view_file","args":{"pad":"'
+    suffix = b'"}}}'
+    raw = prefix + b"a" * (size - len(prefix) - len(suffix)) + suffix
+    assert len(raw) == size
+    result = _invoke(tmp_path, raw)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == decision
+    assert len(result.stdout) < 200

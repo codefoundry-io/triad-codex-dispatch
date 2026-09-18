@@ -230,8 +230,9 @@ success is not workflow authority.
 The packaged `bin/agy_hook.py` only evaluates a fixed tool-name allowlist and
 prints decisions or an always-disabled configuration. It never executes the
 requested action, follows payload paths, records input, or installs policy.
-Its bounded JSON adapter rejects malformed, duplicate-member and oversized
-input; a name allowance is not path/content/egress containment.
+Its bounded JSON adapter rejects malformed, duplicate-member, oversized and
+over-64-container-depth input (root counts as one); a name allowance is not
+path/content/egress containment.
 
 The explicit `allow` decision may interact with existing permissions. Do not
 enable the helper without separate authorized live proof of discovery, normal

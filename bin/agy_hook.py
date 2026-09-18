@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 MAX_INPUT_BYTES = 1024 * 1024
+MAX_CONTAINER_DEPTH = 64
 READ_TOOLS = frozenset({
     "view_file", "grep_search", "list_dir", "find_by_name",
     "search_web", "read_url_content",
@@ -43,12 +44,23 @@ def _reject_constant(value: str) -> None:
     raise ValueError("non-JSON numeric constant")
 
 
+def _within_depth(value: object, depth: int = 0) -> bool:
+    if not isinstance(value, (dict, list)):
+        return True
+    if depth >= MAX_CONTAINER_DEPTH:
+        return False
+    children = value.values() if isinstance(value, dict) else value
+    return all(_within_depth(child, depth + 1) for child in children)
+
+
 def handle(raw: bytes) -> dict[str, str]:
     if len(raw) > MAX_INPUT_BYTES:
         return decide(None)
     try:
         payload = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object,
                              parse_constant=_reject_constant)
+        if not _within_depth(payload):
+            return decide(None)
     except (ValueError, RecursionError):
         return decide(None)
     return decide(payload)
