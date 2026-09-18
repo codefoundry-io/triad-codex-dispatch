@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.554 — 2026-09-19
+
+- Terminates surviving members of a captured provider process group after timeout
+  or interruption, including when the direct child has already exited.
+- Sends Claude task text through stdin while retaining native structured output,
+  local binding validation and one-call behavior. Adds bounded sanitized provider
+  provenance and redactable effective launch-directory audit receipts.
+- Retains bounded AGY terminal-error details and observed-read diagnostics without
+  making either a new retry, coverage or admission signal.
+- Adds an opt-in exact clean-commit check for an existing review worktree and
+  standalone read-only Google CLI version/help/inventory diagnostics.
+- Packages an unactivated AGY tool-name allowlist helper and disabled configuration
+  renderer. Live activation still requires separate authorization and verification.
+- Rejects duplicate decoded member names in raw verdict files before strict
+  semantic and identity validation; earlier provider deserialization is outside
+  this lexical guard.
+- Adds boundary regressions and documents source-test, packaging and activation
+  limits. Preserves public review composition, provider permissions and schemas.
+
 ## 0.2.553 — 2026-09-07
 
 - Adds an explicit guarded-worktree Pro/Flash preflight pair for workspace

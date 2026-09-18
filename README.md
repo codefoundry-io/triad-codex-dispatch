@@ -240,6 +240,20 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.554
+
+0.2.554 adds bounded process-group cleanup, Claude stdin transport and sanitized
+audit receipts, AGY error/read diagnostics, an opt-in committed-input check,
+read-only Google CLI diagnostics, and raw verdict-file duplicate-member rejection.
+Review composition, provider permissions and the public verdict schema remain
+unchanged. Diagnostics do not supply review admission or coverage credit.
+
+The packaged AGY hook is disabled and bootstrap does not activate it. Follow the
+separate live-verification prerequisites before any authorized activation. The
+raw-file duplicate guard cannot recover members already collapsed by a provider
+wrapper. Reinstall the plugin and run the installed bootstrap to update launchers,
+then use a fresh Codex session to load the new plugin bytes.
+
 ### Upgrading to 0.2.553
 
 0.2.553 adds the explicit guarded-worktree Pro/Flash preflight pair described
@@ -406,7 +420,7 @@ not change the public three-family default, prepared-directory renderer, or
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.553-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.554-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

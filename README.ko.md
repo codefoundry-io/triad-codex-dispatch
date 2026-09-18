@@ -218,6 +218,18 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.554 업그레이드
+
+0.2.554는 제한된 process-group cleanup, Claude stdin 전달과 정제된 audit receipt,
+AGY 오류·읽기 진단, opt-in committed-input 검사, 읽기 전용 Google CLI 진단,
+raw verdict-file의 중복 member 거부를 추가합니다. review 구성, provider 권한과
+공개 verdict schema는 유지하며, 진단 결과에 admission·coverage 효력을 부여하지 않습니다.
+
+패키지의 AGY hook은 비활성 상태이며 bootstrap이 활성화하지 않습니다. 별도 승인을
+받아 활성화하기 전에 문서의 live 검증 요건을 충족해야 합니다. raw-file 중복 검사는
+provider wrapper가 이미 병합한 member를 복구할 수 없습니다. 플러그인을 재설치하고
+설치된 bootstrap으로 launcher를 갱신한 뒤 새 Codex 세션에서 새 바이트를 불러오세요.
+
 ### 0.2.553 업그레이드
 
 0.2.553은 아래에 설명한 guarded-worktree Pro/Flash preflight pair를 명시적으로
@@ -373,7 +385,7 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.553-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.554-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
