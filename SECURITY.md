@@ -92,6 +92,15 @@ identifier reuse remains a residual race.
 
 ## Repair boundary
 
+Claude's optional audit `claude_receipt` projects only validated session/model
+identifiers, bounded numeric usage/cost estimates, and an array-length denial
+count (omitted above 1,000,000). It never copies tool arguments, denial objects,
+answer text or arbitrary envelope fields into that receipt. Redacted audit mode
+omits the session and entire model map. This projection does not sanitize the
+existing unredacted streams or failure run logs; those remain sensitive under
+the existing retention policy. Receipt persistence is advisory and does not
+control classification, retries, model attestation or review admission.
+
 Vendor run logs are untrusted. Repair analysis uses a fresh native proposal-only
 child with prompt-controlled no-edit behavior. The child receives an absolute
 run-log path as data and returns only a proposal or escalation; it cannot apply

@@ -639,6 +639,18 @@ unredacted non-launcher path는 전체 stdout/stderr stream을 보존할 수 있
 failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor transcript를
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
+
+Claude audit에는 stdout preview와 별도로 `claude_receipt`가 남을 수 있습니다.
+검증된 session UUID, 전체 token 수, 최대 16개 model의 사용량(식별자는 최대
+128 ASCII 문자), 추정 USD 비용, permission denial 개수만 보존합니다.
+Token 수는 `2**53 - 1` 이하의 음이 아닌 정수, 비용은 USD 1,000,000 이하의
+유한한 값만 허용하고 잘못된 field는 생략합니다. Redacted mode에서는 session과
+전체 per-model map을 제외하고 aggregate 숫자만 보존합니다. 마지막 envelope를
+사용하며 tool 이름·인자와 denial 상세는 receipt에 넣지 않습니다. 기존 audit의
+권한과 보관 정책을 따릅니다. 보고된 model 목록은 실제 reviewer model의 증명이
+아니며 비용은 청구액이 아닌 [provider 추정치](https://code.claude.com/docs/en/headless)입니다.
+Receipt는 응답·재시도·종료 상태·admission에 영향을 주지 않습니다.
+
 AGY terminal failure는 `extraction_error`에 `terminal_error`를 덧붙일 수 있습니다.
 문자열 오류 또는 `message`, `error`, `detail`, `code` 순서에서 처음 찾은 유효한
 문자열의 첫 비어 있지 않은 줄을 최대 512자로 보존합니다. 진단 데이터이며

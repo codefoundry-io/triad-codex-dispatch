@@ -300,6 +300,8 @@ class RunResult:
     runtime_identity: Optional[str] = None
     # Private local transport state; intentionally excluded from audit/run-log schemas.
     _stdin_delivery_failed: bool = False
+    # Sanitized Claude audit evidence only; excluded from failure/repair IPC.
+    _claude_receipt: Optional[dict] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -1948,6 +1950,17 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
         "extraction_error": _redact_cap(result.extraction_error),
         "validation_error": _redact_cap(result.validation_error),
     }
+    if cli == "claude" and result._claude_receipt:
+        receipt = result._claude_receipt
+        if redact:
+            # Do not reintroduce stream-derived identifiers in redacted audits.
+            receipt = {
+                key: receipt[key]
+                for key in ("usage", "estimated_cost_usd", "permission_denial_count")
+                if key in receipt
+            }
+        if receipt:
+            rec["claude_receipt"] = receipt
     if redact:
         rec["stderr_len"] = len(result.stderr or "")
     if ok:

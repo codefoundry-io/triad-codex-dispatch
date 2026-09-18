@@ -39,6 +39,81 @@ FORMAL_CLAUDE_EFFORT = "xhigh"
 FORMAL_CLAUDE_TIMEOUT = 1200
 
 
+def _claude_receipt(stdout: str) -> dict | None:
+    """Project bounded, provider-reported metadata from the final envelope.
+
+    This is audit evidence, not model attestation, billing or a verdict input.
+    Invalid fields are omitted independently; no arbitrary provider text is copied.
+    """
+    raw = (stdout or "").strip()
+    # Match the ordinary answer extractor's supported fence normalization.
+    if raw.startswith("```"):
+        newline = raw.find("\n")
+        if newline != -1:
+            raw = raw[newline + 1:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        raw = raw.strip()
+    try:
+        envelope = json.loads(raw)
+    except (TypeError, ValueError, RecursionError):
+        return None
+    if not isinstance(envelope, dict):
+        return None
+
+    def usage(value: object, *, per_model: bool = False) -> dict:
+        if not isinstance(value, dict):
+            return {}
+        fields = (
+            ("input_tokens", "inputTokens"),
+            ("output_tokens", "outputTokens"),
+            ("cache_read_input_tokens", "cacheReadInputTokens"),
+            ("cache_creation_input_tokens", "cacheCreationInputTokens"),
+        )
+        selected = {}
+        for name, model_name in fields:
+            count = value.get(model_name if per_model else name)
+            if type(count) is int and 0 <= count <= 2**53 - 1:
+                selected[name] = count
+        return selected
+
+    def cost(value: object) -> bool:
+        # The bounded comparison also rejects NaN/infinity without converting
+        # potentially enormous JSON integers to float.
+        return type(value) in (int, float) and 0 <= value <= 1_000_000
+
+    receipt = {}
+    session = envelope.get("session_id")
+    if isinstance(session, str) and re.fullmatch(
+        r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", session
+    ):
+        receipt["session_id"] = session.lower()
+    totals = usage(envelope.get("usage"))
+    if totals:
+        receipt["usage"] = totals
+    models = envelope.get("modelUsage")
+    if isinstance(models, dict) and len(models) <= 16:
+        selected_models = {}
+        for name, values in models.items():
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", name) is None:
+                continue
+            if not isinstance(values, dict):
+                continue
+            selected = usage(values, per_model=True)
+            if cost(values.get("costUSD")):
+                selected["estimated_cost_usd"] = values["costUSD"]
+            if selected:
+                selected_models[name] = selected
+        if selected_models:
+            receipt["model_usage"] = selected_models
+    if cost(envelope.get("total_cost_usd")):
+        receipt["estimated_cost_usd"] = envelope["total_cost_usd"]
+    denials = envelope.get("permission_denials")
+    if isinstance(denials, list) and len(denials) <= 1_000_000:
+        receipt["permission_denial_count"] = len(denials)
+    return receipt or None
+
+
 def _run_native_structured_once(
     cmd: list[str],
     cwd: str,
@@ -322,6 +397,7 @@ def main() -> int:
             prompt_via_stdin=True,
         )
 
+    result._claude_receipt = _claude_receipt(result.stdout)
     audit_cmd = build_cmd(args.prompt, native_schema)
     persist_result_artifacts(
         "claude", sys.argv, audit_cmd, args.prompt, result, debug=args.debug

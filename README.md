@@ -690,6 +690,19 @@ non-launcher path may retain full stdout/stderr streams. Failure run logs keep
 full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
+
+Claude audit records may include `claude_receipt`, independently of the stdout
+preview: a validated session UUID, aggregate token counters, up to 16 reported
+model-usage entries with identifiers of at most 128 ASCII characters, estimated
+USD cost, and permission-denial count. Only nonnegative integer token counts up
+to `2**53 - 1` and finite costs up to USD 1,000,000 are retained; invalid fields
+are omitted. Redacted mode omits the session and entire per-model map, retaining
+only aggregate numeric metadata. The receipt uses the final envelope, excludes
+tool names/arguments and denial details, and shares existing audit permissions
+and retention. Reported models do not attest which model performed a review;
+cost is a [provider estimate](https://code.claude.com/docs/en/headless), not billing.
+Receipt data does not affect answers, retries, exit status or admission.
+
 AGY terminal failures may add `terminal_error` to `extraction_error`: the first
 nonempty line from a string error or the first usable string field among
 `message`, `error`, `detail`, and `code`, capped at 512 characters. This is
