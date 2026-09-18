@@ -2852,6 +2852,92 @@ def test_ordinary_index_supports_fingerprint_capture_verify_and_cli(
     assert completed.stdout.strip() == fingerprint
 
 
+def _committed_input_cli(worktree: Path, commit: str | None):
+    argv = [sys.executable, str(BIN / "review_round.py"),
+            "fingerprint-worktree", "--worktree", str(worktree)]
+    if commit is not None:
+        argv += ["--require-clean-head", commit]
+    return subprocess.run(argv, text=True, capture_output=True, check=False)
+
+
+def test_committed_input_detached_fixture_excludes_developer_changes(
+    worktree: Path, tmp_path: Path
+) -> None:
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    review = tmp_path.resolve() / "committed review 한글"
+    _git(worktree, "worktree", "add", "--detach", str(review), commit)
+    try:
+        (worktree / "source.py").write_text("DEVELOPER_DIRTY = True\n")
+        (worktree / "untracked.txt").write_text("developer-only\n")
+        before = _git(worktree, "status", "--porcelain=v1", "--untracked-files=all")
+        completed = _committed_input_cli(review, commit)
+        assert completed.returncode == 0, completed.stderr
+        assert completed.stdout.strip() == review_round._worktree_fingerprint(review)
+        assert (review / "source.py").read_text() == "VALUE = 1\n"
+        assert not (review / "untracked.txt").exists()
+        assert _git(review, "status", "--porcelain=v1") == ""
+        assert _git(worktree, "status", "--porcelain=v1", "--untracked-files=all") == before
+    finally:
+        _git(worktree, "worktree", "remove", str(review))
+    assert not review.exists()
+
+
+@pytest.mark.parametrize("kind", ["unstaged", "staged", "untracked"])
+def test_committed_input_rejects_dirty_but_preserves_default_mode(
+    worktree: Path, kind: str
+) -> None:
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    path = worktree / ("extra.py" if kind == "untracked" else "source.py")
+    path.write_text("CHANGED = True\n")
+    if kind == "staged":
+        _git(worktree, "add", "source.py")
+    before = _git(worktree, "status", "--porcelain=v1", "--untracked-files=all")
+    rejected = _committed_input_cli(worktree, commit)
+    assert rejected.returncode == 2
+    assert rejected.stdout == ""
+    assert "committed input requires a clean Git status" in rejected.stderr
+    default = _committed_input_cli(worktree, None)
+    assert default.returncode == 0, default.stderr
+    assert default.stdout.strip() == review_round._worktree_fingerprint(worktree)
+    assert _git(worktree, "status", "--porcelain=v1", "--untracked-files=all") == before
+    assert path.read_text() == "CHANGED = True\n"
+
+
+@pytest.mark.parametrize("commit", ["0" * 40, "HEAD", "abc", "A" * 40])
+def test_committed_input_rejects_wrong_or_nonliteral_head(worktree: Path, commit: str) -> None:
+    rejected = _committed_input_cli(worktree, commit)
+    assert rejected.returncode == 2
+    assert rejected.stdout == ""
+    assert "committed input" in rejected.stderr
+    assert _git(worktree, "status", "--porcelain=v1") == ""
+
+
+def test_committed_input_keeps_hidden_index_flag_refusal(worktree: Path) -> None:
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    _git(worktree, "update-index", "--assume-unchanged", "source.py")
+    rejected = _committed_input_cli(worktree, commit)
+    assert rejected.returncode == 2
+    assert rejected.stdout == ""
+    assert "worktree index flag refused" in rejected.stderr
+    assert _git(worktree, "ls-files", "-v").startswith("h ")
+
+
+def test_committed_input_rechecks_clean_state_after_fingerprinting(
+    worktree: Path, monkeypatch
+) -> None:
+    commit = _git(worktree, "rev-parse", "HEAD").strip()
+    original = review_round._git
+
+    def mutate_during_inspection(root, *args):
+        if args[:2] == ("diff", "--cached"):
+            (root / "source.py").write_text("CHANGED_DURING_INSPECTION = True\n")
+        return original(root, *args)
+
+    monkeypatch.setattr(review_round, "_git", mutate_during_inspection)
+    with pytest.raises(RoundIntegrityError, match="committed input requires a clean Git status"):
+        review_round._worktree_fingerprint(worktree, require_clean_head=commit)
+
+
 def test_worktree_prompt_preserves_leader_authored_review_points(
     worktree: Path, tmp_path: Path
 ) -> None:

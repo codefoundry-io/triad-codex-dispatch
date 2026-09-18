@@ -1252,8 +1252,19 @@ def _canonical_git_worktree(worktree: Path) -> Path:
     return root
 
 
-def _worktree_fingerprint(worktree: Path) -> str:
+def _require_clean_head(worktree: Path, commit: str) -> None:
+    if re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit) is None:
+        raise RoundIntegrityError("committed input requires a full lowercase commit ID")
+    if _git(worktree, "rev-parse", "HEAD").decode().strip() != commit:
+        raise RoundIntegrityError("committed input requires the exact requested HEAD")
+    if _git(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"):
+        raise RoundIntegrityError("committed input requires a clean Git status")
+
+
+def _worktree_fingerprint(worktree: Path, *, require_clean_head: str | None = None) -> str:
     root = _canonical_git_worktree(worktree)
+    if require_clean_head is not None:
+        _require_clean_head(root, require_clean_head)
 
     hasher = hashlib.sha256()
     _record(hasher, b"HEAD", _git(root, "rev-parse", "HEAD"))
@@ -1293,6 +1304,8 @@ def _worktree_fingerprint(worktree: Path) -> str:
             raise RoundIntegrityError(f"unsupported untracked entry: {relative}")
         payload = kind + b"\0" + raw_path + b"\0" + content_digest
         _record(hasher, b"UNTRACKED", payload)
+    if require_clean_head is not None:
+        _require_clean_head(root, require_clean_head)
     return hasher.hexdigest()
 
 
@@ -2010,6 +2023,10 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--snapshot", type=Path, required=True)
     fingerprint_worktree = commands.add_parser("fingerprint-worktree")
     fingerprint_worktree.add_argument("--worktree", type=Path, required=True)
+    fingerprint_worktree.add_argument(
+        "--require-clean-head",
+        help="Require this full commit ID and clean Git status before/after inspection",
+    )
     select_google = commands.add_parser("select-google-route")
     select_google.add_argument(
         "--authentication-class",
@@ -2099,7 +2116,9 @@ def main(argv: list[str] | None = None) -> int:
             print("ROUND_INTEGRITY_OK", flush=True)
             _refresh_lifecycle_activity(Path(snapshot.prepared_dir))
         elif arguments.command == "fingerprint-worktree":
-            print(_worktree_fingerprint(arguments.worktree), flush=True)
+            print(_worktree_fingerprint(
+                arguments.worktree, require_clean_head=arguments.require_clean_head
+            ), flush=True)
         elif arguments.command == "select-google-route":
             receipt = select_google_route(
                 arguments.authentication_class, arguments.review_id

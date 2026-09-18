@@ -92,6 +92,13 @@ identifier reuse remains a residual race.
 
 ## Repair boundary
 
+The optional `fingerprint-worktree --require-clean-head` check constrains an
+existing checkout's HEAD and Git-visible clean state at setup time. It neither
+creates isolation nor changes reviewer permissions or AGY root binding. Ignored
+files remain outside the claim; shared Git metadata and later mutations still
+require normal review custody and final integrity verification. Never use a
+different checkout to bypass protected changes in a governing worktree.
+
 The optional audit `effective_cwd` records the host-resolved launch directory
 only after a child starts. Hardened/redacted mode masks the entire path. It
 shares existing private audit retention and is excluded from failure/repair IPC;

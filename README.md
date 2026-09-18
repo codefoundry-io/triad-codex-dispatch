@@ -679,6 +679,33 @@ live `codex plugin list --json` output.
 
 After editing custom-agent TOML files, start a new Codex session.
 
+## Optional committed-input setup check
+
+For a review explicitly limited to a known commit, the caller can supply an
+existing review worktree and check it before creating custody files:
+
+```bash
+python3 "$TRIAD_TOOLKIT/bin/review_round.py" fingerprint-worktree \
+  --worktree "$REVIEW_WORKTREE" --require-clean-head "$REVIEW_COMMIT"
+```
+
+Set `TRIAD_TOOLKIT` and `REVIEW_WORKTREE` to canonical absolute roots and
+`REVIEW_COMMIT` to the approved full lowercase commit ID. The option requires
+that exact HEAD and a clean Git status before and after inspection, retaining
+existing hidden-index/sparse-checkout refusal. It only inspects the supplied
+checkout; it creates no worktree or provider project. Omitting the option keeps
+the normal dirty-worktree review mode.
+
+After preparing custody, capture the normal review fingerprint again and follow
+the existing render and post-review integrity steps. This setup check grants no
+admission and is not a substitute for them. Git-ignored files are outside its
+clean-state claim and must remain outside reviewer inputs; shared Git metadata
+and subsequent mutation are not isolated. An AGY reviewer still needs an already
+provisioned UUID bound to exactly this cwd and the existing read-only guard.
+Do not rebind another project's UUID or use global-settings fallback to make a
+new checkout work. Repository rules may continue to require the original
+guarded worktree, including its intentional dirty changes.
+
 ## Runtime Logs And Local Data
 
 Runtime telemetry is local under the installed plugin's `bin/_logs/<cli>/`.

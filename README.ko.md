@@ -628,6 +628,30 @@ cleanup까지 남아 있습니다.
 
 custom-agent TOML을 바꾼 뒤에는 새 Codex session을 시작하세요.
 
+## 선택: 커밋 전용 입력의 사전 확인
+
+특정 커밋만 리뷰하기로 명시한 경우, 사용자가 제공한 기존 review worktree를
+custody 파일 생성 전에 확인할 수 있습니다.
+
+```bash
+python3 "$TRIAD_TOOLKIT/bin/review_round.py" fingerprint-worktree \
+  --worktree "$REVIEW_WORKTREE" --require-clean-head "$REVIEW_COMMIT"
+```
+
+`TRIAD_TOOLKIT`과 `REVIEW_WORKTREE`는 canonical absolute root,
+`REVIEW_COMMIT`은 승인된 전체 소문자 commit ID로 지정합니다. 검사 전후 HEAD가
+정확히 일치하고 Git status가 깨끗해야 하며, 기존 hidden index flag와 sparse
+checkout 거부도 유지합니다. Worktree나 provider project를 생성하지 않습니다.
+옵션을 생략하면 기존 dirty-worktree 리뷰 방식을 그대로 사용합니다.
+
+Custody 준비 후에는 정상 리뷰 fingerprint를 다시 계산하고 기존 render 및
+post-review integrity 절차를 따릅니다. 이 사전 검사는 admission을 부여하거나
+해당 절차를 대체하지 않습니다. Git-ignored 파일은 clean-state 주장에 포함되지
+않으며 리뷰 입력에서 제외해야 합니다. 공유 Git metadata나 이후 변경을 격리하지
+않습니다. AGY에는 이 cwd에 정확히 연결된 기존 UUID와 read-only guard가 필요합니다.
+다른 프로젝트 UUID를 재연결하거나 global-settings fallback을 사용하지 마세요.
+저장소 지침이 기존 guarded worktree를 요구한다면 의도된 dirty 변경도 보존합니다.
+
 ## Runtime Log 및 Local Data
 
 Runtime telemetry는 설치된 plugin의 `bin/_logs/<cli>/` 아래에 local artifact로
