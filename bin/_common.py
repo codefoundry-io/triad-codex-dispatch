@@ -298,6 +298,8 @@ class RunResult:
     dispatch_phase: Optional[str] = None
     # Provider-exposed runtime identity, or ``unexposed`` when the route omits it.
     runtime_identity: Optional[str] = None
+    # Private local transport state; intentionally excluded from audit/run-log schemas.
+    _stdin_delivery_failed: bool = False
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -1281,16 +1283,30 @@ def _run_once(
 
     stdout = capture-only (structured JSON/JSONL — not for human stream).
     stderr = mirror to parent stderr (human progress visibility).
-    stdin_text: when provided, feed via a daemon writer thread so a large
-    prompt cannot deadlock against a full OS pipe before the child starts
-    reading. When None (default), stdin is DEVNULL (gemini/claude behavior
-    unchanged).
+    stdin_text: when provided, strictly encode UTF-8 and feed those bytes via
+    a daemon writer thread so a large prompt cannot deadlock against a full OS
+    pipe before the child starts reading. The writer must complete its write,
+    flush, and close phases within bounded reconciliation joins. When None
+    (default), stdin is DEVNULL (gemini/claude behavior unchanged).
     """
     log(
         f"exec cwd={cwd or os.getcwd()} timeout={timeout}s "
         f"argv={_redact_prompt_args(cmd)}"
     )
     start = time.monotonic()
+
+    stdin_bytes = None
+    if stdin_text is not None:
+        try:
+            stdin_bytes = stdin_text.encode("utf-8")
+        except UnicodeError:
+            diagnostic = "stdin delivery failed (encoding)"
+            log(diagnostic)
+            return RunResult(
+                EXIT_CLI_FAIL, "", "", time.monotonic() - start,
+                classification="unknown", extraction_error=diagnostic,
+                _stdin_delivery_failed=True,
+            )
 
     # Scrub loader/interpreter injection vars so a poisoned parent env cannot
     # reach the vendor child (I-2/I-3). Explicit env= replaces the implicit
@@ -1303,7 +1319,7 @@ def _run_once(
         env=child_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        stdin=(subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL),
+        stdin=(subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL),
         text=True,
         bufsize=1,
     )
@@ -1329,19 +1345,37 @@ def _run_once(
         except (AttributeError, OSError):
             pass
 
-    if stdin_text is not None and proc.stdin is not None:
+    stdin_done = threading.Event()
+    stdin_errors: list[str] = []
+    t_in = None
+    if stdin_bytes is not None and proc.stdin is not None:
         def _feed_stdin() -> None:
             try:
-                proc.stdin.write(stdin_text)
-                proc.stdin.flush()
+                written = proc.stdin.buffer.write(stdin_bytes)
+                if written != len(stdin_bytes):
+                    stdin_errors.append("write")
+                proc.stdin.buffer.flush()
             except Exception:
-                pass
+                stdin_errors.append("write")
             finally:
                 try:
                     proc.stdin.close()
                 except Exception:
-                    pass
-        threading.Thread(target=_feed_stdin, daemon=True).start()
+                    stdin_errors.append("close")
+                finally:
+                    stdin_done.set()
+        t_in = threading.Thread(target=_feed_stdin, daemon=True)
+        t_in.start()
+
+    def _finish_stdin() -> None:
+        if t_in is None:
+            return
+        t_in.join(timeout=2)
+        if not stdin_done.is_set():
+            _terminate_provider_process_group(
+                proc, "stdin writer incomplete", provider_pgid
+            )
+            t_in.join(timeout=2)
 
     stdout_buf: list[str] = []
     stderr_buf: list[str] = []
@@ -1364,10 +1398,12 @@ def _run_once(
         )
     except BaseException:
         _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
+        _finish_stdin()
         t_out.join(timeout=2)
         t_err.join(timeout=2)
         raise
 
+    _finish_stdin()
     t_out.join(timeout=2)
     t_err.join(timeout=2)
 
@@ -1376,6 +1412,9 @@ def _run_once(
     stderr = "".join(stderr_buf)
     rc = proc.returncode if proc.returncode is not None else -1
 
+    delivery_failed = stdin_bytes is not None and (
+        not stdin_done.is_set() or bool(stdin_errors)
+    )
     if timed_out:
         log(f"timed out elapsed={elapsed:.1f}s")
         result = RunResult(EXIT_TIMEOUT, stdout, stderr, elapsed)
@@ -1383,22 +1422,26 @@ def _run_once(
         log(f"exit={rc} elapsed={elapsed:.1f}s")
         ec = EXIT_OK if rc == 0 else EXIT_CLI_FAIL
         result = RunResult(ec, stdout, stderr, elapsed)
+        if rc == 0 and delivery_failed:
+            phase = stdin_errors[0] if stdin_errors else "incomplete"
+            result.exit_code = EXIT_CLI_FAIL
+            result.classification = "unknown"
+            result.extraction_error = f"stdin delivery failed ({phase})"
+            result._stdin_delivery_failed = True
+            log(result.extraction_error)
 
     result.vendor_exit_code = rc
     if classify_and_log:
-        result.classification = classify(
-            cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
-        )
-
-        # One-line deterministic summary (immediately visible to leader/user).
-        # SEMANTIC stderr classification (tool-not-installed / vendor warning)
-        # stays the leader's judgment over the mirrored raw stderr.
+        if not result._stdin_delivery_failed:
+            result.classification = classify(
+                cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
+            )
         log(
             f"[wrapper] {cli} {result.classification} "
             f"exit={result.exit_code} vendor={result.vendor_exit_code} "
             f"elapsed={elapsed:.1f}s"
         )
-    else:
+    elif not result._stdin_delivery_failed:
         result.classification = "unclassified"
 
     return result
@@ -1556,6 +1599,10 @@ def run_cli_with_retry(
             else:
                 r.mode = "normal"
             result = r
+            if r._stdin_delivery_failed or (
+                prompt_via_stdin and r.exit_code == EXIT_TIMEOUT
+            ):
+                return r
             cls = r.classification
             if cli == "claude":
                 _answer, ext_err = extract_claude_answer(r.stdout, r.stderr)

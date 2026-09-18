@@ -45,15 +45,28 @@ def _run_native_structured_once(
     timeout: int,
     pydantic_cls,
     *,
+    stdin_text: str | None = None,
     expected_review_id: str | None = None,
     expected_family: str | None = None,
     expected_content_digest: str | None = None,
 ) -> _common.RunResult:
     """Run one Claude call and validate its native structured output."""
     _common.prune_stale_run_logs("claude")
+    input_kwargs = {} if stdin_text is None else {"stdin_text": stdin_text}
     result = _common._run_once(
-        "claude", cmd, cwd, timeout, classify_and_log=False
+        "claude", cmd, cwd, timeout, classify_and_log=False, **input_kwargs
     )
+    if result._stdin_delivery_failed or (
+        stdin_text is not None and result.exit_code == _common.EXIT_TIMEOUT
+    ):
+        if result.exit_code == _common.EXIT_TIMEOUT:
+            result.classification = "timeout"
+        log(
+            f"[wrapper] claude {result.classification} "
+            f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+            f"elapsed={result.elapsed_s:.1f}s"
+        )
+        return result
     answer, extraction_error = _common.extract_claude_answer(
         result.stdout, result.stderr
     )

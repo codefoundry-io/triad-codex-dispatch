@@ -548,14 +548,78 @@ def test_provider_descendant_fixture_cleanup_reaps_owned_direct_before_receipts(
     assert not _fixture_process_is_running(descendant[0])
 
 
-def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> None:
+@pytest.mark.skipif(
+    not _POSIX_PROCESS_GROUPS or not hasattr(os, "fork"),
+    reason="requires POSIX process-group APIs and fork",
+)
+def test_run_once_inherited_stdin_is_reconciled(tmp_path, monkeypatch):
+    direct_receipt = tmp_path / "direct.json"
+    descendant_receipt = tmp_path / "descendant.json"
+    script = tmp_path / "inherited_stdin.py"
+    script.write_text('''import json,os,sys,time
+from pathlib import Path
+def receipt(path):
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps({"pid":os.getpid(),"pgrp":os.getpgrp(),"sid":os.getsid(0)}), encoding="utf-8")
+    os.replace(temporary, path)
+receipt(Path(sys.argv[1]))
+child = os.fork()
+if child == 0:
+    receipt(Path(sys.argv[2]))
+    os.close(1)
+    os.close(2)
+    time.sleep(30)
+    os._exit(0)
+deadline = time.monotonic()+3
+while not Path(sys.argv[2]).exists():
+    if time.monotonic() > deadline:
+        os._exit(90)
+    time.sleep(.01)
+descendant = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert descendant["pid"] == child
+print('{"is_error":false,"result":"success"}', flush=True)
+os._exit(0)
+''', encoding="utf-8")
+    wrapper_pgrp, wrapper_sid = os.getpgrp(), os.getsid(0)
+    direct_process = None
+    real_popen = subprocess.Popen
+
+    def capture_owned_process(*args, **kwargs):
+        nonlocal direct_process
+        assert direct_process is None
+        direct_process = real_popen(*args, **kwargs)
+        return direct_process
+
+    monkeypatch.setattr(subprocess, "Popen", capture_owned_process)
+    try:
+        started = time.monotonic()
+        result = _common._run_once(
+            "claude", [sys.executable, str(script), str(direct_receipt),
+                       str(descendant_receipt)], str(tmp_path), 5,
+            stdin_text="input" * 400000)
+        assert time.monotonic() - started < 20
+        assert result.vendor_exit_code == 0
+        assert result.exit_code == _common.EXIT_CLI_FAIL
+        descendant = _read_fixture_identity(descendant_receipt)
+        assert descendant is not None
+        assert _wait_for_fixture_exit(descendant[0], 3)
+    finally:
+        _cleanup_fixture_processes(
+            direct_process, (direct_receipt, descendant_receipt),
+            wrapper_pgrp=wrapper_pgrp, wrapper_sid=wrapper_sid)
+
+
+@pytest.mark.parametrize("stdin_text", [None, "input"])
+def test_run_once_interrupt_terminates_provider_process_group(
+    monkeypatch, stdin_text
+) -> None:
     interruption = KeyboardInterrupt("cancel invalid round")
     signals: list[tuple[int, int]] = []
     getpgid_calls: list[int] = []
 
     class InterruptingProcess:
         pid = 4242
-        stdin = None
+        stdin = io.TextIOWrapper(io.BytesIO()) if stdin_text is not None else None
         stdout = io.StringIO("")
         stderr = io.StringIO("")
         returncode = None
@@ -581,7 +645,8 @@ def test_run_once_interrupt_terminates_provider_process_group(monkeypatch) -> No
     monkeypatch.setattr(os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
 
     with pytest.raises(KeyboardInterrupt) as caught:
-        _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+        _common._run_once("claude", ["claude", "-p", "review"], None, 60,
+                          stdin_text=stdin_text)
 
     assert caught.value is interruption
     assert getpgid_calls == [process.pid]
