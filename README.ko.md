@@ -640,6 +640,13 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
 
+Provider child가 시작된 경우 audit에 `effective_cwd`가 남을 수 있습니다.
+Dispatch 전에 host가 해석한 실행 디렉터리이며 redacted/hardened mode에서는
+경로 전체를 `<redacted:cwd-path>`로 가립니다. 실행 전 실패에는 생략합니다.
+이는 실행 위치의 기록이며 provider의 이후 디렉터리 변경이나 리뷰 범위를
+증명하지 않습니다. 환경 덤프나 failure/repair IPC field를 추가하지 않으며
+dispatch와 admission을 변경하지 않습니다.
+
 Claude audit에는 stdout preview와 별도로 `claude_receipt`가 남을 수 있습니다.
 검증된 session UUID, 전체 token 수, 최대 16개 model의 사용량(식별자는 최대
 128 ASCII 문자), 추정 USD 비용, permission denial 개수만 보존합니다.

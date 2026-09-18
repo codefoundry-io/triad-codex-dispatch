@@ -691,6 +691,13 @@ full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
 
+After a provider child starts, the audit may include `effective_cwd`: the
+host-resolved launch directory captured before dispatch. Redacted/hardened modes
+replace the whole path with `<redacted:cwd-path>`. Pre-launch failures omit it.
+This is launch evidence, not proof of later provider directory changes or review
+coverage. It adds no environment capture or failure/repair IPC field and does
+not change dispatch or admission.
+
 Claude audit records may include `claude_receipt`, independently of the stdout
 preview: a validated session UUID, aggregate token counters, up to 16 reported
 model-usage entries with identifiers of at most 128 ASCII characters, estimated
