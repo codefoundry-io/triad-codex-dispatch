@@ -2,7 +2,7 @@
 
 ## Scope and source boundary
 
-- These instructions apply to this entire Git repository.
+- Manage only the Codex-hosted TRIAD implementation. Treat the Claude-hosted `codefoundry-io/triad-dispatch` repository as a read-only reference. For shared defects, provide an evidence-backed fix prompt for its maintainer; do not modify that repository.
 - Treat this checkout's plugin manifest, skills, scripts, tests, and public documentation as the development source surface. Do not edit an installed plugin cache or copied distribution as a substitute for source changes.
 - `migration/AGENTS.recommended.md` is shipped consumer guidance; it does not govern development of this checkout.
 
