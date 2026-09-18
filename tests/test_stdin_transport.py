@@ -324,7 +324,10 @@ def test_claude_prompt_file_reaches_text_stdin_once(
     prompt_file.write_bytes(PROMPT.encode("utf-8"))
     loaded = _common.load_prompt_text(None, str(prompt_file))
     monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: str(provider))
-    monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *a, **k: None)
+    log_root = tmp_path.resolve() / "logs"
+    monkeypatch.setattr(_common, "_LOG_DIR", log_root)
+    monkeypatch.setattr(_common, "_LOG_DIR_CONFIGURED", True)
+    monkeypatch.setenv("TRIAD_AUDIT_REDACT_PROMPTS", "1")
     args = ["claude_wrapper.py", "--prompt-file", str(prompt_file),
             "--cwd", str(tmp_path), "--model", "opus", "--effort", "xhigh"]
     if formal:
@@ -333,13 +336,19 @@ def test_claude_prompt_file_reaches_text_stdin_once(
                  "--expected-content-digest", "a" * 64]
     monkeypatch.setattr(sys, "argv", args)
     assert claude_wrapper.main() == 0
-    assert json.loads(capsys.readouterr().out) == PAYLOAD
+    output = capsys.readouterr()
+    assert json.loads(output.out) == PAYLOAD
+    audit = json.loads((log_root / "claude" / "audit.jsonl").read_text())
+    assert "--input-format" in audit["cmd"]
+    assert audit["cmd"][audit["cmd"].index("--input-format") + 1] == "text"
+    assert "'--input-format', 'text'" in output.err
+    assert loaded not in output.err and audit["prompt_head"] == "<redacted>"
     record = json.loads(receipt.read_text())
     assert record["n"] == len(loaded.encode("utf-8"))
     assert record["sha"] == hashlib.sha256(loaded.encode("utf-8")).hexdigest()
     assert len(children) == 1
     assert PROMPT not in record["argv"] and loaded not in record["argv"]
-    assert record["argv"][:5] == ["-p", "--input-format", "text", "--output-format", "json"]
+    assert record["argv"][:5] == ["--print", "--input-format", "text", "--output-format", "json"]
     assert record["argv"][record["argv"].index("--model") + 1] == "opus"
     assert record["argv"][record["argv"].index("--effort") + 1] == "xhigh"
     if formal:

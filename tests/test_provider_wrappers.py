@@ -844,7 +844,7 @@ def test_claude_route_forwards_model_effort_and_native_json(
     assert capsys.readouterr().out == "ok\n"
     assert captured["cmd"] == [
         "/opt/bin/claude",
-        "-p",
+        "--print",
         "--input-format",
         "text",
         "--output-format",
@@ -882,7 +882,7 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
         calls.append(cmd)
         assert stdin_text == "review"
         assert "review" not in cmd
-        assert cmd[1:6] == ["-p", "--input-format", "text", "--output-format", "json"]
+        assert cmd[1:6] == ["--print", "--input-format", "text", "--output-format", "json"]
         assert classify_and_log is False
         return _common.RunResult(
             exit_code=0,
@@ -954,7 +954,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
         calls.append(cmd)
         assert stdin_text == "review"
         assert "review" not in cmd
-        assert cmd[1:6] == ["-p", "--input-format", "text", "--output-format", "json"]
+        assert cmd[1:6] == ["--print", "--input-format", "text", "--output-format", "json"]
         assert _timeout == 1200
         schema = json.loads(cmd[cmd.index("--json-schema") + 1])
         properties = schema["properties"]

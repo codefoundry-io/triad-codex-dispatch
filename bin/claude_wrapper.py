@@ -346,7 +346,7 @@ def main() -> int:
     ) -> list[str]:
         cmd = [
             claude_bin,   # resolved/pinned path (finding #3) — never a bare name
-            "-p", "--input-format", "text",
+            "--print", "--input-format", "text",
             "--output-format", "json",
         ]
         if args.model:
