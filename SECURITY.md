@@ -108,8 +108,8 @@ is added. Existing unredacted streams and human stderr remain sensitive.
 AGY plan-mode `agy_read_telemetry` counts observed DONE view_file tool events,
 including repeated or failed reads. It projects only up to 128 unique relative
 paths (1024 valid-UTF-8 characters each) currently resolving inside that captured
-cwd; malformed/outside/symlink-escaping paths are omitted. It retains no tool
-output, error, unrelated argument or provider identifier. Redacted/hardened
+cwd; malformed/relative/`..`-containing/outside/symlink-escaping paths are omitted.
+It retains no tool output, error, unrelated argument or provider identifier. Redacted/hardened
 audit retains only the count. The projection cannot change a verdict and is
 excluded from result and failure/repair IPC. It is neither coverage/permission
 proof nor historical filesystem attestation; existing raw-stream custody and

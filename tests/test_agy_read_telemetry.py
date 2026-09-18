@@ -82,6 +82,7 @@ def test_paths_are_bounded_relative_projections_not_tool_output(tmp_path):
     (root / "escape").symlink_to(outside, target_is_directory=True)
     (root / "alias").symlink_to(root / "inside", target_is_directory=True)
     bad = [None, [], {}, 17, "relative.py", str(outside / "DO_NOT_PROJECT_OUTSIDE"),
+           str(root / "sub/../in-cwd.py"),
            str(root / "../outside/file.py"), str(root / "escape/file.py"),
            str(root) + "/null\x00", str(root) + "/surrogate\ud800"]
     steps = [event(path) for path in bad]

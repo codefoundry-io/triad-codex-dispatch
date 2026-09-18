@@ -189,7 +189,7 @@ def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) 
             continue
         try:
             path = Path(raw)
-            if not path.is_absolute():
+            if not path.is_absolute() or ".." in path.parts:
                 continue
             relative = path.resolve(strict=False).relative_to(root).as_posix()
             relative.encode("utf-8")

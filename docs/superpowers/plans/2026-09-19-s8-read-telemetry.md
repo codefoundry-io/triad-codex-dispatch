@@ -23,8 +23,9 @@ Use the host-captured absolute effective cwd, not provider-supplied cwd. Extract
 only tool_info.parameters.AbsolutePath strings. Resolve with strict=False and
 retain first-seen unique cwd-relative paths, capped at 128 entries and 1024
 characters per entry with valid UTF-8. Skip malformed, relative, outside,
-traversing, symlink-escaping and unrepresentable paths. Path-resolution failures
-must not affect the provider result. No usable cwd or matching events means no
+traversing, symlink-escaping and unrepresentable paths. Reject raw `..` components
+before resolution. Path-resolution failures must not affect the provider result.
+No usable cwd or matching events means no
 telemetry. Never retain outputs, errors, other arguments or provider identifiers.
 
 Ordinary audit stores event count and relative paths only for antigravity;
