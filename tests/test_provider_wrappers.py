@@ -845,7 +845,8 @@ def test_claude_route_forwards_model_effort_and_native_json(
     assert captured["cmd"] == [
         "/opt/bin/claude",
         "-p",
-        "review",
+        "--input-format",
+        "text",
         "--output-format",
         "json",
         "--model",
@@ -853,6 +854,7 @@ def test_claude_route_forwards_model_effort_and_native_json(
         "--effort",
         "xhigh",
     ]
+    assert captured["kwargs"]["prompt_via_stdin"] is True
 
 
 def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) -> None:
@@ -876,8 +878,11 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
         ),
     )
 
-    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log, stdin_text=None):
         calls.append(cmd)
+        assert stdin_text == "review"
+        assert "review" not in cmd
+        assert cmd[1:6] == ["-p", "--input-format", "text", "--output-format", "json"]
         assert classify_and_log is False
         return _common.RunResult(
             exit_code=0,
@@ -945,8 +950,11 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
     )
     monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
 
-    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log):
+    def fake_once(_cli, cmd, _cwd, _timeout, *, classify_and_log, stdin_text=None):
         calls.append(cmd)
+        assert stdin_text == "review"
+        assert "review" not in cmd
+        assert cmd[1:6] == ["-p", "--input-format", "text", "--output-format", "json"]
         assert _timeout == 1200
         schema = json.loads(cmd[cmd.index("--json-schema") + 1])
         properties = schema["properties"]
@@ -1263,9 +1271,10 @@ def test_claude_structured_route_rejects_result_text_fallback(
     )
     monkeypatch.setattr(_common, "prune_stale_run_logs", lambda _cli: None)
 
-    def fake_once(_cli, _cmd, _cwd, _timeout, *, classify_and_log):
+    def fake_once(_cli, _cmd, _cwd, _timeout, *, classify_and_log, stdin_text=None):
         nonlocal calls
         calls += 1
+        assert stdin_text == "review"
         assert classify_and_log is False
         return _common.RunResult(
             exit_code=0,

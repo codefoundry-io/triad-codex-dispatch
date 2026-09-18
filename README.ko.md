@@ -467,6 +467,8 @@ approved-path containment는 provider가 실제로 enforce하지 않는 한 prom
 그 외 경계는 선택한 `--cwd` worktree, native provider permission,
 immutable-directory digest, leader mutation check에 의존합니다.
 
+로컬 Claude wrapper는 실제 전달할 prompt를 UTF-8 text stdin으로 provider에 보내며 JSON 및 native-schema 출력을 유지합니다. 바깥쪽 wrapper 명령줄에서도 prompt를 제외하려면 `--prompt-file`을 사용하세요. Claude 문서는 stdin의 [10MB 한도](https://code.claude.com/docs/en/headless#pipe-data-through-claude)를 명시하며 이 한도는 vendor가 적용합니다. 모델의 context/token 한도도 그대로 적용됩니다. Wrapper는 한도를 피하려고 prompt를 자르거나 나누거나 요청을 추가하지 않습니다. Stdin 전달 실패를 성공으로 받아들이지 않습니다. Stdin은 안쪽 provider argv에서 prompt를 제외합니다. 기존 argv 배열도 shell expansion을 방지합니다. 민감한 prompt/transcript 로그는 그대로 남으며 stdin이 입력 암호화, prompt injection 방지, token 사용량 감소를 제공하지는 않습니다.
+
 ## 문제 해결 (Troubleshooting)
 
 | 증상 | 원인 | 해결 |

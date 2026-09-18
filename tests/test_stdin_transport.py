@@ -304,3 +304,47 @@ def test_stdin_reconciliation_interrupt_rethrows_and_cleans_up(
     assert caught.value is interruption
     assert cleanups == [(process, "wrapper interrupted", process.pid)]
     assert joins == [2, 2]
+
+
+@pytest.mark.parametrize("formal", [False, True])
+def test_claude_prompt_file_reaches_text_stdin_once(
+        formal, monkeypatch, tmp_path, children, capsys):
+    receipt = tmp_path / "received.json"
+    provider = tmp_path / "claude-fixture"
+    provider.write_text(
+        "#!" + sys.executable + "\n"
+        "import hashlib,json,sys\n"
+        "from pathlib import Path\n"
+        "d=sys.stdin.buffer.read()\n"
+        "Path(" + repr(str(receipt)) + ").write_text(json.dumps({"
+        "'argv':sys.argv[1:],'n':len(d),'sha':hashlib.sha256(d).hexdigest()}))\n"
+        "print(" + repr(SUCCESS) + ")\n", encoding="utf-8")
+    provider.chmod(0o755)
+    prompt_file = tmp_path / "prompt.txt"
+    prompt_file.write_bytes(PROMPT.encode("utf-8"))
+    loaded = _common.load_prompt_text(None, str(prompt_file))
+    monkeypatch.setattr(claude_wrapper, "require_binary", lambda _name: str(provider))
+    monkeypatch.setattr(claude_wrapper, "persist_result_artifacts", lambda *a, **k: None)
+    args = ["claude_wrapper.py", "--prompt-file", str(prompt_file),
+            "--cwd", str(tmp_path), "--model", "opus", "--effort", "xhigh"]
+    if formal:
+        args += ["--pydantic", "verdict_schema:LegVerdict", "--timeout", "1200",
+                 "--expected-review-id", "review-r1", "--expected-family", "claude",
+                 "--expected-content-digest", "a" * 64]
+    monkeypatch.setattr(sys, "argv", args)
+    assert claude_wrapper.main() == 0
+    assert json.loads(capsys.readouterr().out) == PAYLOAD
+    record = json.loads(receipt.read_text())
+    assert record["n"] == len(loaded.encode("utf-8"))
+    assert record["sha"] == hashlib.sha256(loaded.encode("utf-8")).hexdigest()
+    assert len(children) == 1
+    assert PROMPT not in record["argv"] and loaded not in record["argv"]
+    assert record["argv"][:5] == ["-p", "--input-format", "text", "--output-format", "json"]
+    assert record["argv"][record["argv"].index("--model") + 1] == "opus"
+    assert record["argv"][record["argv"].index("--effort") + 1] == "xhigh"
+    if formal:
+        assert record["argv"][record["argv"].index("--permission-mode") + 1] == "plan"
+        schema = json.loads(record["argv"][record["argv"].index("--json-schema") + 1])
+        assert schema["properties"]["review_id"]["const"] == "review-r1"
+        assert schema["properties"]["family"]["const"] == "claude"
+        assert schema["properties"]["content_digest"]["const"] == "a" * 64

@@ -271,7 +271,7 @@ def main() -> int:
     ) -> list[str]:
         cmd = [
             claude_bin,   # resolved/pinned path (finding #3) — never a bare name
-            "-p", effective_prompt,
+            "-p", "--input-format", "text",
             "--output-format", "json",
         ]
         if args.model:
@@ -304,6 +304,7 @@ def main() -> int:
             args.cwd,
             args.timeout,
             pydantic_cls,
+            stdin_text=args.prompt,
             expected_review_id=args.expected_review_id,
             expected_family=args.expected_family,
             expected_content_digest=args.expected_content_digest,
@@ -318,6 +319,7 @@ def main() -> int:
             pydantic_cls=None,
             last_msg_path=None,
             repair_mode=args.repair_mode,
+            prompt_via_stdin=True,
         )
 
     audit_cmd = build_cmd(args.prompt, native_schema)
