@@ -304,6 +304,8 @@ class RunResult:
     _claude_receipt: Optional[dict] = None
     # Host-resolved launch cwd; audit-only evidence, not provider attestation.
     _effective_cwd: Optional[str] = None
+    # Diagnostic event projection only; excluded from result/repair IPC.
+    _agy_read_telemetry: Optional[dict] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -1956,6 +1958,12 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
     }
     if result._effective_cwd is not None:
         rec["effective_cwd"] = "<redacted:cwd-path>" if redact else result._effective_cwd
+    if cli == "antigravity" and result._agy_read_telemetry is not None:
+        telemetry = result._agy_read_telemetry
+        rec["agy_read_telemetry"] = (
+            {"done_view_file_event_count": telemetry["done_view_file_event_count"]}
+            if redact else telemetry
+        )
     if cli == "claude" and result._claude_receipt:
         receipt = result._claude_receipt
         if redact:

@@ -671,6 +671,17 @@ Dispatch 전에 host가 해석한 실행 디렉터리이며 redacted/hardened mo
 증명하지 않습니다. 환경 덤프나 failure/repair IPC field를 추가하지 않으며
 dispatch와 admission을 변경하지 않습니다.
 
+Formal AGY plan-mode audit에는 `agy_read_telemetry`가 포함될 수 있습니다.
+관측한 `done_view_file_event_count`와 host 실행 cwd 안에서 해석한 고유
+`relative_paths`를 최초 등장 순서대로 남깁니다(최대 128개, 경로당 유효한
+UTF-8 문자 최대 1024개). `view_file`인 DONE tool event만 세며 반복·실패도
+포함합니다. 잘못된 경로, 상대경로, cwd 밖 또는 symlink로 이탈하는 경로는
+제외하고 경로 해석 실패는 판정에 영향을 주지 않습니다. Redacted/hardened
+audit에는 개수만 남습니다. 유효한 cwd 또는 해당 event가 없으면 생략합니다.
+읽기 성공, 고유 실행, 리뷰 범위, 권한 또는 과거 파일시스템 상태를 증명하지
+않는 진단 정보입니다. 결과·failure/repair IPC field와 기존 raw-stream 보관
+정책은 바꾸지 않습니다. Event 형식은 [AGY headless mode](https://antigravity.google/docs/cli/headless/)를 따릅니다.
+
 Claude audit에는 stdout preview와 별도로 `claude_receipt`가 남을 수 있습니다.
 검증된 session UUID, 전체 token 수, 최대 16개 model의 사용량(식별자는 최대
 128 ASCII 문자), 추정 USD 비용, permission denial 개수만 보존합니다.

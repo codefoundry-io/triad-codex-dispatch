@@ -725,6 +725,18 @@ This is launch evidence, not proof of later provider directory changes or review
 coverage. It adds no environment capture or failure/repair IPC field and does
 not change dispatch or admission.
 
+Formal AGY plan-mode audit may also include `agy_read_telemetry`: the observed
+`done_view_file_event_count` and first-seen unique `relative_paths` under that
+host launch cwd (at most 128 paths, each at most 1024 UTF-8-valid characters).
+Only DONE tool steps named `view_file` count; repeats and failed reads still
+count. Malformed, relative, outside or symlink-escaping paths are omitted, and
+path-resolution errors never affect the verdict. Redacted/hardened audit keeps
+only the count. No usable cwd or matching events means no telemetry. This is
+diagnostic data, not proof of read success, unique calls, review coverage,
+permissions or historical filesystem state. It adds no result or failure/repair
+IPC field and does not change existing raw-stream custody. The documented event
+shape is in [AGY headless mode](https://antigravity.google/docs/cli/headless/).
+
 Claude audit records may include `claude_receipt`, independently of the stdout
 preview: a validated session UUID, aggregate token counters, up to 16 reported
 model-usage entries with identifiers of at most 128 ASCII characters, estimated
