@@ -696,6 +696,9 @@ existing hidden-index/sparse-checkout refusal. It only inspects the supplied
 checkout; it creates no worktree or provider project. Omitting the option keeps
 the normal dirty-worktree review mode.
 
+The check uses `--ignore-submodules=none`: configured ignore settings cannot
+hide modified or untracked submodule content or a moved submodule HEAD.
+
 After preparing custody, capture the normal review fingerprint again and follow
 the existing render and post-review integrity steps. This setup check grants no
 admission and is not a substitute for them. Git-ignored files are outside its
@@ -834,6 +837,13 @@ UUID/cwd, then prove each behavior in that environment. Keep it disabled without
 that proof. Provider behavior after a helper crash or timeout is unverified;
 process exit alone is not enforcement evidence. No review admission or coverage
 credit comes from this helper. See the [official hook contract](https://antigravity.google/docs/hooks).
+
+The disabled renderer currently invokes bare `python3`. Before authorized
+activation, replace it with a verified trusted absolute interpreter. Its `*`
+matcher applies the allowlist to every tool call in the enabled session; prove
+that a complete review finishes while off-list tools remain denied. Also verify
+oversized-input stdin-write/broken-pipe and helper process-failure outcomes;
+emitting deny JSON alone does not establish that the provider enforces it.
 
 ## Google CLI metadata snapshot
 

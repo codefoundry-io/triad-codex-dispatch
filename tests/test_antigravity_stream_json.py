@@ -48,6 +48,30 @@ def _stream(result: dict) -> str:
     )
 
 
+@pytest.mark.parametrize("status, exit_code, classification", [
+    ("SUCCESS", _common.EXIT_OK, "ok"),
+    ("ERROR", _common.EXIT_TERMINAL, "vendor-error"),
+])
+def test_real_child_launch_cwd_survives_terminal_interpretation(
+    tmp_path, status, exit_code, classification
+):
+    launch = tmp_path / "launch 한글"
+    launch.mkdir()
+    stream = _stream({"status": status, "structured_output": {"ok": True}})
+    run = _common._run_once(
+        "antigravity", [sys.executable, "-c", f"print({stream!r})"],
+        cwd=str(launch), timeout=10, classify_and_log=False,
+    )
+    assert run.vendor_exit_code == 0
+    assert run._effective_cwd == str(launch.resolve())
+    interpreted = wrapper._interpret_run(run, _Answer, "gemini-3.1-pro-high")
+    assert interpreted._effective_cwd == str(launch.resolve())
+    assert interpreted.exit_code == exit_code
+    assert interpreted.classification == classification
+    if status == "SUCCESS":
+        assert interpreted.validated == {"ok": True}
+
+
 def _formal_payload() -> dict:
     return {
         "review_id": "review-r1",

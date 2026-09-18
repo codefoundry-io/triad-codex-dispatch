@@ -644,6 +644,9 @@ python3 "$TRIAD_TOOLKIT/bin/review_round.py" fingerprint-worktree \
 checkout 거부도 유지합니다. Worktree나 provider project를 생성하지 않습니다.
 옵션을 생략하면 기존 dirty-worktree 리뷰 방식을 그대로 사용합니다.
 
+검사는 `--ignore-submodules=none`을 사용하므로 설정된 ignore 옵션이 submodule의
+수정·untracked 내용이나 이동한 HEAD를 숨길 수 없습니다.
+
 Custody 준비 후에는 정상 리뷰 fingerprint를 다시 계산하고 기존 render 및
 post-review integrity 절차를 따릅니다. 이 사전 검사는 admission을 부여하거나
 해당 절차를 대체하지 않습니다. Git-ignored 파일은 clean-state 주장에 포함되지
@@ -781,6 +784,12 @@ bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이�
 대한 provider의 권한 처리는 미검증이며, 종료 코드만으로 차단을 입증할 수 없습니다.
 이 도구는 리뷰 승인이나 읽기 coverage 증거를 제공하지 않습니다.
 [공식 훅 계약](https://antigravity.google/docs/hooks)을 참고하세요.
+
+비활성 renderer는 현재 bare `python3`를 호출합니다. 승인된 활성화 전에는 이를
+검증된 신뢰 가능한 인터프리터 절대 경로로 바꿔야 합니다. `*` matcher는 활성 세션의
+모든 도구 호출에 allowlist를 적용하므로, off-list 도구를 계속 거부하면서 전체 리뷰가
+완료되는지 입증해야 합니다. 초과 입력의 stdin 쓰기·broken pipe 및 helper 프로세스
+실패 결과도 확인해야 하며, deny JSON 출력만으로 provider의 차단을 증명하지 않습니다.
 
 ## Google CLI 메타데이터 스냅샷
 
