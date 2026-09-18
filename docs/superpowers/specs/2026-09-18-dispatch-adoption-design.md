@@ -72,8 +72,8 @@ receives KILL. Reap the direct child with bounded waits. Timeout classification
 and interruption propagation remain unchanged. A missing group is already
 clean; permission failure must not redirect a signal to another group.
 
-This does not promise control over descendants that create another session,
-OS-enforced containment, or elimination of the residual OS identifier-reuse
+This does not promise control over descendants that leave the captured group
+(including by creating another session), OS-enforced containment, or elimination of the residual OS identifier-reuse
 race. No new process registry, daemon, provider retry, or runtime dependency is
 needed. Planned net production delta is below 100 lines, novel core below 100,
 and one behavioral claim, within the S/M slice budget.
