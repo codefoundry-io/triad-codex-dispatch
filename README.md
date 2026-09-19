@@ -241,6 +241,22 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.555
+
+0.2.555 strengthens provider transport, review-root cleanup custody, canonical
+verdict parsing, review-condition and policy-byte binding, and Gemini CLI version
+preflight. Guarded reviews now explicitly record scoped symlink text and missing
+coverage without following link targets.
+
+Formal REVIEW prohibits web research. AGY formal calls add the URL-read deny and
+omit headless autoapproval; raw INVESTIGATION remains available. Gemini's REVIEW
+web prohibition is prompt-controlled, not a mechanical policy guarantee. Existing
+authentication routes, the public verdict schema and disabled AGY hook remain.
+This release does not adopt a shared-spec revision or certify cross-host parity.
+
+Upgrade the marketplace, reinstall the plugin, run the installed bootstrap, and
+start a fresh Codex session as described below.
+
 ### Upgrading to 0.2.554
 
 0.2.554 adds bounded process-group cleanup, Claude stdin transport and sanitized
@@ -428,7 +444,7 @@ not change the public three-family default, prepared-directory renderer, or
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.554-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.555-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

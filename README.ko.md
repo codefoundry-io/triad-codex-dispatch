@@ -220,6 +220,22 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.555 업그레이드
+
+0.2.555는 provider 전송, 리뷰 root 정리 전 증거 보존, canonical verdict 파싱,
+리뷰 조건·policy bytes 결합, Gemini CLI 버전 preflight를 강화합니다. Guarded
+review는 링크 대상을 따라가지 않고 범위 내 symlink text와 누락된 검토 범위를
+명시적으로 기록합니다.
+
+Formal REVIEW는 웹 조사를 금지합니다. AGY formal 호출은 URL-read deny를 추가하고
+headless autoapproval을 생략하며, raw INVESTIGATION 기능은 유지합니다. Gemini
+REVIEW의 웹 금지는 prompt 지침이며 policy에 의한 기계적 차단을 보장하지 않습니다.
+기존 인증 경로, 공개 verdict schema, 비활성 AGY hook을 유지합니다. 이번 릴리스는
+공유 스펙 revision 채택이나 cross-host 정합성 인증을 의미하지 않습니다.
+
+아래 절차대로 marketplace를 갱신하고 플러그인을 재설치한 뒤, 설치된 bootstrap을
+실행하고 새 Codex 세션을 시작하세요.
+
 ### 0.2.554 업그레이드
 
 0.2.554는 제한된 process-group cleanup, Claude stdin 전달과 정제된 audit receipt,
@@ -393,7 +409,7 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.554-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.555-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
