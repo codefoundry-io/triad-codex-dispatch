@@ -5,13 +5,15 @@ description: Use when a bounded task needs one authorized AGY Google-family answ
 
 # Antigravity Dispatch
 
-Use the packaged `bin/antigravity_wrapper.py`. The wrapper internally inserts
-`--dangerously-skip-permissions` for AGY headless calls unless the operator
-sets `AGY_NO_HEADLESS_AUTOAPPROVE=1`. Callers do not pass this flag. Formal
-calls use `--sandbox read-only`. Without an explicit project, the route uses
+Use the packaged `bin/antigravity_wrapper.py`.
+Formal preflight and dispatch never use `--dangerously-skip-permissions`.
+Raw investigations retain the version-gated headless compatibility unless
+`AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag.
+Formal calls use `--sandbox read-only`. Without an explicit project, the route uses
 native `--mode plan` with a transient global-settings transaction
-that unions the five write/command/unsandboxed/URL/MCP deny rules, then
-restores the original bytes. On AGY 1.1.20 or newer, the formal route passes a
+that unions the five raw read-only deny rules plus `read_url(*)`, then
+restores the original bytes. Identical formal leases may overlap; different
+raw/formal deny lists remain isolated. On AGY 1.1.20 or newer, the formal route passes a
 review-bound native `--json-schema` in plan mode and consumes the terminal
 `structured_output`. It then repeats strict local `LegVerdict` validation and
 exact review-binding checks. Human-readable response text and diagnostic finish
@@ -20,9 +22,10 @@ A missing, malformed, or schema-invalid structured output terminates the leg wit
 schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, forbids command and
 other action tools plus experiments, and undecidable uncertainty goes to
-`open_questions`. MCP calls are unavailable for the formal Google leg. Approved
-AGY native official-web reads remain available only when the review objective
-and authorized external data boundary expressly permit them. Use `grep_search`
+`open_questions`. MCP calls are unavailable for the formal Google leg.
+Every REVIEW prohibits web research; external evidence requires a separate
+leader-authorized INVESTIGATION. Do not call `search_web` or `read_url_content`.
+Use `grep_search`
 with the required `SearchPath` and `Query` arguments to search inside the review
 target identified by Review metadata, and use `list_dir`, `find_by_name`, and `view_file` as
 needed. For every `view_file` call, provide the required `AbsolutePath` argument. For files
@@ -35,8 +38,7 @@ not an admission schema: added fields, changed optional tool arguments, denied
 attempts, and duplicate progress events do not invalidate an otherwise valid
 terminal verdict. The prompt and native `--mode plan` define the static-review
 behavior. The explicit deny rules remain the action-namespace enforcement
-backstop. Headless auto-approve removes interactive approval prompts but does
-not remove those explicit deny entries. Local verdict and review-binding checks plus
+backstop. Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. The wrapper does not suppress installed tools
 before provider execution or reinterpret a completed review from the vendor's
@@ -48,7 +50,7 @@ admission, and separate round-integrity checks.
 
 An owner-provisioned dedicated project may use `--project <canonical-lowercase-UUID>`
 with an explicit `--cwd` and `--sandbox read-only`. The wrapper checks the project
-record's ID, single cwd resource, and all five read-only deny entries without a
+record's ID, single cwd resource, and the same six formal deny entries without a
 global settings lease or permission-file writes. Use the same UUID for preflight
 and dispatch, and for both Pro/Flash preflights in a paired review. Keep the
 project configuration stable during the call. Follow the exact
@@ -91,8 +93,8 @@ output is terminal and causes no schema-repair provider call. The formal leg use
 an explicit 600-second wrapper provider-process deadline, and the AGY child gets
 `--print-timeout 590s`. Apply [convergence](../triad-cross-family-review/references/convergence.md)
 to observation waits and terminal outcomes. The formal Google prompt
-authorizes only AGY native file-read/search tools for local inspection plus
-expressly authorized AGY native official-web reads. MCP calls are denied by the
+authorizes only AGY native file-read/search tools for local inspection.
+Web research is prohibited; MCP calls are denied by the
 formal read-only permission rules. It forbids command, shell, terminal,
 file-write/edit, notebook-execution, subagent, browser-actuation, and
 scratch-space tools plus experiments; undecidable uncertainty goes to
@@ -104,8 +106,9 @@ candidate execution.
 A failure before provider submission stops the round with zero provider legs.
 A failure after submission invalidates the Google leg and round. Do not switch
 providers or authentication classes, drop `--sandbox read-only`, or substitute
-a provider-side command-specific allowlist or tool suppression. If the operator
-opt-out makes headless review unavailable, preserve that opt-out and report the blocker.
+a provider-side command-specific allowlist or tool suppression.
+Keep formal permission checks enabled; if headless review is unavailable,
+report the blocker and diagnose the same route without enabling autoapproval.
 Clean the invalid round, correct the same route, and restart every required
 family under a fresh review ID. Return one validated result bound to one review
 ID and content digest.

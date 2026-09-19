@@ -29,18 +29,20 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
   않습니다. 명시적 `--project`가 없는 AGY route는 `--sandbox read-only`
   호출 동안 일시적 global-settings transaction으로
-  다섯 deny를 합치고 원래 바이트를 복원합니다. AGY 1.1.3+에서는 operator가
-  `AGY_NO_HEADLESS_AUTOAPPROVE=1`을 설정하지 않은 한 headless 실행에 wrapper 소유
-  `--dangerously-skip-permissions`가 필요합니다. auto-approve는 interactive approval
-  prompt를 제거하지만 explicit deny rule은 지정된 action namespace를
-  계속 차단합니다. AGY route의 formal permission rule로 MCP 호출은 차단되고, 조건부로
-  승인된 외부 근거는 AGY native official-web read 경로를 사용합니다. Enterprise
+  원래 바이트를 복원합니다. Formal AGY는 기존 다섯 deny에 `read_url(*)`를
+  추가하고 headless 자동 승인 flag를 사용하지 않습니다. 동일한 formal deny
+  lease는 동시 실행할 수 있고 raw/formal 목록은 격리됩니다. Raw 조사는 기존 웹
+  기능과 버전별 headless 호환 처리를 유지하며 `AGY_NO_HEADLESS_AUTOAPPROVE=1`로
+  해당 처리를 끌 수 있습니다. 모든 REVIEW prompt는 웹을 금지하고 외부 조사는
+  별도로 승인된 INVESTIGATION에서 수행합니다. AGY의 MCP 호출도 차단합니다. Enterprise
   Gemini route는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
   API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
   runtime model은 `unexposed`입니다. 이는 OS 수준 confinement가 아니며
-  round-integrity mutation detection은 별도 검사입니다.
+  round-integrity mutation detection은 별도 검사입니다. 현재 Gemini policy는 웹
+  읽기·검색 도구를 허용하므로 이 route의 REVIEW 웹 금지는 prompt 지침이며,
+  코드로 강제되는 웹 차단이라고 주장하지 않습니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
   인증된 로그인 터미널에서 bootstrap이 출력한
   `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
@@ -338,8 +340,7 @@ duplicate progress event가 유효한 terminal review를 사후에 무효화하�
 검증이 admission gate로 유지됩니다.
 
 formal AGY 프롬프트는 계속 명시적인 정적 전용 계약입니다.
-native file read/search와 조건부로 승인된 AGY native official-web read만 허용하고
-MCP 호출은 차단하며 command, write, experiment, notebook, subagent, browser
+native local file read/search만 허용하고 웹·MCP 호출을 차단하며 command, write, experiment, notebook, subagent, browser
 actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
 `open_questions`에 기록합니다. prepared directory 안에서는 native `list_dir`,
 `find_by_name`, `view_file`을 필요에 따라 사용하고, 필수 `SearchPath`와 `Query` 인자를
@@ -550,8 +551,9 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
   digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
   일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
-  AGY 1.1.3+의 headless auto-approve는 interactive approval prompt를 제거하지만
-  설정된 explicit deny rule은 지정된 action namespace를 계속 차단합니다.
+  Formal preflight와 dispatch는 여섯 review deny를 요구하며
+  `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
+  headless 호환 처리를 유지합니다.
   sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
   mutation detection은 별도의 fail-closed 검사입니다.
   Prepared-directory review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
@@ -803,7 +805,9 @@ owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-low
 추가 owner deny rule은 보존하며, 이 모드에서는 프로젝트·전역 설정·전역 lease 파일을
 생성하거나 수정하지 않습니다.
 
-정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다. 기존 preflight의
+정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
+프로젝트 설정에 `read_url(*)`도 있어야 하며 누락되면 owner 설정을 바꾸지 않고
+거절합니다. 기존 preflight의
 `route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
 프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
 native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙니다. `--project`를

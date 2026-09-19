@@ -308,7 +308,7 @@ def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
     assert cmd.count("--dangerously-skip-permissions") == 1
 
 
-def test_formal_route_uses_plan_mode_with_sandbox() -> None:
+def test_command_builder_combines_sandbox_plan_mode_and_explicit_headless_flag() -> None:
     cmd = wrapper._build_cmd(
         "/opt/bin/agy",
         "review the directory",
@@ -1067,6 +1067,7 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
     monkeypatch, capsys, tmp_path
 ) -> None:
     calls: list[list[str]] = []
+    monkeypatch.delenv("AGY_NO_HEADLESS_AUTOAPPROVE", raising=False)
     guarded: list[list[str]] = []
     payload = {
         "review_id": "review-r1",
@@ -1154,8 +1155,8 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
         "--mode",
         "plan",
     ]
-    assert "--dangerously-skip-permissions" in calls[0]
-    assert guarded == [wrapper._agy_settings._READ_ONLY_DENY]
+    assert "--dangerously-skip-permissions" not in calls[0]
+    assert guarded == [wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]]
 
 
 def test_formal_provider_failure_restores_settings_bytes(
@@ -1179,7 +1180,7 @@ def test_formal_provider_failure_restores_settings_bytes(
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
         live = json.loads(target.read_text())
         assert live["permissions"]["allow"] == ["command(git)"]
-        assert live["permissions"]["deny"] == wrapper._agy_settings._READ_ONLY_DENY
+        assert live["permissions"]["deny"] == wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]
         assert backup.exists()
         return _run_result("", rc=7, stderr="provider failed")
 
@@ -1317,7 +1318,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     }
     assert pruned == ["antigravity"]
     assert catalog_probes == [str(selected)]
-    assert guarded == [wrapper._agy_settings._READ_ONLY_DENY]
+    assert guarded == [wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]]
 
 
 def test_probe_agy_models_parses_the_advertised_catalog_and_scrubs_auth_env(

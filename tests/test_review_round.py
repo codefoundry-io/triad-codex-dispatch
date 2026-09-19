@@ -3097,11 +3097,9 @@ def test_worktree_prompt_preserves_leader_authored_review_points(
         "the limit in open_questions. "
         "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
         "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-        "The formal read-only permission rules deny all MCP calls. Approved AGY native official-web "
-        "reads remain available only when the review objective and authorized external data boundary "
-        "expressly permit them. Do not create or execute an experiment "
-        "to resolve uncertainty. If static inspection and any expressly authorized read-only external "
-        "evidence cannot decide current correctness, report the uncertainty in open_questions. "
+        "The formal read-only permission rules deny all MCP calls. Do not call search_web or read_url_content. "
+        "Do not create or execute an experiment to resolve uncertainty. If static inspection "
+        "cannot decide current correctness, report the uncertainty in open_questions. "
     )
     assert prompt.count(google_tool_contract) == 1
     assert "explicit positive-integer StartLine and EndLine ranges" in prompt
@@ -3984,7 +3982,7 @@ def test_rendered_claude_prompt_preserves_all_read_search_tools(prepared):
     assert "Configured MCP servers remain available" in prompt
     assert "Existing user permission settings continue to govern MCP calls" in prompt
     assert (
-        "Approved official-web reads through read-only MCP tools remain available"
+        "Do not use web search, URL fetching, or other network research in REVIEW"
         in prompt
     )
     assert (
@@ -4019,11 +4017,9 @@ def test_rendered_google_prompt_forbids_command_tools_and_experiments(prepared):
         "the limit in open_questions. "
         "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
         "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-        "The formal read-only permission rules deny all MCP calls. Approved AGY native official-web "
-        "reads remain available only when the review objective and authorized external data boundary "
-        "expressly permit them. Do not create or execute an experiment "
-        "to resolve uncertainty. If static inspection and any expressly authorized read-only external "
-        "evidence cannot decide current correctness, report the uncertainty in open_questions. "
+        "The formal read-only permission rules deny all MCP calls. Do not call search_web or read_url_content. "
+        "Do not create or execute an experiment to resolve uncertainty. If static inspection "
+        "cannot decide current correctness, report the uncertainty in open_questions. "
     )
     assert prompt.count(google_tool_contract) == 1
     assert "explicit positive-integer StartLine and EndLine ranges" in prompt

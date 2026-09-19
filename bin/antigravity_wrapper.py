@@ -6,7 +6,9 @@ terminal ``result`` event, and validates contracted output locally. Formal
 plan-mode calls pass the review-bound native finish schema, admit terminal
 ``structured_output``, and repeat local verdict binding. Explicit project calls
 validate owner-provisioned read-only permissions without a global lease. Other
-calls retain the transient global-settings transaction and headless adaptation.
+calls retain the transient global-settings transaction. Formal preflight and
+dispatch require six denies and omit headless adaptation; raw calls retain the
+version-gated adaptation.
 """
 
 from __future__ import annotations
@@ -462,6 +464,9 @@ def main() -> int:
         _common.log("formal verdict schema requires all formal verdict bindings")
         return _common.EXIT_ARG_ERROR
     if args.preflight_only:
+        if args.sandbox != "read-only":
+            _common.log("AGY formal preflight requires --sandbox read-only")
+            return _common.EXIT_ARG_ERROR
         if (
             args.expected_review_id is None
             or args.expected_family is not None
@@ -577,10 +582,13 @@ def main() -> int:
             return _common.EXIT_TERMINAL
 
     deny_rules = (
-        _agy_settings.build_deny_rules(args.sandbox) if args.sandbox is not None else []
+        _agy_settings.build_deny_rules(args.sandbox, formal_review=selected_context)
+        if args.sandbox is not None else []
     )
     if args.project is not None:
-        settings_guard = _agy_settings.agy_project_guard(args.project, cwd)
+        settings_guard = _agy_settings.agy_project_guard(
+            args.project, cwd, formal_review=selected_context
+        )
     else:
         try:
             lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
@@ -648,7 +656,7 @@ def main() -> int:
         timeout=args.timeout,
         json_schema=schema,
         sandbox=args.sandbox == "read-only",
-        skip_permissions=_agy_needs_skip_permissions(version),
+        skip_permissions=not selected_context and _agy_needs_skip_permissions(version),
         project=args.project,
     )
     run_options: dict[str, Any] = {"classify_and_log": False}

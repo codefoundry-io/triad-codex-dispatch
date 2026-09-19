@@ -92,6 +92,15 @@ which does not by itself prove authentication, runtime model or policy enforceme
 
 ## Admission boundary
 
+Every REVIEW leg prohibits web research. Return missing external evidence as an
+open question for a separate authorized INVESTIGATION. AGY formal preflight and
+dispatch require `read_url(*)` in addition to the five raw read-only denies and
+omit headless autoapproval. Identical formal leases remain concurrent; mixed raw
+and formal lists retain existing isolation. Explicit project validation checks
+the same formal rules without changing the project. Raw invocation behavior is
+preserved. Gemini's current policy still permits its web read/search tools;
+the REVIEW prompt prohibits them, but this is not mechanical Gemini web denial.
+
 Provider permission modes are inputs to containment, not admission proof.
 Packaged prompt controls, local receipt and `LegVerdict` validation, and the
 post-review prepared-directory or worktree integrity check jointly determine

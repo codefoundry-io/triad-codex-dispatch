@@ -16,7 +16,7 @@ from test_review_round import worktree, _review_metadata  # noqa: F401
 review_round = wrapper.review_round
 PROJECT = "a0613764-eb21-4d72-86e6-eac3cbd20d76"
 OTHER_PROJECT = "c6a7db00-14a9-4bd2-bda5-9466dfd86de5"
-DENIES = ["write_file(*)", "command(*)", "unsandboxed(*)", "execute_url(*)", "mcp(*)"]
+DENIES = ["write_file(*)", "command(*)", "unsandboxed(*)", "execute_url(*)", "mcp(*)", "read_url(*)"]
 
 
 def _canonical(record):
@@ -64,6 +64,7 @@ def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
     project_case, monkeypatch, capsys, tmp_path, model,
 ):
     home, cwd, project_path, _, selector_path, args = project_case
+    monkeypatch.delenv("AGY_NO_HEADLESS_AUTOAPPROVE", raising=False)
     before = {str(p): p.read_bytes() for p in home.rglob("*") if p.is_file()}
     args[args.index("--model") + 1] = model
     monkeypatch.setattr(sys, "argv", args)
@@ -76,6 +77,7 @@ def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
         assert cmd[-6:] == ["--model", model, "--effort", "high", "--project", PROJECT]
         assert cmd[cmd.index("--mode") + 1] == "plan"
         assert "--sandbox" in cmd
+        assert "--dangerously-skip-permissions" not in cmd
         event = _stream({"status": "SUCCESS", "structured_output": verdict})
         event = event.replace(PRO, model)
         return _run_result(event)

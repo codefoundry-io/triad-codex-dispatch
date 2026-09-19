@@ -216,7 +216,9 @@ explicit `--cwd "$review_target_cwd"` and `--sandbox read-only`. The UUID must
 use canonical lowercase spelling. The wrapper reads
 `~/.gemini/config/projects/<UUID>.json` and requires a matching ID, exactly one
 resource whose `folderUri` equals the canonical cwd URI, and these deny entries:
-`write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`.
+`write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`,
+`read_url(*)`. The last rule is required for formal preflight and dispatch;
+raw read-only investigation keeps the original five-rule requirement.
 Additional owner rules remain untouched. Invalid configuration stops before
 inference. This mode validates the project instead of entering a global settings
 transaction; it never creates or edits a project or permission record.
@@ -261,7 +263,9 @@ The wrappers own the mechanical formal contracts:
   review-bound JSON schema, validates the explicit project or applies and restores
   the transient deny transaction, and consumes terminal `structured_output`. A tool
   attempt in a named denied namespace is also blocked by its matching deny entry.
-  Preserve `AGY_NO_HEADLESS_AUTOAPPROVE=1` when the operator sets it.
+  Formal dispatch omits `--dangerously-skip-permissions` regardless of the
+  operator's `AGY_NO_HEADLESS_AUTOAPPROVE` setting; do not enable it to bypass a
+  formal permission failure.
 - Both routes make one provider call, validate the terminal `LegVerdict` and
   review bindings locally, and treat invalid output or capacity failure as a
   terminal result. They do not retry capacity, call a schema-repair provider, or

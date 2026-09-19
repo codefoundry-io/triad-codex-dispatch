@@ -536,8 +536,8 @@ def test_standalone_skills_and_public_docs_keep_provider_read_contracts() -> Non
             assert tool_argument in public_doc
     assert "uses native `grep_search`" in readme
     assert "native `grep_search`를 사용합니다" in readme_ko
-    assert "MCP calls are denied" in readme
-    assert "MCP 호출은 차단" in readme_ko
+    assert "AGY also denies MCP calls" in readme
+    assert "AGY의 MCP 호출도 차단" in readme_ko
 
 
 def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> None:
@@ -588,26 +588,49 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "user setting을 변경하지 않습니다" not in readme_ko
     assert "transient AGY global-settings transaction" in readme
     assert "일시적 AGY global-settings transaction" in readme_ko
-    assert (
-        "auto-approve removes interactive approval prompts, while the configured "
-        "explicit deny rules still block their named action namespaces" in readme
-    )
-    assert (
-        "auto-approve는 interactive approval prompt를 제거하지만 설정된 "
-        "explicit deny rule은 지정된 action namespace를 계속 차단합니다" in readme_ko
-    )
-    assert (
-        "auto-approve removes interactive approval prompts but does not remove "
-        "explicit deny entries" in security
-    )
-    assert "MCP calls are denied" in security
-    assert "AGY native official-web read path" in security
+    assert "Formal AGY adds `read_url(*)`" in readme
+    assert "Formal AGY는 기존 다섯 deny에 `read_url(*)`" in readme_ko
+    assert "formal dispatch never supplies `--dangerously-skip-permissions`" in security
+    assert "Every REVIEW prompt prohibits web" in readme
+    assert "모든 REVIEW prompt는 웹을 금지" in readme_ko
+    assert "MCP calls are also denied" in security
+    assert "REVIEW's prohibition of those tools is prompt-controlled" in security
+    for document, stale_claim in (
+        (readme, "auto-approve removes interactive approval prompts, while"),
+        (readme_ko, "auto-approve는 interactive approval prompt를 제거하지만"),
+        (security, "auto-approve removes interactive approval prompts but does not"),
+        (security, "AGY native official-web read path"),
+    ):
+        assert stale_claim not in document
     assert "voids deny" not in security
     assert "If AGY was selected, started, or later failed" in gemini
     assert "standalone compatibility consult only" in gemini
     assert "Personal Google Sign-In requires AGY" in routing
     assert "Gemini Enterprise OAuth" in routing
     assert "transient deny transaction" in leg_contracts
+
+
+def test_standalone_agy_separates_formal_review_and_raw_investigation() -> None:
+    agy = " ".join(_text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md").split())
+
+    for clause in (
+        "Formal preflight and dispatch never use `--dangerously-skip-permissions`",
+        "five raw read-only deny rules plus `read_url(*)`",
+        "Raw investigations retain the version-gated headless compatibility",
+        "Every REVIEW prohibits web research",
+        "separate leader-authorized INVESTIGATION",
+        "same six formal deny entries",
+        "Keep formal permission checks enabled",
+    ):
+        assert clause in agy
+    for stale_claim in (
+        "five write/command/unsandboxed/URL/MCP deny rules",
+        "Approved AGY native official-web reads remain available",
+        "expressly authorized AGY native official-web reads",
+        "Headless auto-approve removes interactive approval prompts",
+        "If the operator opt-out makes headless review unavailable",
+    ):
+        assert stale_claim not in agy
 
 
 def test_recipient_guidance_uses_codex_host_policy_for_outside_sandbox_execution() -> (
