@@ -748,6 +748,12 @@ Do not rebind another project's UUID or use global-settings fallback to make a
 new checkout work. Repository rules may continue to require the original
 guarded worktree, including its intentional dirty changes.
 
+For guarded review, the leader records approved symlinks' exact text and
+HEAD/index/working-tree basis in TASK before capture. Reviewers use that evidence
+without following link targets or symlink ancestors. Target content requires a
+separately authorized bound input; missing necessary evidence is an open question.
+See [scoped symlink evidence](skills/triad-cross-family-review/references/leg-contracts.md#scoped-symlink-evidence).
+
 ## Runtime Logs And Local Data
 
 Runtime telemetry is local under the installed plugin's `bin/_logs/<cli>/`.

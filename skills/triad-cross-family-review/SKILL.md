@@ -57,8 +57,8 @@ zero-start, partial-start, finding, and rerun handling.
    review ID to packaged `review_round.py prepare`. Add only current `TASK.md`,
    `REVIEW.diff`, optional `EVIDENCE.md`, then run `manifest` last. The lifecycle
    code owns path grammar, inventory, collision, and source-copy validation.
-   For a worktree-first round, capture one packaged `fingerprint-worktree` value
-   after its custody files exist and before review starts. Start inspection from
+   For a worktree-first round, prepare [scoped symlink evidence](references/leg-contracts.md#scoped-symlink-evidence),
+   then capture one packaged `fingerprint-worktree` value after custody files exist and before review starts. Start inspection from
    the authenticated diff and explicit approved paths; references inside reviewed
    content never expand the approved boundary.
 

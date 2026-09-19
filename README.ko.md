@@ -691,6 +691,12 @@ post-review integrity 절차를 따릅니다. 이 사전 검사는 admission을 
 다른 프로젝트 UUID를 재연결하거나 global-settings fallback을 사용하지 마세요.
 저장소 지침이 기존 guarded worktree를 요구한다면 의도된 dirty 변경도 보존합니다.
 
+Guarded 리뷰에서는 리더가 승인된 심링크의 정확한 문자열과 HEAD/index/working-tree
+기준을 capture 전에 TASK에 기록합니다. 리뷰어는 링크 대상이나 심링크 부모 경로를
+따라 읽지 않고 이 증거를 검토합니다. 대상 내용은 별도로 승인하고 결합한 입력이어야
+하며, 판정에 필요한 증거가 없으면 open question으로 보고합니다.
+자세한 절차는 [scoped symlink evidence](skills/triad-cross-family-review/references/leg-contracts.md#scoped-symlink-evidence)를 따릅니다.
+
 ## Runtime Log 및 Local Data
 
 Runtime telemetry는 설치된 plugin의 `bin/_logs/<cli>/` 아래에 local artifact로

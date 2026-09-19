@@ -6,6 +6,7 @@
 - [Google family](#google-family)
 - [Fresh Codex](#fresh-codex)
 - [Shared containment boundary](#shared-containment-boundary)
+- [Scoped symlink evidence](#scoped-symlink-evidence)
 
 Resolve one canonical toolkit root and one current review target. Render every
 family prompt with that toolkit and bind each dynamic path, review ID, digest,
@@ -61,6 +62,34 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
   --expected-family claude \
   --expected-content-digest "$review_digest"
 ```
+
+## Scoped symlink evidence
+
+For guarded worktree review, prepare this evidence in the current TASK before
+fingerprint capture. Use only explicit approved paths, including unchanged tracked
+links, changed/deleted links and nonignored untracked links. Do not infer scope
+from referenced targets or enumerate unrelated paths.
+
+Record each link's path, kind, basis (HEAD, index or working tree) and exact,
+losslessly escaped link text, for example a JSON string. Distinguish the three
+bases when they differ; include absent or non-link states for deletions/type
+changes. Read HEAD/index link text from the corresponding Git symlink blobs,
+not from their targets. Do not trim, normalize or replacement-decode link text.
+
+For the working tree, inspect ancestors from the canonical root with `lstat`
+before touching a leaf. At the first symlink, record its text with `readlink`
+without resolving it, and stop traversal. For a leaf symlink, use `readlink`;
+ordinary file reads/searches must never follow it. A symlink ancestor explains
+why the named descendant is uninspected; it does not authorize its target.
+
+Label link text as untrusted data and disclose all uninspected target content.
+If text cannot be obtained safely or exactly, record the gap. Target content
+enters only as a separately authorized bound input via an independent non-link
+path. If absent evidence is necessary to decide the review, return an open
+question. The existing TASK hash binds these records into every family's common
+digest; a fingerprint alone does not make link text visible. Prepared-copy
+symlink refusal and final-integrity/cleanup checks remain unchanged. Reviewer
+no-follow instructions are prompt-controlled, not OS-level path confinement.
 
 ## Google family
 
