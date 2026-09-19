@@ -300,6 +300,7 @@ class RunResult:
     runtime_identity: Optional[str] = None
     # Private local transport state; intentionally excluded from audit/run-log schemas.
     _stdin_delivery_failed: bool = False
+    _output_transport_failed: bool = False
     # Sanitized Claude audit evidence only; excluded from failure/repair IPC.
     _claude_receipt: Optional[dict] = None
     # Host-resolved launch cwd; audit-only evidence, not provider attestation.
@@ -1213,7 +1214,7 @@ def scrubbed_child_env(base=None, *, remove=()) -> dict:
     return {k: v for k, v in src.items() if k not in omitted}
 
 
-def _drain(stream, accum: list[str], passthrough) -> None:
+def _drain(stream, accum: list[str], passthrough, outcome: dict) -> None:
     """Reader thread — line iter, accumulate, optional mirror to passthrough."""
     try:
         for line in iter(stream.readline, ""):
@@ -1224,19 +1225,25 @@ def _drain(stream, accum: list[str], passthrough) -> None:
                     passthrough.flush()
                 except Exception:
                     pass
+    except Exception as e:
+        outcome["error"] = type(e).__name__
+    finally:
         try:
             stream.close()
-        except Exception:
-            pass
-    except Exception as e:
-        log(f"reader thread error: {e}")
+        except Exception as e:
+            outcome["error"] = type(e).__name__
+        outcome["done"] = True
 
 
 def _terminate_provider_process_group(
     proc, reason: str, provider_pgid: Optional[int] = None
-) -> None:
-    """Terminate and reap one saved provider process group or direct child."""
+) -> bool:
+    """Signal the saved group and reap the direct child.
+
+    The result reports signaling/reaping errors, not descendant zombie removal.
+    """
     log(f"{reason}; sending SIGTERM")
+    completed = True
     try:
         if provider_pgid is not None:
             os.killpg(provider_pgid, signal.SIGTERM)
@@ -1244,6 +1251,8 @@ def _terminate_provider_process_group(
             proc.terminate()
     except (ProcessLookupError, PermissionError) as error:
         log(f"SIGTERM failed: {error}")
+        if isinstance(error, PermissionError):
+            completed = False
     direct_child_unreaped = False
     try:
         proc.wait(timeout=5)
@@ -1259,6 +1268,8 @@ def _terminate_provider_process_group(
             pass
         except PermissionError as error:
             log(f"process-group liveness check failed: {error}")
+            completed = False
+            group_survives = True
 
     if group_survives or (provider_pgid is None and direct_child_unreaped):
         log("SIGTERM ignored; sending SIGKILL")
@@ -1267,13 +1278,17 @@ def _terminate_provider_process_group(
                 os.killpg(provider_pgid, signal.SIGKILL)
             else:
                 proc.kill()
-        except (ProcessLookupError, PermissionError):
+        except ProcessLookupError:
             pass
+        except PermissionError:
+            completed = False
 
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         log("zombie: SIGKILL also unresponsive")
+        completed = False
+    return completed
 
 
 def _run_once(
@@ -1328,6 +1343,7 @@ def _run_once(
         stderr=subprocess.PIPE,
         stdin=(subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL),
         text=True,
+        encoding="utf-8",
         bufsize=1,
     )
     if hasattr(os, "setsid"):
@@ -1355,24 +1371,29 @@ def _run_once(
     stdin_done = threading.Event()
     stdin_errors: list[str] = []
     t_in = None
-    if stdin_bytes is not None and proc.stdin is not None:
-        def _feed_stdin() -> None:
-            try:
-                written = proc.stdin.buffer.write(stdin_bytes)
-                if written != len(stdin_bytes):
-                    stdin_errors.append("write")
-                proc.stdin.buffer.flush()
-            except Exception:
+    threads: list = []
+    stdout_buf: list[str] = []
+    stderr_buf: list[str] = []
+    out_state: dict = {}
+    err_state: dict = {}
+    transport_error = None
+    setup_failed = False
+
+    def _feed_stdin() -> None:
+        try:
+            written = proc.stdin.buffer.write(stdin_bytes)
+            if written != len(stdin_bytes):
                 stdin_errors.append("write")
+            proc.stdin.buffer.flush()
+        except Exception:
+            stdin_errors.append("write")
+        finally:
+            try:
+                proc.stdin.close()
+            except Exception:
+                stdin_errors.append("close")
             finally:
-                try:
-                    proc.stdin.close()
-                except Exception:
-                    stdin_errors.append("close")
-                finally:
-                    stdin_done.set()
-        t_in = threading.Thread(target=_feed_stdin, daemon=True)
-        t_in.start()
+                stdin_done.set()
 
     def _finish_stdin() -> None:
         if t_in is None:
@@ -1384,19 +1405,22 @@ def _run_once(
             )
             t_in.join(timeout=2)
 
-    stdout_buf: list[str] = []
-    stderr_buf: list[str] = []
-    t_out = threading.Thread(
-        target=_drain, args=(proc.stdout, stdout_buf, None), daemon=True
-    )
-    t_err = threading.Thread(
-        target=_drain, args=(proc.stderr, stderr_buf, sys.stderr), daemon=True
-    )
-    t_out.start()
-    t_err.start()
-
     timed_out = False
     try:
+        # Construction/start belongs inside the same cleanup boundary as wait.
+        if stdin_bytes is not None and proc.stdin is not None:
+            t_in = threading.Thread(target=_feed_stdin, daemon=True)
+            threads.append(t_in)
+            t_in.start()
+        for stream, buf, mirror, state in (
+            (proc.stdout, stdout_buf, None, out_state),
+            (proc.stderr, stderr_buf, sys.stderr, err_state),
+        ):
+            thread = threading.Thread(
+                target=_drain, args=(stream, buf, mirror, state), daemon=True
+            )
+            threads.append(thread)
+            thread.start()
         try:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -1405,15 +1429,51 @@ def _run_once(
                 proc, f"timeout after {timeout}s", provider_pgid
             )
         _finish_stdin()
-    except BaseException:
-        _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
-        _finish_stdin()
-        t_out.join(timeout=2)
-        t_err.join(timeout=2)
-        raise
+        # A reaped leader may still own descendants, even with closed pipes.
+        if not timed_out and provider_pgid is not None:
+            try:
+                os.killpg(provider_pgid, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                if not _terminate_provider_process_group(
+                    proc, "provider descendant remained after exit", provider_pgid
+                ):
+                    transport_error = "process-group cleanup incomplete"
+    except BaseException as exc:
+        try:
+            _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
+        except Exception as cleanup_error:
+            log(f"provider cleanup failed ({type(cleanup_error).__name__})")
+        for thread in threads:
+            try:
+                thread.join(timeout=2)
+            except RuntimeError:  # A constructed thread may not have started.
+                pass
+        # Close unclaimed pipes only; closing a pipe owned by a blocked reader
+        # on this thread would turn bounded cleanup into an unbounded wait.
+        if not any(thread.is_alive() for thread in threads):
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+        if not isinstance(exc, Exception):
+            raise
+        setup_failed = True
+        transport_error = f"transport setup/wait failed ({type(exc).__name__})"
+    else:
+        for thread in threads:
+            if thread is not t_in:
+                thread.join(timeout=2)
 
-    t_out.join(timeout=2)
-    t_err.join(timeout=2)
+    for name, state in (("stdout", out_state), ("stderr", err_state)):
+        if not state.get("done") or state.get("error"):
+            detail = state.get("error", "incomplete")
+            transport_error = transport_error or f"{name} collection failed ({detail})"
+    if transport_error:
+        log(transport_error)
 
     elapsed = time.monotonic() - start
     stdout = "".join(stdout_buf)
@@ -1437,11 +1497,16 @@ def _run_once(
             result.extraction_error = f"stdin delivery failed ({phase})"
             result._stdin_delivery_failed = True
             log(result.extraction_error)
+        elif transport_error and (rc == 0 or setup_failed):
+            result.exit_code = EXIT_CLI_FAIL
+            result.classification = "unknown"
+            result.extraction_error = transport_error
+            result._output_transport_failed = True
 
     result._effective_cwd = effective_cwd
     result.vendor_exit_code = rc
     if classify_and_log:
-        if not result._stdin_delivery_failed:
+        if not (result._stdin_delivery_failed or result._output_transport_failed):
             result.classification = classify(
                 cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
             )
@@ -1450,7 +1515,7 @@ def _run_once(
             f"exit={result.exit_code} vendor={result.vendor_exit_code} "
             f"elapsed={elapsed:.1f}s"
         )
-    elif not result._stdin_delivery_failed:
+    elif not (result._stdin_delivery_failed or result._output_transport_failed):
         result.classification = "unclassified"
 
     return result
@@ -1608,7 +1673,7 @@ def run_cli_with_retry(
             else:
                 r.mode = "normal"
             result = r
-            if r._stdin_delivery_failed or (
+            if r._stdin_delivery_failed or r._output_transport_failed or (
                 prompt_via_stdin and r.exit_code == EXIT_TIMEOUT
             ):
                 return r

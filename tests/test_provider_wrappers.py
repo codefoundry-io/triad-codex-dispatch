@@ -186,7 +186,7 @@ def _fixture_process_is_running(pid: int) -> bool:
     if sys.platform.startswith("linux"):
         try:
             state = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             return False
         if state.rsplit(") ", 1)[-1].split(maxsplit=1)[0] == "Z":
             return False
@@ -327,6 +327,8 @@ import time
 role = sys.argv[1]
 state_dir = Path(sys.argv[2])
 omit_aggregate = len(sys.argv) > 3 and sys.argv[3] == "omit-aggregate"
+normal_exit = "normal-exit" in sys.argv[3:]
+hold_output = "hold-output" in sys.argv[3:]
 
 
 def write_receipt(path, payload):
@@ -357,8 +359,8 @@ if role == "direct":
     subprocess.Popen(
         [sys.executable, __file__, "descendant", str(state_dir)],
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=None if hold_output else subprocess.DEVNULL,
+        stderr=None if hold_output else subprocess.DEVNULL,
     )
     deadline = time.monotonic() + 3.0
     descendant_receipt = state_dir / "descendant-ready.json"
@@ -374,6 +376,9 @@ if role == "direct":
                 "descendant": json.loads(descendant_receipt.read_text(encoding="utf-8")),
             },
         )
+    if normal_exit:
+        print("terminal complete", flush=True)
+        os._exit(0)
     while True:
         time.sleep(0.05)
 
@@ -426,6 +431,34 @@ def test_run_once_timeout_kills_provider_descendant_after_direct_exit(
             (direct_receipt, descendant_receipt),
             wrapper_pgrp=wrapper_pgrp,
             wrapper_sid=wrapper_sid,
+        )
+
+
+@pytest.mark.skipif(not _POSIX_PROCESS_GROUPS, reason="requires POSIX process groups")
+@pytest.mark.parametrize("hold_output", [False, True])
+def test_c1_normal_exit_reconciles_owned_descendant(tmp_path, hold_output):
+    script = tmp_path / "provider_fixture.py"
+    state = tmp_path / "state"
+    state.mkdir()
+    _write_provider_fixture(script)
+    receipts = (state / "direct-ready.json", state / "descendant-ready.json")
+    wrapper_pgrp, wrapper_sid = os.getpgrp(), os.getsid(0)
+    try:
+        started = time.monotonic()
+        result = _common._run_once(
+            "fixture", [sys.executable, str(script), "direct", str(state),
+                        "normal-exit", *( ["hold-output"] if hold_output else [])],
+            str(tmp_path), timeout=5, classify_and_log=False,
+        )
+        assert time.monotonic() - started < 15
+        assert result.vendor_exit_code == 0
+        assert result.stdout.strip() == "terminal complete"
+        descendant = _read_fixture_identity(receipts[1])
+        assert descendant is not None
+        assert _wait_for_fixture_exit(descendant[0], 3)
+    finally:
+        _cleanup_available_fixture_receipts(
+            receipts, wrapper_pgrp=wrapper_pgrp, wrapper_sid=wrapper_sid,
         )
 
 

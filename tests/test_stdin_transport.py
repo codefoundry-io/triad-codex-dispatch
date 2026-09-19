@@ -263,6 +263,9 @@ def test_stdin_reconciliation_interrupt_rethrows_and_cleans_up(
         def start(self):
             self.target()
 
+        def is_alive(self):
+            return False  # This test double completes its target synchronously.
+
         def join(self, timeout):
             joins.append(timeout)
             if len(joins) == 1:
