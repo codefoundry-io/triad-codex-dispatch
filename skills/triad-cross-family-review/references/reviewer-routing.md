@@ -83,6 +83,13 @@ it validates. Rendering and dispatch verify that hash against the current
 policy file. Regenerate preflight after a policy change or when an older receipt
 lacks the hash. This binds bytes; it does not attest to merged runtime settings.
 
+Gemini preflight first runs the selected executable's `--version` with a maximum
+15-second timeout and the formal scrubbed environment. It requires SemVer
+>=0.34.0 before the existing help probe and records the exact `gemini_version`.
+Regenerate receipts missing this field. A prerelease of 0.34.0 is below the floor;
+build metadata does not affect precedence. The receipt hash binds the observation,
+which does not by itself prove authentication, runtime model or policy enforcement.
+
 ## Admission boundary
 
 Provider permission modes are inputs to containment, not admission proof.

@@ -110,6 +110,7 @@ def _google_selector_fixture(
                 (ROOT / "bin" / "policies" / "gemini-formal-readonly.toml").resolve()
             ),
             "read_only_enforcement": "packaged-mode-independent-policy",
+            "gemini_version": "0.60.0",
             "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "requested_approval_mode": "plan",
         }
@@ -154,6 +155,7 @@ def _google_preflight_fixture(
         ),
         "provider_started": False,
         "read_only_enforcement": "packaged-mode-independent-policy",
+        "gemini_version": "0.60.0",
         "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
         "requested_approval_mode": "plan",
         "review_id": review_id,
@@ -1794,7 +1796,7 @@ def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout=_formal_gemini_help(),
+            stdout="0.60.0\n" if cmd[-1] == "--version" else _formal_gemini_help(),
             stderr="",
         )
 
@@ -1834,12 +1836,11 @@ def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(
     assert Path(receipt["policy"]) == (
         ROOT / "bin" / "policies" / "gemini-formal-readonly.toml"
     )
-    assert len(calls) == 1
-    cmd, kwargs = calls[0]
-    assert cmd == [str(selected), "--help"]
-    child_env = kwargs["env"]
-    for name in competing_auth:
-        assert name not in child_env
+    assert receipt["gemini_version"] == "0.60.0"
+    assert [cmd for cmd, _ in calls] == [[str(selected), "--version"], [str(selected), "--help"]]
+    for _, kwargs in calls:
+        for name in competing_auth:
+            assert name not in kwargs["env"]
 
 
 def test_gemini_formal_preflight_rejects_unbound_help_tokens(
@@ -1851,7 +1852,7 @@ def test_gemini_formal_preflight_rejects_unbound_help_tokens(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout=(
+            stdout="0.60.0\n" if cmd[-1] == "--version" else (
                 "--approval-mode supports only default\n"
                 "plan is mentioned in unrelated prose\n"
                 "--policy was removed and accepts no path\n"
@@ -1890,7 +1891,7 @@ def test_gemini_formal_preflight_requires_explicit_auto_model_surface(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout=(
+            stdout="0.60.0\n" if cmd[-1] == "--version" else (
                 "  --approval-mode  Set the approval mode  [string] "
                 '[choices: "default", "auto_edit", "yolo", "plan"]\n'
                 "  --policy  Additional policy files or directories to load  [array]\n"
@@ -1936,7 +1937,7 @@ def test_gemini_formal_preflight_honors_required_receipt_pin_over_path(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout=_formal_gemini_help(),
+            stdout="0.60.0\n" if cmd[-1] == "--version" else _formal_gemini_help(),
             stderr="",
         )
 
@@ -1961,7 +1962,7 @@ def test_gemini_formal_preflight_honors_required_receipt_pin_over_path(
 
     assert gemini_wrapper.main() == 0
     assert json.loads(capsys.readouterr().out)["executable"] == str(selected)
-    assert calls == [[str(selected), "--help"]]
+    assert calls == [[str(selected), "--version"], [str(selected), "--help"]]
 
 
 def test_gemini_formal_rejects_wrong_route_receipt_before_preflight(

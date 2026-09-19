@@ -429,6 +429,28 @@ def load_google_selector_receipt(
     )
 
 
+def validate_formal_gemini_version(version: str) -> str:
+    """Require one SemVer at or above the formal Gemini CLI floor."""
+    match = re.fullmatch(
+        r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+        r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+        r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?",
+        version,
+    ) if isinstance(version, str) else None
+    if match is None:
+        raise RoundIntegrityError("Gemini version must be one valid SemVer")
+    prerelease = match[4]
+    if prerelease and any(
+        part.isdecimal() and len(part) > 1 and part.startswith("0")
+        for part in prerelease.split(".")
+    ):
+        raise RoundIntegrityError("Gemini prerelease version has a leading zero")
+    core = tuple(int(match[index]) for index in (1, 2, 3))
+    if core < (0, 34, 0) or (core == (0, 34, 0) and prerelease):
+        raise RoundIntegrityError("Gemini formal review requires CLI >=0.34.0")
+    return version
+
+
 def validate_google_preflight_receipt(
     path: Path,
     selector_receipt: GoogleSelectorReceipt,
@@ -453,6 +475,7 @@ def validate_google_preflight_receipt(
         "agy": {"agy_version", "effort", "model", "route_args"},
         "gemini": {
             "effective_approval_mode",
+            "gemini_version",
             "model",
             "policy",
             "policy_sha256",
@@ -508,6 +531,7 @@ def validate_google_preflight_receipt(
         ):
             raise RoundIntegrityError("Google AGY preflight fields are invalid")
     else:
+        validate_formal_gemini_version(record["gemini_version"])
         gemini_fields = (
             "effective_approval_mode",
             "model",

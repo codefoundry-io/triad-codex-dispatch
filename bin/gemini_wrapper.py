@@ -148,6 +148,20 @@ def _run_preflight(
     policy = _formal_policy_path()
     try:
         policy_sha256 = _validate_formal_policy(policy)
+        version_result = subprocess.run(
+            [gemini_bin, "--version"],
+            cwd=cwd,
+            env=_common.scrubbed_child_env(remove=FORMAL_GEMINI_REMOVED_ENV),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=min(timeout, 15),
+        )
+        if version_result.returncode != 0:
+            raise ValueError("Gemini --version probe failed")
+        gemini_version = review_round.validate_formal_gemini_version(
+            version_result.stdout.strip()
+        )
         completed = subprocess.run(
             [gemini_bin, "--help"],
             cwd=cwd,
@@ -170,6 +184,7 @@ def _run_preflight(
         json.dumps(
             {
                 "effective_approval_mode": "unexposed",
+                "gemini_version": gemini_version,
                 "executable": gemini_bin,
                 "google_selector_receipt_sha256": selector_receipt.receipt_sha256,
                 "model": "auto",

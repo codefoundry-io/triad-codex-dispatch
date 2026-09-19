@@ -468,7 +468,10 @@ directory에 준비합니다. 모든 required family는 그 동일한 complete d
 반환합니다. 두 review 경로 모두 admission digest에 공통 검토 조건과 renderer/schema의
 정확한 파일 bytes를 포함합니다. 조건·toolkit·receipt가 바뀌면 새 검토 기준을 만들며,
 family만 바꾸면 공통 digest를 유지합니다. Gemini preflight는 policy bytes도 고정합니다.
-`policy_sha256`이 없는 과거 receipt나 policy 파일이 바뀐 receipt는 다시 생성해야 합니다.
+`policy_sha256` 또는 `gemini_version`이 없는 receipt나 policy 파일이 바뀐 receipt는 다시 생성해야 합니다.
+Formal Gemini preflight는 최대 15초의 `--version` 검사로 SemVer >=0.34.0을 먼저
+확인한 뒤 기존 help 기능을 검사합니다. 실제 버전 문자열을 기록하며 receipt hash가
+그 버전을 검토 기준에 포함합니다.
 Leader는 dispatch 전에 prepared-directory integrity digest와 canonical-worktree fingerprint를
 capture하고 시작된 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
 재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는

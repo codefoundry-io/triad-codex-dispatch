@@ -504,7 +504,10 @@ That admission digest binds the common review conditions and exact renderer/sche
 bytes on both prepared and guarded routes. A condition, toolkit, or receipt change
 requires a new basis; family selection alone retains the common digest. Gemini
 preflight also pins the packaged policy bytes. Regenerate an older receipt that
-lacks `policy_sha256`, or any receipt whose policy file has changed.
+lacks `policy_sha256` or `gemini_version`, or any receipt whose policy file has changed.
+Formal Gemini preflight first requires a successful `--version` probe (at most
+15 seconds) proving SemVer >=0.34.0, then checks the existing help capabilities.
+It records the exact accepted version; the receipt hash binds it into the review basis.
 The leader separately captures the prepared-directory integrity digest and canonical-worktree fingerprint
 before dispatch, verifies both after every started leg terminates, and reproduces every
 finding against the canonical worktree. Reviewer coverage is prompt-controlled
