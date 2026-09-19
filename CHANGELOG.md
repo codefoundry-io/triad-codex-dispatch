@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.555 — 2026-09-20
+
+- Completes provider stdin delivery and preserves reader/transport failure evidence.
+- Requires allocated review-root identity and verified evidence custody before
+  cleanup; retains failed-round evidence for diagnosis.
+- Validates canonical verdict JSON before normalization and binds review
+  conditions and selected policy bytes into admission evidence.
+- Binds the supported Gemini CLI version observation to formal preflight.
+- Separates formal REVIEW web restrictions from raw INVESTIGATION: AGY formal
+  calls add the URL-read deny and omit headless autoapproval; raw behavior remains
+  available. Gemini REVIEW web prohibition remains prompt-controlled.
+- Makes scoped symlink text and coverage gaps explicit in guarded review tasks
+  without following targets or changing prepared-directory link refusal.
+- Preserves the public three-family contract, raw investigation routes, disabled
+  AGY hook and existing authentication boundary. This release does not adopt a
+  shared-spec revision or claim unexecuted cross-host conformance checks.
+
 ## 0.2.554 — 2026-09-19
 
 - Terminates surviving members of a captured provider process group after timeout
