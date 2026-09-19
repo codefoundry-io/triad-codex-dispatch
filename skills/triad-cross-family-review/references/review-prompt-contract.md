@@ -15,10 +15,16 @@ Every family receives one canonical `Review metadata: ` JSON record containing:
 
 - review ID, kind, family, objective, and criteria;
 - immutable prepared-directory path and prepared digest;
-- route-bound result-admission digest;
+- result-admission digest binding every common review condition and route;
 - exact approved data and test-source boundary;
 - selected Google authentication class, route, executable, and wrapper;
 - selector and preflight receipt hashes, model, and effort.
+
+Both renderers also bind the exact `review_round.py` and `verdict_schema.py`
+file hashes. A changed objective, criteria or order, boundary or order, kind,
+review ID, input path, toolkit file, or receipt requires a new common basis.
+Family selection alone preserves that basis. The prepared-directory integrity
+digest remains separate from the result-admission digest.
 
 The prepared directory contains the approved complete files under
 `source/product/`, current `TASK.md`, current `REVIEW.diff`, optional bounded

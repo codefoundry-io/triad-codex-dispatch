@@ -16,6 +16,7 @@ results are written to ``_logs/gemini/audit.jsonl`` (gitignored).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -82,9 +83,10 @@ def _rule_tools(rule: dict[str, object]) -> set[str]:
     return set()
 
 
-def _validate_formal_policy(path: Path) -> None:
+def _validate_formal_policy(path: Path) -> str:
     try:
-        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+        policy_bytes = path.read_bytes()
+        payload = tomllib.loads(policy_bytes.decode("utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise ValueError(
             f"formal Gemini policy is unavailable or invalid: {error}"
@@ -116,6 +118,7 @@ def _validate_formal_policy(path: Path) -> None:
     }
     if len(actual_rules) != len(expected_rules) or set(actual_rules) != expected_rules:
         raise ValueError("formal Gemini policy is not the exact fail-closed rule set")
+    return hashlib.sha256(policy_bytes).hexdigest()
 
 
 def _supports_formal_help_contract(help_text: str) -> bool:
@@ -144,7 +147,7 @@ def _run_preflight(
 ) -> int:
     policy = _formal_policy_path()
     try:
-        _validate_formal_policy(policy)
+        policy_sha256 = _validate_formal_policy(policy)
         completed = subprocess.run(
             [gemini_bin, "--help"],
             cwd=cwd,
@@ -171,6 +174,7 @@ def _run_preflight(
                 "google_selector_receipt_sha256": selector_receipt.receipt_sha256,
                 "model": "auto",
                 "policy": str(policy),
+                "policy_sha256": policy_sha256,
                 "provider_started": False,
                 "read_only_enforcement": "packaged-mode-independent-policy",
                 "requested_approval_mode": "plan",

@@ -182,9 +182,11 @@ When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured, it must include the canonical
 system temp base, including when hardened mode requires the setting.
 
 Every leg receives the same directory and task. No prompt inlines a diff or file
-body. The prepared-directory digest protects packet bytes; the renderer binds it
-with the canonical Google selector receipt into one result-admission content digest shared by
-every family. Compare both packet integrity and result bindings after every
+body. The prepared-directory digest protects packet bytes; the renderer binds it,
+every common review condition, and the Google receipts into one result-admission
+content digest shared by every family. Both renderers bind the exact renderer
+and schema file hashes, so toolkit changes require a new basis. Compare both
+packet integrity and result bindings after every
 started leg terminates. In a partial-start round, record the actual start failure and each remaining
 required leg as not started because launch was closed before comparison. Reviewers do not execute candidate code, tests, builds,
 hooks, or generated scripts.
@@ -221,7 +223,9 @@ the route is then immutable. AGY
 version, executable, exact tabular model-catalog, and selected project or settings-transaction checks precede
 submission. Gemini preflight validates the receipt binary, model/Plan Mode/policy
 CLI surfaces, and mode-independent packaged policy without a model call. It
-records requested Plan Mode and effective mode `unexposed`; the policy, not a
+records a SHA-256 of the same policy bytes it validates; render and dispatch
+reject a missing or stale policy hash. This binds policy bytes, not effective
+runtime settings. It records requested Plan Mode and effective mode `unexposed`; the policy, not a
 speculative settings or trust probe, supplies the fail-closed read-only boundary.
 The current Gemini JSON route records literal `runtime_identity: "unexposed"`;
 it does not infer a single model from `stats.models`. Neither route falls back after
