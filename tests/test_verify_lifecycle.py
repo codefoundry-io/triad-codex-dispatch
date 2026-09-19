@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -47,6 +49,11 @@ def assert_cleanup_and_source(report):
     assert report["cleanup"]
     assert all(item["absent"] for item in report["cleanup"])
     assert all(not Path(item["path"]).exists() for item in report["cleanup"])
+    retained = report["retained_evidence"]
+    assert retained
+    for name, item in retained["inventory"].items():
+        if item["kind"] == "file":
+            assert hashlib.sha256(base64.b64decode(retained["files_base64"][name])).hexdigest() == item["sha256"]
 
 
 def test_fixed_lifecycle_cli_preserves_json_and_never_dispatches(catalog_only_vendor):
@@ -59,12 +66,39 @@ def test_fixed_lifecycle_cli_preserves_json_and_never_dispatches(catalog_only_ve
     assert report["failures"] == []
     assert report["payload_round_trip_verified"] is True
     assert report["integrity_stdout"].strip() == "ROUND_INTEGRITY_OK"
+    generated = report["retained_evidence"]["generated_files_base64"]
+    assert set(generated) == {"snapshot.json", "codex-prompt.txt", "selector.json", "preflight.json"}
+    assert json.loads(base64.b64decode(generated["snapshot.json"]))["prepared_digest"]
+    assert b"Review metadata:" in base64.b64decode(generated["codex-prompt.txt"])
     steps = [command["step"] for command in report["commands"]]
-    lifecycle = ["bootstrap", "prepare", "manifest", "capture", "select", "preflight", "render", "verify", "cleanup"]
+    lifecycle = ["bootstrap", "prepare", "manifest", "capture", "select", "preflight", "render", "verify", "export", "cleanup"]
     assert [step for step in steps if step in lifecycle] == lifecycle
     assert all(isinstance(command["argv"], list) for command in report["commands"])
     assert all(command["returncode"] == 0 for command in report["commands"])
     assert_cleanup_and_source(report)
+
+
+@pytest.mark.parametrize("failed_file", ["payload.json", "snapshot.json"])
+def test_failed_report_retention_preserves_synthetic_evidence(catalog_only_vendor, monkeypatch, failed_file):
+    spec = importlib.util.spec_from_file_location("lifecycle_retention_test", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    original = Path.read_bytes
+    def fail_evidence_read(path):
+        if path.name == failed_file and "triad-lifecycle-fixture-" in str(path):
+            raise OSError("synthetic retention failure")
+        return original(path)
+    monkeypatch.setattr(Path, "read_bytes", fail_evidence_read)
+    report = module.verify_lifecycle()
+    assert report["status"] == "WORKFLOW_DEFECT"
+    assert report["retained_evidence"] is None
+    assert "cleanup" not in [item["step"] for item in report["commands"]]
+    preserved = [Path(item["path"]) for item in report["cleanup"] if not item["absent"]]
+    assert any(path.name.startswith("triad-lifecycle-fixture-") for path in preserved)
+    # The test itself owns this synthetic fixture and has just verified retention.
+    for path in preserved:
+        if path.name.startswith("triad-lifecycle-fixture-"):
+            module.shutil.rmtree(path)
     assert set(catalog_only_vendor.read_text().splitlines()) == {"--version", "models"}
 
 
@@ -88,7 +122,7 @@ def test_lifecycle_documentation_states_bootstrap_prerequisites_and_write_scope(
     assert "ignored" in docstring
 
 
-@pytest.mark.parametrize("failure_step", ["render", "cleanup"])
+@pytest.mark.parametrize("failure_step", ["render", "export", "cleanup"])
 def test_failure_keeps_real_exit_and_runs_postchecks(catalog_only_vendor, monkeypatch, failure_step):
     assert SCRIPT.is_file(), "bounded lifecycle verifier is missing"
     spec = importlib.util.spec_from_file_location("lifecycle_under_test", SCRIPT)
@@ -111,4 +145,9 @@ def test_failure_keeps_real_exit_and_runs_postchecks(catalog_only_vendor, monkey
     assert report["failures"]
     if failure_step == "render":
         assert "verify" not in [command["step"] for command in report["commands"]]
+    if failure_step == "export":
+        assert report["retained_evidence"]["source"] == "synthetic-fixture-fallback"
+        cleanup = next(command for command in report["commands"] if command["step"] == "cleanup")
+        assert cleanup["returncode"] != 0
+        assert "export receipt" in cleanup["stderr"]
     assert_cleanup_and_source(report)

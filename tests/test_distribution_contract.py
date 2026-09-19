@@ -1039,6 +1039,7 @@ def test_cross_family_skill_delegates_mechanical_lifecycle_to_code() -> None:
         "render",
         "render-worktree",
         "verify",
+        "export",
         "cleanup",
     ):
         assert subcommand in skill
@@ -1053,6 +1054,7 @@ def test_cross_family_skill_delegates_mechanical_lifecycle_to_code() -> None:
         "def render_review_prompt(",
         "def render_worktree_review_prompt(",
         "def cleanup_review_workspace(",
+        "def export_review_workspace(",
     ):
         assert implementation in lifecycle
 

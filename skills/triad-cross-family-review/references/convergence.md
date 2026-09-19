@@ -43,6 +43,11 @@ fresh Codex, repeat observation waits until its terminal result arrives.
 
 ## Failure before any provider starts
 
+Before any cleanup in this protocol, finish all writers, export and verify the
+round's evidence at its approved durable destination. Managed prepared roots use
+packaged `export` then `cleanup`; unproven or unexported residue is preserved and
+reported. This also applies to failed and stopped rounds.
+
 A packet, selector, preflight, or launch-setup defect with zero started provider
 legs invalidates the attempt. Record the exact non-secret failure evidence, use
 supported cleanup for an exact managed root when one exists, correct the defect
