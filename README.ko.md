@@ -602,7 +602,9 @@ python3 -m pytest -q tests/ -p no:cacheprovider   # 모든 테스트 PASS 기대
 provider-free 합성 lifecycle 검증을 명시적으로 요청한 경우 checkout에서
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py`를 실행합니다.
 기존 CLI와 격리 bootstrap을 재사용하며, 추론 없이 AGY 버전·모델 목록만 조회합니다.
-실제 명령 결과, 패키지 소스 해시와 정리 증거를 JSON으로 출력합니다.
+실제 명령 결과, 패키지 소스 해시, export manifest, 합성 artifact의 실제 bytes(base64),
+링크 문자열과 정리 증거를 JSON으로 출력합니다. Export 실패 시에도 합성 bytes를 보고서에
+보관한 뒤 자체 fixture를 정리하며, 보관에 실패하면 fixture를 남깁니다.
 PATH에 Git과 Codex, Claude, AGY CLI가, Python 3.12+ 환경에 Pydantic 2가 필요합니다.
 임시 `AGY_SETTINGS_PATH`는 wrapper
 트랜잭션만 격리하며 vendor 설정 격리를 증명하지 않습니다. 성공은 리뷰 판정이나
@@ -732,11 +734,30 @@ fingerprint, family별 하나의 strict `LegVerdict`를 사용합니다. 리더�
 snapshot을 reviewed evidence 밖에 두며 bounded correction 뒤에는 fresh complete
 round를 시작합니다.
 
-Formal review는 canonical system temp root 아래의 `triad-review-` namespace를
-예약합니다. 각 round는 `results/_logs`를 포함한 returned root를 소유하며, 다음
-prepare는 activity가 strictly more than 30 days 동안 없었던 managed interrupted
-root만 정리합니다. 정상 cleanup은 완료된 exact root만 제거하고 다른 managed
-sibling root는 건드리지 않습니다.
+### 리뷰 증거 정리
+
+`prepare`는 system temp의 `triad-review-` namespace에 mode-0700 root를 만들고,
+root 밖에 독점 생성한 allocation 기록으로 실제 디렉터리 identity를 연결합니다.
+`results/_logs`도 다른 round 증거와 함께 export 대상에 포함합니다.
+모든 writer가 종료된 뒤 `review_round.py export --review-id ID --expected-root ROOT
+--output DESTINATION`을 실행하고 같은 ID/root로 `cleanup`합니다. 목적지는 모든
+managed root·cleanup claim 밖의 새 절대 경로여야 합니다. Export는 파일 bytes,
+빈 디렉터리를 포함한 목록, 링크 문자열을 보관하며 링크 대상을 따라가지 않습니다.
+Cleanup은 원본과 보관된 증거를 재검증하고, 뒤늦게 추가·수정된 자료가 있으면 거부합니다.
+최종 결과 수거 후 한 번 export합니다.
+
+하나의 allocation은 리더 한 명만 정리합니다. 확인된 partial claim은 재개하고,
+완료 후 재호출은 no-op입니다. 다음 `prepare`는 출처와 export가 검증된 allocation 중
+activity가 strictly more than 30 days 없는 것만 정리하며 partial claim도 포함합니다.
+이름·UID·나이·그럴듯한 marker만으로는 삭제하지 않습니다. 다른 root와 링크 대상은 보존합니다.
+
+거부된 잔여물은 경로·진단을 남기고 소유자 권한으로 증거를 확인·보관한 뒤 정확히 확인한
+대상만 정리합니다. 알 수 없는 폴더를 채택하려고 allocation/export 기록을 만들지 마세요.
+`triad-review-ID` root의 형제 기록은 `.triad-review-ID.{allocation,export,claim}.json`,
+claim 폴더는 `.triad-review-ID.cleanup`입니다. 정리 중단 후 검증된 기록만 남았다면
+원래 review ID와 expected root로 `cleanup`을 다시 실행하세요. Root와 claim 폴더가
+모두 사라진 뒤 기록만 남은 경우 stale sweep은 이를 수거하지 않습니다.
+악의적인 동일 UID의 기록 위조나 열린 FD를 유지하는 동시 writer 방어를 보장하지 않습니다.
 
 Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocation은 provider
 실행 전에 3,600 seconds보다 오래된 managed UUID/file-IPC entry를 best-effort

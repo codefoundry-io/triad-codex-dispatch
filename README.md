@@ -654,7 +654,10 @@ For an explicitly provider-free synthetic lifecycle check, run
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py` from the
 checkout. It reuses the packaged CLI and isolated bootstrap, probes AGY version
 and catalog without inference, and prints actual command outcomes, packaged-source
-hashes and cleanup evidence as JSON. It needs Git and the Codex, Claude and AGY
+hashes, export manifest, actual synthetic artifact bytes (base64), link records
+and cleanup evidence as JSON. If export fails, it retains the synthetic bytes in
+the report before disposing of its own fixtures; if retention fails, the fixture
+is preserved. It needs Git and the Codex, Claude and AGY
 CLIs on PATH, plus Python 3.12+ with Pydantic 2.
 Temporary `AGY_SETTINGS_PATH` isolates only the wrapper transaction, not vendor
 configuration. Success is neither a review verdict nor release certification.
@@ -792,11 +795,33 @@ worktree fingerprint, and one strict `LegVerdict` per family. The leader keeps
 results and snapshots outside reviewed evidence and starts a fresh complete
 round after any bounded correction.
 
-Formal review reserves the `triad-review-` namespace under the canonical system
-temp root. Each round owns its returned root, including `results/_logs`; a later
-prepare removes only managed interrupted roots without activity for strictly
-more than 30 days. Normal cleanup removes the exact completed root and leaves
-other managed sibling roots untouched.
+### Review evidence cleanup
+
+Formal review reserves the `triad-review-` system-temp namespace. `prepare`
+exclusively records its allocation identity outside the mode-0700 root, including
+`results/_logs`. After all writers terminate, run `review_round.py export --review-id ID --expected-root
+ROOT --output DESTINATION`, then `cleanup` with the same ID/root. Use a new
+absolute durable destination outside every managed root or cleanup claim.
+Export retains regular bytes, directory inventory and symlink text without
+following link targets. Cleanup revalidates both original and exported evidence;
+late or changed artifacts stop deletion. Export once after final collection.
+
+One leader cleans an allocation at a time. A proven partial cleanup resumes from
+its private claim; another cleanup after completion is a no-op. A later `prepare`
+may reclaim only proven, exported allocations inactive for strictly more than
+30 days, including partial claims. Names, UID, age or plausible markers alone
+never authorize deletion. Other sibling roots and symlink targets are preserved.
+
+Recovery for refused residue: preserve the paths and diagnostics, inspect and
+retain the evidence under owner authority, then remove only the exact inspected
+residue. Do not manufacture allocation/export records to adopt unknown roots.
+For root `triad-review-ID`, its sibling records are
+`.triad-review-ID.{allocation,export,claim}.json` and its claim container is
+`.triad-review-ID.cleanup`. If only proven records remain after interrupted
+cleanup, retry `cleanup` with the original review ID and expected root; stale
+sweeping does not collect records after both root and claim container are gone.
+These checks do not protect against malicious same-UID metadata forgery or
+concurrent writers retaining open file descriptors.
 
 Every normal non-`--repair-mode` wrapper invocation that reaches its dispatch
 driver performs best-effort cleanup of managed UUID/file-IPC entries older than

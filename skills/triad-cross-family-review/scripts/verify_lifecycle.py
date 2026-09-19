@@ -9,6 +9,8 @@ isolates the Python guard only; this is not a vendor-settings isolation test.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import shutil
@@ -21,6 +23,8 @@ from pathlib import Path
 TOOLKIT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(TOOLKIT / "scripts"))
 from verify_distribution import HASH_TARGETS, sha256_file
+sys.path.insert(0, str(TOOLKIT / "bin"))
+import review_round
 
 
 def _source_hashes():
@@ -34,9 +38,11 @@ def verify_lifecycle():
         "toolkit_root": str(TOOLKIT), "source_before": None, "source_after": None,
         "commands": [], "failures": [], "cleanup": [],
         "payload_round_trip_verified": False, "integrity_stdout": "",
+        "retained_evidence": None,
     }
     owned = []
     managed_root = None
+    base = None
     env = os.environ.copy()
     cli = [sys.executable, str(TOOLKIT / "bin/review_round.py")]
 
@@ -56,6 +62,22 @@ def verify_lifecycle():
         path = Path(tempfile.mkdtemp(prefix=f"triad-lifecycle-{label}-")).resolve()
         owned.append(path)
         return path
+
+    def retain(root, inventory, source, manifest=None):
+        # Only this provider-free synthetic fixture is embedded in the report.
+        # No link is materialized or followed; failures preserve the fixture.
+        files = {name: base64.b64encode((root / name).read_bytes()).decode("ascii")
+                 for name, item in inventory.items() if item["kind"] == "file"}
+        for name, data in files.items():
+            if hashlib.sha256(base64.b64decode(data)).hexdigest() != inventory[name]["sha256"]:
+                raise RuntimeError("synthetic evidence changed while retaining")
+        generated = {name: base64.b64encode((base / name).read_bytes()).decode("ascii")
+                     for name in ("snapshot.json", "codex-prompt.txt", "selector.json", "preflight.json")
+                     if (base / name).exists()}
+        report["retained_evidence"] = {
+            "source": source, "inventory": inventory, "files_base64": files, "manifest": manifest,
+            "generated_files_base64": generated,
+        }
 
     try:
         report["source_before"] = _source_hashes()
@@ -149,12 +171,33 @@ def verify_lifecycle():
     finally:
         if managed_root is not None:
             try:
-                run("cleanup", [*cli, "cleanup", "--review-id", review_id, "--expected-root", managed_root], neutral)
+                output = base / "retained-export"
+                run("export", [*cli, "export", "--review-id", review_id,
+                               "--expected-root", managed_root, "--output", output], neutral)
+                manifest = json.loads((output / "manifest.json").read_bytes())
+                retain(output / "artifacts", manifest["inventory"], "verified-export", manifest)
             except Exception as exc:
-                report["failures"].append(f"cleanup: {type(exc).__name__}: {exc}")
-        # Even failed prepare/cleanup may leave artifacts inside our private base.
-        # Only roots allocated above are removed; never recurse into a caller path.
+                report["failures"].append(f"export: {type(exc).__name__}: {exc}")
+                try:
+                    retain(managed_root, review_round._inventory(managed_root), "synthetic-fixture-fallback")
+                except Exception as custody_error:
+                    report["failures"].append(f"retain: {type(custody_error).__name__}: {custody_error}")
+            if report["retained_evidence"] is not None:
+                try:
+                    run("cleanup", [*cli, "cleanup", "--review-id", review_id, "--expected-root", managed_root], neutral)
+                except Exception as exc:
+                    report["failures"].append(f"cleanup: {type(exc).__name__}: {exc}")
+        # Test-owned fixtures are distinct from production review roots. Retain
+        # actual synthetic bytes in the report even when export/cleanup fails;
+        # otherwise preserve the fixture base, including any incomplete prepare.
         for root in reversed(owned):
+            if root == base and report["retained_evidence"] is None and (
+                managed_root is not None or any(
+                    item.name.startswith(("triad-review-", ".triad-review-")) for item in base.iterdir()
+                )
+            ):
+                report["failures"].append(f"unretained synthetic evidence preserved: {base}")
+                continue
             try:
                 shutil.rmtree(root)
             except OSError as exc:

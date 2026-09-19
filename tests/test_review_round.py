@@ -48,6 +48,24 @@ def _write_member_list(path: Path, members: list[str] | tuple[str, ...]) -> None
     path.write_bytes(_canonical_json_bytes(sorted(members)))
 
 
+def _allocated_for_cleanup(base: Path, review_id: str, now: float = 4_000_000.0) -> Path:
+    source = base.parent / f"fixture-{review_id}"
+    source.mkdir()
+    (source / "input.txt").write_text("retained test evidence\n")
+    members = base.parent / f"members-{review_id}.json"
+    _write_member_list(members, ["input.txt"])
+    return Path(review_round.prepare_review_workspace(
+        review_id, source.resolve(), members.resolve(), temp_root=base, now=now,
+    ).root)
+
+
+def _export_for_cleanup(base: Path, root: Path) -> None:
+    review_round.export_review_workspace(
+        root.name.removeprefix("triad-review-"), root,
+        base.parent / f"retained-{root.name}", temp_root=base,
+    )
+
+
 def _write_source_manifest(shared: Path) -> None:
     entries = []
     manifest = shared / "SOURCE_SHA256SUMS"
@@ -936,17 +954,15 @@ def test_prepare_wraps_destination_storage_error_and_cleans_owned_root(
 def test_prepare_sweeps_only_managed_roots_older_than_30_days(tmp_path: Path) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    stale = temp_root / "triad-review-stale"
-    stale.mkdir()
-    (stale / ".last_activity").write_text("", encoding="utf-8")
-    recent = temp_root / "triad-review-recent"
-    recent.mkdir()
-    (recent / ".last_activity").write_text("", encoding="utf-8")
+    stale = _allocated_for_cleanup(temp_root, "stale")
+    recent = _allocated_for_cleanup(temp_root, "recent")
     unrelated = temp_root / "other-stale"
     unrelated.mkdir()
     now = 4_000_000.0
     os.utime(stale / ".last_activity", (now - 30 * 86400 - 1,) * 2)
     os.utime(recent / ".last_activity", (now - 30 * 86400,) * 2)
+    _export_for_cleanup(temp_root, stale)
+    _export_for_cleanup(temp_root, recent)
     source = (tmp_path / "source").resolve()
     source.mkdir()
     (source / "a.txt").write_text("a\n", encoding="utf-8")
@@ -1055,7 +1071,7 @@ def test_cleanup_rejects_unsafe_root_type(tmp_path: Path, root_type: str) -> Non
     assert outside.is_dir()
 
 
-def test_prepare_sweeps_partial_roots_by_root_mtime(tmp_path: Path) -> None:
+def test_prepare_preserves_unproven_partial_roots_regardless_of_root_mtime(tmp_path: Path) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
     now = 4_000_000.0
@@ -1093,25 +1109,31 @@ def test_prepare_sweeps_partial_roots_by_root_mtime(tmp_path: Path) -> None:
     )
 
     assert all(path.is_dir() for path in retained)
-    assert all(not path.exists() for path in stale)
-    assert result.swept_roots == tuple(
-        str(path) for path in sorted(stale, key=os.fspath)
-    )
+    assert all(path.is_dir() for path in stale)
+    assert result.swept_roots == ()
+    assert set(result.skipped_roots) == {str(path) for path in retained + stale}
     assert outside.read_text(encoding="utf-8") == "outside\n"
 
 
 def test_prepare_skips_foreign_uid_managed_root(tmp_path: Path, monkeypatch) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    foreign = temp_root / "triad-review-foreign"
-    foreign.mkdir()
+    foreign = _allocated_for_cleanup(temp_root, "foreign")
+    _export_for_cleanup(temp_root, foreign)
     source = (tmp_path / "source").resolve()
     source.mkdir()
     (source / "a.txt").write_text("a\n", encoding="utf-8")
     members = (tmp_path / "members.txt").resolve()
     _write_member_list(members, ["a.txt"])
-    real_uid = os.getuid()
-    monkeypatch.setattr(review_round.os, "getuid", lambda: real_uid + 1)
+    real_lstat = Path.lstat
+    def foreign_uid(path):
+        metadata = real_lstat(path)
+        if path == foreign:
+            fields = list(metadata)
+            fields[4] = os.getuid() + 1
+            return os.stat_result(fields)
+        return metadata
+    monkeypatch.setattr(Path, "lstat", foreign_uid)
 
     result = review_round.prepare_review_workspace(
         "current", source, members, temp_root=temp_root, now=4_000_000.0
@@ -1138,8 +1160,8 @@ def test_cleanup_rejects_foreign_uid_managed_root(tmp_path: Path, monkeypatch) -
 def test_cleanup_accepts_top_level_disappearance(tmp_path: Path, monkeypatch) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    root = temp_root / "triad-review-disappears"
-    root.mkdir()
+    root = _allocated_for_cleanup(temp_root, "disappears")
+    _export_for_cleanup(temp_root, root)
     original_rmtree = review_round.shutil.rmtree
 
     def remove_then_fail(path: Path) -> None:
@@ -1161,10 +1183,10 @@ def test_stale_sweep_accepts_top_level_disappearance(
 ) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    stale = temp_root / "triad-review-stale-disappears"
-    stale.mkdir()
+    stale = _allocated_for_cleanup(temp_root, "stale-disappears")
     now = 4_000_000.0
-    os.utime(stale, (now - 30 * 86400 - 1,) * 2)
+    os.utime(stale / ".last_activity", (now - 30 * 86400 - 1,) * 2)
+    _export_for_cleanup(temp_root, stale)
     source = (tmp_path / "source").resolve()
     source.mkdir()
     (source / "a.txt").write_text("a\n", encoding="utf-8")
@@ -1191,8 +1213,8 @@ def test_cleanup_propagates_persistent_removal_error(
 ) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    root = temp_root / "triad-review-persistent"
-    root.mkdir()
+    root = _allocated_for_cleanup(temp_root, "persistent")
+    _export_for_cleanup(temp_root, root)
 
     def fail_removal(path: Path) -> None:
         raise OSError("simulated persistent failure")
@@ -1202,7 +1224,7 @@ def test_cleanup_propagates_persistent_removal_error(
     with pytest.raises(RoundIntegrityError, match="review root could not be removed"):
         review_round.cleanup_review_workspace("persistent", root, temp_root=temp_root)
 
-    assert root.is_dir()
+    assert (temp_root / ".triad-review-persistent.cleanup/root").is_dir()
 
 
 def test_stale_sweep_propagates_persistent_removal_error(
@@ -1210,10 +1232,10 @@ def test_stale_sweep_propagates_persistent_removal_error(
 ) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    stale = temp_root / "triad-review-stale-persistent"
-    stale.mkdir()
+    stale = _allocated_for_cleanup(temp_root, "stale-persistent")
     now = 4_000_000.0
-    os.utime(stale, (now - 30 * 86400 - 1,) * 2)
+    os.utime(stale / ".last_activity", (now - 30 * 86400 - 1,) * 2)
+    _export_for_cleanup(temp_root, stale)
     source = (tmp_path / "source").resolve()
     source.mkdir()
     (source / "a.txt").write_text("a\n", encoding="utf-8")
@@ -1226,13 +1248,13 @@ def test_stale_sweep_propagates_persistent_removal_error(
     monkeypatch.setattr(review_round.shutil, "rmtree", fail_removal)
 
     with pytest.raises(
-        RoundIntegrityError, match="stale review root could not be removed"
+        RoundIntegrityError, match="stale review root .*review root could not be removed"
     ):
         review_round.prepare_review_workspace(
             "current", source, members, temp_root=temp_root, now=now
         )
 
-    assert stale.is_dir()
+    assert (temp_root / ".triad-review-stale-persistent.cleanup/root").is_dir()
     assert not (temp_root / "triad-review-current").exists()
 
 
@@ -1250,6 +1272,7 @@ def test_cleanup_removes_only_the_exact_review_root(tmp_path: Path) -> None:
     second = review_round.prepare_review_workspace(
         "second", source, members, temp_root=temp_root, now=4_000_000.0
     )
+    _export_for_cleanup(temp_root, Path(first.root))
 
     cleaned = review_round.cleanup_review_workspace(
         "first", Path(first.root), temp_root=temp_root
@@ -1284,6 +1307,7 @@ def test_cleanup_does_not_report_dangling_symlink_replacement_as_removed(
         "cleanup-race", source, members, temp_root=temp_root, now=4_000_000.0
     )
     root = Path(result.root)
+    _export_for_cleanup(temp_root, root)
     original = review_round.shutil.rmtree
 
     def replace_with_dangling_symlink(path: Path) -> None:
@@ -1296,7 +1320,7 @@ def test_cleanup_does_not_report_dangling_symlink_replacement_as_removed(
     with pytest.raises(RoundIntegrityError, match="review root could not be removed"):
         review_round.cleanup_review_workspace("cleanup-race", root, temp_root=temp_root)
 
-    assert root.is_symlink()
+    assert (temp_root / ".triad-review-cleanup-race.cleanup/root").is_symlink()
 
 
 def test_stale_sweep_does_not_ignore_dangling_symlink_replacement(
@@ -1304,12 +1328,12 @@ def test_stale_sweep_does_not_ignore_dangling_symlink_replacement(
 ) -> None:
     temp_root = (tmp_path / "temp").resolve()
     temp_root.mkdir()
-    stale = temp_root / "triad-review-stale-race"
-    stale.mkdir()
+    stale = _allocated_for_cleanup(temp_root, "stale-race")
     marker = stale / ".last_activity"
     marker.write_text("", encoding="utf-8")
     now = 4_000_000.0
     os.utime(marker, (now - 30 * 86400 - 1,) * 2)
+    _export_for_cleanup(temp_root, stale)
     source = (tmp_path / "source").resolve()
     source.mkdir()
     (source / "a.txt").write_text("a\n", encoding="utf-8")
@@ -1325,14 +1349,14 @@ def test_stale_sweep_does_not_ignore_dangling_symlink_replacement(
     monkeypatch.setattr(review_round.shutil, "rmtree", replace_with_dangling_symlink)
 
     with pytest.raises(
-        RoundIntegrityError, match="stale review root could not be removed"
+        RoundIntegrityError, match="stale review root .*review root could not be removed"
     ) as error:
         review_round.prepare_review_workspace(
             "current", source, members, temp_root=temp_root, now=now
         )
 
     assert str(stale) in str(error.value)
-    assert stale.is_symlink()
+    assert (temp_root / ".triad-review-stale-race.cleanup/root").is_symlink()
     assert not (temp_root / "triad-review-current").exists()
 
 
@@ -1382,6 +1406,7 @@ def test_cleanup_does_not_follow_internal_symlink(tmp_path: Path) -> None:
     (Path(result.results_dir) / "outside-link").symlink_to(
         outside, target_is_directory=True
     )
+    _export_for_cleanup(temp_root, Path(result.root))
 
     review_round.cleanup_review_workspace(
         "symlink-cleanup", Path(result.root), temp_root=temp_root
@@ -2041,6 +2066,12 @@ def test_cli_prepare_and_cleanup_round_trip(tmp_path: Path) -> None:
             f"{member_name}\n"
         )
 
+    export_run = subprocess.run(
+        [sys.executable, str(BIN / "review_round.py"), "export", "--review-id", "cli-round",
+         "--expected-root", prepared_result["root"], "--output", str(tmp_path / "retained")],
+        env=env, text=True, capture_output=True, check=True,
+    )
+    assert export_run.stdout.encode("ascii") == _canonical_json_bytes(json.loads(export_run.stdout))
     cleanup_run = subprocess.run(
         [
             sys.executable,
@@ -2321,6 +2352,12 @@ def test_cli_lifecycle_sequence(tmp_path: Path, worktree: Path) -> None:
     )
     assert verified.returncode == 0, verified.stderr
     assert verified.stdout.strip() == "ROUND_INTEGRITY_OK"
+
+    exported = subprocess.run(
+        [*cli, "export", "--review-id", "sequence", "--expected-root", str(root),
+         "--output", str(tmp_path / "retained")], env=env, text=True, capture_output=True,
+    )
+    assert exported.returncode == 0, exported.stderr
 
     cleanup = [
         *cli,

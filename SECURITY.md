@@ -170,9 +170,13 @@ relevant test source; other advisory review uses its separately owner-approved
 data scope.
 
 The prepared directory and round-owned `results/_logs` live in a mode-0700 root
-under the reserved `triad-review-` system-temp namespace; normal cleanup removes
-completed roots exactly, while an interrupted root can persist until a later
-prepare removes it after strictly more than 30 days.
+under the reserved `triad-review-` system-temp namespace. Cleanup and stale sweep
+require an external allocation record and reverified evidence export. Unknown,
+unexported or changed roots are preserved; a proven partial claim can resume.
+Stale eligibility remains strictly more than 30 days without activity. Export
+retains symlink text without following targets. All writers must be terminal and
+one leader must clean an allocation at a time; same-UID forgery or concurrent
+open-FD mutation is not contained. See [recovery](README.md#review-evidence-cleanup).
 Formal wrapper `--cwd` and `--prompt-file` paths therefore live under that root.
 When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured, it must include the canonical
 system temp base, including when hardened mode requires the setting.

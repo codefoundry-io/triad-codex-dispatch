@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -297,7 +298,7 @@ def _canonical_regular_file_bytes(path: Path, label: str) -> bytes:
         or not stat.S_ISREG(before.st_mode)
     ):
         raise RoundIntegrityError(f"{label} must be a canonical existing regular file")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    flags = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
         descriptor = os.open(path, flags)
     except OSError:
@@ -749,7 +750,7 @@ def _copy_source_member(
     directory_flags = (
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     )
-    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    file_flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     directory_fd = -1
     file_fd = -1
     try:
@@ -835,7 +836,7 @@ def _source_member_digest(
     directory_flags = (
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     )
-    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    file_flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     directory_fd = -1
     file_fd = -1
     try:
@@ -932,47 +933,41 @@ def _sweep_stale_roots(
     removed: list[str] = []
     skipped: list[str] = []
     try:
-        entries = sorted(os.scandir(base), key=lambda entry: os.fsencode(entry.name))
+        names = {entry.name for entry in os.scandir(base)}
     except OSError as error:
         raise RoundIntegrityError(
             f"system temp root could not be read: {error}"
         ) from None
-    for entry in entries:
-        if not entry.name.startswith(_REVIEW_ROOT_PREFIX):
+    names.update(name[1:-len(".cleanup")] for name in tuple(names)
+                 if name.startswith("." + _REVIEW_ROOT_PREFIX) and name.endswith(".cleanup"))
+    for name in sorted(names, key=os.fsencode):
+        if not name.startswith(_REVIEW_ROOT_PREFIX):
             continue
-        review_id = entry.name[len(_REVIEW_ROOT_PREFIX) :]
-        path = base / entry.name
+        review_id = name[len(_REVIEW_ROOT_PREFIX):]
+        path = base / name
         if path == requested_root:
             continue
         try:
             _validate_review_id(review_id)
-            metadata = entry.stat(follow_symlinks=False)
+            allocation = _load_allocation(path, review_id)
+            claim = _custody_path(path, "cleanup")
+            claim_record = _load_claim(path, allocation) if _present(claim) else None
+            target = claim / "root" if claim_record else path
+            if _present(target):
+                _check_identity(target, allocation["identity"], "review root")
+            inventory = _verified_export(path, allocation)
+            _check_inventory(target, inventory, subset=claim_record is not None)
+            activity_time = (claim_record["activity_time"] if claim_record
+                             else _activity_time(path))
         except (OSError, RoundIntegrityError):
-            skipped.append(str(path))
-            continue
-        if (
-            entry.is_symlink()
-            or not stat.S_ISDIR(metadata.st_mode)
-            or metadata.st_uid != os.getuid()
-        ):
-            skipped.append(str(path))
-            continue
-        activity_time = metadata.st_mtime
-        marker = path / ".last_activity"
-        try:
-            marker_metadata = marker.lstat()
-            if stat.S_ISREG(marker_metadata.st_mode) and not stat.S_ISLNK(
-                marker_metadata.st_mode
-            ):
-                activity_time = marker_metadata.st_mtime
-        except FileNotFoundError:
-            pass
-        except OSError:
             skipped.append(str(path))
             continue
         if now - activity_time <= _STALE_AFTER_SECONDS:
             continue
-        _remove_tree(path, "stale review root")
+        try:
+            cleanup_review_workspace(review_id, path, temp_root=base)
+        except RoundIntegrityError as error:
+            raise RoundIntegrityError(f"stale review root {path}: {error}") from None
         removed.append(str(path))
     return tuple(removed), tuple(skipped)
 
@@ -1000,6 +995,11 @@ def prepare_review_workspace(
     current_time = time.time() if now is None else now
     root = _review_root(base, review_id)
     swept, skipped = _sweep_stale_roots(base, current_time, root)
+    if _present(root):
+        raise RoundIntegrityError(f"review root already exists: {root}")
+    if any(_present(_custody_path(root, suffix))
+           for suffix in ("allocation.json", "export.json", "claim.json", "cleanup")):
+        raise RoundIntegrityError(f"review allocation or claim already exists: {root}")
     try:
         root.mkdir(mode=0o700, exist_ok=False)
     except FileExistsError:
@@ -1009,6 +1009,11 @@ def prepare_review_workspace(
             f"review root could not be created: {error}"
         ) from None
 
+    identity = _directory_identity(root, "review root")
+    allocation = {"review_id": review_id, "root": str(root), "identity": identity,
+                  "allocation_id": uuid.uuid4().hex}
+    allocation_path = _custody_path(root, "allocation.json")
+    allocation_written = False
     shared = root / "shared"
     destination_root = shared / "source" / "product"
     prompts = root / "prompts"
@@ -1017,6 +1022,8 @@ def prepare_review_workspace(
     stored_source_root = root / "source-root.json"
     marker = root / ".last_activity"
     try:
+        _write_new(allocation_path, _canonical_json_bytes(allocation))
+        allocation_written = True
         destination_root.mkdir(parents=True)
         prompts.mkdir()
         results.mkdir()
@@ -1032,8 +1039,11 @@ def prepare_review_workspace(
         os.utime(marker, (current_time, current_time))
     except (OSError, RoundIntegrityError) as error:
         try:
+            _check_identity(root, identity, "partial review root")
             _remove_tree(root, "partial review root")
-        except RoundIntegrityError as cleanup_error:
+            if allocation_written:
+                allocation_path.unlink()
+        except (OSError, RoundIntegrityError) as cleanup_error:
             raise RoundIntegrityError(f"{error}; {cleanup_error}") from None
         if isinstance(error, RoundIntegrityError):
             raise
@@ -1056,31 +1066,256 @@ def prepare_review_workspace(
     )
 
 
+def _custody_path(root: Path, suffix: str) -> Path:
+    return root.with_name(f".{root.name}.{suffix}")
+
+
+def _present(path: Path) -> bool:
+    try:
+        path.lstat()
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def _directory_identity(path: Path, label: str) -> dict[str, int]:
+    metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise RoundIntegrityError(f"{label} must be a non-symlink directory: {path}")
+    if metadata.st_uid != os.getuid():
+        raise RoundIntegrityError(f"{label} must be owned by the current user: {path}")
+    return {"uid": metadata.st_uid, "device": metadata.st_dev, "inode": metadata.st_ino}
+
+
+def _check_identity(path: Path, identity: object, label: str) -> None:
+    if _directory_identity(path, label) != identity:
+        raise RoundIntegrityError(f"{label} allocation identity mismatch: {path}; preserve both locations")
+
+
+def _read_custody(path: Path, label: str) -> dict:
+    raw = _canonical_regular_file_bytes(path, label)
+    try:
+        record = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise RoundIntegrityError(f"invalid {label}") from None
+    if not isinstance(record, dict) or raw != _canonical_json_bytes(record):
+        raise RoundIntegrityError(f"invalid canonical {label}")
+    if path.lstat().st_uid != os.getuid():
+        raise RoundIntegrityError(f"foreign {label}")
+    return record
+
+
+def _load_allocation(root: Path, review_id: str) -> dict:
+    record = _read_custody(_custody_path(root, "allocation.json"), "allocation record")
+    identity = record.get("identity")
+    if (set(record) != {"review_id", "root", "identity", "allocation_id"}
+            or record.get("review_id") != review_id or record.get("root") != str(root)
+            or not isinstance(record.get("allocation_id"), str)
+            or not re.fullmatch(r"[a-f0-9]{32}", record["allocation_id"])
+            or not isinstance(identity, dict) or set(identity) != {"uid", "device", "inode"}
+            or any(type(value) is not int for value in identity.values())
+            or identity["uid"] != os.getuid()):
+        raise RoundIntegrityError("invalid allocation record")
+    return record
+
+
+def _activity_time(root: Path) -> float:
+    marker = root / ".last_activity"
+    if _present(marker):
+        metadata = marker.lstat()
+        if stat.S_ISREG(metadata.st_mode):
+            return metadata.st_mtime
+    return root.lstat().st_mtime
+
+
+def _inventory(root: Path) -> dict[str, dict[str, str]]:
+    """Retain directory and link facts; open every traversed directory without following links."""
+    records = {}
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+
+    def visit(fd: int, prefix: str) -> None:
+        with os.scandir(fd) as entries:
+            for entry in sorted(entries, key=lambda item: os.fsencode(item.name)):
+                name = prefix + entry.name
+                metadata = entry.stat(follow_symlinks=False)
+                if stat.S_ISLNK(metadata.st_mode):
+                    records[name] = {"kind": "symlink", "target": os.readlink(entry.name, dir_fd=fd)}
+                elif stat.S_ISDIR(metadata.st_mode):
+                    records[name] = {"kind": "directory"}
+                    child = os.open(entry.name, flags, dir_fd=fd)
+                    try:
+                        if not os.path.samestat(os.fstat(child), metadata):
+                            raise RoundIntegrityError("evidence directory changed")
+                        visit(child, name + "/")
+                    finally:
+                        os.close(child)
+                elif stat.S_ISREG(metadata.st_mode):
+                    _, chain = _source_member(root, name)
+                    records[name] = {"kind": "file", "sha256": _source_member_digest(root, name, chain)}
+                else:
+                    raise RoundIntegrityError(f"unsupported evidence entry: {name}")
+
+    try:
+        fd = os.open(root, flags)
+        try:
+            visit(fd, "")
+        finally:
+            os.close(fd)
+    except OSError as error:
+        raise RoundIntegrityError(f"evidence inventory failed: {error}") from None
+    return records
+
+
+def _check_inventory(root: Path, inventory: dict, *, subset: bool) -> None:
+    actual = _inventory(root) if _present(root) else {}
+    if ((not subset and actual != inventory)
+            or any(inventory.get(name) != item for name, item in actual.items())):
+        raise RoundIntegrityError(f"evidence changed after export: {root}")
+
+
+def _export_destination(output: Path) -> None:
+    if not output.is_absolute() or output.parent.resolve(strict=True) != output.parent:
+        raise RoundIntegrityError("export destination must have a canonical absolute parent")
+    for part in (output, *output.parents):
+        if part.name.startswith(_REVIEW_ROOT_PREFIX) or (
+            part.name.startswith("." + _REVIEW_ROOT_PREFIX) and part.name.endswith(".cleanup")
+        ):
+            raise RoundIntegrityError("export destination is inside a reclaimable review root")
+
+
+def _verified_export(root: Path, allocation: dict) -> dict:
+    receipt = _read_custody(_custody_path(root, "export.json"), "export receipt")
+    if (set(receipt) != {"allocation", "output", "manifest_sha256"}
+            or receipt.get("allocation") != allocation or not isinstance(receipt.get("output"), str)):
+        raise RoundIntegrityError("invalid export receipt")
+    output = Path(receipt["output"])
+    _export_destination(output)
+    _canonical_directory(output, "export destination")
+    manifest_path = output / "manifest.json"
+    manifest = _read_custody(manifest_path, "export manifest")
+    if (hashlib.sha256(_canonical_json_bytes(manifest)).hexdigest() != receipt["manifest_sha256"]
+            or set(manifest) != {"allocation", "inventory"} or manifest["allocation"] != allocation
+            or not isinstance(manifest["inventory"], dict)):
+        raise RoundIntegrityError("export manifest mismatch")
+    expected = {name: item for name, item in manifest["inventory"].items()
+                if isinstance(item, dict) and item.get("kind") != "symlink"}
+    if _inventory(output / "artifacts") != expected:
+        raise RoundIntegrityError("export evidence bytes changed")
+    return manifest["inventory"]
+
+
+def export_review_workspace(
+    review_id: str, expected_root: Path, output: Path, *, temp_root: Path | None = None,
+) -> dict:
+    try:
+        root = _review_root(_temp_base(temp_root), review_id)
+        if not expected_root.is_absolute() or expected_root != root:
+            raise RoundIntegrityError("expected root mismatch")
+        allocation = _load_allocation(root, review_id)
+        _check_identity(root, allocation["identity"], "review root")
+        if _present(_custody_path(root, "cleanup")) or _present(_custody_path(root, "export.json")):
+            raise RoundIntegrityError("export receipt or cleanup claim already exists")
+        _export_destination(output)
+        inventory = _inventory(root)
+        output.mkdir(mode=0o700)
+        artifacts = output / "artifacts"
+        artifacts.mkdir(mode=0o700)
+        for name, item in sorted(inventory.items()):
+            target = artifacts / name
+            if item["kind"] == "directory":
+                target.mkdir()
+            elif item["kind"] == "file":
+                _, chain = _source_member(root, name)
+                _copy_source_member(root, name, chain, target)
+        manifest = {"allocation": allocation, "inventory": inventory}
+        raw = _canonical_json_bytes(manifest)
+        _write_new(output / "manifest.json", raw)
+        if _inventory(artifacts) != {name: item for name, item in inventory.items() if item["kind"] != "symlink"}:
+            raise RoundIntegrityError("export evidence copy mismatch")
+        _check_identity(root, allocation["identity"], "review root")
+        _check_inventory(root, inventory, subset=False)
+        receipt = {"allocation": allocation, "output": str(output),
+                   "manifest_sha256": hashlib.sha256(raw).hexdigest()}
+        _write_new(_custody_path(root, "export.json"), _canonical_json_bytes(receipt))
+        _verified_export(root, allocation)
+        return receipt
+    except OSError as error:
+        raise RoundIntegrityError(f"export failed; remaining evidence preserved: {error}") from None
+
+
+def _load_claim(root: Path, allocation: dict) -> dict:
+    claim = _custody_path(root, "cleanup")
+    record = _read_custody(_custody_path(root, "claim.json"), "cleanup claim record")
+    if (set(record) != {"allocation", "identity", "activity_time"}
+            or record["allocation"] != allocation
+            or type(record["activity_time"]) not in (int, float)
+            or not float("-inf") < record["activity_time"] < float("inf")):
+        raise RoundIntegrityError("invalid cleanup claim record")
+    _check_identity(claim, record["identity"], "cleanup claim")
+    if {entry.name for entry in claim.iterdir()} - {"root"}:
+        raise RoundIntegrityError("cleanup claim contains unproven entries")
+    return record
+
+
 def cleanup_review_workspace(
     review_id: str,
     expected_root: Path,
     *,
     temp_root: Path | None = None,
 ) -> CleanupResult:
-    base = _temp_base(temp_root)
-    review_id = _validate_review_id(review_id)
-    root = _review_root(base, review_id)
-    if not expected_root.is_absolute() or expected_root != root:
-        raise RoundIntegrityError("expected root mismatch")
     try:
-        metadata = root.lstat()
-    except FileNotFoundError:
-        return CleanupResult(review_id, str(root), False)
+        base = _temp_base(temp_root)
+        review_id = _validate_review_id(review_id)
+        root = _review_root(base, review_id)
+        if not expected_root.is_absolute() or expected_root != root:
+            raise RoundIntegrityError("expected root mismatch")
+        claim = _custody_path(root, "cleanup")
+        allocation_path = _custody_path(root, "allocation.json")
+        if not any(_present(path) for path in (root, claim, allocation_path,
+                                              _custody_path(root, "claim.json"), _custody_path(root, "export.json"))):
+            return CleanupResult(review_id, str(root), False)
+        if _present(root):
+            _directory_identity(root, "review root")
+        allocation = _load_allocation(root, review_id)
+        removed = _present(root) or _present(claim)
+        if removed:
+            inventory = _verified_export(root, allocation)
+            resumed = _present(claim)
+            if resumed:
+                _load_claim(root, allocation)
+            if _present(root):
+                _check_identity(root, allocation["identity"], "review root")
+                _check_inventory(root, inventory, subset=False)
+                if not resumed:
+                    claim.mkdir(mode=0o700)
+                    record = {"allocation": allocation, "identity": _directory_identity(claim, "cleanup claim"),
+                              "activity_time": _activity_time(root)}
+                    _write_new(_custody_path(root, "claim.json"), _canonical_json_bytes(record))
+                if _present(claim / "root"):
+                    raise RoundIntegrityError("cleanup claim/root collision; preserve both locations")
+                root.rename(claim / "root")
+                resumed = False
+            target = claim / "root"
+            _load_claim(root, allocation)
+            if _present(target):
+                _check_identity(target, allocation["identity"], "claimed review root")
+                _check_inventory(target, inventory, subset=resumed)
+                _remove_tree(target, "review root")
+            _load_claim(root, allocation)
+            claim.rmdir()
+        # Only validated records belonging to this allocation are removed. A crash
+        # after deleting the claim can leave these harmless sidecars for the next call.
+        for suffix in ("claim.json", "export.json"):
+            path = _custody_path(root, suffix)
+            if _present(path):
+                record = _read_custody(path, suffix)
+                if record.get("allocation") != allocation:
+                    raise RoundIntegrityError(f"{suffix} allocation mismatch")
+                path.unlink()
+        allocation_path.unlink()
+        return CleanupResult(review_id, str(root), removed)
     except OSError as error:
-        raise RoundIntegrityError(
-            f"review root could not be inspected: {error}"
-        ) from None
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-        raise RoundIntegrityError("review root must be a non-symlink directory")
-    if metadata.st_uid != os.getuid():
-        raise RoundIntegrityError("review root must be owned by the current user")
-    _remove_tree(root, "review root")
-    return CleanupResult(review_id, str(root), True)
+        raise RoundIntegrityError(f"cleanup failed; remaining evidence preserved: {error}") from None
 
 
 def _open_regular_file(path: Path, label: str) -> int:
@@ -2012,6 +2247,10 @@ def _parser() -> argparse.ArgumentParser:
     cleanup = commands.add_parser("cleanup")
     cleanup.add_argument("--review-id", required=True)
     cleanup.add_argument("--expected-root", type=Path, required=True)
+    export = commands.add_parser("export")
+    export.add_argument("--review-id", required=True)
+    export.add_argument("--expected-root", type=Path, required=True)
+    export.add_argument("--output", type=Path, required=True)
     manifest = commands.add_parser("manifest")
     manifest.add_argument("--prepared-dir", type=Path, required=True)
     capture = commands.add_parser("capture")
@@ -2102,6 +2341,10 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.expected_root,
             )
             _print_canonical_json(asdict(result))
+        elif arguments.command == "export":
+            _print_canonical_json(export_review_workspace(
+                arguments.review_id, arguments.expected_root, arguments.output,
+            ))
         elif arguments.command == "manifest":
             result = create_source_manifest(arguments.prepared_dir)
             _print_canonical_json(asdict(result))
