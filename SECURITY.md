@@ -111,6 +111,15 @@ group and sends KILL to surviving members. A child that leaves the captured
 group, including by starting a new session, is outside this guarantee, and OS
 identifier reuse remains a residual race.
 
+## Guarded symlink review boundary
+
+The leader records scoped link metadata/text in TASK before capture. Reviewers
+inspect that bound evidence without traversing leaf or ancestor symlinks; target
+content requires a separately authorized bound input. Missing necessary evidence
+remains an open question. This restriction is prompt-controlled, not OS-level
+path confinement. The link fingerprint does not bind external target contents.
+Prepared-copy refusal and cleanup's existing no-follow checks remain in force.
+
 ## Repair boundary
 
 The optional `fingerprint-worktree --require-clean-head` check constrains an
