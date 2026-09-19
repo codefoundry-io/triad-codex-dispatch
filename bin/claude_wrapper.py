@@ -182,9 +182,14 @@ def _run_native_structured_once(
         result.validation_error = "claude native structured_output is missing"
         result.final_answer = ""
     else:
-        valid, validated_or_error = _common.validate_response(
-            answer, pydantic_cls
-        )
+        try:
+            _common._check_original_json(
+                _common.strip_markdown_fences(result.stdout), pydantic_cls
+            )
+        except ValueError as error:
+            valid, validated_or_error = False, str(error)
+        else:
+            valid, validated_or_error = _common.validate_response(answer, pydantic_cls)
         if valid:
             for field, expected in (
                 ("review_id", expected_review_id),
@@ -309,7 +314,8 @@ def main() -> int:
         args.expected_content_digest,
     )
     formal_bindings_complete = all(value is not None for value in binding_values)
-    if args.pydantic == "verdict_schema:LegVerdict" and not all(
+    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS
+    if formal_verdict and not all(
         value is not None for value in binding_values
     ):
         log("formal verdict schema requires all formal verdict bindings")
@@ -318,7 +324,7 @@ def main() -> int:
         if not all(value is not None for value in binding_values):
             log("formal verdict bindings must be supplied together")
             return EXIT_ARG_ERROR
-        if args.pydantic != "verdict_schema:LegVerdict":
+        if not formal_verdict:
             log("formal verdict bindings require --pydantic verdict_schema:LegVerdict")
             return EXIT_ARG_ERROR
         if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.expected_review_id) is None:

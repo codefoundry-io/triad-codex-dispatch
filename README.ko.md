@@ -845,9 +845,13 @@ bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이�
 review/family/digest 검증을 적용합니다. 중복 입력은 키·값을 반영하지 않는 고정 오류
 `duplicate JSON member`와 종료 코드 2를 반환합니다. 정상 판정의 출력은 유지합니다.
 
-이 검사는 원본 result-file 검증에 적용됩니다. provider wrapper가 앞서 JSON을
-디코딩·재직렬화하면서 이미 없앤 중복은 복원할 수 없습니다. provider 호출,
-repair/retry, schema field나 리뷰 구성 변경을 추가하지 않습니다.
+Canonical wrapper도 성공 결과를 내보내기 전에 원본 답변과 native envelope/event의
+JSON 중복을 검사하며, 중복 판정은 추가 formal provider 호출 없이 schema failure로
+반환합니다. 예약 표기 `verdict_schema:LegVerdict`와 `verdict_schema.LegVerdict`는
+모두 패키지의 스키마 파일을 읽고 dispatch 전에 세 expected review binding을
+요구합니다. 사용자 정의 스키마, raw 조사, 깨진 AGY 로그 행 처리와 기존 provider
+실패 우선순위는 유지합니다. schema field나 리뷰 구성은 추가하지 않습니다.
+result-file reader만으로는 다른 호출자가 이미 없앤 중복을 복원할 수 없습니다.
 
 ## Google CLI 메타데이터 스냅샷
 

@@ -685,7 +685,9 @@ def classify(
 
 # ─── Pydantic helpers ─────────────────────────────────────────────────────
 
-_PACKAGED_VERDICT_OPERAND = "verdict_schema:LegVerdict"
+PACKAGED_VERDICT_SPECS = frozenset({
+    "verdict_schema:LegVerdict", "verdict_schema.LegVerdict",
+})
 
 
 def _load_packaged_verdict_class():
@@ -726,7 +728,7 @@ def load_pydantic_class(spec: str):
             "pydantic 2 is unavailable in this Python runtime; run "
             f"`{install_command}` in your normal terminal"
         )
-    if spec == _PACKAGED_VERDICT_OPERAND:
+    if spec in PACKAGED_VERDICT_SPECS:
         cls = _load_packaged_verdict_class()
         if not (
             isinstance(cls, type)
@@ -871,6 +873,12 @@ def strip_markdown_fences(text: str) -> str:
     return s.strip()
 
 
+def _check_original_json(text: str, cls) -> None:
+    check = getattr(cls, "_triad_check_original_json", None)
+    if check is not None:
+        check(text)
+
+
 def validate_response(
     answer_text: str,
     cls,
@@ -878,6 +886,7 @@ def validate_response(
     """(ok, validated_dict_or_error_string)."""
     cleaned = strip_markdown_fences(answer_text)
     try:
+        _check_original_json(cleaned, cls)
         obj = cls.model_validate_json(cleaned)
         return True, obj.model_dump(mode="json")
     except Exception as e:
@@ -1778,6 +1787,13 @@ def run_cli_with_retry(
                     f"elapsed={result.elapsed_s:.1f}s"
                 )
             return result
+
+        if cli in ("claude", "gemini") and pydantic_cls is not None:
+            try:
+                _check_original_json(strip_markdown_fences(result.stdout), pydantic_cls)
+            except ValueError as error:
+                result.validation_error = str(error)
+                return promote_schema_fail(result)
 
         result.final_answer = answer
 

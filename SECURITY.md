@@ -276,9 +276,14 @@ The canonical regular-file reader still reads once. `validate_verdict_file`
 rejects duplicate decoded member names at any object level before passing the
 same raw bytes to strict schema and identity validation. Duplicate errors do
 not reflect names or values; decoder recursion failure follows the existing
-invalid-result CLI path. This lexical guard cannot detect duplicates removed by
-earlier wrapper deserialization. It introduces no provider re-ask, permission
-change, or broader transport/admission guarantee.
+invalid-result CLI path. Canonical wrapper admission checks the original answer
+and native envelope/event JSON before success, preserving primary failure
+precedence and malformed AGY-noise handling. Both reserved schema spellings
+(`verdict_schema:LegVerdict`, `verdict_schema.LegVerdict`) use the packaged file
+loader and require complete expected bindings before dispatch. Arbitrary schema
+imports retain their hardened opt-in; raw/custom replies are unchanged. No
+provider re-ask, permission change or broader transport guarantee is introduced.
+A result-file reader alone cannot recover evidence discarded by another caller.
 
 ## Standalone Google diagnostics
 

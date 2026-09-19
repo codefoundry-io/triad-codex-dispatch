@@ -37,10 +37,7 @@ from _common import (
 )
 
 
-FORMAL_VERDICT_SPECS = {
-    "verdict_schema:LegVerdict",
-    "verdict_schema.LegVerdict",
-}
+FORMAL_VERDICT_SPECS = _common.PACKAGED_VERDICT_SPECS
 FORMAL_GEMINI_TIMEOUT = 600
 FORMAL_GEMINI_REMOVED_ENV = (
     "GEMINI_API_KEY",

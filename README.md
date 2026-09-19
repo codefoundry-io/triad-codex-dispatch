@@ -907,9 +907,15 @@ existing strict semantic and review/family/digest checks use those same bytes.
 Duplicate input exits 2 with the fixed error `duplicate JSON member`, without
 reflecting the key or value. Unique valid verdicts keep their existing output.
 
-This guard covers raw result-file validation. It cannot recover duplicates
-already collapsed by a provider wrapper's earlier JSON decoding/reserialization.
-It adds no provider call, repair/retry, schema field or review-composition change.
+Canonical wrapper admission also checks original answer and native envelope/event
+JSON before success can discard duplicate evidence. Duplicate canonical replies
+return schema failure without another formal provider call. The reserved
+`verdict_schema:LegVerdict` and `verdict_schema.LegVerdict` spellings both load
+the packaged schema file and require all three expected review bindings before
+dispatch. Custom schemas, raw investigation, malformed AGY noise and primary
+provider-failure precedence retain their existing behavior. No schema field or
+review-composition change is introduced. A result-file reader alone cannot
+recover duplicates already removed by an unrelated caller.
 
 ## Google CLI metadata snapshot
 
