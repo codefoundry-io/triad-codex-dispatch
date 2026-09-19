@@ -82,6 +82,14 @@ executable-custody controls, not provider or OS sandbox enforcement.
 
 The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
 
+A zero provider exit is insufficient if an output reader fails or remains
+incomplete. Reader diagnostics identify only the stream and exception class.
+Cleanup uses the saved owned process group, including after normal exit. AGY
+settings-release failure cannot admit a completed answer; raw capture remains
+subject to the existing failure-artifact confidentiality rules, and earlier
+timeout/provider failures retain priority. This does not add path containment
+or a stronger provider permission boundary.
+
 Provider timeout cleanup is best-effort POSIX lifecycle hygiene, not OS
 containment. A wrapper targets a saved group only when it belonged to the new
 provider child and differed from the wrapper group; otherwise it terminates the

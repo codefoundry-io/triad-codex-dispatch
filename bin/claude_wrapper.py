@@ -131,7 +131,7 @@ def _run_native_structured_once(
     result = _common._run_once(
         "claude", cmd, cwd, timeout, classify_and_log=False, **input_kwargs
     )
-    if result._stdin_delivery_failed or (
+    if result._stdin_delivery_failed or result._output_transport_failed or (
         stdin_text is not None and result.exit_code == _common.EXIT_TIMEOUT
     ):
         if result.exit_code == _common.EXIT_TIMEOUT:

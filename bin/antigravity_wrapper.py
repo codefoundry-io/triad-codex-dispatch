@@ -266,6 +266,9 @@ def _interpret_run(
     run.runtime_identity = route_conflict or exposed_model or run.runtime_identity
     if run.exit_code == _common.EXIT_TIMEOUT:
         return _fail(run, "timeout", _common.EXIT_TIMEOUT, "provider timed out")
+    if run._stdin_delivery_failed or run._output_transport_failed:
+        run.dispatch_phase = "post-dispatch-result"
+        return run
 
     status = result.get("status") if isinstance(result, dict) else None
 
@@ -631,6 +634,8 @@ def main() -> int:
     run_options: dict[str, Any] = {"classify_and_log": False}
     if formal_bindings:
         run_options["remove_env"] = FORMAL_AGY_ENV_REMOVE
+    raw = None
+    release_failed = False
     try:
         with settings_guard:
             raw = _common._run_once(
@@ -642,7 +647,9 @@ def main() -> int:
             )
     except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         _common.log(f"AGY settings/config conflict: {exc}")
-        return _common.EXIT_TERMINAL
+        if raw is None:
+            return _common.EXIT_TERMINAL
+        release_failed = True
     result = _interpret_run(
         raw,
         pydantic_cls,
@@ -652,6 +659,14 @@ def main() -> int:
         expected_content_digest=args.expected_content_digest,
         plan_mode=local_plan_response,
     )
+    if release_failed:
+        if result.exit_code == _common.EXIT_OK:
+            result = _fail(result, "config-conflict", _common.EXIT_TERMINAL,
+                           "AGY settings release failed after provider completion")
+        else:
+            result.extraction_error = (result.extraction_error or "") + "; AGY settings release also failed"
+        result.final_answer = ""
+        result.validated = None
     _common.log(
         f"[wrapper] antigravity {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "

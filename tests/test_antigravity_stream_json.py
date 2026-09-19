@@ -1791,3 +1791,46 @@ def test_preflight_settings_failure_stops_before_provider(
 
     assert wrapper.main() == _common.EXIT_TERMINAL
     assert "AGY settings/config conflict: busy settings" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("raw_exit,vendor_exit,stderr,expected_exit,classification", [
+    (0, 0, "captured provider progress", _common.EXIT_TERMINAL, "config-conflict"),
+    (_common.EXIT_TIMEOUT, -15, "captured provider progress", _common.EXIT_TIMEOUT, "timeout"),
+    (_common.EXIT_CLI_FAIL, 1, "payload size exceeds", _common.EXIT_TERMINAL, "token-limit"),
+])
+def test_c6_completed_stream_survives_settings_release_failure(
+    monkeypatch, capsys, raw_exit, vendor_exit, stderr, expected_exit, classification,
+):
+    raw_stream = _stream({"status": "SUCCESS", "response": "completed answer"})
+    captured = []
+    calls = []
+    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/fixture/agy")
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 7))
+    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
+    monkeypatch.setattr(wrapper._common, "persist_result_artifacts",
+                        lambda *args, **_kwargs: captured.append(args[4]))
+
+    @contextlib.contextmanager
+    def release_failure(_deny_rules, *, lock_timeout):
+        yield
+        raise OSError("synthetic release failure")
+
+    def complete(*args, **_kwargs):
+        calls.append(args)
+        raw = _run_result(raw_stream, rc=vendor_exit, stderr=stderr)
+        raw.exit_code = raw_exit
+        return raw
+
+    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", release_failure)
+    monkeypatch.setattr(wrapper._common, "_run_once", complete)
+    monkeypatch.setattr(sys, "argv", ["antigravity_wrapper.py", "--prompt", "review"])
+    assert wrapper.main() == expected_exit
+    assert capsys.readouterr().out == ""
+    assert len(calls) == 1
+    assert len(captured) == 1
+    result = captured[0]
+    assert result.classification == classification
+    assert result.vendor_exit_code == vendor_exit
+    assert result.stdout == raw_stream
+    assert result.stderr == stderr
+    assert result.final_answer == "" and result.validated is None
