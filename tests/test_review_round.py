@@ -143,6 +143,7 @@ def _write_google_preflight_receipt(
             "effective_approval_mode": "unexposed",
             "model": "auto",
             "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
+            "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "read_only_enforcement": "packaged-mode-independent-policy",
             "requested_approval_mode": "plan",
         }
@@ -3867,9 +3868,6 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
     assert selector_receipt is not None
     expected_metadata = {
         "approved_boundary": list(brief.approved_boundary),
-        "content_digest": review_round._prepared_review_digest(
-            prepared_digest, selector_receipt
-        ),
         "criteria": list(brief.criteria),
         "family": brief.family,
         **review_round._google_selector_metadata(selector_receipt),
@@ -3879,6 +3877,10 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
         "prepared_digest": prepared_digest,
         "review_id": brief.review_id,
         "review_kind": brief.review_kind,
+        "review_toolkit_sha256": {
+            name: hashlib.sha256((BIN / name).read_bytes()).hexdigest()
+            for name in ("review_round.py", "verdict_schema.py")
+        },
     }
 
     prompt = render_review_prompt(brief)
@@ -3887,6 +3889,9 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
     metadata_lines = [line for line in prompt.splitlines() if line.startswith(prefix)]
     assert len(metadata_lines) == 1
     metadata_line = metadata_lines[0]
+    digest = json.loads(metadata_line.removeprefix(prefix))["content_digest"]
+    assert len(digest) == 64 and set(digest) <= set("0123456789abcdef")
+    expected_metadata["content_digest"] = digest
     encoded_metadata = _canonical_json_bytes(expected_metadata)
     assert (metadata_line.removeprefix(prefix) + "\n").encode(
         "ascii"
@@ -4367,6 +4372,7 @@ def test_google_gemini_preflight_receipt_requires_truthful_mode_fields(
         "executable": str(selected),
         "google_selector_receipt_sha256": selector.receipt_sha256,
         "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
+        "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
         "provider_started": False,
         "review_id": "review-r1",
         "route": "gemini",

@@ -500,6 +500,11 @@ prepares one focused directory containing the complete current files,
 configuration, and governing documentation relevant to the decision. Every
 required family reviews that same complete directory once and returns one
 strict `LegVerdict` bound to its family, review ID, and route-bound `metadata.content_digest`.
+That admission digest binds the common review conditions and exact renderer/schema
+bytes on both prepared and guarded routes. A condition, toolkit, or receipt change
+requires a new basis; family selection alone retains the common digest. Gemini
+preflight also pins the packaged policy bytes. Regenerate an older receipt that
+lacks `policy_sha256`, or any receipt whose policy file has changed.
 The leader separately captures the prepared-directory integrity digest and canonical-worktree fingerprint
 before dispatch, verifies both after every started leg terminates, and reproduces every
 finding against the canonical worktree. Reviewer coverage is prompt-controlled

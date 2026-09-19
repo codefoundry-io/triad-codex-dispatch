@@ -455,6 +455,7 @@ def validate_google_preflight_receipt(
             "effective_approval_mode",
             "model",
             "policy",
+            "policy_sha256",
             "read_only_enforcement",
             "requested_approval_mode",
         },
@@ -511,6 +512,7 @@ def validate_google_preflight_receipt(
             "effective_approval_mode",
             "model",
             "policy",
+            "policy_sha256",
             "read_only_enforcement",
             "requested_approval_mode",
         )
@@ -526,6 +528,9 @@ def validate_google_preflight_receipt(
             or record["requested_approval_mode"] != "plan"
         ):
             raise RoundIntegrityError("Google Gemini preflight fields are invalid")
+        policy_bytes = _canonical_regular_file_bytes(expected_policy, "Gemini policy")
+        if record["policy_sha256"] != hashlib.sha256(policy_bytes).hexdigest():
+            raise RoundIntegrityError("Google Gemini preflight policy hash mismatch")
     return GooglePreflightReceipt(
         review_id=selector_receipt.review_id,
         authentication_class=selector_receipt.authentication_class,
@@ -1883,21 +1888,12 @@ def _google_route(
     return receipt.route
 
 
-def _prepared_review_digest(
-    prepared_digest: str,
-    receipt: GooglePreflightReceipt,
-) -> str:
-    if receipt.model == "gemini-3.8-flash-high":
-        raise RoundIntegrityError("Flash requires the paired guarded-worktree route")
-    return hashlib.sha256(
-        _canonical_json_bytes(
-            {
-                **_google_selector_metadata(receipt),
-                **_google_preflight_metadata(receipt),
-                "prepared_digest": prepared_digest,
-            }
-        )
-    ).hexdigest()
+def _review_toolkit_metadata() -> dict[str, object]:
+    root = Path(__file__).resolve().parent
+    return {"review_toolkit_sha256": {
+        name: hashlib.sha256(_canonical_regular_file_bytes(root / name, name)).hexdigest()
+        for name in ("review_round.py", "verdict_schema.py")
+    }}
 
 
 def _google_tool_contract(route: Literal["agy", "gemini"]) -> str:
@@ -1980,22 +1976,24 @@ def render_review_prompt(brief: ReviewBrief) -> str:
     assert receipt is not None
     if receipt.review_id != review_id:
         raise RoundIntegrityError("google selector receipt review ID mismatch")
-    review_digest = _prepared_review_digest(
-        brief.content_digest,
-        receipt,
-    )
-    metadata = {
+    if receipt.model == "gemini-3.8-flash-high":
+        raise RoundIntegrityError("Flash requires the paired guarded-worktree route")
+    common_metadata = {
         "approved_boundary": list(brief.approved_boundary),
-        "content_digest": review_digest,
         "criteria": list(brief.criteria),
-        "family": brief.family,
         **_google_selector_metadata(receipt),
         **_google_preflight_metadata(receipt),
+        **_review_toolkit_metadata(),
         "objective": brief.objective,
         "prepared_directory": str(brief.prepared_dir),
         "prepared_digest": brief.content_digest,
         "review_id": review_id,
         "review_kind": brief.review_kind,
+    }
+    metadata = {
+        **common_metadata,
+        "content_digest": hashlib.sha256(_canonical_json_bytes(common_metadata)).hexdigest(),
+        "family": brief.family,
     }
     encoded_metadata = (
         _canonical_json_bytes(metadata).decode("ascii").removesuffix("\n")
@@ -2118,6 +2116,7 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
         **custody,
         **_google_selector_metadata(receipt),
         **_google_preflight_metadata(receipt),
+        **_review_toolkit_metadata(),
         "objective": brief.objective,
         "review_id": review_id,
         "review_kind": brief.review_kind,

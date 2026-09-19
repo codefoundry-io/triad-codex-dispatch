@@ -110,6 +110,7 @@ def _google_selector_fixture(
                 (ROOT / "bin" / "policies" / "gemini-formal-readonly.toml").resolve()
             ),
             "read_only_enforcement": "packaged-mode-independent-policy",
+            "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "requested_approval_mode": "plan",
         }
     metadata = {
@@ -153,6 +154,7 @@ def _google_preflight_fixture(
         ),
         "provider_started": False,
         "read_only_enforcement": "packaged-mode-independent-policy",
+        "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
         "requested_approval_mode": "plan",
         "review_id": review_id,
         "route": "gemini",
@@ -1826,6 +1828,8 @@ def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(
     assert receipt["effective_approval_mode"] == "unexposed"
     assert receipt["model"] == "auto"
     assert receipt["read_only_enforcement"] == ("packaged-mode-independent-policy")
+    assert receipt["policy_sha256"] == hashlib.sha256(
+        (BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest()
     assert "approval_mode" not in receipt
     assert Path(receipt["policy"]) == (
         ROOT / "bin" / "policies" / "gemini-formal-readonly.toml"

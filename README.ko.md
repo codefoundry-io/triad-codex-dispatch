@@ -465,7 +465,11 @@ full diff는 navigation evidence이지 review boundary가 아닙니다. Leader�
 관련된 complete current file, configuration, governing documentation을 하나의 focused
 directory에 준비합니다. 모든 required family는 그 동일한 complete directory를 한 번씩
 검토하고 family, review ID, route-bound `metadata.content_digest`에 bind된 strict `LegVerdict` 하나를
-반환합니다. Leader는 dispatch 전에 prepared-directory integrity digest와 canonical-worktree fingerprint를
+반환합니다. 두 review 경로 모두 admission digest에 공통 검토 조건과 renderer/schema의
+정확한 파일 bytes를 포함합니다. 조건·toolkit·receipt가 바뀌면 새 검토 기준을 만들며,
+family만 바꾸면 공통 digest를 유지합니다. Gemini preflight는 policy bytes도 고정합니다.
+`policy_sha256`이 없는 과거 receipt나 policy 파일이 바뀐 receipt는 다시 생성해야 합니다.
+Leader는 dispatch 전에 prepared-directory integrity digest와 canonical-worktree fingerprint를
 capture하고 시작된 모든 leg이 끝난 뒤 둘 다 verify하며, 모든 finding을 canonical worktree에서
 재현합니다. Provider가 더 강한 boundary를 노출하지 않는 한 reviewer coverage는
 prompt-controlled이며, manifest path나 provider confidence만으로 승격하지 않습니다.

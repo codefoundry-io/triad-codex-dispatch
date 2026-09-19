@@ -143,6 +143,7 @@ def _google_selector_fixture(
             "effective_approval_mode": "unexposed",
             "model": "auto",
             "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
+            "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "read_only_enforcement": "packaged-mode-independent-policy",
             "requested_approval_mode": "plan",
         }

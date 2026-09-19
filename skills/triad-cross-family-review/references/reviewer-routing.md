@@ -78,6 +78,11 @@ user-tier enforcement boundary, with enterprise admin policy above it. Help
 surface evidence proves required CLI support, not merged settings or workspace
 trust.
 
+Gemini preflight records `policy_sha256` from the exact packaged policy bytes
+it validates. Rendering and dispatch verify that hash against the current
+policy file. Regenerate preflight after a policy change or when an older receipt
+lacks the hash. This binds bytes; it does not attest to merged runtime settings.
+
 ## Admission boundary
 
 Provider permission modes are inputs to containment, not admission proof.
