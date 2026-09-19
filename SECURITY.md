@@ -12,13 +12,15 @@ AGY is preferred and personal Google Sign-In requires it. When the owner selects
 Gemini Enterprise OAuth and AGY is absent, the selector may choose the already
 authenticated Gemini CLI instead. Without an explicit project, the
 AGY wrapper brackets `--sandbox read-only` in a transient global-settings
-transaction, unions the exact write/command/unsandboxed/URL/MCP deny set, and
-restores the original bytes. Unless the operator sets
-`AGY_NO_HEADLESS_AUTOAPPROVE=1`, AGY 1.1.3+ requires the wrapper-owned
-`--dangerously-skip-permissions` headless adaptation. Headless auto-approve
-removes interactive approval prompts but does not remove explicit deny entries.
-On the AGY route, MCP calls are denied; conditionally authorized external evidence uses the AGY
-native official-web read path. The provider-managed sandbox is not OS-level
+transaction and restores the original bytes. Formal preflight and dispatch use
+the five raw read-only denies plus `read_url(*)`; formal dispatch never supplies
+`--dangerously-skip-permissions`. Identical formal deny leases can overlap, while
+raw/formal lists remain isolated by the existing deny-key and lock timeout.
+Raw investigations retain their existing web-compatible rules and version-gated
+headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
+Every REVIEW prompt prohibits web; external research requires a separate
+authorized INVESTIGATION. On the AGY route, MCP calls are also denied.
+The provider-managed sandbox is not OS-level
 confinement, and round-integrity mutation detection is a separate fail-closed
 check. The formal Gemini wrapper explicitly requests CLI Auto and native Plan
 Mode, but records the effective approval mode as `unexposed`. Its exact
@@ -27,6 +29,15 @@ boundary: it denies writes, shell, Plan Mode transitions, and all other tools in
 every mode; an enterprise admin policy remains a higher tier. Bootstrap installs
 no persistent global permission policy, Enterprise authentication, or pre-spawn
 `shell_environment_policy`.
+
+The current Gemini packaged policy still allows `google_web_search` and
+`web_fetch`; REVIEW's prohibition of those tools is prompt-controlled on that
+route. Do not claim mechanical Gemini web denial from this contract or from a
+successful preflight. Shared policy adoption and effective-policy verification
+are separate from the AGY/renderer changes.
+AGY's prompt also prohibits both `search_web` and `read_url_content`. The exact
+deny list and a successful local review do not attest how every vendor web tool
+maps to permission actions; do not infer complete mechanical web denial from them.
 
 Run TRIAD from the same authenticated login terminal and project worktree used
 for development. The outer Codex host sandbox is separate from each provider's
@@ -53,7 +64,9 @@ authentication or broaden permission to mutate a user-global target.
 An explicit `--project <canonical-lowercase-UUID>` with `--cwd` and
 `--sandbox read-only` selects an owner-provisioned AGY project record under
 `~/.gemini/config/projects/<UUID>.json`. Before inference, the wrapper checks
-its ID, its single cwd resource, and the five read-only deny entries. This path
+its ID, its single cwd resource, and the five raw read-only deny entries; formal
+preflight and dispatch additionally require `read_url(*)`. Missing rules refuse
+before inference. This path
 does not enter the global transaction or create/edit permission or lease files.
 Additional project denies remain intact. Preflight and dispatch must select the
 same UUID, bound through the existing hashed `route_args`; a paired Pro/Flash

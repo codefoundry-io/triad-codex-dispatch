@@ -31,9 +31,8 @@ from pathlib import Path
 
 _DEFAULT_PATH = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
 
-# read-only: every mutation + shell (sandboxed OR unsandboxed) blocked; reads
-# succeed. read_url is intentionally NOT denied — agy's web search/research is
-# its key advantage and the internet is always allowed (owner directive).
+# Raw read-only investigations retain web access. Formal REVIEW additionally
+# denies URL reads; both exact lists may share only an identical active lease.
 _READ_ONLY_DENY = [
     "write_file(*)",
     "command(*)",
@@ -41,12 +40,13 @@ _READ_ONLY_DENY = [
     "execute_url(*)",
     "mcp(*)",
 ]
+_FORMAL_REVIEW_DENY = [*_READ_ONLY_DENY, "read_url(*)"]
 
 
-def build_deny_rules(mode: str) -> list:
+def build_deny_rules(mode: str, *, formal_review: bool = False) -> list:
     """Return the permissions.deny list for an agy sandbox mode."""
     if mode == "read-only":
-        return list(_READ_ONLY_DENY)
+        return list(_FORMAL_REVIEW_DENY if formal_review else _READ_ONLY_DENY)
     raise ValueError(f"unknown sandbox mode: {mode!r}")
 
 
@@ -57,7 +57,7 @@ def validate_project_id(project: str) -> None:
 
 
 @contextlib.contextmanager
-def agy_project_guard(project: str, cwd: str):
+def agy_project_guard(project: str, cwd: str, *, formal_review: bool = False):
     """Check the owner's project configuration without acquiring a global lease.
 
     The owner keeps this configuration stable during the call. This local check
@@ -81,7 +81,7 @@ def agy_project_guard(project: str, cwd: str):
         if (
             not isinstance(deny, list)
             or not all(isinstance(rule, str) for rule in deny)
-            or not set(_READ_ONLY_DENY).issubset(deny)
+            or not set(build_deny_rules("read-only", formal_review=formal_review)).issubset(deny)
         ):
             raise ValueError("AGY project is missing the read-only deny rules")
     except (KeyError, TypeError) as exc:
@@ -107,10 +107,9 @@ def _deny_key(deny_rules: list) -> str:
 
 
 def _shareable_deny(deny_rules: list) -> bool:
-    # Read-only calls all install the exact same deny list and can safely share
-    # the active settings transaction. Any other deny set (including the empty
-    # list for the permissive no-sandbox baseline) stays exclusive.
-    return deny_rules == _READ_ONLY_DENY
+    # Only known lists can share; the active deny_key still separates raw and
+    # formal callers. Arbitrary lists and the permissive baseline stay exclusive.
+    return deny_rules == _READ_ONLY_DENY or deny_rules == _FORMAL_REVIEW_DENY
 
 
 def _snapshot(p: Path) -> dict:
@@ -538,7 +537,7 @@ def _exclusive_settings_guard(
         if not deny_rules:
             yield
             return
-        # NOTE: with read-only the only shareable set and [] the only exclusive
+        # NOTE: with the known read-only lists shareable and [] the only exclusive
         # production input, the merge/restore branch below is currently
         # exercised only by tests — kept for a future non-shareable deny set.
         snap = _snapshot(p)

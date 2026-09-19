@@ -16,9 +16,8 @@ Use the installed triad dispatch skills instead of invoking wrapper scripts
 directly:
 
 - `$triad-claude-dispatch` for a single-shot Claude Code consult.
-- `$triad-antigravity-dispatch` for the primary Google-family consult, including
-  web-grounded research and live URL checks when a separate Google-family leg is
-  useful.
+- `$triad-antigravity-dispatch` for an authorized raw INVESTIGATION consult,
+  including web-grounded research and live URL checks. REVIEW legs prohibit web research.
 - `$triad-gemini-dispatch` for a standalone authorized Gemini CLI compatibility
   consult; it does not choose or lead a formal Google-family review.
 - `$triad-cross-family-review` before risky merges.
@@ -42,10 +41,12 @@ admission credit.
 
 Select provider permissions and project trust in that authenticated developer
 environment before dispatch. TRIAD does not install a separate Codex profile,
-rule, permission mode, or pre-spawn `shell_environment_policy`. The Codex-led
-AGY wrapper deliberately selects AGY native headless `always-proceed` for that
-child through its internal `--dangerously-skip-permissions` flag; callers do not
-pass the flag, and this does not change stored or global user/project settings.
+rule, permission mode, or pre-spawn `shell_environment_policy`.
+Formal AGY preflight and dispatch never pass `--dangerously-skip-permissions`.
+Only raw investigations retain the version-gated headless adaptation, unless
+`AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag. Calls
+without a project use the transient settings lease and restore its original
+bytes; explicit projects are validated without permission-file writes.
 Trusted Python and `PATH` values are prerequisites. After trusted launcher and
 interpreter startup, wrapper descendants remain scrubbed of loader and
 interpreter injection variables.
@@ -84,7 +85,8 @@ authority over other user-global paths.
 
 An owner-provisioned dedicated AGY project can be selected with
 `--project <canonical-lowercase-UUID> --cwd <absolute-review-root> --sandbox read-only`.
-Follow the canonical leg contract's project record and five-deny prerequisites.
+Follow the canonical leg contract's project record and six formal deny prerequisites
+(the five raw read-only denies plus `read_url(*)`).
 The wrapper validates that record without a global settings lease or permission
 mutation; provisioning remains separately authorized owner work. Use the same
 project for preflight and dispatch, and both Pro/Flash preflights when paired.

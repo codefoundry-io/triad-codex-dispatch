@@ -32,19 +32,20 @@ reaches out to the other families for you.
   owner-selected Gemini Enterprise OAuth account, an absent AGY executable
   selects the existing Gemini CLI wrapper immediately; later AGY failure never
   triggers that fallback. Without an explicit `--project`, `--sandbox read-only` brackets AGY in a transient
-  global-settings transaction that unions five deny rules and restores the
-  original bytes. AGY 1.1.3+ also needs the wrapper-owned
-  `--dangerously-skip-permissions` headless adaptation unless the operator sets
-  `AGY_NO_HEADLESS_AUTOAPPROVE=1`. The auto-approve removes interactive approval
-  prompts, while the explicit deny rules still block their named
-  action namespaces. On the AGY route, MCP calls are denied by the formal permission rules;
-  conditionally authorized external evidence uses AGY's native official-web read
-  path. The Enterprise Gemini route requests explicit CLI Auto and native Plan
+  global-settings transaction and restores the original bytes. Formal AGY adds
+  `read_url(*)` to the five raw read-only denies and never uses the headless
+  autoapproval flag. Identical formal leases can overlap; raw/formal deny lists
+  remain isolated. Raw investigations retain their web-compatible rules and
+  version-gated headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
+  Every REVIEW prompt prohibits web; external research is a separate authorized
+  INVESTIGATION. AGY also denies MCP calls. The Enterprise Gemini route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
   cache and removes competing API-key/ADC/Vertex/model selectors without reading
   them. Effective mode and runtime model remain `unexposed`. This is not OS-level
-  confinement; round-integrity mutation detection remains separate.
+  confinement; round-integrity mutation detection remains separate. Gemini's
+  current policy still permits its web read/search tools, so REVIEW no-web on
+  that route is prompt-controlled, not mechanical web denial.
 - Classifier gaps use a fresh native proposal-only child. The owner applies an
   accepted proposal locally from the same authenticated login terminal with the
   bootstrap-printed `python3 bin/apply_patch.py ... --classifier-file ...`
@@ -371,8 +372,7 @@ explicit deny transaction; strict local `LegVerdict` and review-binding checks
 plus round-integrity verification remain the admission gates.
 
 The formal AGY prompt remains explicitly static-only: it permits
-native file read/search and conditionally authorized AGY native official-web
-reads, denies MCP calls, forbids command, write, experiment, notebook, subagent,
+native local file read/search, denies web and MCP calls, forbids command, write, experiment, notebook, subagent,
 browser-actuation, and scratch tools, and sends unresolved static uncertainty to
 `open_questions`. Inside the prepared directory it uses native `list_dir`,
 `find_by_name`, and `view_file` as needed, and uses native `grep_search` with the
@@ -591,9 +591,9 @@ Honest boundaries, so you know where the toolkit stops:
   selected `--cwd` review root, digest and mutation checks, and your review before
   commit. Without `--project`, it also uses the transient deny lease; with
   `--project`, it validates the owner-provisioned project permission record.
-  On AGY 1.1.3+ the headless auto-approve removes interactive approval prompts,
-  while the configured explicit deny rules still block their named action
-  namespaces. The sandbox
+  Formal preflight and dispatch require the six review denies and never pass
+  `--dangerously-skip-permissions`. Raw calls retain their existing version-gated
+  headless compatibility. The sandbox
   remains provider-managed rather than OS-level confinement; round-integrity
   mutation detection is a separate fail-closed check.
   Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
@@ -863,6 +863,8 @@ Additional owner-defined denies remain in place. The wrapper creates or edits no
 project record, global settings, or global lease artifact in this mode.
 
 For formal review, use the same project UUID for preflight and dispatch. The
+project must also contain `read_url(*)`; the wrapper refuses a missing rule
+without changing owner configuration. The
 existing preflight `route_args` and receipt hash bind it to the rendered review;
 paired Pro/Flash preflights must select the same project. Keep the project
 configuration stable throughout the call. This is a configured native permission
