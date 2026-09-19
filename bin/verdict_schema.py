@@ -103,6 +103,14 @@ class LegVerdict(BaseModel):
     affected_surfaces_inspected: list[ReviewRelativePath] = Field(min_length=1)
     open_questions: list[str]
 
+    @staticmethod
+    def _triad_check_original_json(raw: str | bytes) -> None:
+        """Reject ambiguity before an envelope or verdict loses its members."""
+        try:
+            json.loads(raw, object_pairs_hook=_reject_duplicate_members)
+        except RecursionError:
+            raise ValueError("JSON nesting exceeds decoder limit") from None
+
     @field_validator("review_id")
     @classmethod
     def _valid_review_id(cls, value: str) -> str:
@@ -210,11 +218,8 @@ def validate_verdict_file(
     expected_content_digest: str,
 ) -> LegVerdict:
     raw = _read_canonical_regular_file(result_file)
-    try:
-        # Discard decoded values; semantic validation consumes the original bytes.
-        json.loads(raw, object_pairs_hook=_reject_duplicate_members)
-    except RecursionError:
-        raise ValueError("JSON nesting exceeds decoder limit") from None
+    # Discard decoded values; semantic validation consumes the original bytes.
+    LegVerdict._triad_check_original_json(raw)
     verdict = LegVerdict.model_validate_json(raw, strict=True)
     if verdict.review_id != expected_review_id:
         raise ValueError("review ID mismatch")

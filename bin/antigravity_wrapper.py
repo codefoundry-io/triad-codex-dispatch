@@ -322,6 +322,21 @@ def _interpret_run(
             f"requested model {expected_model!r} but AGY exposed {route_conflict!r}",
         )
     if pydantic_cls is not None:
+        original_check = getattr(pydantic_cls, "_triad_check_original_json", None)
+        if original_check is not None:
+            try:
+                for line in (run.stdout or "").split("\n"):
+                    if not line.lstrip().startswith("{"):
+                        continue
+                    try:
+                        # Hooks can fail before the decoder detects malformed suffixes.
+                        json.loads(line)
+                        original_check(line)
+                    except json.JSONDecodeError:
+                        continue  # Preserve the stream parser's malformed/noise handling.
+            except ValueError as error:
+                run.validation_error = str(error)
+                return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, str(error))
         structured = result.get("structured_output")
         if structured is None:
             run.validation_error = "terminal result has no structured_output"
@@ -441,6 +456,11 @@ def main() -> int:
         args.expected_family,
         args.expected_content_digest,
     )
+    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS
+    if (not args.preflight_only and formal_verdict
+            and not any(value is not None for value in binding_values)):
+        _common.log("formal verdict schema requires all formal verdict bindings")
+        return _common.EXIT_ARG_ERROR
     if args.preflight_only:
         if (
             args.expected_review_id is None
@@ -453,7 +473,7 @@ def main() -> int:
         if not all(value is not None for value in binding_values):
             _common.log("formal verdict bindings must be supplied together")
             return _common.EXIT_ARG_ERROR
-        if args.pydantic != "verdict_schema:LegVerdict":
+        if not formal_verdict:
             _common.log(
                 "formal verdict bindings require --pydantic verdict_schema:LegVerdict"
             )
