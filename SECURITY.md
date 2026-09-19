@@ -221,7 +221,11 @@ render and dispatch rejects a mismatch. The selected wrapper executes the receip
 executable directly. Its provider-free preflight finishes before any family starts;
 the route is then immutable. AGY
 version, executable, exact tabular model-catalog, and selected project or settings-transaction checks precede
-submission. Gemini preflight validates the receipt binary, model/Plan Mode/policy
+submission. Gemini preflight probes the receipt binary's `--version` before help,
+with a maximum 15-second version timeout and the same scrubbed environment. It
+requires SemVer >=0.34.0 and records the exact `gemini_version` in the bound
+receipt; malformed, missing, failed or unsupported versions refuse before inference.
+It also validates the model/Plan Mode/policy
 CLI surfaces, and mode-independent packaged policy without a model call. It
 records a SHA-256 of the same policy bytes it validates; render and dispatch
 reject a missing or stale policy hash. This binds policy bytes, not effective
