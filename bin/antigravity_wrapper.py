@@ -35,6 +35,7 @@ HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
 FORMAL_AGY_MODEL = "gemini-3.1-pro-high"
 FORMAL_AGY_EFFORT = "high"
 FORMAL_AGY_TIMEOUT = 600
+_WEB_EVIDENCE_PATH = Path(__file__).resolve().parents[1] / "prompts" / "investigation.md"
 FORMAL_AGY_ENV_REMOVE = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -47,6 +48,15 @@ FORMAL_AGY_ENV_REMOVE = (
     "GOOGLE_CLOUD_QUOTA_PROJECT",
     "AGY_ADC_AUTH",
 )
+
+
+def _load_web_evidence_clause() -> str:
+    """Load the one vendored C29 clause only for an authorized investigation."""
+    document = _WEB_EVIDENCE_PATH.read_text(encoding="utf-8")
+    clauses = re.findall(r"^```text\n(.*?)\n```(?:\n|$)", document, re.MULTILINE | re.DOTALL)
+    if document.count("```text") != 1 or len(clauses) != 1 or not clauses[0].strip():
+        raise ValueError("expected one nonempty terminated text clause")
+    return clauses[0]
 
 
 def _parse_agy_version(text: str) -> tuple[int, int, int] | None:
@@ -409,6 +419,8 @@ def main() -> int:
     prompt_group.add_argument("--prompt-file", help="Read a UTF-8 prompt file")
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--sandbox", choices=("read-only",), default=None)
+    parser.add_argument("--web", action="store_true",
+                        help="Authorized web INVESTIGATION; requires --sandbox read-only")
     parser.add_argument(
         "--project",
         help="Existing AGY project UUID; requires --cwd and --sandbox read-only",
@@ -444,6 +456,21 @@ def main() -> int:
     if not prompt.strip() or args.timeout <= 0:
         _common.log("prompt must be non-empty and timeout must be positive")
         return _common.EXIT_ARG_ERROR
+    if args.web:
+        if args.sandbox != "read-only":
+            _common.log("--web requires --sandbox read-only")
+            return _common.EXIT_ARG_ERROR
+        if (args.preflight_only or args.pydantic in _common.PACKAGED_VERDICT_SPECS
+                or any(value is not None for value in (
+                    args.expected_review_id, args.expected_family, args.expected_content_digest,
+                    args.google_selector_receipt, args.google_preflight_receipt))):
+            _common.log("--web is for raw INVESTIGATION, not formal REVIEW or preflight")
+            return _common.EXIT_ARG_ERROR
+        try:
+            prompt = prompt + "\n\n" + _load_web_evidence_clause()
+        except (OSError, UnicodeError, ValueError) as exc:
+            _common.log(f"web evidence clause unavailable: {exc}")
+            return _common.EXIT_ARG_ERROR
     _common.prune_stale_run_logs("antigravity")
 
     pydantic_cls = None

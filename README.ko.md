@@ -951,3 +951,16 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
 중복 키와 배포된 SHA-256을 검사합니다. 해시는 서명이 아닌 로컬 무결성 확인입니다.
 이 명령은 provider를 호출하거나 round를 승인하지 않습니다. v2 wrapper·renderer·수집기
 활성화 및 revision 채택도 별도 단계입니다. 기존 legacy 경로와 custom-schema 조사는 유지됩니다.
+
+## 승인된 AGY 웹 조사
+
+최신 AI API 등 외부 근거 확인이 필요하면 별도 승인된 조사로
+`antigravity_wrapper.py --web --sandbox read-only`를 사용합니다. 사용자 프롬프트나
+프롬프트 파일과 선택적 custom schema를 받으며, `--web`에 formal verdict binding이나
+preflight를 함께 주면 거부합니다.
+[호출과 증거 계약](skills/triad-cross-family-review/references/leg-contracts.md#authorized-agy-web-investigation)을 따릅니다.
+
+wrapper는 공통 근거 확인 지침을 프롬프트 맨 끝에 붙입니다. 검색 요약은 원문을 찾는
+단서이며, 인용한 페이지를 실제로 읽고 날짜·버전을 확인해야 합니다. 지침 추가만으로
+페이지 읽기나 해석의 정확성이 증명되지는 않습니다. 기존 로그 마스킹과 실패 시에만
+생기는 run-log는 유지되며, 일반 성공 로그에는 전체 웹 도구 호출 기록이 남지 않습니다.

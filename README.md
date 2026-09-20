@@ -1020,3 +1020,17 @@ JSON members and checks the bundled SHA-256 manifest. Hashes establish local
 integrity, not a signature. This command does not launch providers or admit a round.
 It does not activate v2 wrapper/render/collection paths or adopt a revision tag.
 Existing legacy routes and custom-schema investigations retain their interfaces.
+
+## Authorized AGY web investigation
+
+For current AI APIs or other external facts that require web verification, run a
+separate authorized investigation with `antigravity_wrapper.py --web --sandbox
+read-only`. It accepts a caller prompt or prompt file and an optional custom
+schema; formal verdict bindings and preflight are refused with `--web`.
+See [the invocation and evidence contract](skills/triad-cross-family-review/references/leg-contracts.md#authorized-agy-web-investigation).
+
+The wrapper appends the vendored shared evidence procedure last. A search summary
+is only a pointer: cited pages must be fetched and their date/version checked.
+The instruction does not attest that fetching occurred or that the answer read
+the page correctly. Existing audit redaction and failure-only run logs remain;
+ordinary successful logs do not retain complete fetch telemetry.

@@ -40,6 +40,8 @@ HASH_TARGETS = (
     "contracts/review-legs.schema.json",
     "contracts/receipt-fields.json",
     "contracts/source-manifest.json",
+    "prompts/investigation.md",
+    "prompts/source-manifest.json",
     "requirements.txt",
     "scripts/bootstrap.sh",
 )

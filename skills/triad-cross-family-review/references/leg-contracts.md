@@ -342,6 +342,34 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
   --expected-content-digest "$review_digest"
 ```
 
+## Authorized AGY web investigation
+
+When external facts need verification, including new AI APIs or technologies,
+use a separately authorized raw investigation. Keep REVIEW no-web and bring
+verified source evidence into the next review basis when needed.
+
+```text
+TRIAD_DISPATCH_LOG_DIR="$investigation_log_dir" \
+python3 "$toolkit_root/bin/antigravity_wrapper.py" \
+  --prompt-file "$investigation_prompt_file" \
+  --cwd "$investigation_cwd" \
+  --sandbox read-only --web \
+  --model gemini-3.1-pro-high --effort high --timeout 600
+```
+
+An optional custom `--pydantic` schema remains available; do not pass formal
+verdict bindings, selector/preflight receipts or `--preflight-only`. The wrapper
+appends the sole `text` clause from packaged `prompts/investigation.md` last,
+preserving caller bytes. `prompts/source-manifest.json` records its shared source
+commit and SHA-256. No `--web` flag is passed to the vendor CLI.
+
+The leader checks completed page-fetch events against each cited URL and verifies
+the page's date/version and interpretation. A search-only or failed fetch is
+UNSURE, not evidence. Clause insertion alone is not this verification. Existing
+unredacted audit argv and failure run logs receive the final prompt; hardened
+audit masking and success-log truncation still apply. A successful ordinary call
+does not by itself provide complete exact prompt/fetch custody.
+
 ## Shared containment boundary
 
 The no-edit contract is prompt-controlled unless runtime metadata proves a

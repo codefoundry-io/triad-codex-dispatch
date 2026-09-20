@@ -352,3 +352,13 @@ tamper resistance against an actor able to replace the entire distribution.
 The candidate does not alter installed revision pins, legacy review admission,
 provider permissions or raw investigation routes. Bootstrap requires the declared
 schema APIs before persistent writes and never installs Python packages itself.
+
+## Explicit web investigations
+
+AGY `--web` is a raw INVESTIGATION option requiring `--sandbox read-only`; it
+does not grant formal REVIEW access to the web or relax any owner deny rule.
+It appends the single vendored investigation clause after validating the caller
+prompt and operation. Missing or malformed clause content fails before provider
+work. The prompt manifest and distribution checks track copied source bytes;
+they do not attest runtime tool permission or factual correctness. Existing
+settings/project guards, audit masking and failure-log custody are unchanged.
