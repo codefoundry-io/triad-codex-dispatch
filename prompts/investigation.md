@@ -2,7 +2,7 @@
 
 > Seed = host A's `antigravity_wrapper.py` constant `AGY_WEB_EVIDENCE_CLAUSE` (2026-09-19), byte-identical below.
 > Scope: any Google-family dispatch that may read the web — A's `--web` research agent (agy `read_url_content` /
-> `search_web`); B's Google route wherever its prompt permits web reads (gemini `web_fetch` / `google_web_search`).
+> `search_web`); B's explicitly web-authorized raw investigation (gemini `web_fetch` / `google_web_search`).
 > Not a review clause: review legs read only the reviewed tree (`R-CONTAIN`; D-9 decides the gemini policy rows).
 > Placeholders: none. Vendoring rule: `README.md` § How a host uses a revision.
 
@@ -14,8 +14,7 @@ WEB EVIDENCE PROCEDURE (appended by the caller to every research dispatch; it bi
 
 ## order
 
-The host appends `web-evidence` LAST, after the caller's own prompt text and one blank line — a rule at the START of a
-long prompt is the one most likely dropped by the time the model acts (the documented constraint-drop shape). The host
-records the prompt AS SENT (clause included) in its per-call audit / run-log, so a reader can see what the model saw.
+The host appends `web-evidence` LAST, after the caller's own prompt text and one blank line.
+Evidence custody, redaction and verification follow [R-INVEST](../reference/review-rules.md#R-INVEST).
 On a gemini route the tool names read `web_fetch` for the page fetch and `google_web_search` for the summary; a host
 renderer substitutes the names of the CLI it dispatches and changes nothing else (case C29).

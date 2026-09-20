@@ -52,11 +52,7 @@ FORMAL_AGY_ENV_REMOVE = (
 
 def _load_web_evidence_clause() -> str:
     """Load the one vendored C29 clause only for an authorized investigation."""
-    document = _WEB_EVIDENCE_PATH.read_text(encoding="utf-8")
-    clauses = re.findall(r"^```text\n(.*?)\n```(?:\n|$)", document, re.MULTILINE | re.DOTALL)
-    if document.count("```text") != 1 or len(clauses) != 1 or not clauses[0].strip():
-        raise ValueError("expected one nonempty terminated text clause")
-    return clauses[0]
+    return _common.load_web_evidence_clause(_WEB_EVIDENCE_PATH)
 
 
 def _parse_agy_version(text: str) -> tuple[int, int, int] | None:
@@ -135,6 +131,7 @@ def _build_cmd(
     sandbox: bool = False,
     skip_permissions: bool = True,
     project: str | None = None,
+    add_dirs: tuple[str, ...] = (),
 ) -> list[str]:
     print_timeout = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = [agy_bin]
@@ -152,6 +149,8 @@ def _build_cmd(
         cmd += ["--json-schema", json_schema]
     if sandbox:
         cmd += ["--mode", "plan", "--sandbox"]
+    for directory in add_dirs:
+        cmd += ["--add-dir", directory]
     return cmd + _route_args(model, effort, project)
 
 
@@ -428,6 +427,7 @@ def main() -> int:
     parser.add_argument("--model", default=None)
     parser.add_argument("--effort", choices=("low", "medium", "high"), default=None)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
     parser.add_argument("--pydantic", default=None, help="module:Class schema contract")
     parser.add_argument("--expected-review-id", default=None)
     parser.add_argument(
@@ -442,16 +442,28 @@ def main() -> int:
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
+    process_cwd = None
     try:
         process_cwd = Path.cwd()
         prompt = _common.load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
+    except Exception as exc:
+        _common.log(_common.input_path_error("prompt load", args.prompt_file, process_cwd, exc))
+        return _common.EXIT_ARG_ERROR
+    try:
         cwd = _common.validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
+        args.add_dir = _common.validate_extra_directories(args.add_dir, process_cwd=process_cwd)
         if args.project is not None:
             _agy_settings.validate_project_id(args.project)
             if cwd is None or args.sandbox != "read-only":
                 raise ValueError("--project requires --cwd and --sandbox read-only")
     except Exception as exc:
-        _common.log(f"argument validation failed: {exc}")
+        _common.log(_common.input_path_error("argument", args.cwd, process_cwd, exc))
+        return _common.EXIT_ARG_ERROR
+    if args.add_dir and (args.preflight_only or args.pydantic in _common.PACKAGED_VERDICT_SPECS or any(
+        value is not None for value in (args.expected_review_id, args.expected_family,
+            args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
+    )):
+        _common.log("--add-dir is for raw INVESTIGATION; REVIEW inputs must be bound in the round")
         return _common.EXIT_ARG_ERROR
     if not prompt.strip() or args.timeout <= 0:
         _common.log("prompt must be non-empty and timeout must be positive")
@@ -686,6 +698,7 @@ def main() -> int:
         sandbox=args.sandbox == "read-only",
         skip_permissions=not selected_context and _agy_needs_skip_permissions(version),
         project=args.project,
+        add_dirs=tuple(args.add_dir),
     )
     run_options: dict[str, Any] = {"classify_and_log": False}
     if formal_bindings:
@@ -725,6 +738,7 @@ def main() -> int:
         result.validated = None
     result.transport = {**_common.transport_receipt("antigravity", result),
                         "cli_version": _version_text(version)}
+    _common.record_wrapper_paths(result, args.prompt_file, cwd, process_cwd)
     _common.log(
         f"[wrapper] antigravity {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "

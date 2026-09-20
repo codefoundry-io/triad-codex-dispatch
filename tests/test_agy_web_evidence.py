@@ -11,7 +11,7 @@ from test_antigravity_stream_json import ROOT, wrapper, _run_result, _stream
 
 
 CLAUSE_SHA = "78bc9d8e4fc450b00715ff5b106151c1c441b714cfa8cd101feb7ad998cd6bea"
-DOCUMENT_SHA = "0f65c6a8662978484d469e2688f4d8418dd006ef4eb44b8b09e5116d394a0b95"
+DOCUMENT_SHA = "424223be8384c3b43cbb62ddda28caee3ffa4d4da9277d5214a638397dfbb8f7"
 RAW_DENIES = {"write_file(*)", "command(*)", "unsandboxed(*)", "execute_url(*)", "mcp(*)"}
 
 
@@ -145,6 +145,6 @@ def test_c29_vendored_document_matches_shared_provenance():
     prompt_dir = ROOT / "prompts"
     manifest = json.loads((prompt_dir / "source-manifest.json").read_text())
     assert manifest["source_repository"] == "https://github.com/codefoundry-io/triad-dispatch-spec"
-    assert manifest["source_commit"] == "59db77533d39e29b56b94447d28d2dc167b4b468"
+    assert manifest["source_commit"] == "6f0f2746f0bd74e16cf6df7c9ee5e0750d42d7d5"
     assert manifest["sha256"]["investigation.md"] == DOCUMENT_SHA
     assert hashlib.sha256((prompt_dir / "investigation.md").read_bytes()).hexdigest() == DOCUMENT_SHA

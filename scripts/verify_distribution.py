@@ -33,6 +33,7 @@ HASH_TARGETS = (
     "bin/gemini_wrapper.py",
     "bin/google_diagnostics.py",
     "bin/policies/gemini-formal-readonly.toml",
+    "bin/policies/source-manifest.json",
     "bin/review_round.py",
     "bin/review_roster.py",
     "bin/verdict_schema.py",

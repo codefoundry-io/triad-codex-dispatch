@@ -30,11 +30,12 @@ every mode; an enterprise admin policy remains a higher tier. Bootstrap installs
 no persistent global permission policy, Enterprise authentication, or pre-spawn
 `shell_environment_policy`.
 
-The current Gemini packaged policy still allows `google_web_search` and
-`web_fetch`; REVIEW's prohibition of those tools is prompt-controlled on that
-route. Do not claim mechanical Gemini web denial from this contract or from a
-successful preflight. Shared policy adoption and effective-policy verification
-are separate from the AGY/renderer changes.
+The selected B Gemini profile explicitly denies `google_web_search` and
+`web_fetch`, retaining its 999/998 rule priorities and Plan Mode transition
+denies. The wrapper checks the complete rule set, exact bytes and adjacent
+`bin/policies/source-manifest.json` provenance. This is candidate payload adoption,
+not a tagged spec revision. B1-B3 in the shared verification manifest remain
+NOT RUN; a local preflight cannot prove effective admin-policy precedence.
 AGY's prompt also prohibits both `search_web` and `read_url_content`. The exact
 deny list and a successful local review do not attest how every vendor web tool
 maps to permission actions; do not infer complete mechanical web denial from them.
@@ -378,3 +379,10 @@ prompt and operation. Missing or malformed clause content fails before provider
 work. The prompt manifest and distribution checks track copied source bytes;
 they do not attest runtime tool permission or factual correctness. Existing
 settings/project guards, audit masking and failure-log custody are unchanged.
+
+Gemini raw `--web` appends that same clause with Gemini tool names. It changes
+neither native permission policy nor authentication. All raw wrappers accept
+explicit `--add-dir` inputs with entry-cwd/root validation; REVIEW refuses the
+unbound expansion. Native directory grants are not filesystem read-only
+enforcement. Success path evidence and refusal candidates use existing audit
+masking, without adding permanent prompt/page storage or changing failure IPC.

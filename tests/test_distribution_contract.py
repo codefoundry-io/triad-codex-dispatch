@@ -594,7 +594,8 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "Every REVIEW prompt prohibits web" in readme
     assert "모든 REVIEW prompt는 웹을 금지" in readme_ko
     assert "MCP calls are also denied" in security
-    assert "REVIEW's prohibition of those tools is prompt-controlled" in security
+    assert "selected B Gemini profile explicitly denies `google_web_search` and `web_fetch`" in security
+    assert "do not infer complete mechanical web denial" in security
     for document, stale_claim in (
         (readme, "auto-approve removes interactive approval prompts, while"),
         (readme_ko, "auto-approve는 interactive approval prompt를 제거하지만"),
@@ -728,8 +729,6 @@ def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> No
         "list_directory",
         "glob",
         "grep_search",
-        "google_web_search",
-        "web_fetch",
         "get_internal_docs",
     }
     denied_tools = {
@@ -743,6 +742,8 @@ def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> No
         )
     }
     assert denied_tools == {
+        "google_web_search",
+        "web_fetch",
         "write_file",
         "replace",
         "run_shell_command",

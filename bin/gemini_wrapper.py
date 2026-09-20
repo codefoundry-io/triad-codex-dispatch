@@ -57,8 +57,6 @@ FORMAL_READ_TOOLS = {
     "list_directory",
     "glob",
     "grep_search",
-    "google_web_search",
-    "web_fetch",
     "get_internal_docs",
 }
 FORMAL_DENIED_TOOLS = {
@@ -67,6 +65,8 @@ FORMAL_DENIED_TOOLS = {
     "run_shell_command",
     "enter_plan_mode",
     "exit_plan_mode",
+    "google_web_search",
+    "web_fetch",
 }
 
 
@@ -118,7 +118,21 @@ def _validate_formal_policy(path: Path) -> str:
     }
     if len(actual_rules) != len(expected_rules) or set(actual_rules) != expected_rules:
         raise ValueError("formal Gemini policy is not the exact fail-closed rule set")
-    return hashlib.sha256(policy_bytes).hexdigest()
+    digest = hashlib.sha256(policy_bytes).hexdigest()
+    from validate_v2 import _json
+    try:
+        manifest = _json(review_round._canonical_regular_file_bytes(
+            path.with_name("source-manifest.json"), "policy provenance"))
+    except (OSError, ValueError):
+        raise ValueError("formal Gemini policy digest provenance is unavailable") from None
+    if digest != "01a267f591518964e30f94ffc45d496aae594435678380179b679d1aa8de189b" or manifest != {
+        "source_repository": "https://github.com/codefoundry-io/triad-dispatch-spec",
+        "source_commit": "6f0f2746f0bd74e16cf6df7c9ee5e0750d42d7d5", "status": "candidate",
+        "source_path": "contracts/gemini-readonly-b.toml",
+        "sha256": {"gemini-formal-readonly.toml": digest},
+    }:
+        raise ValueError("formal Gemini policy digest does not match the selected candidate")
+    return digest
 
 
 def _supports_formal_help_contract(help_text: str) -> bool:
@@ -220,6 +234,8 @@ def main() -> int:
     )
     p.add_argument("--cwd", default=None, help="Process working directory")
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
+    p.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
+    p.add_argument("--web", action="store_true", help="Explicitly authorize raw web INVESTIGATION evidence")
     p.add_argument(
         "--model",
         default=None,
@@ -250,23 +266,47 @@ def main() -> int:
     )
     args = p.parse_args()
 
+    process_cwd = None
     try:
         process_cwd = Path.cwd()
         _prompt_text = load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
     except Exception as e:
-        log(f"prompt load failed: {e}")
+        log(_common.input_path_error("prompt load", args.prompt_file, process_cwd, e))
         return EXIT_ARG_ERROR
     args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
         args.cwd = validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
     except Exception as e:
-        log(f"--cwd validation failed: {e}")
+        log(_common.input_path_error("--cwd", args.cwd, process_cwd, e))
         return EXIT_ARG_ERROR
 
     if not args.prompt.strip():
         log("empty prompt")
         return EXIT_ARG_ERROR
+
+    try:
+        args.add_dir = _common.validate_extra_directories(args.add_dir, process_cwd=process_cwd)
+        if any("," in directory for directory in args.add_dir):
+            raise ValueError("Gemini --include-directories cannot represent a comma in one path")
+    except Exception as e:
+        log(_common.input_path_error("--add-dir", None, process_cwd, e))
+        return EXIT_ARG_ERROR
+    if args.web or args.add_dir:
+        if (args.preflight_only or args.pydantic in FORMAL_VERDICT_SPECS or any(
+            value is not None for value in (args.expected_review_id, args.expected_family,
+                args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
+        )):
+            log("--web/--add-dir is for raw INVESTIGATION, not formal REVIEW or preflight")
+            return EXIT_ARG_ERROR
+    web_clause = ""
+    if args.web:
+        try:
+            web_clause = _common.load_web_evidence_clause(
+                Path(__file__).resolve().parents[1] / "prompts/investigation.md", gemini=True)
+        except (OSError, UnicodeError, ValueError) as e:
+            log(f"web evidence clause unavailable: {e}")
+            return EXIT_ARG_ERROR
 
     formal_verdict = args.pydantic in FORMAL_VERDICT_SPECS
     pydantic_cls = None
@@ -397,6 +437,8 @@ def main() -> int:
             ]
         elif args.model:
             cmd += ["-m", args.model]
+        for directory in args.add_dir:
+            cmd += ["--include-directories", directory]
         return cmd
 
     result = run_cli_with_retry(
@@ -410,6 +452,7 @@ def main() -> int:
         repair_mode=args.repair_mode,
         single_provider_call=formal_verdict,
         remove_env=FORMAL_GEMINI_REMOVED_ENV if formal_verdict else (),
+        prompt_suffix=web_clause,
     )
 
     if formal_verdict:
@@ -431,9 +474,11 @@ def main() -> int:
                 result.validated = None
                 break
 
-    audit_cmd = build_cmd(args.prompt)
+    audit_prompt = args.prompt + ("\n\n" + web_clause if web_clause else "")
+    audit_cmd = build_cmd(audit_prompt)
+    _common.record_wrapper_paths(result, args.prompt_file, args.cwd, process_cwd)
     persist_result_artifacts(
-        "gemini", sys.argv, audit_cmd, args.prompt, result, debug=args.debug
+        "gemini", sys.argv, audit_cmd, audit_prompt, result, debug=args.debug
     )
 
     if pydantic_cls and result.validated is not None:

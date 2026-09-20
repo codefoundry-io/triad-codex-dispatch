@@ -109,7 +109,11 @@ P3's consumer; C28 masked-path wording and implementation belong to P4 with D-B2
 - [x] Implement `review_round.py resolve-roster --project-root PATH` using the
   canonical schema and a host data file. This command never starts a provider;
   its output is resolved configuration, not a capability or admission receipt.
-- [ ] Fresh RED/GREEN and complete plan review before P3.
+- [x] Fresh RED/GREEN and complete plan review before the next implementation plan.
+  Dedicated GREEN: 96 focused / 1393 full macOS tests; Ubuntu 24.04:
+  1391 passed and two existing filesystem skips. `triad-b-roster-r1`: all four
+  SAFE, `ADMITTED_SAFE`; integrity verified and owned custody cleaned.
+  Published B commit: `7cc70a73c72ef9106e7c963bafed24cbbf623a5a`.
 
 Dedicated RED: 26 failures at the missing resolver command; root GREEN: all 26
 pass. A separate dedicated distribution RED confirms the two new payloads were
@@ -138,8 +142,11 @@ P2 is an independently useful configuration check, never partial v2 dispatch.
 - [ ] Test all N-entry agreement outcomes and legacy/v2 isolation; fresh RED/GREEN,
   full suites and complete plan review.
 
-Budget: approximately +650/-100 production lines, 350 novel core; about 450 test
-lines. This is one cohesive wire/consumer transition; size is a planning guide.
+Budget: approximately +1000/-60 production lines, 500 novel core; about 600 test
+lines. The refined estimate includes the actual producer/consumer and exclusive
+attempt custody, not only schemas. This is one cohesive wire/consumer transition;
+size is a planning guide. Execute P4 first because these consumers reuse the
+completed policy and investigation boundaries.
 
 ### P4 — Google policy and investigation completion
 
@@ -148,14 +155,33 @@ lines. This is one cohesive wire/consumer transition; size is a planning guide.
   without plan mode. The provider artifact is already short before B collection.
   No verified AGY CLI truncation control was found; exact internal cause remains
   unexposed. Retain the external limitation, not a false fixed claim.
-- [ ] Publish the D-B1/D-B2 contract wording and same-commit Claude review request
+- [x] Publish the D-B1/D-B2 contract wording and same-commit Claude review request
   before implementing any changed common behavior.
+  Shared commit `6f0f2746f0bd74e16cf6df7c9ee5e0750d42d7d5`, PR 1 comment
+  `5748274863`. `triad-shared-v2-policy-r2`: all four SAFE, `ADMITTED_SAFE`;
+  80 contract checks passed on macOS and Ubuntu. Remote main remained
+  `2eb883fee59e66556ee7c7f87189b38231136622`. Candidate publication is not adoption.
 - [ ] Preserve separate Gemini policy profiles, enforce REVIEW no-web, implement
   explicit Gemini investigation clause and authorized read-root propagation.
 - [ ] Fresh RED/GREEN, complete review and platform checks. Leave unavailable
   authenticated Gemini V1–V5 evidence NOT RUN; do not relabel a stub as a service run.
+- [ ] Resolve the AGY 1.2.7 changelog/runtime discrepancy before claiming search
+  compatibility. The release note says default legacy search tools were retired;
+  diagnostic init events still advertise them. An exact fixture view succeeded,
+  but the model skipped the requested grep call: its unsupported-tool prose is
+  not a tool failure. Current evidence does not establish a functional defect.
+  A explicitly lists these tools in a custom agent. Preserve current routing;
+  any shared Google-clause change needs publication and same-commit Claude review.
 
-Budget: approximately +150/-60 production lines, 100 novel core; about 200 test
+Dedicated P4 RED: 17 failures / 4 passes across missing success-path evidence,
+masked refusal paths, extra-root forwarding, Gemini web trigger and B policy.
+Leader checks additionally exposed a schema-output suffix after the required
+Gemini web clause; the final-clause fix must cover the first and schema-repair
+attempt. The GitHub blob representation also produced the same 148-byte prefix
+as raw (29.4 s, provider/wrapper 0/0); this remains an external incomplete-body
+observation, not a repaired provider behavior.
+
+Budget: approximately +210/-60 production lines, 150 novel core; about 220 test
 lines. A vendor defect or a design change is a diagnosis/owner boundary, not a
 reason to invent a fetch service, SDK migration or global setting.
 

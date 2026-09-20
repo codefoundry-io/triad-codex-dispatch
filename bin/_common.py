@@ -310,6 +310,7 @@ class RunResult:
     _claude_receipt: Optional[dict] = None
     # Host-resolved launch cwd; audit-only evidence, not provider attestation.
     _effective_cwd: Optional[str] = None
+    _resolved_prompt_file: Optional[str] = None
     # Diagnostic event projection only; excluded from result/repair IPC.
     _agy_read_telemetry: Optional[dict] = None
 
@@ -531,6 +532,56 @@ def validate_wrapper_cwd(cwd: Optional[str], *, process_cwd: Path | None = None)
     return str(resolved)
 
 
+def input_path_error(label: str, value: str | None, process_cwd: Path | None, error: Exception) -> str:
+    """Report the resolved candidate through the existing audit privacy mode."""
+    if _audit_redact_enabled():
+        return f"{label} validation failed: {type(error).__name__}; candidate=<redacted:path>"
+    if process_cwd is None:
+        return f"{label} validation failed: {type(error).__name__}; entry cwd unavailable"
+    try:
+        path = Path(value).expanduser() if value else process_cwd
+        candidate = (path if path.is_absolute() else process_cwd / path).resolve(strict=False)
+    except (OSError, ValueError, RuntimeError):
+        return f"{label} validation failed: {type(error).__name__}"
+    return f"{label} validation failed: {error}; candidate={candidate}"
+
+
+def validate_extra_directories(values: list[str], *, process_cwd: Path) -> list[str]:
+    """Resolve explicitly supplied raw-call inputs with existing containment."""
+    resolved = []
+    for value in values:
+        if not value.strip():
+            raise ValueError("--add-dir requires a nonempty directory")
+        path = validate_wrapper_cwd(value, process_cwd=process_cwd)
+        if path not in resolved:
+            resolved.append(path)
+    return resolved
+
+
+def record_wrapper_paths(result: RunResult, prompt_file: str | None, cwd: str | None,
+                         process_cwd: Path) -> None:
+    if prompt_file is not None:
+        path = Path(prompt_file).expanduser()
+        result._resolved_prompt_file = str((path if path.is_absolute() else process_cwd / path).resolve())
+    if result.exit_code == EXIT_OK:
+        result._effective_cwd = result._effective_cwd or cwd or str(process_cwd)
+        redact = _audit_redact_enabled()
+        prompt_path = ("<redacted:prompt-file-path>" if redact and prompt_file is not None
+                       else result._resolved_prompt_file)
+        child_path = "<redacted:cwd-path>" if redact else result._effective_cwd
+        log(f"resolved_prompt_file={prompt_path} effective_cwd={child_path}")
+
+
+def load_web_evidence_clause(path: Path, *, gemini: bool = False) -> str:
+    document = path.read_text(encoding="utf-8")
+    clauses = re.findall(r"^```text\n(.*?)\n```(?:\n|$)", document, re.MULTILINE | re.DOTALL)
+    if document.count("```text") != 1 or len(clauses) != 1 or not clauses[0].strip():
+        raise ValueError("expected one nonempty terminated text clause")
+    clause = clauses[0]
+    return (clause.replace("search_web", "google_web_search").replace("read_url_content", "web_fetch")
+            if gemini else clause)
+
+
 def _redact_prompt_args(cmd: list[str]) -> list[str]:
     """Keep argv shape in durable audit logs without storing prompt payloads."""
     redacted: list[str] = []
@@ -539,6 +590,8 @@ def _redact_prompt_args(cmd: list[str]) -> list[str]:
         if redact_next is not None:
             if redact_next in {"prompt", "schema"}:
                 redacted.append(f"<redacted:{len(arg)} chars>")
+            elif redact_next == "input-directory":
+                redacted.append("<redacted:input-directory-path>")
             else:
                 redacted.append("<redacted:prompt-file-path>")
             redact_next = None
@@ -550,6 +603,10 @@ def _redact_prompt_args(cmd: list[str]) -> list[str]:
         if arg == "--prompt-file":
             redacted.append(arg)
             redact_next = "prompt-file"
+            continue
+        if arg in {"--add-dir", "--include-directories"}:
+            redacted.append(arg)
+            redact_next = "input-directory"
             continue
         if arg == "--json-schema":
             redacted.append(arg)
@@ -1378,7 +1435,7 @@ def _run_once_owned(
     """
     effective_cwd = os.path.realpath(cwd or os.getcwd())
     log(
-        f"exec cwd={effective_cwd} timeout={timeout}s "
+        f"exec cwd={'<redacted:cwd-path>' if _audit_redact_enabled() else effective_cwd} timeout={timeout}s "
         f"argv={_redact_prompt_args(cmd)}"
     )
     start = time.monotonic()
@@ -1617,6 +1674,7 @@ def run_cli_with_retry(
     prompt_via_stdin: bool = False,
     single_provider_call: bool = False,
     remove_env=(),
+    prompt_suffix: str = "",
 ) -> RunResult:
     """Top-level driver.
 
@@ -1728,7 +1786,9 @@ def run_cli_with_retry(
 
     schema_repair_attempt = 0
     while True:
-        cmd = cmd_builder(effective_prompt)
+        # The caller's final clause follows schema and retry instructions.
+        sent_prompt = effective_prompt + ("\n\n" + prompt_suffix if prompt_suffix else "")
+        cmd = cmd_builder(sent_prompt)
 
         # Layer 2: server-cap retry.
         max_retries = (
@@ -1737,7 +1797,7 @@ def run_cli_with_retry(
         result: Optional[RunResult] = None
         for attempt in range(max_retries + 1):
             run_once_kwargs = {
-                "stdin_text": effective_prompt if prompt_via_stdin else None,
+                "stdin_text": sent_prompt if prompt_via_stdin else None,
             }
             if remove_env:
                 run_once_kwargs["remove_env"] = remove_env
@@ -2115,6 +2175,10 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
     }
     if result._effective_cwd is not None:
         rec["effective_cwd"] = "<redacted:cwd-path>" if redact else result._effective_cwd
+    rec["resolved_prompt_file"] = (
+        "<redacted:prompt-file-path>" if redact and result._resolved_prompt_file is not None
+        else result._resolved_prompt_file
+    )
     if cli == "antigravity" and result._agy_read_telemetry is not None:
         telemetry = result._agy_read_telemetry
         rec["agy_read_telemetry"] = (

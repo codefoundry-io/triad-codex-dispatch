@@ -40,9 +40,9 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
   API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
   runtime model은 `unexposed`입니다. 이는 OS 수준 confinement가 아니며
-  round-integrity mutation detection은 별도 검사입니다. 현재 Gemini policy는 웹
-  읽기·검색 도구를 허용하므로 이 route의 REVIEW 웹 금지는 prompt 지침이며,
-  코드로 강제되는 웹 차단이라고 주장하지 않습니다.
+  round-integrity mutation detection은 별도 검사입니다. B 전용 Gemini policy는 두 웹
+  도구를 명시적으로 거부합니다. 조직 정책의 우선순위를 포함한 실제 적용 여부는
+  별도 라이브 검증 항목으로 유지합니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
   인증된 로그인 터미널에서 bootstrap이 출력한
   `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
@@ -229,7 +229,7 @@ review는 링크 대상을 따라가지 않고 범위 내 symlink text와 누락
 
 Formal REVIEW는 웹 조사를 금지합니다. AGY formal 호출은 URL-read deny를 추가하고
 headless autoapproval을 생략하며, raw INVESTIGATION 기능은 유지합니다. Gemini
-REVIEW의 웹 금지는 prompt 지침이며 policy에 의한 기계적 차단을 보장하지 않습니다.
+REVIEW는 B 전용 policy의 명시적 웹 deny를 사용하며 실제 적용 검증은 별도입니다.
 기존 인증 경로, 공개 verdict schema, 비활성 AGY hook을 유지합니다. 이번 릴리스는
 공유 스펙 revision 채택이나 cross-host 정합성 인증을 의미하지 않습니다.
 
@@ -999,9 +999,19 @@ Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 �
 `antigravity_wrapper.py --web --sandbox read-only`를 사용합니다. 사용자 프롬프트나
 프롬프트 파일과 선택적 custom schema를 받으며, `--web`에 formal verdict binding이나
 preflight를 함께 주면 거부합니다.
+Gemini raw wrapper도 `--web`을 받고 같은 지침의 도구 이름만 치환합니다. 기존
+Gemini 권한과 인증은 유지되며, 이 옵션이 권한 우회나 formal policy를 선택하지 않습니다.
 [호출과 증거 계약](skills/triad-cross-family-review/references/leg-contracts.md#authorized-agy-web-investigation)을 따릅니다.
 
 wrapper는 공통 근거 확인 지침을 프롬프트 맨 끝에 붙입니다. 검색 요약은 원문을 찾는
 단서이며, 인용한 페이지를 실제로 읽고 날짜·버전을 확인해야 합니다. 지침 추가만으로
 페이지 읽기나 해석의 정확성이 증명되지는 않습니다. 기존 로그 마스킹과 실패 시에만
 생기는 run-log는 유지되며, 일반 성공 로그에는 전체 웹 도구 호출 기록이 남지 않습니다.
+
+세 wrapper의 raw 호출은 승인된 추가 입력 폴더를 `--add-dir`로 반복 지정할 수
+있습니다. 호출 시작 cwd 기준으로 해석하고 기존 runtime-root 검사를 유지합니다.
+Claude·AGY는 native `--add-dir`, Gemini는 `--include-directories`로 전달합니다.
+Gemini는 쉼표가 포함된 단일 경로를 거부합니다. 기존 native 권한을 유지하며
+OS 읽기 전용 격리를 뜻하지 않습니다. REVIEW에서는 범위 밖 입력 추가를 거부합니다.
+성공 요약과 기존 audit에는 해석된 prompt-file·cwd가 기존 마스킹 정책에 따라
+기록됩니다. inline prompt의 파일 경로는 null이며, 거부 시 후보 경로도 마스킹합니다.

@@ -239,6 +239,7 @@ def main() -> int:
         help="Process working directory (caller-owned — use a sibling directory for isolation)",
     )
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
+    p.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
     p.add_argument(
         "--model",
         default=None,
@@ -280,18 +281,30 @@ def main() -> int:
     )
     args = p.parse_args()
 
+    process_cwd = None
     try:
         process_cwd = Path.cwd()
         _prompt_text = load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
     except Exception as e:
-        log(f"prompt load failed: {e}")
+        log(_common.input_path_error("prompt load", args.prompt_file, process_cwd, e))
         return EXIT_ARG_ERROR
     args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
         args.cwd = validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
     except Exception as e:
-        log(f"--cwd validation failed: {e}")
+        log(_common.input_path_error("--cwd", args.cwd, process_cwd, e))
+        return EXIT_ARG_ERROR
+
+    try:
+        args.add_dir = _common.validate_extra_directories(args.add_dir, process_cwd=process_cwd)
+    except Exception as e:
+        log(_common.input_path_error("--add-dir", None, process_cwd, e))
+        return EXIT_ARG_ERROR
+    if args.add_dir and (args.pydantic in _common.PACKAGED_VERDICT_SPECS or any(
+        value is not None for value in (args.expected_review_id, args.expected_family, args.expected_content_digest)
+    )):
+        log("--add-dir is for raw INVESTIGATION; REVIEW inputs must be bound in the round")
         return EXIT_ARG_ERROR
 
     if not args.prompt.strip():
@@ -361,6 +374,8 @@ def main() -> int:
             cmd += ["--model", args.model]
         if args.effort:
             cmd += ["--effort", args.effort]
+        for directory in args.add_dir:
+            cmd += ["--add-dir", directory]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
         if formal_bindings_complete:
@@ -406,6 +421,7 @@ def main() -> int:
         )
 
     result._claude_receipt = _claude_receipt(result.stdout)
+    _common.record_wrapper_paths(result, args.prompt_file, args.cwd, process_cwd)
     audit_cmd = build_cmd(args.prompt, native_schema)
     persist_result_artifacts(
         "claude", sys.argv, audit_cmd, args.prompt, result, debug=args.debug

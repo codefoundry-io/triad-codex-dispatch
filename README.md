@@ -44,8 +44,8 @@ reaches out to the other families for you.
   cache and removes competing API-key/ADC/Vertex/model selectors without reading
   them. Effective mode and runtime model remain `unexposed`. This is not OS-level
   confinement; round-integrity mutation detection remains separate. Gemini's
-  current policy still permits its web read/search tools, so REVIEW no-web on
-  that route is prompt-controlled, not mechanical web denial.
+  selected B policy explicitly denies both web tools; effective enterprise
+  policy precedence still requires the separately recorded live checks.
 - Classifier gaps use a fresh native proposal-only child. The owner applies an
   accepted proposal locally from the same authenticated login terminal with the
   bootstrap-printed `python3 bin/apply_patch.py ... --classifier-file ...`
@@ -250,8 +250,8 @@ preflight. Guarded reviews now explicitly record scoped symlink text and missing
 coverage without following link targets.
 
 Formal REVIEW prohibits web research. AGY formal calls add the URL-read deny and
-omit headless autoapproval; raw INVESTIGATION remains available. Gemini's REVIEW
-web prohibition is prompt-controlled, not a mechanical policy guarantee. Existing
+omit headless autoapproval; raw INVESTIGATION remains available. Gemini's selected
+B profile explicitly denies web tools; live policy verification remains separate. Existing
 authentication routes, the public verdict schema and disabled AGY hook remain.
 This release does not adopt a shared-spec revision or certify cross-host parity.
 
@@ -551,7 +551,16 @@ paths use the wrapper process directory captured at entry; the provider's
 `--cwd` is never the base for loading the prompt. Existing path existence,
 file/directory type, UTF-8, nonempty-prompt and opt-in runtime-root checks still
 apply before provider resolution. Canonical review artifact paths remain
-absolute. Audit masking is unchanged.
+absolute. Success summaries and existing audit rows include the resolved prompt
+file and child cwd, masked under the existing privacy mode; inline prompts use
+a null prompt-file path. Refusals identify the candidate through the same masking.
+
+Raw invocations also accept repeated `--add-dir` for explicitly authorized input
+directories. Paths use the same entry cwd and runtime-root checks. Claude and AGY
+receive their native `--add-dir`; Gemini receives `--include-directories` (a comma
+inside one directory name is refused because the native option splits commas).
+These options preserve native permission controls; adding an input directory is
+not an OS read-only sandbox. Formal REVIEW refuses this unbound expansion.
 
 The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
 
@@ -1071,6 +1080,10 @@ For current AI APIs or other external facts that require web verification, run a
 separate authorized investigation with `antigravity_wrapper.py --web --sandbox
 read-only`. It accepts a caller prompt or prompt file and an optional custom
 schema; formal verdict bindings and preflight are refused with `--web`.
+The raw Gemini wrapper also accepts `--web`, substituting its native tool names
+in the same clause. This flag records web authorization and evidence procedure;
+native Gemini permissions and authentication remain authoritative. It neither
+selects a formal review policy nor grants a permission bypass.
 See [the invocation and evidence contract](skills/triad-cross-family-review/references/leg-contracts.md#authorized-agy-web-investigation).
 
 The wrapper appends the vendored shared evidence procedure last. A search summary

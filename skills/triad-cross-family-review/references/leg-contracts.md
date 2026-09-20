@@ -363,6 +363,14 @@ appends the sole `text` clause from packaged `prompts/investigation.md` last,
 preserving caller bytes. `prompts/source-manifest.json` records its shared source
 commit and SHA-256. No `--web` flag is passed to the vendor CLI.
 
+The standalone Gemini wrapper accepts the same raw `--web` marker, substituting
+`google_web_search`/`web_fetch` in the clause. Native authentication/permissions
+still govern; this option does not select the formal policy or bypass a denial.
+All raw wrappers accept repeated `--add-dir` for explicitly authorized inputs;
+formal review rejects unbound extra directories. Keep the requested read-only
+scope in the investigation brief: native directory grants are not an OS sandbox.
+Resolved prompt-file/cwd success evidence and refusal paths use existing masking.
+
 The leader checks completed page-fetch events against each cited URL and verifies
 the page's date/version and interpretation. A search-only or failed fetch is
 UNSURE, not evidence. Clause insertion alone is not this verification. Existing
