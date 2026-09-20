@@ -790,6 +790,25 @@ full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
 
+Audit rows and failure run logs carry the same `transport` object from the
+[candidate shared receipt schema](contracts/receipt-fields.json): actual
+execution route, attempted executable, observed CLI version (or `null`), attempt
+and stdin delivery state. Encoding/spawn refusals are `not-started`; incomplete
+delivery is `failed`, including when timeout or a vendor error remains the
+primary outcome. Unobserved custom transports stay `unexposed`. Existing AGY
+version probes and validated Gemini preflight versions are reused; no additional
+provider call is made. This legacy invocation records `attempt=1`; existing
+capacity/schema-repair counters retain their separate meanings. Native v2
+collection and per-leg invocation attempt progression are
+separate pending work, not established by these CLI audit fields.
+
+On the wrapper's main thread, SIGTERM/SIGHUP during provider collection enters
+bounded owned-group and reader/writer cleanup, then records a terminal failure
+through the existing audit/run-log path. A captured success response cannot
+override cancellation or trigger another provider attempt. Previous signal
+handlers are restored; KeyboardInterrupt keeps its existing cleanup-and-rethrow
+behavior. This does not cover SIGKILL or host failure.
+
 After a provider child starts, the audit may include `effective_cwd`: the
 host-resolved launch directory captured before dispatch. Redacted/hardened modes
 replace the whole path with `<redacted:cwd-path>`. Pre-launch failures omit it.

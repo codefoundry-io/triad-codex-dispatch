@@ -692,7 +692,8 @@ def test_run_once_interrupt_terminates_provider_process_group(
         (process.pid, 0),
         (process.pid, signal.SIGKILL),
     ]
-    assert process.wait_calls == [60, 5, 5]
+    assert 0 < process.wait_calls[0] <= 60
+    assert process.wait_calls[1:] == [5, 5]
 
 
 def test_run_once_uses_direct_fallback_for_an_unsafe_child_process_group(
@@ -735,13 +736,14 @@ def test_run_once_uses_direct_fallback_for_an_unsafe_child_process_group(
         lambda pgid, sig: group_signals.append((pgid, sig)),
     )
 
-    result = _common._run_once("claude", ["claude", "-p", "review"], None, 60)
+    # An expired deadline exercises timeout without depending on poll interval.
+    result = _common._run_once("claude", ["claude", "-p", "review"], None, 0)
 
     assert result.exit_code == _common.EXIT_TIMEOUT
     assert group_signals == []
     assert process.terminate_calls == 1
     assert process.kill_calls == 0
-    assert process.wait_calls == [60, 5, 5]
+    assert process.wait_calls == [0, 5, 5]
 
 
 def test_terminate_provider_process_group_fallback_kills_unreaped_child(

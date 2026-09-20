@@ -129,6 +129,15 @@ files remain outside the claim; shared Git metadata and later mutations still
 require normal review custody and final integrity verification. Never use a
 different checkout to bypass protected changes in a governing worktree.
 
+The common `transport` object adds execution metadata to existing audit and
+failure-log envelopes, without prompt/page storage or a new log directory.
+Catchable SIGTERM/SIGHUP on the wrapper main thread during child collection
+uses scoped handlers, owned-group cleanup and existing failure persistence;
+previous handlers are restored. It does not cover SIGKILL or host failure.
+An attempted executable and probed version do not attest provider model identity,
+authentication or successful interpretation. Delivery observations never replace
+the primary timeout/vendor error. Existing masking and retention remain.
+
 The optional audit `effective_cwd` records the host-resolved launch directory
 only after a child starts. Hardened/redacted mode masks the entire path. It
 shares existing private audit retention and is excluded from failure/repair IPC;

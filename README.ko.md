@@ -732,6 +732,22 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
 
+Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실제 실행 route,
+시도한 실행 파일, 관측한 CLI 버전(미관측 시 `null`), attempt와 stdin 전달 상태를
+[공통 후보 계약](contracts/receipt-fields.json)에 맞춰 보존합니다. 인코딩·spawn
+실패는 `not-started`, 불완전한 전달은 `failed`이며 기존 timeout·vendor 오류를
+덮어쓰지 않습니다. 관측하지 못한 별도 transport는 `unexposed`입니다. AGY의 기존
+버전 검사와 검증된 Gemini preflight 버전을 재사용하며 추가 provider 호출은 없습니다.
+현재 legacy 호출은 `attempt=1`을 기록하며 capacity/schema-repair 횟수는 기존
+별도 필드 의미를 유지합니다. Native v2 수집·leg별 호출 attempt 증가는 별도
+미완료 항목입니다.
+
+Wrapper main thread가 provider 결과를 수집하는 동안 SIGTERM/SIGHUP을 받으면
+소유한 프로세스 그룹과 reader/writer를 수거하고 기존 audit/run-log에 실패를
+기록합니다. 이미 출력한 성공 응답은 취소를 덮어쓰거나 재호출을 유발하지 못합니다.
+이전 signal handler는 복원하며 KeyboardInterrupt의 기존 수거 후 재발생 동작은
+유지합니다. SIGKILL이나 호스트 장애까지 수거한다고 보장하지 않습니다.
+
 Provider child가 시작된 경우 audit에 `effective_cwd`가 남을 수 있습니다.
 Dispatch 전에 host가 해석한 실행 디렉터리이며 redacted/hardened mode에서는
 경로 전체를 `<redacted:cwd-path>`로 가립니다. 실행 전 실패에는 생략합니다.

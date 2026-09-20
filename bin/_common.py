@@ -301,7 +301,9 @@ class RunResult:
     dispatch_phase: Optional[str] = None
     # Provider-exposed runtime identity, or ``unexposed`` when the route omits it.
     runtime_identity: Optional[str] = None
-    # Private local transport state; intentionally excluded from audit/run-log schemas.
+    # Common observed transport; shared unchanged by audit and failure IPC.
+    transport: Optional[dict] = None
+    # Private failure controls remain distinct from the public delivery observation.
     _stdin_delivery_failed: bool = False
     _output_transport_failed: bool = False
     # Sanitized Claude audit evidence only; excluded from failure/repair IPC.
@@ -317,6 +319,20 @@ class RunResult:
 def log(msg: str) -> None:
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
     print(f"[{ts}] {msg}", file=sys.stderr)
+
+
+def transport_receipt(cli: str, result: RunResult) -> dict:
+    """Expose observations only; custom/unobserved transports are not inferred."""
+    if result.transport is None:
+        return {
+            "schema_version": 2,
+            "stdin_delivery": "unexposed",
+            "route": "agy" if cli == "antigravity" else cli,
+            "binary": None,
+            "cli_version": None,
+            "attempt": 1,
+        }
+    return result.transport
 
 
 def require_binary(name: str) -> str:
@@ -1303,6 +1319,53 @@ def _run_once(
     classify_and_log: bool = True,
     remove_env=(),
 ) -> RunResult:
+    """Capture catchable termination for this owned invocation, then restore it.
+
+    The handler only records state: raising between Popen and its assignment
+    could lose the child handle. The engine observes cancellation in its wait
+    loop and uses the same bounded group/reader cleanup as other terminal paths.
+    Library calls from non-main threads retain their caller's signal policy.
+    """
+    received: list[int] = []
+    previous = {}
+
+    def remember(signum, _frame):
+        if not received:
+            received.append(signum)
+
+    try:
+        if threading.current_thread() is threading.main_thread():
+            for signum in (signal.SIGTERM, signal.SIGHUP):
+                previous[signum] = signal.signal(signum, remember)
+        result = _run_once_owned(
+            cli, cmd, cwd, timeout, stdin_text, classify_and_log, remove_env,
+            received,
+        )
+        # Covers a signal arriving after the engine's final collection check.
+        if received and not result._output_transport_failed and result.exit_code != EXIT_TIMEOUT:
+            _mark_signal_failure(result, received[0])
+            log(f"[wrapper] {cli} unknown exit={result.exit_code} "
+                f"vendor={result.vendor_exit_code} elapsed={result.elapsed_s:.1f}s")
+        return result
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
+def _mark_signal_failure(result: RunResult, signum: int) -> None:
+    result.exit_code = EXIT_CLI_FAIL
+    result.classification = "unknown"
+    result.extraction_error = f"wrapper interrupted ({signal.Signals(signum).name})"
+    result._output_transport_failed = True
+    result.final_answer = ""
+    result.validated = None
+
+
+def _run_once_owned(
+    cli: str, cmd: list[str], cwd: Optional[str], timeout: int,
+    stdin_text: Optional[str], classify_and_log: bool, remove_env,
+    received: list[int],
+) -> RunResult:
     """One Popen invocation.
 
     stdout = capture-only (structured JSON/JSONL — not for human stream).
@@ -1320,6 +1383,14 @@ def _run_once(
     )
     start = time.monotonic()
 
+    def observed(result: RunResult, delivery: str) -> RunResult:
+        result.transport = {
+            **transport_receipt(cli, result),
+            "stdin_delivery": delivery,
+            "binary": cmd[0] if cmd else None,
+        }
+        return result
+
     stdin_bytes = None
     if stdin_text is not None:
         try:
@@ -1327,11 +1398,11 @@ def _run_once(
         except UnicodeError:
             diagnostic = "stdin delivery failed (encoding)"
             log(diagnostic)
-            return RunResult(
+            return observed(RunResult(
                 EXIT_CLI_FAIL, "", "", time.monotonic() - start,
                 classification="unknown", extraction_error=diagnostic,
                 _stdin_delivery_failed=True,
-            )
+            ), "not-started")
 
     # Scrub loader/interpreter injection vars so a poisoned parent env cannot
     # reach the vendor child (I-2/I-3). Explicit env= replaces the implicit
@@ -1357,10 +1428,10 @@ def _run_once(
     except OSError as e:
         elapsed = time.monotonic() - start
         log(f"OSError on spawn: {e}")
-        return RunResult(
+        return observed(RunResult(
             EXIT_ARG_ERROR, "", f"spawn failed: {e}\n", elapsed,
             classification="unknown",
-        )
+        ), "not-started")
 
     provider_pgid: Optional[int] = None
     if all(hasattr(os, name) for name in ("killpg", "getpgid", "getpgrp")):
@@ -1424,12 +1495,19 @@ def _run_once(
             )
             threads.append(thread)
             thread.start()
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
+        deadline = time.monotonic() + timeout
+        while not received:
+            try:
+                proc.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    break
+        if timed_out or received:
             _terminate_provider_process_group(
-                proc, f"timeout after {timeout}s", provider_pgid
+                proc, f"timeout after {timeout}s" if timed_out else
+                "wrapper termination requested", provider_pgid
             )
         _finish_stdin()
         # A reaped leader may still own descendants, even with closed pipes.
@@ -1508,6 +1586,8 @@ def _run_once(
 
     result._effective_cwd = effective_cwd
     result.vendor_exit_code = rc
+    if received and not timed_out:
+        _mark_signal_failure(result, received[0])
     if classify_and_log:
         if not (result._stdin_delivery_failed or result._output_transport_failed):
             result.classification = classify(
@@ -1521,7 +1601,8 @@ def _run_once(
     elif not (result._stdin_delivery_failed or result._output_transport_failed):
         result.classification = "unclassified"
 
-    return result
+    return observed(result, "not-used" if stdin_bytes is None else
+                    "failed" if delivery_failed else "complete")
 
 
 def run_cli_with_retry(
@@ -2015,6 +2096,7 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
         "classification": result.classification,
         "dispatch_phase": result.dispatch_phase,
         "runtime_identity": result.runtime_identity,
+        "transport": transport_receipt(cli, result),
         "mode": result.mode,
         "repair_attempt": result.repair_attempt,
         "schema_repair_attempt": result.schema_repair_attempt,
@@ -2741,6 +2823,7 @@ def emit_run_log(
         "classification": result.classification,
         "dispatch_phase": result.dispatch_phase,
         "runtime_identity": result.runtime_identity,
+        "transport": transport_receipt(cli, result),
         "mode": result.mode,
         "elapsed_s": round(result.elapsed_s, 2),
         "stderr": result.stderr,

@@ -414,6 +414,8 @@ def main() -> int:
 
     if formal_verdict:
         result.runtime_identity = result.runtime_identity or "unexposed"
+        result.transport = {**_common.transport_receipt("gemini", result),
+                            "cli_version": selector_receipt.cli_version}
 
     if formal_verdict and result.exit_code == _common.EXIT_OK:
         for field, expected in (

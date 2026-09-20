@@ -147,6 +147,7 @@ class GooglePreflightReceipt(GoogleSelectorReceipt):
     model: str
     effort: str | None
     route_args: tuple[str, ...]
+    cli_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -570,6 +571,7 @@ def validate_google_preflight_receipt(
         model=record["model"],
         effort=record["effort"] if route == "agy" else None,
         route_args=tuple(record["route_args"]) if route == "agy" else (),
+        cli_version=record[f"{route}_version"],
     )
 
 

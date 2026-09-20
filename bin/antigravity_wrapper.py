@@ -723,6 +723,8 @@ def main() -> int:
             result.extraction_error = (result.extraction_error or "") + "; AGY settings release also failed"
         result.final_answer = ""
         result.validated = None
+    result.transport = {**_common.transport_receipt("antigravity", result),
+                        "cli_version": _version_text(version)}
     _common.log(
         f"[wrapper] antigravity {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "
