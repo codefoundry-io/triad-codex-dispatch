@@ -65,8 +65,8 @@ section is optional.
    - `claude` — Claude Code `>= 2.1.170`; bootstrap checks binary presence only
      and does not run a version probe.
 
-   You also need `git`, `python3 >= 3.12`, and Pydantic 2 in that same Python
-   runtime. The runtime dependency is declared in the shipped
+   You also need `git`, `python3 >= 3.12`, Pydantic 2 and `jsonschema>=4.26,<5`
+   in that same Python runtime. The runtime dependencies are declared in the shipped
    `requirements.txt`. Keep
    `~/.local/bin` on `PATH` (or set `TRIAD_BOOTSTRAP_BIN_DIR` to a directory
    already on `PATH`). At least one of `agy` or `gemini` must be installed.
@@ -94,7 +94,8 @@ section is optional.
    Its shebang makes the shipped script directly executable.
 
    Before its first mutation, the script verifies that the selected Python can
-   import the Pydantic 2 APIs used by the toolkit. If not, it stops and prints
+   import the Pydantic 2 and jsonschema Draft 2020-12 APIs used by the toolkit.
+   If not, it stops and prints
    an argv-safe command equivalent to
    `python3 -m pip install -r <absolute-plugin-path>/requirements.txt`. Run that
    command in the Python environment you own, then rerun bootstrap. Bootstrap
@@ -590,7 +591,7 @@ Honest boundaries, so you know where the toolkit stops:
   yourself; the installer writes the three provider wrapper launchers plus the
   review-round selector launcher while
   preserving owner-authored configuration. If the
-  selected Python is missing Pydantic 2, bootstrap stops before mutation and
+  selected Python lacks Pydantic 2 or the jsonschema APIs, bootstrap stops before mutation and
   prints the exact `python3 -m pip install -r .../requirements.txt` command for
   that interpreter.
 - **The self-improving classifier is a heuristic, not an oracle.** It can route a
@@ -682,7 +683,7 @@ hashes, export manifest, actual synthetic artifact bytes (base64), link records
 and cleanup evidence as JSON. If export fails, it retains the synthetic bytes in
 the report before disposing of its own fixtures; if retention fails, the fixture
 is preserved. It needs Git and the Codex, Claude and AGY
-CLIs on PATH, plus Python 3.12+ with Pydantic 2.
+CLIs on PATH, plus Python 3.12+ with Pydantic 2 and jsonschema from the shipped requirements.
 Temporary `AGY_SETTINGS_PATH` isolates only the wrapper transaction, not vendor
 configuration. Success is neither a review verdict nor release certification.
 
@@ -996,3 +997,19 @@ availability; synthetic tests verify this helper's behavior without real inferen
   push, install, release, or publication.
 - The fresh repair child returns a proposal or escalation and never applies a
   classifier change.
+
+## Offline v2 candidate validation
+
+The [candidate contract bundle](contracts/README.md) comes from shared commit
+055204c83e57bf87eeac5b2422f2b17340f7c53b. Use this explicit source CLI with an
+absolute canonical regular result file and all six expected binding values:
+
+    python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
+
+Substitute actual arguments; Google uses agy or gemini for the expected route.
+Success prints the validated v2 object (exit 0); invalid input, binding or payload
+integrity returns exit 2. It uses jsonschema offline, rejects duplicate original
+JSON members and checks the bundled SHA-256 manifest. Hashes establish local
+integrity, not a signature. This command does not launch providers or admit a round.
+It does not activate v2 wrapper/render/collection paths or adopt a revision tag.
+Existing legacy routes and custom-schema investigations retain their interfaces.

@@ -127,6 +127,20 @@ def field_validator(*args, **kwargs): return lambda function: function
 def model_validator(*args, **kwargs): return lambda function: function
 '''
     (package / "__init__.py").write_text(module, encoding="utf-8")
+    # Bootstrap fixtures intentionally hide user-site dependencies. These fake
+    # API surfaces characterize readiness; real validation has its own tests.
+    schema_package = site / "jsonschema"
+    schema_package.mkdir(exist_ok=True)
+    schema_package.joinpath("__init__.py").write_text('''\
+class Draft202012Validator:
+    def __init__(self, schema, *, registry): pass
+    @staticmethod
+    def check_schema(schema): pass
+    def is_valid(self, instance): return True
+''')
+    reference_package = site / "referencing"
+    reference_package.mkdir(exist_ok=True)
+    reference_package.joinpath("__init__.py").write_text("class Registry: pass\n")
     return site
 
 
@@ -3087,6 +3101,30 @@ def test_install_requires_pydantic_2_before_persistent_mutation(
     assert result.returncode != 0
     assert "Pydantic 2 formal review APIs are required" in result.stderr
     assert expected_command in result.stderr
+    assert "required prerequisite checks failed" in result.stderr
+    assert not any(launcher_dir.iterdir())
+    assert not (Path(env["HOME"]) / ".codex").exists()
+    assert not shell_rc.exists()
+
+
+@pytest.mark.parametrize("surface", ("absent", "incomplete"))
+def test_install_requires_jsonschema_before_persistent_mutation(tmp_path, surface):
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    fake_site = _fake_pydantic_site(tmp_path, "schema-probe")
+    package = fake_site / "jsonschema"
+    package.joinpath("__init__.py").write_text(
+        "raise ImportError('missing jsonschema')\n" if surface == "absent"
+        else "Draft202012Validator = None\n"
+    )
+    shell_rc = tmp_path / "shellrc"
+    result, env, launcher_dir = _run_bootstrap(
+        tmp_path, repo_root=repo_root, arg="--install",
+        env_overrides={"PYTHONPATH": str(fake_site),
+                       "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)},
+    )
+    assert result.returncode != 0
+    assert "jsonschema Draft 2020-12 APIs are required" in result.stderr
+    assert str((repo_root / "requirements.txt").resolve()) in result.stderr
     assert "required prerequisite checks failed" in result.stderr
     assert not any(launcher_dir.iterdir())
     assert not (Path(env["HOME"]) / ".codex").exists()

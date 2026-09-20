@@ -35,6 +35,11 @@ HASH_TARGETS = (
     "bin/policies/gemini-formal-readonly.toml",
     "bin/review_round.py",
     "bin/verdict_schema.py",
+    "bin/validate_v2.py",
+    "contracts/leg-verdict.schema.json",
+    "contracts/review-legs.schema.json",
+    "contracts/receipt-fields.json",
+    "contracts/source-manifest.json",
     "requirements.txt",
     "scripts/bootstrap.sh",
 )

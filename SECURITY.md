@@ -339,3 +339,16 @@ security-sensitive issues on the product issue tracker with a `[security]`
 title and never include credentials or tokens. See
 [the repair protocol](docs/references/repair-protocol.md) for the proposal and
 owner-apply contract.
+
+## Offline candidate contracts
+
+The explicit bin/validate_v2.py command consumes only the fixed local candidate
+contract bundle. It checks regular canonical files and manifest digests, rejects
+duplicate original JSON members before parsing loses them, validates all six
+expected invocation fields, and uses an explicit empty jsonschema reference
+registry. It neither fetches remote schemas nor resolves file URI references.
+The source-commit/hash manifest detects inconsistent local payloads; it is not
+tamper resistance against an actor able to replace the entire distribution.
+The candidate does not alter installed revision pins, legacy review admission,
+provider permissions or raw investigation routes. Bootstrap requires the declared
+schema APIs before persistent writes and never installs Python packages itself.

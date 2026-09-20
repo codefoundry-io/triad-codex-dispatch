@@ -836,7 +836,7 @@ resolve_python_runtime() {
 check_formal_schema_dependency() {
   if python3 "$REPO_ROOT/bin/bootstrap_repair.py" formal-schema-ready \
     --requirements "$REPO_ROOT/requirements.txt"; then
-    ok "Pydantic 2 formal review APIs available"
+    ok "Pydantic 2 and jsonschema Draft 2020-12 APIs available"
   else
     fail "formal review dependency readiness failed"
   fi
