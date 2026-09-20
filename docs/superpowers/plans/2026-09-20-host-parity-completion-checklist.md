@@ -20,6 +20,14 @@ and release separate. Unchecked items are unfinished, not implicitly waived.
   admit converted legacy results. Native Codex stays native; dormant hooks stay dormant.
 - [ ] Re-fetch main before common changes and final review; record new SHAs here.
 
+Current status refresh: B implementation HEAD `8f12bd58e401d061ba4a9bc889791e24718fb915`;
+remote B main `56f0f6657084f81516217ee51698f9b18cfc71dc`. Shared main re-fetched
+at `2eb883fee59e66556ee7c7f87189b38231136622`; authoring candidate before this
+documentation refresh is `11582b0f6fe6cc6bd292cbb90dfd07dab452ed75`.
+P1, P2 and P4 are implemented and reviewed on the B feature branch. P3 is local
+work in progress; the producer adapter is not wired into operational review.
+This refresh changes no production behavior, adoption or installation.
+
 ## Case coverage and completion evidence
 
 `BASELINE` means existing source/test evidence; retain it in the final regression.
@@ -33,21 +41,21 @@ baseline and source/test pointers are in shared
 | C2, C6 | Partial setup and guard-release failure custody | BASELINE: terminal/provider/stream tests | Full macOS and Ubuntu regressions |
 | C3–C5, C7 | Age floor, proven ownership, export before cleanup, safe resume | BASELINE: log/cleanup custody tests | Full regressions; owned cleanup proof |
 | C8 | Shared exit vocabulary and explicit exceptions | BASELINE: exit-token contract tests | No producer drift |
-| C9, C10 | Actual native/CLI transport object in audit, failure IPC and v2 collection | OPEN | Successful/failed/not-started/stdin/unexposed and route/attempt tests |
+| C9, C10 | Actual native/CLI transport object in audit, failure IPC and v2 collection | PARTIAL: P1 CLI emission verified | P3 native receipt and per-entry/attempt collection; retain existing CLI tests |
 | C11, C17 | Route-specific environment scrub | BASELINE: provider/diagnostic tests | Actual adapter env regression; no credential inspection |
-| C12 | Three defaults, merge-by-name, discovery, validation and displayed enabled roster | OPEN | Absent/override/invalid/disabled/new-name tests; actual consumer |
-| C13, C14, C30 | v2 producers, prompt, six bindings and admission switch together | OPEN: offline validator only | End-to-end v2 and legacy isolation; original duplicate rejection |
-| C15 | REVIEW no-web on every route, preserving B policy protections | OPEN: AGY/rendering done | Shared host-profile amendment; policy/argv tests; V1–V5 separately NOT RUN |
+| C12 | Three defaults, merge-by-name, discovery, validation and displayed enabled roster | PARTIAL: P2 resolver/display verified | P3 preparation and execution must consume resolved entries and capabilities |
+| C13, C14, C30 | v2 producers, prompt, six bindings and admission switch together | PARTIAL: offline validator; local producer draft unwired | End-to-end v2 and legacy isolation; original duplicate rejection |
+| C15 | REVIEW no-web on every route, preserving B policy protections | P4 IMPLEMENTED: exact separate B policy and route tests | Live B1–B3 and A V1–V5 remain NOT RUN; source equality is not live policy proof |
 | C16 | Version/capability/auth boundary before dispatch | BASELINE partial | Preserve checks; actual principal/effective policy remains unverified unless observed |
 | C18, C22 | Roster model/effort reaches native/CLI; Google Pro/high defaults | OPEN | Route catalog/argv/native matrix; unsupported values fail before inference |
 | C19 | Same-basis failed-entry retry with immutable attempt custody | OPEN | Attempt 2 retains siblings; negative verdict is not retryable transport |
-| C20 | Every changed condition forces full scope; previous findings fenced to all | OPEN: digest binding done | Each changed-condition axis; complete residual delivery |
+| C20 | Every changed condition forces full scope; previous findings fenced to all | PARTIAL: condition digest and capture/verify implemented | Full v2 roster/condition binding; complete residual delivery |
 | C21, C23 | All N entries count, family coverage separate, same-family custody exclusive | OPEN | Informational blocker, missing result, swapped result/read audit tests |
 | C24 | macOS and Ubuntu 24.04 outcomes recorded independently | BASELINE per prior slice | New complete suite on both; unrun service checks explicit |
-| C25 | Raw custom prompt/schema/model/web/authorized roots survive | OPEN audit/integration | Route preservation matrix; no mandatory review envelope |
+| C25 | Raw custom prompt/schema/model/web/authorized roots survive | P4 VERIFIED: route preservation and extra roots | Retain route matrix through P3; no mandatory investigation envelope |
 | C26, C27 | No-follow link text; selected route/binary/version frozen | BASELINE | Full regression and v2 consumer binding |
-| C28 | Entry-cwd relative paths, checks and masked success path evidence | OPEN: resolution implemented | Summary/audit on success and refusal; no unmasked-path expansion |
-| C29 | Explicit Google investigation appends clause last; fetch facts are verified | OPEN: AGY trigger done | Gemini trigger; truncation diagnosis; shared D-B2 wording; bounded live check |
+| C28 | Entry-cwd relative paths, checks and masked success path evidence | P4 VERIFIED: loader, evidence and masking | Retain success/refusal/vanished-cwd tests; accepted diagnostic limits below |
+| C29 | Explicit Google investigation appends clause last; fetch evidence is qualified | P4 VERIFIED: both triggers; non-fatal AGY known issue | Incomplete source evidence remains incomplete/UNSURE where relevant; independent dispatch failures retain existing handling |
 
 ## Dependency-ordered functional plans
 
@@ -161,10 +169,21 @@ completed policy and investigation boundaries.
   `5748274863`. `triad-shared-v2-policy-r2`: all four SAFE, `ADMITTED_SAFE`;
   80 contract checks passed on macOS and Ubuntu. Remote main remained
   `2eb883fee59e66556ee7c7f87189b38231136622`. Candidate publication is not adoption.
-- [ ] Preserve separate Gemini policy profiles, enforce REVIEW no-web, implement
+- [x] Preserve separate Gemini policy profiles, enforce REVIEW no-web, implement
   explicit Gemini investigation clause and authorized read-root propagation.
-- [ ] Fresh RED/GREEN, complete review and platform checks. Leave unavailable
+- [x] Fresh RED/GREEN, complete review and platform checks. Leave unavailable
   authenticated Gemini V1–V5 evidence NOT RUN; do not relabel a stub as a service run.
+  B commit `8f12bd58e401d061ba4a9bc889791e24718fb915`; dedicated final GREEN:
+  108 focused and 1429 full macOS tests. Ubuntu 24.04, unprivileged uid 65534:
+  1427 passed, two existing filesystem skips. `triad-b-p4-r1`: four SAFE,
+  `ADMITTED_SAFE`, matching integrity, exact owned cleanup. Digest
+  `3b3f3414f05714417dd73d6d2ea600eabd19bfec12a06c305441e138fdcc3209`.
+  Minor diagnostic limitations on the unchanged reviewed bytes: invalid extra
+  directory refusal may display entry cwd as its candidate; a missing required
+  jsonschema dependency in Gemini provenance parsing exits 1 rather than 3.
+  Both refuse before inference and preserve masking. No unnecessary reader/path
+  abstraction was added. Leader disposition is retained in workspace
+  `_runs/infra/20260920-transport-contract/p4-review-adjudication.md`.
 - [ ] Resolve the AGY 1.2.7 changelog/runtime discrepancy before claiming search
   compatibility. The release note says default legacy search tools were retired;
   diagnostic init events still advertise them. An exact fixture view succeeded,
@@ -180,6 +199,22 @@ Gemini web clause; the final-clause fix must cover the first and schema-repair
 attempt. The GitHub blob representation also produced the same 148-byte prefix
 as raw (29.4 s, provider/wrapper 0/0); this remains an external incomplete-body
 observation, not a repaired provider behavior.
+
+Cross-site evidence: Python.org robots.txt also yielded a strict prefix,
+297/536 normalized characters (239 trailing characters omitted); IANA robots.txt
+23/23 and RFC 20 18497/18497 were complete. Direct bytes before/after matched
+for every URL. A fresh native independent audit confirmed the comparisons.
+This excludes a GitHub-only explanation and a universal small fixed cutoff;
+it does not identify the provider's internal component. Task-scoped artifacts
+are retained in workspace `_runs/infra/20260920-agy-web-evidence/`.
+
+- [x] Record `KI-AGY-URL-BODY-PREFIX` as a non-fatal external known issue under
+  the owner's instruction. Shared disposition commit
+  `11582b0f6fe6cc6bd292cbb90dfd07dab452ed75`, PR 1 comment `5748658935`.
+  The observed body loss alone is neither an implementation failure nor an
+  automatic repair/retry trigger. Existing successful exits are unchanged;
+  incomplete evidence and independent dispatch failures retain their meaning.
+  No new log, retention policy, provider workaround or vendor-fix claim is added.
 
 Budget: approximately +210/-60 production lines, 150 novel core; about 220 test
 lines. A vendor defect or a design change is a diagnosis/owner boundary, not a

@@ -1,5 +1,8 @@
 # B v2 foundation: Claude-host handoff
 
+This is the offline foundation slice record. Current whole-host status is in
+the [shared Claude handoff](https://github.com/codefoundry-io/triad-dispatch-spec/blob/codex/host-b-preimplementation-audit/decisions/host-b-0555-contract-compliance-handoff.md).
+
 Shared basis: [055204c83e57bf87eeac5b2422f2b17340f7c53b](https://github.com/codefoundry-io/triad-dispatch-spec/commit/055204c83e57bf87eeac5b2422f2b17340f7c53b),
 a published candidate, not tagged adoption. A source observations below are pinned
 to `codefoundry-io/triad` commit `92c8afd500499d8736afcc28b39a87a4f87fed50`.
@@ -37,7 +40,9 @@ altered payloads, manifest provenance, offline retrieval refusal, legacy copied-
 isolation, bootstrap no-mutation refusal and distribution hashes. macOS/Ubuntu
 receipts and the complete required review gate must establish completion; code
 presence alone does not. Authenticated identity, V1–V5 and full v2 dispatch are
-not verified by this foundation. D-B1/D-B2 remain unresolved owner choices.
+not verified by this foundation. D-B1/D-B2 are now settled and implemented in
+P4 (`8f12bd5`); they are not outstanding owner choices. Operational v2 integration
+remains separate from this foundation and the completed P2 roster resolver.
 
 B's new CLI uses standard JSON ASCII escaping so contract-valid escaped Unicode
 values remain serializable on UTF-8 stdout. A's [raw-admit artifact writer](https://github.com/codefoundry-io/triad/blob/92c8afd500499d8736afcc28b39a87a4f87fed50/.claude/skills/triad-cross-family-review/lib/validate_verdict.py#L628-L669)

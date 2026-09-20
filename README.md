@@ -799,6 +799,33 @@ full prompts and vendor transcripts as untrusted repair evidence and remain
 until their age-floor cleanup. Treat these files as sensitive and remove
 `bin/_logs/` when needed.
 
+### Log retention and lifecycle
+
+The [shared cleanup contract](https://github.com/codefoundry-io/triad-dispatch-spec/blob/main/reference/review-rules.md#R-CLEANUP)
+defines ownership, evidence export and protection of fresh sibling IPC. The
+thresholds below describe this host's implementation, not common cross-host
+defaults. There is no scheduled background cleaner.
+
+| Data | Cleanup trigger and current limits |
+|---|---|
+| Audit, `bin/_logs/<cli>/audit.jsonl` | A successful append rotates the active file after it exceeds 10 MiB. Rotation prunes oldest eligible archives to at most five / 50 MiB per CLI; the active file is separate. No age sweep. |
+| Failure IPC, `bin/_logs/<cli>/runs/` | The next normal dispatch removes eligible records older than 3,600 seconds. A failure write also prunes eligible stale records when the directory exceeds 100 entries or 20 MiB. Fresh siblings and the just-written record survive even above the cap; successful calls create no failure run log. |
+| Opt-in debug, `bin/_debug/<UTC-date>/<cli>.md` | Written only with `--debug`; redacted mode skips it. No automatic retention limit or deletion. |
+| Temporary `triad-review-*` allocations | After all writers finish, verified `export` precedes explicit `cleanup`. A later `prepare` may reclaim only proven, exported allocations inactive for more than 30 days; see [review evidence cleanup](#review-evidence-cleanup). |
+| Durable exported review evidence and task-owned `_runs` investigation/spike records | No automatic deletion. They remain at the selected destination after temporary review-root cleanup. |
+| Provider-owned AGY `~/.gemini/antigravity-cli/brain` | Outside TRIAD's cleanup ownership; this table makes no claim about AGY's own retention. |
+
+`TRIAD_DISPATCH_LOG_DIR` changes the audit/failure-log root, not the debug root.
+Default-root failure IPC may use an owned temporary fallback; a later eligible
+dispatch applies its age-floor sweep there too. An explicitly configured root
+does not fall back. Cleanup is best effort: stale file identity, link checks or
+I/O refusal can leave residue. No later invocation means no next-run cleanup.
+Implementation and regression sources: [log helpers](bin/_common.py),
+[log cleanup tests](tests/test_log_cleanup.py), and
+[review custody tests](tests/test_review_cleanup_custody.py).
+
+### Transport and diagnostic records
+
 Audit rows and failure run logs carry the same `transport` object from the
 [candidate shared receipt schema](contracts/receipt-fields.json): actual
 execution route, attempted executable, observed CLI version (or `null`), attempt
@@ -1091,3 +1118,10 @@ is only a pointer: cited pages must be fetched and their date/version checked.
 The instruction does not attest that fetching occurred or that the answer read
 the page correctly. Existing audit redaction and failure-only run logs remain;
 ordinary successful logs do not retain complete fetch telemetry.
+
+Known issue `KI-AGY-URL-BODY-PREFIX`: AGY 1.2.7 sometimes persists only a prefix
+of a fetched page. This observation alone is not a TRIAD dispatch failure and
+does not trigger automatic repair or retry. Preserve the actual call outcome;
+mark affected evidence incomplete or UNSURE when it matters to the conclusion.
+Independent transport, schema, identity and integrity failures retain their
+existing handling. See the [owner disposition and reproduction evidence](https://github.com/codefoundry-io/triad-dispatch-spec/blob/11582b0f6fe6cc6bd292cbb90dfd07dab452ed75/decisions/2026-09-20-owner-follow-up.md#ki-agy-url-body-prefix-non-fatal-known-issue).

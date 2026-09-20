@@ -732,6 +732,31 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
 
+### 로그 보관과 수명주기
+
+[공통 정리 계약](https://github.com/codefoundry-io/triad-dispatch-spec/blob/main/reference/review-rules.md#R-CLEANUP)은
+소유권 확인, 증거 export, 최근 sibling IPC 보호를 규정합니다. 아래 수치는 이 host의
+현재 구현값이며 양쪽 host의 공통 기본값은 아닙니다. 예약된 백그라운드 청소는 없습니다.
+
+| 자료 | 청소 시점과 현재 한도 |
+|---|---|
+| Audit, `bin/_logs/<cli>/audit.jsonl` | 기록 성공 후 활성 파일이 10 MiB를 넘으면 회전합니다. 회전 시 CLI별 오래된 적격 보관본부터 정리하여 최대 5개·50 MiB로 제한합니다. 활성 파일은 별도이며 기간 기준 삭제는 없습니다. |
+| 실패 IPC, `bin/_logs/<cli>/runs/` | 다음 일반 호출에서 3,600초 지난 적격 파일을 정리합니다. 실패 기록 후 100개·20 MiB를 넘으면 오래된 적격 파일부터 정리하지만 최근 sibling과 방금 쓴 기록은 보존합니다. 성공 호출은 실패 run-log를 만들지 않습니다. |
+| 선택적 debug, `bin/_debug/<UTC-date>/<cli>.md` | `--debug`일 때만 기록하며 redacted mode에서는 생략합니다. 자동 보관 한도나 삭제는 없습니다. |
+| 임시 `triad-review-*` 할당 | 모든 writer 종료 후 검증된 `export`를 먼저 수행하고 명시적으로 `cleanup`합니다. 이후 `prepare`는 소유권과 export가 확인된 30일 초과 비활성 할당만 회수할 수 있습니다. [리뷰 증거 정리](#리뷰-증거-정리)를 참고하세요. |
+| Export한 리뷰 증거와 작업별 `_runs` 조사·스파이크 자료 | 자동 삭제하지 않습니다. 임시 리뷰 root를 정리해도 지정한 보관 목적지에는 남습니다. |
+| AGY 자체 `~/.gemini/antigravity-cli/brain` | TRIAD 청소 소유 범위 밖입니다. 이 표는 AGY 자체 보관 정책을 보증하지 않습니다. |
+
+`TRIAD_DISPATCH_LOG_DIR`는 audit·실패 로그 위치만 바꾸며 debug 위치는 바꾸지 않습니다.
+기본 위치에 실패 IPC를 쓰지 못하면 소유한 임시 fallback을 사용할 수 있고, 이후 적격
+호출에서 같은 기간 기준으로 정리합니다. 명시적으로 지정한 위치는 fallback하지 않습니다.
+파일 identity·링크 검사·I/O 문제로 정리를 거부하면 자료가 남을 수 있습니다.
+다음 호출이 없으면 다음 호출 시 청소도 실행되지 않습니다.
+근거: [로그 구현](bin/_common.py), [로그 정리 테스트](tests/test_log_cleanup.py),
+[리뷰 custody 테스트](tests/test_review_cleanup_custody.py).
+
+### 전송과 진단 기록
+
 Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실제 실행 route,
 시도한 실행 파일, 관측한 CLI 버전(미관측 시 `null`), attempt와 stdin 전달 상태를
 [공통 후보 계약](contracts/receipt-fields.json)에 맞춰 보존합니다. 인코딩·spawn
@@ -1007,6 +1032,12 @@ wrapper는 공통 근거 확인 지침을 프롬프트 맨 끝에 붙입니다. 
 단서이며, 인용한 페이지를 실제로 읽고 날짜·버전을 확인해야 합니다. 지침 추가만으로
 페이지 읽기나 해석의 정확성이 증명되지는 않습니다. 기존 로그 마스킹과 실패 시에만
 생기는 run-log는 유지되며, 일반 성공 로그에는 전체 웹 도구 호출 기록이 남지 않습니다.
+
+Known issue `KI-AGY-URL-BODY-PREFIX`: AGY 1.2.7은 일부 페이지의 원문을 앞부분만
+저장할 수 있습니다. 이 현상만으로 TRIAD 호출 실패로 판정하거나 자동 복구·재시도를
+시작하지 않습니다. 실제 호출 결과를 유지하고, 결론에 영향을 주는 불완전한 근거는
+불완전 또는 UNSURE로 표시합니다. 별개의 전송·스키마·모델 식별·무결성 실패 처리는
+유지합니다. [사용자 결정과 재현 근거](https://github.com/codefoundry-io/triad-dispatch-spec/blob/11582b0f6fe6cc6bd292cbb90dfd07dab452ed75/decisions/2026-09-20-owner-follow-up.md#ki-agy-url-body-prefix-non-fatal-known-issue)를 참고하세요.
 
 세 wrapper의 raw 호출은 승인된 추가 입력 폴더를 `--add-dir`로 반복 지정할 수
 있습니다. 호출 시작 cwd 기준으로 해석하고 기존 runtime-root 검사를 유지합니다.
