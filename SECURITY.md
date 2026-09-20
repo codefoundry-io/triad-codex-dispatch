@@ -351,6 +351,13 @@ owner-apply contract.
 
 ## Offline candidate contracts
 
+`review_round.py resolve-roster` reads the explicit project's regular
+`.agents/triad-review-legs.json` and shipped defaults through the same strict
+local JSON/schema boundary. It refuses duplicate members and linked configuration
+paths. It does not execute configuration values, probe providers, read user-global
+rosters or grant authority. The displayed configuration is not an admission or
+capability receipt; runtime route and model checks are a separate boundary.
+
 The explicit bin/validate_v2.py command consumes only the fixed local candidate
 contract bundle. It checks regular canonical files and manifest digests, rejects
 duplicate original JSON members before parsing loses them, validates all six

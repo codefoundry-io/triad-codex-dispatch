@@ -99,13 +99,23 @@ P3's consumer; C28 masked-path wording and implementation belong to P4 with D-B2
 
 ### P2 — Resolved roster and provider-free display
 
-- [ ] Read actual catalogs/help and A roster handling; ship three runnable defaults.
-- [ ] Test discovery, merge, strict shape, placeholders, disabled entries and
+- [x] Read actual catalogs/help and A roster handling; ship three concrete default
+  entries in `contracts/review-legs.default.json`. AGY 1.2.7's catalog confirms
+  Pro-high; Gemini 0.60.0 source confirms the requested Pro HIGH default, not
+  effective account identity. Claude 2.1.271's documented session-only `/model`
+  route distinguishes a valid selection from not-found despite both exiting 0.
+- [x] Test discovery, merge, strict shape, placeholders, disabled entries and
   displayed enabled roster. Invalid or unreadable configured data must refuse.
-- [ ] Implement `review_round.py resolve-roster --project-root PATH` using the
+- [x] Implement `review_round.py resolve-roster --project-root PATH` using the
   canonical schema and a host data file. This command never starts a provider;
   its output is resolved configuration, not a capability or admission receipt.
 - [ ] Fresh RED/GREEN and complete plan review before P3.
+
+Dedicated RED: 26 failures at the missing resolver command; root GREEN: all 26
+pass. A separate dedicated distribution RED confirms the two new payloads were
+missing from archive hash coverage; the bounded hash-list correction adds them.
+No provider inference is performed by the resolver. The actual adapter and full
+v2 consumer remain open, so this does not close C12 end-to-end.
 
 Budget: approximately +150/-0 production lines, 120 novel core; about 220 test
 lines. Reuse canonical schemas and strict file/JSON loading. A's v1 additional-leg

@@ -2274,6 +2274,8 @@ def _write_new(path: Path, payload: bytes) -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="review_round.py")
     commands = parser.add_subparsers(dest="command", required=True)
+    roster = commands.add_parser("resolve-roster", help="Validate and display v2 project configuration; no dispatch")
+    roster.add_argument("--project-root", type=Path, required=True)
     prepare = commands.add_parser("prepare")
     prepare.add_argument("--review-id", required=True)
     prepare.add_argument("--source-root", type=Path, required=True)
@@ -2358,7 +2360,13 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
-        if arguments.command == "prepare":
+        if arguments.command == "resolve-roster":
+            from review_roster import resolve_roster
+            try:
+                _print_canonical_json(resolve_roster(arguments.project_root))
+            except ValueError as error:
+                raise RoundIntegrityError(str(error)) from None
+        elif arguments.command == "prepare":
             if len(arguments.required_members_json) != 1:
                 raise RoundIntegrityError(
                     "required members argument must appear exactly once"

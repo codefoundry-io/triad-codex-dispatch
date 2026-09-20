@@ -1024,6 +1024,31 @@ availability; synthetic tests verify this helper's behavior without real inferen
 - The fresh repair child returns a proposal or escalation and never applies a
   classifier change.
 
+## Project review roster check
+
+Inspect the resolved v2 configuration without starting providers:
+
+```bash
+python3 /absolute/plugin/bin/review_round.py resolve-roster --project-root /absolute/project
+```
+
+The resolver reads only that project's `.agents/triad-review-legs.json`. If it is
+absent, [the host defaults](contracts/review-legs.default.json) enable Claude,
+native Codex and Google. Overrides merge by `name`; nested fields merge, and
+scalars/arrays replace. A new name must supply a complete entry. Duplicate names
+or original JSON keys, unknown fields, wrong vendor blocks, template placeholders,
+links and invalid files refuse with exit 2 instead of silently using defaults.
+
+Output includes every resolved entry, enabled names, distinct families and the
+selected config path. `acceptance` is data; an informational entry remains a
+participant. Null model/effort values remain explicit for dispatch-time default
+resolution. `capabilities_checked=false` means this is configuration validation:
+it does not probe availability, authorize dispatch, admit a round, or change the
+existing legacy gate. Public v2 execution/collection integration remains separate.
+The Gemini default requests `gemini-3.1-pro-preview`; HIGH is its CLI v0.60.0
+[source default](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77),
+not a Gemini effort flag or proof of account access/effective runtime identity.
+
 ## Offline v2 candidate validation
 
 The [candidate contract bundle](contracts/README.md) comes from shared commit

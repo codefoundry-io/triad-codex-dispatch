@@ -953,6 +953,31 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
 - Fresh repair child는 proposal 또는 escalation만 반환하고 classifier change를
   적용하지 않습니다.
 
+## 프로젝트 리뷰어 설정 확인
+
+provider를 실행하지 않고 v2 설정의 해석 결과를 확인합니다.
+
+```bash
+python3 /absolute/plugin/bin/review_round.py resolve-roster --project-root /absolute/project
+```
+
+해당 프로젝트의 `.agents/triad-review-legs.json`만 읽으며, 파일이 없으면
+[호스트 기본값](contracts/review-legs.default.json)의 Claude·native Codex·Google
+3개를 사용합니다. `name`별로 병합하고 중첩 필드는 병합하며 스칼라·배열은
+교체합니다. 새 이름은 완전한 항목이어야 합니다. 이름·원본 JSON 키 중복,
+알 수 없는 필드, 잘못된 vendor 블록, 미해결 템플릿, 링크·잘못된 파일은
+기본값으로 대체하지 않고 종료 코드 2로 거부합니다.
+
+출력에는 전체 설정, 활성 이름, 서로 다른 family와 설정 경로가 포함됩니다.
+`acceptance`는 데이터이며 informational 항목도 참여자입니다. model/effort의
+null은 dispatch 시 기본값을 적용하도록 그대로 보존합니다.
+`capabilities_checked=false`는 설정 검증만 했다는 의미입니다. 모델 가용성,
+dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다. 공개 v2
+실행·수집 연결은 별도 단계입니다. Gemini 기본 요청은 `gemini-3.1-pro-preview`이며
+HIGH는 CLI v0.60.0의
+[소스 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77)입니다.
+Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 값은 아닙니다.
+
 ## 오프라인 v2 후보 검증
 
 [공통 계약 후보](contracts/README.md)는 공유 커밋
