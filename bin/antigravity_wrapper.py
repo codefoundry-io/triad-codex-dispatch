@@ -431,8 +431,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        prompt = _common.load_prompt_text(args.prompt, args.prompt_file)
-        cwd = _common.validate_wrapper_cwd(args.cwd)
+        process_cwd = Path.cwd()
+        prompt = _common.load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
+        cwd = _common.validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
         if args.project is not None:
             _agy_settings.validate_project_id(args.project)
             if cwd is None or args.sandbox != "read-only":
