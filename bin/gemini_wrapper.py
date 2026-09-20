@@ -251,14 +251,15 @@ def main() -> int:
     args = p.parse_args()
 
     try:
-        _prompt_text = load_prompt_text(args.prompt, args.prompt_file)
+        process_cwd = Path.cwd()
+        _prompt_text = load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
     except Exception as e:
         log(f"prompt load failed: {e}")
         return EXIT_ARG_ERROR
     args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
-        args.cwd = validate_wrapper_cwd(args.cwd)
+        args.cwd = validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
     except Exception as e:
         log(f"--cwd validation failed: {e}")
         return EXIT_ARG_ERROR

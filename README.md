@@ -546,6 +546,13 @@ prompt-controlled unless a provider actually enforces it. The boundary otherwise
 rests on the selected `--cwd` worktree, native provider permissions,
 immutable-directory digests, and leader mutation checks.
 
+`--prompt-file` and `--cwd` accept absolute or relative paths. Both relative
+paths use the wrapper process directory captured at entry; the provider's
+`--cwd` is never the base for loading the prompt. Existing path existence,
+file/directory type, UTF-8, nonempty-prompt and opt-in runtime-root checks still
+apply before provider resolution. Canonical review artifact paths remain
+absolute. Audit masking is unchanged.
+
 The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
 
 Provider success also requires complete, error-free UTF-8 output collection.

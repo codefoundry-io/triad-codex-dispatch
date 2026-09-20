@@ -82,6 +82,9 @@ def map_classification_to_exit(cls: str) -> int:
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # current AGY stream driver emission; surface, never classifier-patched
+        "admission-refused": EXIT_TERMINAL,  # shared table parity; not currently emitted by this host
+        "vendor-timeout": EXIT_TERMINAL,  # shared table parity; not currently emitted by this host
+        "input-delivery-failed": EXIT_TERMINAL,  # shared table parity; retain existing stdin phase handling
         "truncated-answer": EXIT_TERMINAL,  # inert legacy exit-map compatibility alias; current stream driver never emits it
         "permission-unavailable": EXIT_TERMINAL,  # inert legacy exit-map compatibility alias; current stream driver never emits it
         "unknown": EXIT_CLI_FAIL,
@@ -476,8 +479,10 @@ def _ensure_within_runtime_roots(path: Path, label: str) -> Path:
     return resolved
 
 
-def load_prompt_text(prompt: Optional[str], prompt_file: Optional[str]) -> str:
-    """Load the wrapper prompt from argv text or an absolute UTF-8 file.
+def load_prompt_text(
+    prompt: Optional[str], prompt_file: Optional[str], *, process_cwd: Path | None = None
+) -> str:
+    """Load text or a UTF-8 file relative to the wrapper's entry directory.
 
     argparse enforces the XOR at the CLI; this re-check is defense-in-depth
     for direct callers."""
@@ -489,18 +494,7 @@ def load_prompt_text(prompt: Optional[str], prompt_file: Optional[str]) -> str:
         raise ValueError("either --prompt or --prompt-file is required")
     path = Path(prompt_file).expanduser()
     if not path.is_absolute():
-        # P3.b D-2 (spec 3-way unanimous 2026-07-11): stay FAIL-LOUD —
-        # silent relative resolution against a reverted/unexpected cwd could
-        # read the wrong same-named file and pass containment silently. The
-        # candidate below is cwd-DERIVED, not necessarily the intended path.
-        cwd = Path.cwd()
-        raise ValueError(
-            f"--prompt-file must be an absolute path (got {prompt_file!r}; "
-            f"caller cwd: {cwd}). If that cwd is the intended base, retry "
-            f"with --prompt-file {cwd / path}; note the foreground shell cwd "
-            f"can revert between turns — verify it before trusting the "
-            f"candidate."
-        )
+        path = (process_cwd if process_cwd is not None else Path.cwd()) / path
     resolved = _ensure_within_runtime_roots(path, "--prompt-file")
     if not resolved.is_file():
         raise ValueError(f"--prompt-file must be a file: {resolved}")
@@ -508,13 +502,13 @@ def load_prompt_text(prompt: Optional[str], prompt_file: Optional[str]) -> str:
 
 
 
-def validate_wrapper_cwd(cwd: Optional[str]) -> Optional[str]:
+def validate_wrapper_cwd(cwd: Optional[str], *, process_cwd: Path | None = None) -> Optional[str]:
     """Validate a vendor cwd without expanding the no-prompt trust boundary."""
     if not cwd:
         return None
     path = Path(cwd).expanduser()
     if not path.is_absolute():
-        raise ValueError("--cwd must be an absolute path")
+        path = (process_cwd if process_cwd is not None else Path.cwd()) / path
     resolved = _ensure_within_runtime_roots(path, "--cwd")
     if not resolved.is_dir():
         raise ValueError(f"--cwd must be an existing directory: {resolved}")
@@ -2273,13 +2267,10 @@ def _prune_audit_archives(log_dir: Path) -> None:
 # pattern-name SoT + literal bounds, then flock + atomic-write. No LLM in the
 # write path; safe-by-construction against classifier-poisoning.
 #
-#   CLASSIFICATION_TOKENS = the classify() result enum (keys of the
-#     map_classification_to_exit dict — the single source of truth).
-#     EXCEPTION (deliberate, P4 2026-07-11 and native permissions 2026-08-03):
-#     `vendor-error`, `truncated-answer`, and `permission-unavailable` are in
-#     the exit map but NOT here: the current AGY stream driver emits
-#     `vendor-error`; the other two are inert legacy exit-map compatibility
-#     aliases it never emits. None is a classifier-patch target.
+#   CLASSIFICATION_TOKENS = the classify() result enum and patch eligibility.
+#     The exit map also includes transport tokens and compatibility aliases;
+#     those do not become classifier-patch targets. Contract membership and
+#     exit-code parity are checked in tests/test_exit_token_contract.py.
 #   PATTERN_LIST_NAMES    = the built-in pattern-list constant names an
 #     extension may extend (a proposal's pattern_list must be one of these).
 
@@ -2300,12 +2291,6 @@ CLASSIFICATION_TOKENS: frozenset[str] = frozenset(
         "unknown",
     )
 )
-# Assert the enum stays in lock-step with map_classification_to_exit() — the SoT.
-# `.get(cls, ...)` there means every literal branch is a valid classification;
-# a drift here (token added to one and not the other) fails fast at import.
-assert all(
-    map_classification_to_exit(_t) is not None for _t in CLASSIFICATION_TOKENS
-), "CLASSIFICATION_TOKENS drifted from map_classification_to_exit"
 
 PATTERN_LIST_NAMES: frozenset[str] = frozenset(
     (
