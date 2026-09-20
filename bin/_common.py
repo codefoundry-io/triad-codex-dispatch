@@ -303,6 +303,8 @@ class RunResult:
     runtime_identity: Optional[str] = None
     # Common observed transport; shared unchanged by audit and failure IPC.
     transport: Optional[dict] = None
+    # Explicit v2 invocation custody; absent for legacy and raw investigations.
+    review_binding: Optional[dict] = None
     # Private failure controls remain distinct from the public delivery observation.
     _stdin_delivery_failed: bool = False
     _output_transport_failed: bool = False
@@ -755,14 +757,18 @@ def classify(
 PACKAGED_VERDICT_SPECS = frozenset({
     "verdict_schema:LegVerdict", "verdict_schema.LegVerdict",
 })
+PACKAGED_V2_VERDICT_SPECS = frozenset({
+    "verdict_v2:LegVerdict", "verdict_v2.LegVerdict",
+})
 
 
-def _load_packaged_verdict_class():
+def _load_packaged_verdict_class(*, v2: bool = False):
     """Load the shipped verdict model from its exact sibling path."""
-    source = Path(__file__).resolve(strict=True).with_name("verdict_schema.py")
+    name = "verdict_v2" if v2 else "verdict_schema"
+    source = Path(__file__).resolve(strict=True).with_name(name + ".py")
     if source.is_symlink() or not source.is_file():
         raise ImportError("packaged verdict schema must be a regular sibling file")
-    module_name = "_triad_packaged_verdict_schema"
+    module_name = "_triad_packaged_" + name
     spec = importlib.util.spec_from_file_location(module_name, source)
     if spec is None or spec.loader is None:
         raise ImportError("unable to load packaged verdict schema")
@@ -795,8 +801,8 @@ def load_pydantic_class(spec: str):
             "pydantic 2 is unavailable in this Python runtime; run "
             f"`{install_command}` in your normal terminal"
         )
-    if spec in PACKAGED_VERDICT_SPECS:
-        cls = _load_packaged_verdict_class()
+    if spec in PACKAGED_VERDICT_SPECS | PACKAGED_V2_VERDICT_SPECS:
+        cls = _load_packaged_verdict_class(v2=spec in PACKAGED_V2_VERDICT_SPECS)
         if not (
             isinstance(cls, type)
             and BaseModel is not None
@@ -2173,6 +2179,8 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
         "extraction_error": _redact_cap(result.extraction_error),
         "validation_error": _redact_cap(result.validation_error),
     }
+    if result.review_binding is not None:
+        rec["review_binding"] = result.review_binding
     if result._effective_cwd is not None:
         rec["effective_cwd"] = "<redacted:cwd-path>" if redact else result._effective_cwd
     rec["resolved_prompt_file"] = (
@@ -2852,21 +2860,22 @@ def emit_run_log(
     prompt: str,
     result: RunResult,
 ) -> Optional[Path]:
-    """Write per-execution run-log on failure only.
+    """Write failure IPC or an explicitly bound v2 review's original evidence.
 
     Run-logs live at `_logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json`. The
     dispatch skill passes the opaque path to the fresh native proposal-only
     child without inline embedding (escape-safe and parallel-safe).
 
-    On success (`exit_code == EXIT_OK`), returns None and writes nothing because
-    no repair handoff is needed.
+    Ordinary success writes nothing. V2 review success retains the same raw
+    record in its caller-configured per-attempt namespace for collection/export;
+    this is review evidence, not a repair request or permanent investigation log.
 
     Self-prunes after write: if dir exceeds `_RUN_LOG_MAX_FILES` or
     `_RUN_LOG_MAX_BYTES`, eligible stale files are unlinked oldest-first.
     Fresh sibling IPC is retained even if that leaves a temporary overflow
     (best-effort, race-tolerant for parallel writes).
     """
-    if result.exit_code == EXIT_OK:
+    if result.exit_code == EXIT_OK and result.review_binding is None:
         return None
     if not cli or cli in (".", "..") or os.sep in cli:
         raise OSError(errno.EINVAL, "unsafe run-log CLI name")
@@ -2898,6 +2907,8 @@ def emit_run_log(
         "validation_error": result.validation_error,
     }
 
+    if result.review_binding is not None:
+        rec["review_binding"] = result.review_binding
     payload = json.dumps(rec, ensure_ascii=False, indent=2).encode("utf-8")
 
     def write_under(runs_dir: Path) -> Path:

@@ -370,6 +370,23 @@ The candidate does not alter installed revision pins, legacy review admission,
 provider permissions or raw investigation routes. Bootstrap requires the declared
 schema APIs before persistent writes and never installs Python packages itself.
 
+Explicit v2 operational collection uses immutable named-entry/attempt custody
+within the existing managed review lifecycle. It binds the complete roster,
+source/toolkit, clauses, selected route, requested controls and capability
+receipts. CLI collection checks the actual wrapper argv, per-attempt run-log
+ownership and raw stdout/stderr; native collection uses host terminal metadata
+and original final-message bytes. Never accept model-authored host receipts.
+Unexposed observations remain null, separate from observed empty sets.
+An available preflight version is not copied into an unexposed runtime version.
+
+The same existing raw run-log format is retained for explicitly bound v2 review
+success as well as failure under caller-configured per-attempt roots. It may
+contain task-sensitive provider output and is exported/cleaned with owned review
+evidence. Ordinary raw/legacy success does not gain full-output logging. Audit
+redaction, failure diagnostics, provider permissions, no-follow custody and
+export-before-cleanup remain in effect. Original host-file mutation invalidates
+collection. These hashes detect drift, not an actor rewriting all custody.
+
 ## Explicit web investigations
 
 AGY `--web` is a raw INVESTIGATION option requiring `--sandbox read-only`; it

@@ -158,6 +158,8 @@ def _run_preflight(
     cwd: str | None,
     timeout: int,
     selector_receipt: review_round.GoogleSelectorReceipt,
+    *,
+    v2_fields: dict | None = None,
 ) -> int:
     policy = _formal_policy_path()
     try:
@@ -176,6 +178,9 @@ def _run_preflight(
         gemini_version = review_round.validate_formal_gemini_version(
             version_result.stdout.strip()
         )
+        if v2_fields is not None:
+            from google_preflight_v2 import gemini_model_support
+            gemini_model_support(v2_fields["model"], gemini_version)
         completed = subprocess.run(
             [gemini_bin, "--help"],
             cwd=cwd,
@@ -209,8 +214,9 @@ def _run_preflight(
                 "requested_approval_mode": "plan",
                 "review_id": selector_receipt.review_id,
                 "route": "gemini",
+                **(v2_fields or {}),
             },
-            ensure_ascii=False,
+            ensure_ascii=v2_fields is not None,
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -249,6 +255,9 @@ def main() -> int:
     p.add_argument("--expected-review-id", default=None)
     p.add_argument("--expected-family", choices=("google",), default=None)
     p.add_argument("--expected-content-digest", default=None)
+    p.add_argument("--expected-leg-name", default=None)
+    p.add_argument("--expected-attempt", type=int, default=None)
+    p.add_argument("--expected-route", choices=("null", "agy", "gemini"), default=None)
     p.add_argument("--google-selector-receipt", type=Path, default=None)
     p.add_argument("--google-preflight-receipt", type=Path, default=None)
     p.add_argument("--preflight-only", action="store_true")
@@ -293,7 +302,7 @@ def main() -> int:
         log(_common.input_path_error("--add-dir", None, process_cwd, e))
         return EXIT_ARG_ERROR
     if args.web or args.add_dir:
-        if (args.preflight_only or args.pydantic in FORMAL_VERDICT_SPECS or any(
+        if (args.preflight_only or args.pydantic in (FORMAL_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS) or any(
             value is not None for value in (args.expected_review_id, args.expected_family,
                 args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
         )):
@@ -308,7 +317,8 @@ def main() -> int:
             log(f"web evidence clause unavailable: {e}")
             return EXIT_ARG_ERROR
 
-    formal_verdict = args.pydantic in FORMAL_VERDICT_SPECS
+    v2_verdict = args.pydantic in _common.PACKAGED_V2_VERDICT_SPECS
+    formal_verdict = (args.pydantic in FORMAL_VERDICT_SPECS or v2_verdict) and not args.preflight_only
     pydantic_cls = None
     if args.pydantic:
         try:
@@ -316,6 +326,24 @@ def main() -> int:
         except Exception as e:
             log(f"--pydantic load failed: {e}")
             return EXIT_ARG_ERROR
+
+    if v2_verdict:
+        from verdict_v2 import bound_wrapper
+        import google_preflight_v2
+        if args.repair_mode:
+            log("v2 review uses explicit per-entry attempts, not repair-mode")
+            return EXIT_ARG_ERROR
+        if not args.preflight_only:
+            try:
+                pydantic_cls = bound_wrapper(args, family="google", route="gemini")
+            except ValueError as error:
+                log(str(error))
+                return EXIT_ARG_ERROR
+    elif any(value is not None for value in (
+        args.expected_leg_name, args.expected_attempt, args.expected_route
+    )):
+        log("v2 bindings require --pydantic verdict_v2:LegVerdict")
+        return EXIT_ARG_ERROR
 
     binding_values = (
         args.expected_review_id,
@@ -352,14 +380,14 @@ def main() -> int:
     ):
         log("expected review ID has invalid syntax")
         return EXIT_ARG_ERROR
-    if formal_verdict and not args.preflight_only and (
+    if formal_verdict and not v2_verdict and (
         args.timeout != FORMAL_GEMINI_TIMEOUT or args.model is not None
     ):
         log(
             "formal Gemini review requires --timeout 600 and CLI Auto model routing"
         )
         return EXIT_ARG_ERROR
-    if args.preflight_only and (
+    if args.preflight_only and not v2_verdict and (
         args.pydantic is not None or args.model is not None or args.repair_mode
     ):
         log("Gemini formal preflight does not accept model, schema, or repair controls")
@@ -379,6 +407,8 @@ def main() -> int:
         log("Google preflight receipt is reserved for formal dispatch")
         return EXIT_ARG_ERROR
     selector_receipt = None
+    v2_fields = None
+    v2_preflight = None
     if args.google_selector_receipt is not None:
         try:
             selector_receipt = review_round.load_google_selector_receipt(
@@ -387,7 +417,12 @@ def main() -> int:
                 expected_route="gemini",
                 expected_wrapper=Path(__file__).resolve(),
             )
-            if formal_verdict:
+            if v2_verdict:
+                v2_fields = google_preflight_v2.fields(args, args.cwd, selector_receipt)
+            if formal_verdict and v2_verdict:
+                v2_preflight = google_preflight_v2.load_receipt(
+                    args.google_preflight_receipt, selector_receipt, args, args.cwd, args.prompt)
+            elif formal_verdict:
                 selector_receipt = review_round.validate_google_preflight_receipt(
                     args.google_preflight_receipt,
                     selector_receipt,
@@ -399,7 +434,7 @@ def main() -> int:
                     expected_review_id=args.expected_review_id,
                     expected_content_digest=args.expected_content_digest,
                 )
-        except review_round.RoundIntegrityError as error:
+        except (review_round.RoundIntegrityError, ValueError, OSError) as error:
             log(f"Google selector receipt rejected: {error}")
             return EXIT_ARG_ERROR
 
@@ -416,7 +451,8 @@ def main() -> int:
             log(str(error))
             return EXIT_ARG_ERROR
     if args.preflight_only:
-        return _run_preflight(gemini_bin, args.cwd, args.timeout, selector_receipt)
+        return _run_preflight(gemini_bin, args.cwd, args.timeout, selector_receipt,
+                              **({"v2_fields": v2_fields} if v2_verdict else {}))
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [
@@ -429,7 +465,7 @@ def main() -> int:
         if formal_verdict:
             cmd += [
                 "-m",
-                "auto",
+                args.model if v2_verdict else "auto",
                 "--approval-mode",
                 "plan",
                 "--policy",
@@ -457,8 +493,12 @@ def main() -> int:
 
     if formal_verdict:
         result.runtime_identity = result.runtime_identity or "unexposed"
-        result.transport = {**_common.transport_receipt("gemini", result),
-                            "cli_version": selector_receipt.cli_version}
+        result.transport = _common.transport_receipt("gemini", result)
+        if not v2_verdict:
+            result.transport = {**result.transport, "cli_version": selector_receipt.cli_version}
+        if v2_verdict:
+            result.review_binding = dict(pydantic_cls._binding)
+            result.transport["attempt"] = args.expected_attempt
 
     if formal_verdict and result.exit_code == _common.EXIT_OK:
         for field, expected in (

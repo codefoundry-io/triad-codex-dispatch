@@ -22,6 +22,13 @@ directly:
   consult; it does not choose or lead a formal Google-family review.
 - `$triad-cross-family-review` before risky merges.
 
+Keep the existing project gate on its selected protocol. When the owner/project
+explicitly selects public v2, follow the installed skill's `public-v2-review.md`
+procedure for the named roster, generated invocations, actual host evidence and
+same-basis retry; the legacy formal route and failed-round rules below do not
+replace that procedure. Informational v2 entries participate fully. Candidate
+schema presence alone does not select v2 or adopt a revision tag.
+
 For formal review, record `personal-google` or `gemini-enterprise` before any
 family starts. Personal Google Sign-In requires AGY. Gemini Enterprise OAuth
 prefers AGY and selects Gemini CLI only when AGY is absent. Freeze the selected

@@ -1,5 +1,9 @@
 # Review leg contracts
 
+The formal argv examples below are the legacy entry point. Explicit public v2
+uses [generated allocations and host evidence](public-v2-review.md); raw
+investigation and shared containment sections remain applicable to both paths.
+
 ## Contents
 
 - [Claude](#claude)

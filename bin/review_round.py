@@ -2276,6 +2276,24 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     roster = commands.add_parser("resolve-roster", help="Validate and display v2 project configuration; no dispatch")
     roster.add_argument("--project-root", type=Path, required=True)
+    create_v2 = commands.add_parser("v2-create", help="Prepare and bind the explicit v2 review path")
+    create_v2.add_argument("--request-file", type=Path, required=True)
+    create_v2.add_argument("--root", type=Path, required=True)
+    for command in ("v2-allocate", "v2-record-cli", "v2-record-native", "v2-record-start-failure", "v2-collect"):
+        subcommand = commands.add_parser(command)
+        subcommand.add_argument("--basis", type=Path, required=True)
+        if command != "v2-collect":
+            subcommand.add_argument("--leg", required=True)
+        if command == "v2-allocate":
+            subcommand.add_argument("--diagnosis")
+        elif command == "v2-record-cli":
+            subcommand.add_argument("--run-log", type=Path, required=True)
+            subcommand.add_argument("--read-evidence", type=Path)
+        elif command in ("v2-record-native", "v2-record-start-failure"):
+            subcommand.add_argument("--host-receipt", type=Path, required=True)
+            if command == "v2-record-native":
+                subcommand.add_argument("--result-file", type=Path, required=True)
+                subcommand.add_argument("--read-evidence", type=Path)
     prepare = commands.add_parser("prepare")
     prepare.add_argument("--review-id", required=True)
     prepare.add_argument("--source-root", type=Path, required=True)
@@ -2360,7 +2378,29 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
-        if arguments.command == "resolve-roster":
+        if arguments.command.startswith("v2-"):
+            import review_round_v2 as v2
+            try:
+                if arguments.command == "v2-create":
+                    result = v2.create_basis(v2._json(v2._read(arguments.request_file)), root=arguments.root)
+                elif arguments.command == "v2-collect":
+                    result = v2.collect(arguments.basis)
+                elif arguments.command == "v2-allocate":
+                    result = v2.allocate_attempt(arguments.basis, arguments.leg, diagnosis=arguments.diagnosis)
+                elif arguments.command == "v2-record-cli":
+                    result = v2.record_cli_attempt(arguments.basis, arguments.leg,
+                                                  run_log=arguments.run_log, read_evidence=arguments.read_evidence)
+                elif arguments.command == "v2-record-native":
+                    result = v2.record_native_attempt(arguments.basis, arguments.leg,
+                        host_receipt=arguments.host_receipt, result_file=arguments.result_file,
+                        read_evidence=arguments.read_evidence)
+                else:
+                    result = v2.record_start_failure(arguments.basis, arguments.leg,
+                                                    host_receipt=arguments.host_receipt)
+                _print_canonical_json(result)
+            except (OSError, ValueError, TypeError) as error:
+                raise RoundIntegrityError(str(error)) from None
+        elif arguments.command == "resolve-roster":
             from review_roster import resolve_roster
             try:
                 _print_canonical_json(resolve_roster(arguments.project_root))

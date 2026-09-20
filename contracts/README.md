@@ -13,9 +13,13 @@ prevents remote/file retrieval. The host also rejects original duplicate members
 and compares all six expected invocation bindings. It returns the validated data
 without converting legacy labels or filling absent evidence.
 
-Only verdict validation is exposed here. Roster/receipt consumers and complete
-v2 dispatch activation follow separately; their bundled schemas are not claims
-that those operations are implemented. Existing wrappers, custom schemas and
-the copied standalone `bin/verdict_schema.py` legacy gate remain unchanged.
+The explicit [v2 procedure](../skills/triad-cross-family-review/references/public-v2-review.md)
+connects roster resolution, capability checks, the pinned shared clauses,
+wrapper/native producers and per-entry collection. `verdict_v2.py` is a thin
+Pydantic boundary backed by this same schema, not another field definition.
+A Claude generation projection omits only `$schema`, `$id` and top-level
+`allOf`; local admission still validates the complete authoritative schema.
+Existing custom schemas and the copied standalone `bin/verdict_schema.py`
+legacy gate retain their interfaces and do not consume converted v2 results.
 Installing this candidate does not change a deployed `SPEC_REVISION`, confer
 admission or establish live CLI enforcement. V1–V5 remain separate checks.

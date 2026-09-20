@@ -742,6 +742,7 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 |---|---|
 | Audit, `bin/_logs/<cli>/audit.jsonl` | 기록 성공 후 활성 파일이 10 MiB를 넘으면 회전합니다. 회전 시 CLI별 오래된 적격 보관본부터 정리하여 최대 5개·50 MiB로 제한합니다. 활성 파일은 별도이며 기간 기준 삭제는 없습니다. |
 | 실패 IPC, `bin/_logs/<cli>/runs/` | 다음 일반 호출에서 3,600초 지난 적격 파일을 정리합니다. 실패 기록 후 100개·20 MiB를 넘으면 오래된 적격 파일부터 정리하지만 최근 sibling과 방금 쓴 기록은 보존합니다. 성공 호출은 실패 run-log를 만들지 않습니다. |
+| 명시적 v2 리뷰 기록, `results/<name>/attempt-N/logs/<cli>/runs/` | 성공·실패 모두 기존 형식으로 원본 provider 증거를 보관합니다. attempt별 root를 사용하고 관리형 cleanup 전에 export합니다. 성공 기록은 실패 IPC나 수리 요청이 아닙니다. |
 | 선택적 debug, `bin/_debug/<UTC-date>/<cli>.md` | `--debug`일 때만 기록하며 redacted mode에서는 생략합니다. 자동 보관 한도나 삭제는 없습니다. |
 | 임시 `triad-review-*` 할당 | 모든 writer 종료 후 검증된 `export`를 먼저 수행하고 명시적으로 `cleanup`합니다. 이후 `prepare`는 소유권과 export가 확인된 30일 초과 비활성 할당만 회수할 수 있습니다. [리뷰 증거 정리](#리뷰-증거-정리)를 참고하세요. |
 | Export한 리뷰 증거와 작업별 `_runs` 조사·스파이크 자료 | 자동 삭제하지 않습니다. 임시 리뷰 root를 정리해도 지정한 보관 목적지에는 남습니다. |
@@ -764,8 +765,8 @@ Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실�
 덮어쓰지 않습니다. 관측하지 못한 별도 transport는 `unexposed`입니다. AGY의 기존
 버전 검사와 검증된 Gemini preflight 버전을 재사용하며 추가 provider 호출은 없습니다.
 현재 legacy 호출은 `attempt=1`을 기록하며 capacity/schema-repair 횟수는 기존
-별도 필드 의미를 유지합니다. Native v2 수집·leg별 호출 attempt 증가는 별도
-미완료 항목입니다.
+별도 필드 의미를 유지합니다. 명시적 v2 경로는 할당한 leg·attempt에 실제 native
+호스트 또는 CLI 관측을 결합합니다. preflight 버전으로 미노출 실행 버전을 채우지 않습니다.
 
 Wrapper main thread가 provider 결과를 수집하는 동안 SIGTERM/SIGHUP을 받으면
 소유한 프로세스 그룹과 reader/writer를 수거하고 기존 audit/run-log에 실패를
@@ -997,8 +998,8 @@ python3 /absolute/plugin/bin/review_round.py resolve-roster --project-root /abso
 `acceptance`는 데이터이며 informational 항목도 참여자입니다. model/effort의
 null은 dispatch 시 기본값을 적용하도록 그대로 보존합니다.
 `capabilities_checked=false`는 설정 검증만 했다는 의미입니다. 모델 가용성,
-dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다. 공개 v2
-실행·수집 연결은 별도 단계입니다. Gemini 기본 요청은 `gemini-3.1-pro-preview`이며
+dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다. 실행·수집은
+아래 명시적 v2 절차를 따릅니다. Gemini 기본 요청은 `gemini-3.1-pro-preview`이며
 HIGH는 CLI v0.60.0의
 [소스 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77)입니다.
 Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 값은 아닙니다.
@@ -1017,6 +1018,27 @@ Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 �
 중복 키와 배포된 SHA-256을 검사합니다. 해시는 서명이 아닌 로컬 무결성 확인입니다.
 이 명령은 provider를 호출하거나 round를 승인하지 않습니다. v2 wrapper·renderer·수집기
 활성화 및 revision 채택도 별도 단계입니다. 기존 legacy 경로와 custom-schema 조사는 유지됩니다.
+
+## 명시적 public v2 리뷰
+
+현재 사용자·프로젝트 지침에서 v2를 명시적으로 선택하면
+[스킬의 v2 절차](skills/triad-cross-family-review/references/public-v2-review.md)를 따릅니다.
+`bin/review_round.py`의 `v2-create`, `v2-allocate`, `v2-record-cli`,
+`v2-record-native`, `v2-record-start-failure`, `v2-collect`가 프로젝트 roster,
+공통 프롬프트, native·wrapper 호출과 결합값 6개의 판정을 연결합니다.
+기존 legacy 개발 게이트와 wire 형식은 유지하며 결과를 상호 변환하지 않습니다.
+
+informational을 포함한 모든 활성 이름이 참여합니다. 원본 결과·run-log·호스트
+관측·읽기 증거와 준비 실패 기록을 attempt별로 보존합니다. 누락·무효 결과는
+합의를 막습니다. 원인 확인 후 변경 없는 실행 실패 항목만 재시도할 수 있고,
+소스나 리뷰 조건이 바뀌면 모든 항목이 새 기준으로 전체 범위를 검토합니다.
+Minor만 있는 부정 판정도 원래 선택을 보존합니다. 수집 명령 종료 0은 승인과
+다르며 JSON의 `INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED`, `AGREED`를 확인합니다.
+
+Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설정 지원 여부이며
+계정 접근권이나 실제 실행 모델의 증명이 아닙니다. 노출되지 않은 값은 null/unexposed로
+남깁니다. 기존 export·cleanup을 사용하며 별도 스케줄러·주기적 정리기·영구 웹 로그나
+설치 revision 변경을 추가하지 않습니다.
 
 ## 승인된 AGY 웹 조사
 

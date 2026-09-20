@@ -5,16 +5,16 @@ description: Use when an owner requests independent cross-family review or when 
 
 # Triad Cross-Family Review
 
-## Purpose
+Explicit owner/project selection of **public v2** uses [the v2 procedure](references/public-v2-review.md)
+for named rosters, producer/render/collector commands, host evidence and same-basis
+retry. Every enabled entry participates, including informational entries; never
+convert v2 results to legacy. Candidate presence changes no revision or existing gate.
+Raw authorized investigations remain available under [leg contracts](references/leg-contracts.md#authorized-agy-web-investigation).
 
-Run independent Claude, Google-family, and fresh Codex review over one guarded
-current source view. The Codex leader owns scope, writes fixes, reproduces every
-claim, and repeats complete rounds until the evidence converges.
-
-Each round has one fresh review ID, one immutable review basis, one Claude
-`LegVerdict`, one Google `LegVerdict`, and one fresh Codex `LegVerdict`. Every
-family reviews the same complete focused source view. Batches, shards, and
-mixed-round evidence are not supported.
+Otherwise follow the legacy workflow below: one fresh review ID, one immutable
+basis, one Claude `LegVerdict`, one Google `LegVerdict`, and one fresh Codex
+`LegVerdict`. All review the same complete scope. Batches, shards, and mixed-round
+evidence are not supported. The Codex leader owns scope, findings and corrections.
 
 ## Choose the review basis
 

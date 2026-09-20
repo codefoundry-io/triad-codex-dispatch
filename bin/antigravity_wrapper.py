@@ -436,6 +436,9 @@ def main() -> int:
         default=None,
     )
     parser.add_argument("--expected-content-digest", default=None)
+    parser.add_argument("--expected-leg-name", default=None)
+    parser.add_argument("--expected-attempt", type=int, default=None)
+    parser.add_argument("--expected-route", choices=("null", "agy", "gemini"), default=None)
     parser.add_argument("--google-selector-receipt", type=Path, default=None)
     parser.add_argument("--google-preflight-receipt", type=Path, default=None)
     parser.add_argument("--preflight-only", action="store_true")
@@ -459,7 +462,7 @@ def main() -> int:
     except Exception as exc:
         _common.log(_common.input_path_error("argument", args.cwd, process_cwd, exc))
         return _common.EXIT_ARG_ERROR
-    if args.add_dir and (args.preflight_only or args.pydantic in _common.PACKAGED_VERDICT_SPECS or any(
+    if args.add_dir and (args.preflight_only or args.pydantic in (_common.PACKAGED_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS) or any(
         value is not None for value in (args.expected_review_id, args.expected_family,
             args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
     )):
@@ -472,7 +475,7 @@ def main() -> int:
         if args.sandbox != "read-only":
             _common.log("--web requires --sandbox read-only")
             return _common.EXIT_ARG_ERROR
-        if (args.preflight_only or args.pydantic in _common.PACKAGED_VERDICT_SPECS
+        if (args.preflight_only or args.pydantic in (_common.PACKAGED_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS)
                 or any(value is not None for value in (
                     args.expected_review_id, args.expected_family, args.expected_content_digest,
                     args.google_selector_receipt, args.google_preflight_receipt))):
@@ -498,7 +501,22 @@ def main() -> int:
         args.expected_family,
         args.expected_content_digest,
     )
-    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS
+    v2_verdict = args.pydantic in _common.PACKAGED_V2_VERDICT_SPECS
+    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS or v2_verdict
+    if v2_verdict:
+        from verdict_v2 import bound_wrapper
+        import google_preflight_v2
+        if not args.preflight_only:
+            try:
+                pydantic_cls = bound_wrapper(args, family="google", route="agy")
+            except ValueError as exc:
+                _common.log(str(exc))
+                return _common.EXIT_ARG_ERROR
+    elif any(value is not None for value in (
+        args.expected_leg_name, args.expected_attempt, args.expected_route
+    )):
+        _common.log("v2 bindings require --pydantic verdict_v2:LegVerdict")
+        return _common.EXIT_ARG_ERROR
     if (not args.preflight_only and formal_verdict
             and not any(value is not None for value in binding_values)):
         _common.log("formal verdict schema requires all formal verdict bindings")
@@ -539,7 +557,7 @@ def main() -> int:
         return _common.EXIT_ARG_ERROR
 
     formal_bindings = all(value is not None for value in binding_values)
-    if formal_bindings and args.timeout != FORMAL_AGY_TIMEOUT:
+    if formal_bindings and not v2_verdict and args.timeout != FORMAL_AGY_TIMEOUT:
         _common.log("formal AGY review requires --timeout 600")
         return _common.EXIT_ARG_ERROR
     selected_context = args.preflight_only or formal_bindings
@@ -558,6 +576,7 @@ def main() -> int:
         _common.log("Google preflight receipt is reserved for formal dispatch")
         return _common.EXIT_ARG_ERROR
     selector_receipt = None
+    v2_fields = None
     if args.google_selector_receipt is not None:
         try:
             selector_receipt = review_round.load_google_selector_receipt(
@@ -566,7 +585,12 @@ def main() -> int:
                 expected_route="agy",
                 expected_wrapper=Path(__file__).resolve(),
             )
-            if formal_bindings:
+            if v2_verdict:
+                v2_fields = google_preflight_v2.fields(args, cwd, selector_receipt)
+            if formal_bindings and v2_verdict:
+                google_preflight_v2.load_receipt(
+                    args.google_preflight_receipt, selector_receipt, args, cwd, prompt)
+            elif formal_bindings:
                 selector_receipt = review_round.validate_google_preflight_receipt(
                     args.google_preflight_receipt,
                     selector_receipt,
@@ -587,11 +611,11 @@ def main() -> int:
                     expected_review_id=args.expected_review_id,
                     expected_content_digest=args.expected_content_digest,
                 )
-        except review_round.RoundIntegrityError as exc:
+        except (review_round.RoundIntegrityError, ValueError, OSError) as exc:
             _common.log(f"Google selector receipt rejected: {exc}")
             return _common.EXIT_ARG_ERROR
 
-    if args.preflight_only and (
+    if args.preflight_only and not v2_verdict and (
         args.model not in (FORMAL_AGY_MODEL, "gemini-3.8-flash-high") or args.effort != FORMAL_AGY_EFFORT
     ):
         _common.log(
@@ -656,11 +680,12 @@ def main() -> int:
             "review_id": selector_receipt.review_id,
             "route": "agy",
             "route_args": _route_args(args.model, args.effort, args.project),
+            **(v2_fields or {}),
         }
         sys.stdout.write(
             json.dumps(
                 receipt,
-                ensure_ascii=False,
+                ensure_ascii=v2_verdict,
                 sort_keys=True,
                 separators=(",", ":"),
             )
@@ -738,6 +763,9 @@ def main() -> int:
         result.validated = None
     result.transport = {**_common.transport_receipt("antigravity", result),
                         "cli_version": _version_text(version)}
+    if v2_verdict:
+        result.review_binding = dict(pydantic_cls._binding)
+        result.transport["attempt"] = args.expected_attempt
     _common.record_wrapper_paths(result, args.prompt_file, cwd, process_cwd)
     _common.log(
         f"[wrapper] antigravity {result.classification} "

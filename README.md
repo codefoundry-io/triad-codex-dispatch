@@ -810,6 +810,7 @@ defaults. There is no scheduled background cleaner.
 |---|---|
 | Audit, `bin/_logs/<cli>/audit.jsonl` | A successful append rotates the active file after it exceeds 10 MiB. Rotation prunes oldest eligible archives to at most five / 50 MiB per CLI; the active file is separate. No age sweep. |
 | Failure IPC, `bin/_logs/<cli>/runs/` | The next normal dispatch removes eligible records older than 3,600 seconds. A failure write also prunes eligible stale records when the directory exceeds 100 entries or 20 MiB. Fresh siblings and the just-written record survive even above the cap; successful calls create no failure run log. |
+| Explicit v2 review run logs, `results/<name>/attempt-N/logs/<cli>/runs/` | Both success and failure retain raw provider evidence in the existing format. Each attempt has its own root; export before managed cleanup. A successful record is not failure IPC or a repair trigger. |
 | Opt-in debug, `bin/_debug/<UTC-date>/<cli>.md` | Written only with `--debug`; redacted mode skips it. No automatic retention limit or deletion. |
 | Temporary `triad-review-*` allocations | After all writers finish, verified `export` precedes explicit `cleanup`. A later `prepare` may reclaim only proven, exported allocations inactive for more than 30 days; see [review evidence cleanup](#review-evidence-cleanup). |
 | Durable exported review evidence and task-owned `_runs` investigation/spike records | No automatic deletion. They remain at the selected destination after temporary review-root cleanup. |
@@ -834,9 +835,9 @@ delivery is `failed`, including when timeout or a vendor error remains the
 primary outcome. Unobserved custom transports stay `unexposed`. Existing AGY
 version probes and validated Gemini preflight versions are reused; no additional
 provider call is made. This legacy invocation records `attempt=1`; existing
-capacity/schema-repair counters retain their separate meanings. Native v2
-collection and per-leg invocation attempt progression are
-separate pending work, not established by these CLI audit fields.
+capacity/schema-repair counters retain their separate meanings. The explicit
+v2 path binds the allocated leg/attempt and collects actual native host or CLI
+observations; preflight versions never replace an unexposed runtime version.
 
 On the wrapper's main thread, SIGTERM/SIGHUP during provider collection enters
 bounded owned-group and reader/writer cleanup, then records a terminal failure
@@ -1080,7 +1081,7 @@ selected config path. `acceptance` is data; an informational entry remains a
 participant. Null model/effort values remain explicit for dispatch-time default
 resolution. `capabilities_checked=false` means this is configuration validation:
 it does not probe availability, authorize dispatch, admit a round, or change the
-existing legacy gate. Public v2 execution/collection integration remains separate.
+existing legacy gate. Use the explicit v2 procedure below for execution and collection.
 The Gemini default requests `gemini-3.1-pro-preview`; HIGH is its CLI v0.60.0
 [source default](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77),
 not a Gemini effort flag or proof of account access/effective runtime identity.
@@ -1100,6 +1101,30 @@ JSON members and checks the bundled SHA-256 manifest. Hashes establish local
 integrity, not a signature. This command does not launch providers or admit a round.
 It does not activate v2 wrapper/render/collection paths or adopt a revision tag.
 Existing legacy routes and custom-schema investigations retain their interfaces.
+
+## Explicit public v2 review
+
+Select v2 explicitly under the current owner/project instruction and follow the
+[source-skill procedure](skills/triad-cross-family-review/references/public-v2-review.md).
+The operational commands are `v2-create`, `v2-allocate`, `v2-record-cli`,
+`v2-record-native`, `v2-record-start-failure` and `v2-collect` on
+`bin/review_round.py`. They connect the resolved roster, exact shared prompt
+clauses, native/wrapper invocation and canonical six-field verdict validation.
+The existing legacy development gate stays separate; no wire conversion occurs.
+
+Every enabled named entry participates, including informational entries. Preserve
+original per-attempt results, raw run logs, host/read observations and failed
+preparation evidence. Missing/invalid results block agreement. A diagnosed
+failed-to-run entry may retry on unchanged inputs; source or review-condition
+changes require a fresh full-roster review. Minor-only negative results retain
+their selection deviation. Collection exit 0 is not admission: inspect
+`INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED` or `AGREED` in its JSON.
+
+Native Codex stays native. Installed interface/catalog checks prove supported
+requested controls, not authenticated service access or effective runtime
+identity. Unknown observations remain null/unexposed. Existing managed export
+and cleanup own these artifacts; this introduces no scheduler, background log
+cleaner, permanent web logger or installed revision adoption.
 
 ## Authorized AGY web investigation
 
