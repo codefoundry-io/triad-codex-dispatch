@@ -1328,7 +1328,7 @@ def runtime_path() -> Path:
 
 
 def formal_schema_dependency_ready(requirements: Path) -> Path:
-    """Require the Pydantic 2 API surface used by formal review."""
+    """Require the APIs used by legacy and explicit offline v2 validation."""
     runtime = runtime_path()
     if not requirements.is_absolute() or not requirements.is_file():
         raise Refusal(f"requirements file is unavailable: {requirements}")
@@ -1372,6 +1372,21 @@ def formal_schema_dependency_ready(requirements: Path) -> Path:
         )
         raise Refusal(
             "Pydantic 2 formal review APIs are required. Run this in the owner "
+            f"terminal, then rerun bootstrap: {owner_command}"
+        ) from error
+    try:
+        from jsonschema import Draft202012Validator
+        from referencing import Registry
+
+        Draft202012Validator.check_schema({"type": "object"})
+        if not Draft202012Validator({"type": "object"}, registry=Registry()).is_valid({}):
+            raise RuntimeError("jsonschema validator API is incomplete")
+    except (ImportError, AttributeError, RuntimeError, TypeError, ValueError) as error:
+        owner_command = shlex.join(
+            [str(runtime), "-m", "pip", "install", "-r", str(requirements)]
+        )
+        raise Refusal(
+            "jsonschema Draft 2020-12 APIs are required. Run this in the owner "
             f"terminal, then rerun bootstrap: {owner_command}"
         ) from error
     return runtime

@@ -62,7 +62,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    - `claude` — Claude Code `>= 2.1.170`; bootstrap 은 binary 존재만 확인하며
      version probe 를 실행하지 않습니다.
 
-   `git`, `python3 >= 3.12`, 그리고 그 동일 Python runtime의 Pydantic 2도
+   `git`, `python3 >= 3.12`, 그리고 그 동일 Python runtime의 Pydantic 2와 `jsonschema>=4.26,<5`도
    필요합니다. runtime 의존성은 배포되는 `requirements.txt`에 선언됩니다.
    `~/.local/bin` 이 `PATH`
    에 있어야 합니다(아니면 이미 `PATH` 에 있는 디렉터리를 `TRIAD_BOOTSTRAP_BIN_DIR`
@@ -89,7 +89,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    명령을 출력합니다. 그 출력 명령을 일반 로그인 terminal에서 그대로 실행하세요.
    shebang이 포함된 shipped script라 직접 실행할 수 있습니다.
 
-   첫 mutation 전에 스크립트는 선택된 Python이 toolkit에서 사용하는 Pydantic 2
+   첫 mutation 전에 스크립트는 선택된 Python이 toolkit에서 사용하는 Pydantic 2 및 jsonschema Draft 2020-12
    API를 import할 수 있는지 검사합니다. 불가능하면 멈추고
    `python3 -m pip install -r <absolute-plugin-path>/requirements.txt`와 동등한
    argv-safe 명령을 출력합니다. 소유한 Python 환경에서 그 명령을 실행한 뒤 bootstrap을
@@ -553,7 +553,7 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   Python requirements, (Linux/WSL2에서) `bubblewrap`은 직접 설치하며, installer는
   three provider wrapper launchers와 review-round selector launcher만 쓰고
   owner-authored config를 보존합니다. 선택된
-  Python에 Pydantic 2가 없으면 bootstrap은
+  Python에 Pydantic 2 또는 필요한 jsonschema API가 없으면 bootstrap은
   mutation 전에 멈추고 그 interpreter를 위한 정확한
   `python3 -m pip install -r .../requirements.txt` 명령을 출력합니다.
 - **자기개선 분류기는 heuristic이지 oracle이 아닙니다.** 진짜 실패를 그럴듯하지만
@@ -630,7 +630,7 @@ provider-free 합성 lifecycle 검증을 명시적으로 요청한 경우 checko
 실제 명령 결과, 패키지 소스 해시, export manifest, 합성 artifact의 실제 bytes(base64),
 링크 문자열과 정리 증거를 JSON으로 출력합니다. Export 실패 시에도 합성 bytes를 보고서에
 보관한 뒤 자체 fixture를 정리하며, 보관에 실패하면 fixture를 남깁니다.
-PATH에 Git과 Codex, Claude, AGY CLI가, Python 3.12+ 환경에 Pydantic 2가 필요합니다.
+PATH에 Git과 Codex, Claude, AGY CLI가, Python 3.12+ 환경에 배포된 requirements의 Pydantic 2와 jsonschema가 필요합니다.
 임시 `AGY_SETTINGS_PATH`는 wrapper
 트랜잭션만 격리하며 vendor 설정 격리를 증명하지 않습니다. 성공은 리뷰 판정이나
 릴리스 인증이 아닙니다.
@@ -929,3 +929,18 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
   authorization을 제공하지 않습니다.
 - Fresh repair child는 proposal 또는 escalation만 반환하고 classifier change를
   적용하지 않습니다.
+
+## 오프라인 v2 후보 검증
+
+[공통 계약 후보](contracts/README.md)는 공유 커밋
+055204c83e57bf87eeac5b2422f2b17340f7c53b의 원문입니다.
+절대 정규 경로의 일반 결과 파일과 예상 결합값 6개를 지정합니다.
+
+    python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
+
+실제 인자로 치환하세요. Google의 예상 route는 agy 또는 gemini입니다.
+성공하면 검증된 v2 객체와 종료 코드 0을 반환하며, 입력·결합값·계약 무결성
+오류는 종료 코드 2로 거부합니다. jsonschema로 오프라인 검증하고 원본 JSON의
+중복 키와 배포된 SHA-256을 검사합니다. 해시는 서명이 아닌 로컬 무결성 확인입니다.
+이 명령은 provider를 호출하거나 round를 승인하지 않습니다. v2 wrapper·renderer·수집기
+활성화 및 revision 채택도 별도 단계입니다. 기존 legacy 경로와 custom-schema 조사는 유지됩니다.
