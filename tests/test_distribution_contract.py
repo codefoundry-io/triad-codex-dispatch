@@ -588,11 +588,12 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "user setting을 변경하지 않습니다" not in readme_ko
     assert "transient AGY global-settings transaction" in readme
     assert "일시적 AGY global-settings transaction" in readme_ko
-    assert "Formal AGY adds `read_url(*)`" in readme
-    assert "Formal AGY는 기존 다섯 deny에 `read_url(*)`" in readme_ko
+    assert "Default formal AGY adds `read_url(*)`" in readme
+    assert "기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`" in readme_ko
     assert "formal dispatch never supplies `--dangerously-skip-permissions`" in security
-    assert "Every REVIEW prompt prohibits web" in readme
-    assert "모든 REVIEW prompt는 웹을 금지" in readme_ko
+    assert "REVIEW defaults to no web" in readme
+    assert "REVIEW는 기본적으로 웹을 금지" in readme_ko
+    assert "직접 요청" in readme_ko and "review-web.md" in readme
     assert "MCP calls are also denied" in security
     assert "selected B Gemini profile explicitly denies `google_web_search` and `web_fetch`" in security
     assert "do not infer complete mechanical web denial" in security
@@ -618,8 +619,8 @@ def test_standalone_agy_separates_formal_review_and_raw_investigation() -> None:
         "Formal preflight and dispatch never use `--dangerously-skip-permissions`",
         "five raw read-only deny rules plus `read_url(*)`",
         "Raw investigations retain the version-gated headless compatibility",
-        "Every REVIEW prohibits web research",
-        "separate leader-authorized INVESTIGATION",
+        "REVIEW defaults to no web",
+        "only a direct owner request enables",
         "same six formal deny entries",
         "Keep formal permission checks enabled",
     ):

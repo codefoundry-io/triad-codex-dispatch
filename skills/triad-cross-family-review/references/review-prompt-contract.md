@@ -1,5 +1,7 @@
 # Prepared-directory review prompt contract
 
+Web verification requires a direct owner request and [the bound all-leg option](review-web.md); otherwise it remains disabled.
+
 This reference explains the judgment contract for a prepared-directory round.
 `bin/review_round.py` is the canonical generator for the prompt text and dynamic
 metadata; `bin/verdict_schema.py` is the canonical validator for returned paths,

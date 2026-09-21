@@ -49,7 +49,7 @@ def fields(args, cwd: str | None, selector) -> dict:
         if effort is not None:
             raise ValueError("Gemini has no supported effort flag")
         route_args = ["-m", args.model]
-    return {"schema_version": 2, "leg_name": args.expected_leg_name,
+    return {**({"review_web_authorized": True} if getattr(args, "web", False) else {}), "schema_version": 2, "leg_name": args.expected_leg_name,
             "attempt": args.expected_attempt, "cwd": cwd, "timeout_s": args.timeout,
             "model": args.model, "effort": effort, "route_args": route_args}
 
@@ -80,7 +80,7 @@ def load_preflight(path: Path, selector, args, cwd: str | None) -> dict:
             raise ValueError("v2 AGY preflight version is invalid")
     else:
         gemini_model_support(args.model, record["gemini_version"])
-        policy = selector.wrapper.parent / "policies/gemini-formal-readonly.toml"
+        policy = selector.wrapper.parent / "policies" / ("gemini-formal-web.toml" if getattr(args, "web", False) else "gemini-formal-readonly.toml")
         expected_policy = {
             "effective_approval_mode": "unexposed", "requested_approval_mode": "plan",
             "read_only_enforcement": "packaged-mode-independent-policy",
@@ -105,6 +105,8 @@ def load_receipt(path: Path, selector, args, cwd: str | None, prompt: str) -> di
         "attempt": args.expected_attempt, "route": selector.route,
         "google_preflight_receipt_sha256": hashlib.sha256(payload).hexdigest(),
     }
+    if getattr(args, "web", False):
+        metadata["review_web_authorized"] = True
     prefix = "Review v2 metadata: "
     lines = [line[len(prefix):] for line in prompt.splitlines() if line.startswith(prefix)]
     if len(lines) != 1 or _json(lines[0]) != metadata:

@@ -127,9 +127,12 @@ def _load_basis(path: Path) -> dict:
 def create_basis(request: dict, *, root: Path) -> dict:
     required = {"review_id", "project_root", "prepared_dir", "worktree", "mode", "objective",
                 "criteria", "approved_boundary", "authentication_class", "native_capabilities"}
-    if not isinstance(request, dict) or not required <= set(request) or set(request) - required - {"prior_residual"}:
+    if not isinstance(request, dict) or not required <= set(request) or set(request) - required - {"prior_residual", "review_web_authorized"}:
         raise ValueError("invalid v2 review request fields")
     request = _json(_bytes(request))
+    request.setdefault("review_web_authorized", False)
+    if type(request["review_web_authorized"]) is not bool:
+        raise ValueError("review_web_authorized must be a boolean")
     lifecycle._validate_review_id(request["review_id"])
     root = lifecycle._canonical_directory(root, "v2 review root")
     prepared = Path(request["prepared_dir"])
@@ -150,7 +153,8 @@ def create_basis(request: dict, *, root: Path) -> dict:
     adapters = prepare_adapters(
         roster, review_id=request["review_id"], cwd=_review_cwd(request),
         authentication_class=request["authentication_class"],
-        native_capabilities=request["native_capabilities"], receipt_root=preparation)
+        native_capabilities=request["native_capabilities"], receipt_root=preparation,
+        **({"review_web_authorized": True} if request["review_web_authorized"] else {}))
     if set(adapters) != set(roster["enabled"]) or any(
             adapter.get("capabilities_checked") is not True for adapter in adapters.values()):
         raise ValueError("every enabled entry requires capability-checked launch controls")
@@ -190,7 +194,8 @@ def _prompt(basis: dict, binding: dict, adapter: dict) -> str:
         diff_file=prepared / "REVIEW.diff", packet_files=[Path(item) for item in basis["packet_files"]],
         objective=request["objective"], criteria=request["criteria"],
         approved_boundary=request["approved_boundary"], residual=request.get("prior_residual", ""),
-        google_preflight_sha256=adapter["preflight_sha256"])
+        google_preflight_sha256=adapter["preflight_sha256"],
+        review_web_authorized=request.get("review_web_authorized", False))
 
 
 def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict:
@@ -204,6 +209,8 @@ def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict
     argv = ["python3", str(TOOLKIT / "bin" / wrapper), "--prompt-file", str(folder / "prompt.md"),
             "--cwd", adapter["cwd"], "--pydantic", "verdict_v2:LegVerdict",
             "--timeout", str(adapter["timeout_s"])]
+    if adapter.get("review_web_authorized", False):
+        argv += ["--web"]
     if adapter["model"] is not None:
         argv += ["--model", adapter["model"]]
     if adapter["effort"] is not None:
@@ -269,7 +276,8 @@ def allocate_attempt(basis_file: Path, name: str, *, diagnosis: str | None = Non
         adapter = prepare_adapters(
             selected, review_id=request["review_id"], cwd=_review_cwd(request),
             authentication_class=request["authentication_class"], native_capabilities=request["native_capabilities"],
-            receipt_root=_preparation(Path(basis["root"])), attempt=number)[name]
+            receipt_root=_preparation(Path(basis["root"])), attempt=number,
+            **({"review_web_authorized": True} if request.get("review_web_authorized", False) else {}))[name]
         if _controls(adapter) != _controls(basis["adapters"][name]):
             raise ValueError("launch controls changed; every entry requires a new basis")
     binding = _binding(basis, name, number)

@@ -32,19 +32,18 @@ reaches out to the other families for you.
   owner-selected Gemini Enterprise OAuth account, an absent AGY executable
   selects the existing Gemini CLI wrapper immediately; later AGY failure never
   triggers that fallback. Without an explicit `--project`, `--sandbox read-only` brackets AGY in a transient
-  global-settings transaction and restores the original bytes. Formal AGY adds
+  global-settings transaction and restores the original bytes. Default formal AGY adds
   `read_url(*)` to the five raw read-only denies and never uses the headless
   autoapproval flag. Identical formal leases can overlap; raw/formal deny lists
   remain isolated. Raw investigations retain their web-compatible rules and
   version-gated headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-  Every REVIEW prompt prohibits web; external research is a separate authorized
-  INVESTIGATION. AGY also denies MCP calls. The Enterprise Gemini route requests explicit CLI Auto and native Plan
+  REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Enterprise Gemini route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
   cache and removes competing API-key/ADC/Vertex/model selectors without reading
   them. Effective mode and runtime model remain `unexposed`. This is not OS-level
   confinement; round-integrity mutation detection remains separate. Gemini's
-  selected B policy explicitly denies both web tools; effective enterprise
+  default selected B policy explicitly denies both web tools; effective enterprise
   policy precedence still requires the separately recorded live checks.
 - Classifier gaps use a fresh native proposal-only child. The owner applies an
   accepted proposal locally from the same authenticated login terminal with the
@@ -249,7 +248,7 @@ verdict parsing, review-condition and policy-byte binding, and Gemini CLI versio
 preflight. Guarded reviews now explicitly record scoped symlink text and missing
 coverage without following link targets.
 
-Formal REVIEW prohibits web research. AGY formal calls add the URL-read deny and
+The 0.2.555 release baseline prohibits REVIEW web research. Default AGY formal calls add the URL-read deny and
 omit headless autoapproval; raw INVESTIGATION remains available. Gemini's selected
 B profile explicitly denies web tools; live policy verification remains separate. Existing
 authentication routes, the public verdict schema and disabled AGY hook remain.
@@ -389,7 +388,7 @@ explicit deny transaction; strict local `LegVerdict` and review-binding checks
 plus round-integrity verification remain the admission gates.
 
 The formal AGY prompt remains explicitly static-only: it permits
-native local file read/search, denies web and MCP calls, forbids command, write, experiment, notebook, subagent,
+native local file read/search, denies web by default and always denies MCP calls, forbids command, write, experiment, notebook, subagent,
 browser-actuation, and scratch tools, and sends unresolved static uncertainty to
 `open_questions`. Inside the prepared directory it uses native `list_dir`,
 `find_by_name`, and `view_file` as needed, and uses native `grep_search` with the
@@ -624,8 +623,10 @@ Honest boundaries, so you know where the toolkit stops:
   selected `--cwd` review root, digest and mutation checks, and your review before
   commit. Without `--project`, it also uses the transient deny lease; with
   `--project`, it validates the owner-provisioned project permission record.
-  Formal preflight and dispatch require the six review denies and never pass
-  `--dangerously-skip-permissions`. Raw calls retain their existing version-gated
+  Default no-web formal preflight and dispatch require the six review denies.
+  Explicitly requested review web retains the five raw denies and refuses an existing
+  owner `read_url(*)` deny before inference without removing it. Both formal modes
+  never pass `--dangerously-skip-permissions`. Raw calls retain their existing version-gated
   headless compatibility. The sandbox
   remains provider-managed rather than OS-level confinement; round-integrity
   mutation detection is a separate fail-closed check.
@@ -948,9 +949,10 @@ one resource whose `folderUri` matches the canonical cwd, and all five deny rule
 Additional owner-defined denies remain in place. The wrapper creates or edits no
 project record, global settings, or global lease artifact in this mode.
 
-For formal review, use the same project UUID for preflight and dispatch. The
+For default no-web formal review, use the same project UUID for preflight and dispatch. The
 project must also contain `read_url(*)`; the wrapper refuses a missing rule
-without changing owner configuration. The
+without changing owner configuration. Explicitly requested review web instead refuses
+that known whole-URL deny before inference and leaves it intact. The
 existing preflight `route_args` and receipt hash bind it to the rendered review;
 paired Pro/Flash preflights must select the same project. Keep the project
 configuration stable throughout the call. This is a configured native permission
@@ -1126,12 +1128,17 @@ identity. Unknown observations remain null/unexposed. Existing managed export
 and cleanup own these artifacts; this introduces no scheduler, background log
 cleaner, permanent web logger or installed revision adoption.
 
+## Owner-requested web (development candidate)
+
+[explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) is available for all participating legs only on a direct request for that round.
+Raw Claude `--web` adds native `WebSearch`/`WebFetch` permission and keeps the caller prompt.
+This candidate is not an installed release or shared revision adoption.
+
 ## Authorized AGY web investigation
 
-For current AI APIs or other external facts that require web verification, run a
-separate authorized investigation with `antigravity_wrapper.py --web --sandbox
+For an explicitly requested standalone web investigation, run the authorized investigation with `antigravity_wrapper.py --web --sandbox
 read-only`. It accepts a caller prompt or prompt file and an optional custom
-schema; formal verdict bindings and preflight are refused with `--web`.
+schema. Review use follows [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) with matching bound preflight and metadata.
 The raw Gemini wrapper also accepts `--web`, substituting its native tool names
 in the same clause. This flag records web authorization and evidence procedure;
 native Gemini permissions and authentication remain authoritative. It neither

@@ -29,18 +29,18 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
   않습니다. 명시적 `--project`가 없는 AGY route는 `--sandbox read-only`
   호출 동안 일시적 global-settings transaction으로
-  원래 바이트를 복원합니다. Formal AGY는 기존 다섯 deny에 `read_url(*)`를
+  원래 바이트를 복원합니다. 기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`를
   추가하고 headless 자동 승인 flag를 사용하지 않습니다. 동일한 formal deny
   lease는 동시 실행할 수 있고 raw/formal 목록은 격리됩니다. Raw 조사는 기존 웹
   기능과 버전별 headless 호환 처리를 유지하며 `AGY_NO_HEADLESS_AUTOAPPROVE=1`로
-  해당 처리를 끌 수 있습니다. 모든 REVIEW prompt는 웹을 금지하고 외부 조사는
-  별도로 승인된 INVESTIGATION에서 수행합니다. AGY의 MCP 호출도 차단합니다. Enterprise
+  해당 처리를 끌 수 있습니다. REVIEW는 기본적으로 웹을 금지합니다. 사용자가 해당 리뷰에 직접 요청하면
+  [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY의 MCP 호출도 차단합니다. Enterprise
   Gemini route는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
   API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
   runtime model은 `unexposed`입니다. 이는 OS 수준 confinement가 아니며
-  round-integrity mutation detection은 별도 검사입니다. B 전용 Gemini policy는 두 웹
+  round-integrity mutation detection은 별도 검사입니다. B 전용 기본 Gemini policy는 두 웹
   도구를 명시적으로 거부합니다. 조직 정책의 우선순위를 포함한 실제 적용 여부는
   별도 라이브 검증 항목으로 유지합니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
@@ -227,7 +227,7 @@ class, route에서 identity를 추론하지 않습니다.
 review는 링크 대상을 따라가지 않고 범위 내 symlink text와 누락된 검토 범위를
 명시적으로 기록합니다.
 
-Formal REVIEW는 웹 조사를 금지합니다. AGY formal 호출은 URL-read deny를 추가하고
+0.2.555 릴리스의 기본 Formal REVIEW는 웹 조사를 금지합니다. AGY formal 호출은 URL-read deny를 추가하고
 headless autoapproval을 생략하며, raw INVESTIGATION 기능은 유지합니다. Gemini
 REVIEW는 B 전용 policy의 명시적 웹 deny를 사용하며 실제 적용 검증은 별도입니다.
 기존 인증 경로, 공개 verdict schema, 비활성 AGY hook을 유지합니다. 이번 릴리스는
@@ -356,7 +356,7 @@ duplicate progress event가 유효한 terminal review를 사후에 무효화하�
 검증이 admission gate로 유지됩니다.
 
 formal AGY 프롬프트는 계속 명시적인 정적 전용 계약입니다.
-native local file read/search만 허용하고 웹·MCP 호출을 차단하며 command, write, experiment, notebook, subagent, browser
+로컬 검사는 native file read/search만 허용하고, 웹은 기본적으로 차단하며 MCP 호출은 항상 차단하고 command, write, experiment, notebook, subagent, browser
 actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
 `open_questions`에 기록합니다. prepared directory 안에서는 native `list_dir`,
 `find_by_name`, `view_file`을 필요에 따라 사용하고, 필수 `SearchPath`와 `Query` 인자를
@@ -574,8 +574,10 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
   digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
   일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
-  Formal preflight와 dispatch는 여섯 review deny를 요구하며
-  `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
+  기본 웹 비활성 Formal preflight와 dispatch는 여섯 review deny를 요구합니다.
+  웹 검증을 직접 요청한 review는 기존 다섯 raw deny를 유지하며, owner의
+  `read_url(*)` 차단이 있으면 이를 제거하지 않고 실행 전에 거절합니다. 두 Formal
+  모드 모두 `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
   headless 호환 처리를 유지합니다.
   sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
   mutation detection은 별도의 fail-closed 검사입니다.
@@ -876,9 +878,10 @@ owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-low
 추가 owner deny rule은 보존하며, 이 모드에서는 프로젝트·전역 설정·전역 lease 파일을
 생성하거나 수정하지 않습니다.
 
-정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
+기본 웹 비활성 정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
 프로젝트 설정에 `read_url(*)`도 있어야 하며 누락되면 owner 설정을 바꾸지 않고
-거절합니다. 기존 preflight의
+거절합니다. 웹 검증을 직접 요청한 review는 이 전체 URL 차단이 남아 있으면 실행 전에
+거절하고 원래 규칙을 보존합니다. 기존 preflight의
 `route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
 프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
 native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙니다. `--project`를
@@ -1040,12 +1043,19 @@ Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설�
 남깁니다. 기존 export·cleanup을 사용하며 별도 스케줄러·주기적 정리기·영구 웹 로그나
 설치 revision 변경을 추가하지 않습니다.
 
+## 직접 요청한 웹 검증 — 개발 후보
+
+사용자가 해당 리뷰에 직접 요청할 때만 모든 leg에 웹 검증을 허용합니다.
+신기술 여부로 자동 허용하지 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
+Raw Claude `--web`은 `WebSearch`/`WebFetch`를 허용하고 호출자 프롬프트를 보존합니다.
+설치된 릴리스나 공유 revision 채택을 뜻하지 않습니다.
+
 ## 승인된 AGY 웹 조사
 
-최신 AI API 등 외부 근거 확인이 필요하면 별도 승인된 조사로
+사용자가 독립적인 웹 조사를 직접 요청하면
 `antigravity_wrapper.py --web --sandbox read-only`를 사용합니다. 사용자 프롬프트나
-프롬프트 파일과 선택적 custom schema를 받으며, `--web`에 formal verdict binding이나
-preflight를 함께 주면 거부합니다.
+프롬프트 파일과 선택적 custom schema를 받습니다. 리뷰에서 사용하려면 모든 leg의
+현재 허용 조건과 preflight·호출 옵션을 일치시켜야 합니다.
 Gemini raw wrapper도 `--web`을 받고 같은 지침의 도구 이름만 치환합니다. 기존
 Gemini 권한과 인증은 유지되며, 이 옵션이 권한 우회나 formal policy를 선택하지 않습니다.
 [호출과 증거 계약](skills/triad-cross-family-review/references/leg-contracts.md#authorized-agy-web-investigation)을 따릅니다.

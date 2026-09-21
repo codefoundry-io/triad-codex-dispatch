@@ -160,9 +160,10 @@ def test_v2_prompt_metadata_is_checked_before_inference(route):
     assert rc == _common.EXIT_ARG_ERROR and route["calls"] == []
 
 
-def test_review_web_cannot_enter_v2_preflight_or_dispatch(route):
-    rc, _, _ = route["invoke"](["--preflight-only", "--web"])
-    assert rc == _common.EXIT_ARG_ERROR and route["calls"] == []
+def test_review_web_is_not_implied_by_v2_preflight(route):
+    rc, output, _ = route["invoke"](["--preflight-only"])
+    assert rc == 0 and route["calls"] == []
+    assert json.loads(output).get("review_web_authorized", False) is False
 
 
 def test_v2_unknown_requested_model_refuses_before_inference(route):

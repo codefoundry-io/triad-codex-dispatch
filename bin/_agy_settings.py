@@ -31,7 +31,7 @@ from pathlib import Path
 
 _DEFAULT_PATH = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
 
-# Raw read-only investigations retain web access. Formal REVIEW additionally
+# Raw read-only investigations retain web access. Default REVIEW additionally
 # denies URL reads; both exact lists may share only an identical active lease.
 _READ_ONLY_DENY = [
     "write_file(*)",
@@ -57,7 +57,8 @@ def validate_project_id(project: str) -> None:
 
 
 @contextlib.contextmanager
-def agy_project_guard(project: str, cwd: str, *, formal_review: bool = False):
+def agy_project_guard(project: str, cwd: str, *, formal_review: bool = False,
+                      require_web: bool = False):
     """Check the owner's project configuration without acquiring a global lease.
 
     The owner keeps this configuration stable during the call. This local check
@@ -86,7 +87,16 @@ def agy_project_guard(project: str, cwd: str, *, formal_review: bool = False):
             raise ValueError("AGY project is missing the read-only deny rules")
     except (KeyError, TypeError) as exc:
         raise ValueError("AGY project permission configuration is invalid") from exc
+    if require_web:
+        _reject_web_url_deny(deny)
     yield
+
+
+def _reject_web_url_deny(deny: list) -> None:
+    if not isinstance(deny, list) or any(not isinstance(rule, str) for rule in deny):
+        raise ValueError("AGY review web requires a valid local deny list")
+    if "read_url(*)" in deny:
+        raise ValueError("requested review web conflicts with owner read_url(*) deny")
 
 
 def _settings_path() -> Path:
@@ -558,7 +568,7 @@ def _exclusive_settings_guard(
 
 
 @contextlib.contextmanager
-def agy_settings_guard(deny_rules, *, lock_timeout: float = 30.0):
+def agy_settings_guard(deny_rules, *, lock_timeout: float = 30.0, require_web: bool = False):
     """Bracket an agy call in a global-settings deny transaction.
 
     Read-only calls share an active identical deny transaction so multiple
@@ -571,9 +581,11 @@ def agy_settings_guard(deny_rules, *, lock_timeout: float = 30.0):
     bak = p.with_name(".agybak")
     lock = p.with_name(".agy_settings.lock")
     p.parent.mkdir(parents=True, exist_ok=True)
-    if _shareable_deny(deny_rules):
-        with _shared_readonly_guard(p, bak, lock, deny_rules, lock_timeout):
-            yield
-        return
-    with _exclusive_settings_guard(p, bak, lock, deny_rules, lock_timeout):
+    guard = (_shared_readonly_guard if _shareable_deny(deny_rules) else _exclusive_settings_guard)
+    with guard(p, bak, lock, deny_rules, lock_timeout):
+        if require_web:
+            # Inspect the active lease before yielding; refusal still runs the
+            # existing byte-exact restoration. This is not merged-policy attestation.
+            active = json.loads(p.read_text())
+            _reject_web_url_deny(active["permissions"]["deny"])
         yield

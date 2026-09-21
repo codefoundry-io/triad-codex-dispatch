@@ -58,10 +58,12 @@ def _new(path: Path, data: dict) -> None:
     review_round._write_new(path, review_round._canonical_json_bytes(data))
 
 
-def _native(block: dict, capabilities: dict) -> dict:
+def _native(block: dict, capabilities: dict, *, web: bool = False) -> dict:
     if (not isinstance(capabilities, dict) or capabilities.get("source") != "native-spawn-tool"
             or not isinstance(capabilities.get("models"), dict)):
         raise ValueError("native invocation requires current host tool capabilities")
+    if web and capabilities.get("web_available") is not True:
+        raise ValueError("native review web requires current host web availability")
     model = block.get("model") if block.get("model") is not None else capabilities.get("default_model")
     effort = block.get("reasoning") if block.get("reasoning") is not None else capabilities.get("default_effort")
     levels = capabilities["models"].get(model)
@@ -69,10 +71,11 @@ def _native(block: dict, capabilities: dict) -> dict:
             or any(not isinstance(value, str) for value in levels) or effort not in levels):
         raise ValueError("native requested/default model and effort are not exposed as supported")
     return {"model": model, "effort": effort, "binary": None, "cli_version": None,
-            "transport_route": "native", "capability_source": "native-spawn-tool"}
+            "transport_route": "native", "capability_source": "native-spawn-tool",
+            **({"native_web_available": True} if web else {})}
 
 
-def _claude(block: dict, *, cwd: Path, folder: Path) -> dict:
+def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
     agent, model, effort = (block.get(key) for key in ("agent", "model", "effort"))
     if agent is not None and (
             not agent.strip() or any(char in agent for char in ("\x00", "\r", "\n"))):
@@ -98,6 +101,8 @@ def _claude(block: dict, *, cwd: Path, folder: Path) -> dict:
     required = ("--print", "--model", "--effort", "--no-session-persistence", "--permission-mode", "--output-format")
     if any(flag not in help_text for flag in required) or (agent is not None and "--agent" not in help_text):
         raise ValueError("installed Claude interface lacks required review controls")
+    if web and "--allowedTools" not in help_text:
+        raise ValueError("Claude web authorization requires native --allowedTools support")
     command = [binary, "--print", "--no-session-persistence", "--output-format", "text", "--permission-mode", "plan"]
     if agent is not None:
         command += ["--agent", agent]
@@ -132,7 +137,7 @@ def _claude(block: dict, *, cwd: Path, folder: Path) -> dict:
 
 
 def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
-            authentication_class: str, folder: Path, attempt: int) -> dict:
+            authentication_class: str, folder: Path, attempt: int, web: bool = False) -> dict:
     pin = entry.get("google", {}).get("route")
     if authentication_class not in ("personal-google", "gemini-enterprise"):
         raise ValueError("unsupported Google authentication class")
@@ -159,7 +164,7 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
                                                         expected_route=route, expected_wrapper=wrapper)
     args = SimpleNamespace(expected_review_id=review_id, expected_leg_name=entry["name"],
                            expected_attempt=attempt, expected_route=route,
-                           model=model, effort=effort, timeout=entry["timeout_s"], project=None)
+                           model=model, effort=effort, timeout=entry["timeout_s"], project=None, web=web)
     # The wrapper's preflight is the source of route/version/catalog/policy
     # evidence. It receives no review content and performs no review inference.
     argv = [sys.executable, str(wrapper), "--preflight-only", "--prompt", "v2 capability check",
@@ -168,6 +173,8 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
             "--expected-leg-name", entry["name"],
             "--expected-attempt", str(attempt), "--expected-route", route,
             "--google-selector-receipt", str(selector_file)]
+    if web:
+        argv += ["--web"]
     if effort is not None:
         argv += ["--effort", effort]
     if route == "agy":
@@ -185,7 +192,9 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
 
 
 def prepare_adapters(roster: dict, *, review_id: str, cwd: Path, authentication_class: str,
-                     native_capabilities: dict, receipt_root: Path, attempt: int = 1) -> dict:
+                     native_capabilities: dict, receipt_root: Path, attempt: int = 1, review_web_authorized: bool = False) -> dict:
+    if type(review_web_authorized) is not bool:
+        raise ValueError("review_web_authorized must be a boolean")
     review_round._validate_review_id(review_id)
     review_round._canonical_directory(cwd, "v2 child cwd")
     if type(attempt) is not int or attempt < 1:
@@ -205,17 +214,17 @@ def prepare_adapters(roster: dict, *, review_id: str, cwd: Path, authentication_
             folder.mkdir()
         except FileExistsError:
             raise ValueError("capability attempt already recorded") from None
-        base = {"family": family, "route": None, "agent": None,
+        base = {"review_web_authorized": review_web_authorized, "family": family, "route": None, "agent": None,
                 "timeout_s": entry["timeout_s"], "cwd": str(cwd), "capabilities_checked": True,
                 "preflight_sha256": None, "preflight_file": None, "selector_file": None}
         try:
             if family == "codex":
-                extra = _native(entry["codex"], native_capabilities)
+                extra = _native(entry["codex"], native_capabilities, web=review_web_authorized)
             elif family == "claude":
-                extra = _claude(entry["claude"], cwd=cwd, folder=folder)
+                extra = _claude(entry["claude"], cwd=cwd, folder=folder, web=review_web_authorized)
             else:
                 extra = _google(entry, defaults=defaults["google"], review_id=review_id,
-                                cwd=cwd, authentication_class=authentication_class, folder=folder, attempt=attempt)
+                                cwd=cwd, authentication_class=authentication_class, folder=folder, attempt=attempt, web=review_web_authorized)
             output[name] = {**base, **extra}
             _new(folder / "adapter.json", output[name])
         except (ValueError, OSError) as error:

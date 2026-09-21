@@ -36,7 +36,8 @@ def round_fixture(tmp_path, monkeypatch, worktree):
         root, shared = _lifecycle_packet(tmp_path, monkeypatch, "v2-fixture", source_root=worktree)
         calls = []
 
-        def adapters(roster, *, review_id, cwd, authentication_class, native_capabilities, receipt_root, attempt=1):
+        def adapters(roster, *, review_id, cwd, authentication_class, native_capabilities, receipt_root, attempt=1,
+                     review_web_authorized=False):
             calls.append([entry["name"] for entry in roster["legs"] if entry["enabled"]])
             output = {}
             for entry in roster["legs"]:
@@ -55,6 +56,9 @@ def round_fixture(tmp_path, monkeypatch, worktree):
                     "preflight_sha256": "b" * 64 if route else None,
                     "preflight_file": None, "selector_file": None,
                 }
+                output[entry["name"]]["review_web_authorized"] = review_web_authorized
+                if family == "codex" and review_web_authorized:
+                    output[entry["name"]]["native_web_available"] = native_capabilities.get("web_available") is True
             return adapter_transform(output) if adapter_transform is not None else output
 
         monkeypatch.setattr(mod, "prepare_adapters", adapters)

@@ -106,10 +106,10 @@ def test_c29_failure_logs_use_effective_prompt_without_weakening_audit_redaction
 @pytest.mark.parametrize("prompt,extra,message", [
     (" ", ["--sandbox", "read-only"], "non-empty"),
     ("question", [], "--sandbox read-only"),
-    ("question", ["--sandbox", "read-only", "--preflight-only", "--expected-review-id", "r1"], "INVESTIGATION"),
+    ("question", ["--sandbox", "read-only", "--preflight-only", "--expected-review-id", "r1"], "requires --google-selector-receipt"),
     ("question", ["--sandbox", "read-only", "--pydantic", "verdict_schema:LegVerdict",
                   "--expected-review-id", "r1", "--expected-family", "google",
-                  "--expected-content-digest", "a" * 64], "INVESTIGATION"),
+                  "--expected-content-digest", "a" * 64], "requires one bound metadata record"),
 ])
 def test_c29_invalid_web_requests_fail_before_provider(monkeypatch, capsys, prompt, extra, message):
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _: pytest.fail("provider probed"))

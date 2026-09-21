@@ -36,7 +36,8 @@ def test_current_migration_guidance_discloses_child_permission_selection_without
     assert "repository worktree used for development" in guidance
     assert "Formal AGY preflight and dispatch never pass `--dangerously-skip-permissions`" in guidance
     assert "Only raw investigations retain the version-gated headless adaptation" in guidance
-    assert "REVIEW legs prohibit web research" in guidance
+    assert "REVIEW defaults to no web" in guidance
+    assert "only on a direct owner request for that round" in guidance
     assert "deliberately selects AGY native headless `always-proceed`" not in guidance
     assert "transient settings lease and restore its original bytes" in guidance
     assert "explicit projects are validated without permission-file writes" in guidance

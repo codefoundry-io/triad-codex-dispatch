@@ -12,14 +12,14 @@ AGY is preferred and personal Google Sign-In requires it. When the owner selects
 Gemini Enterprise OAuth and AGY is absent, the selector may choose the already
 authenticated Gemini CLI instead. Without an explicit project, the
 AGY wrapper brackets `--sandbox read-only` in a transient global-settings
-transaction and restores the original bytes. Formal preflight and dispatch use
+transaction and restores the original bytes. Default formal preflight and dispatch use
 the five raw read-only denies plus `read_url(*)`; formal dispatch never supplies
 `--dangerously-skip-permissions`. Identical formal deny leases can overlap, while
 raw/formal lists remain isolated by the existing deny-key and lock timeout.
 Raw investigations retain their existing web-compatible rules and version-gated
 headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-Every REVIEW prompt prohibits web; external research requires a separate
-authorized INVESTIGATION. On the AGY route, MCP calls are also denied.
+REVIEW defaults to no web. A direct owner request may enable the bound all-leg
+[review web option](skills/triad-cross-family-review/references/review-web.md). On the AGY route, MCP calls are also denied.
 The provider-managed sandbox is not OS-level
 confinement, and round-integrity mutation detection is a separate fail-closed
 check. The formal Gemini wrapper explicitly requests CLI Auto and native Plan
@@ -30,13 +30,13 @@ every mode; an enterprise admin policy remains a higher tier. Bootstrap installs
 no persistent global permission policy, Enterprise authentication, or pre-spawn
 `shell_environment_policy`.
 
-The selected B Gemini profile explicitly denies `google_web_search` and
+The default selected B Gemini profile explicitly denies `google_web_search` and
 `web_fetch`, retaining its 999/998 rule priorities and Plan Mode transition
 denies. The wrapper checks the complete rule set, exact bytes and adjacent
 `bin/policies/source-manifest.json` provenance. This is candidate payload adoption,
 not a tagged spec revision. B1-B3 in the shared verification manifest remain
 NOT RUN; a local preflight cannot prove effective admin-policy precedence.
-AGY's prompt also prohibits both `search_web` and `read_url_content`. The exact
+AGY's default prompt also prohibits both `search_web` and `read_url_content`. The exact
 deny list and a successful local review do not attest how every vendor web tool
 maps to permission actions; do not infer complete mechanical web denial from them.
 
@@ -65,9 +65,11 @@ authentication or broaden permission to mutate a user-global target.
 An explicit `--project <canonical-lowercase-UUID>` with `--cwd` and
 `--sandbox read-only` selects an owner-provisioned AGY project record under
 `~/.gemini/config/projects/<UUID>.json`. Before inference, the wrapper checks
-its ID, its single cwd resource, and the five raw read-only deny entries; formal
-preflight and dispatch additionally require `read_url(*)`. Missing rules refuse
-before inference. This path
+its ID, its single cwd resource, and the five raw read-only deny entries. Default
+no-web formal preflight and dispatch additionally require `read_url(*)`.
+Explicitly requested review web retains the five raw denies and refuses an existing
+`read_url(*)` deny before inference, preserving the owner's rule. Missing required
+rules also refuse before inference. This path
 does not enter the global transaction or create/edit permission or lease files.
 Additional project denies remain intact. Preflight and dispatch must select the
 same UUID, bound through the existing hashed `route_args`; a paired Pro/Flash
@@ -387,11 +389,22 @@ redaction, failure diagnostics, provider permissions, no-follow custody and
 export-before-cleanup remain in effect. Original host-file mutation invalidates
 collection. These hashes detect drift, not an actor rewriting all custody.
 
+## Explicit web permission
+
+The current-round `review_web_authorized` boolean is absent/false by default and
+never a persistent roster permission. All CLI review invocations require matching
+metadata and preflight. Claude adds only native WebSearch/WebFetch preapproval;
+AGY preserves its existing read-only lease and owner denies; Gemini selects the
+complete `gemini-formal-web.toml` plus `web-source-manifest.json`, differing only
+in its two web tools. Its default profile remains unchanged. Native Codex uses
+existing host web capabilities; permission does not create a missing tool.
+Authenticated Gemini web checks remain NOT RUN. No permanent policy is installed.
+
 ## Explicit web investigations
 
-AGY `--web` is a raw INVESTIGATION option requiring `--sandbox read-only`; it
-does not grant formal REVIEW access to the web or relax any owner deny rule.
-It appends the single vendored investigation clause after validating the caller
+AGY `--web` requires `--sandbox read-only`. In REVIEW it must match the current
+bound owner request and preflight. It does not relax any pre-existing owner deny rule.
+On the raw route it appends the single vendored investigation clause after validating the caller
 prompt and operation. Missing or malformed clause content fails before provider
 work. The prompt manifest and distribution checks track copied source bytes;
 they do not attest runtime tool permission or factual correctness. Existing

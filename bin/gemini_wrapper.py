@@ -83,7 +83,7 @@ def _rule_tools(rule: dict[str, object]) -> set[str]:
     return set()
 
 
-def _validate_formal_policy(path: Path) -> str:
+def _validate_formal_policy(path: Path, *, web: bool = False) -> str:
     try:
         policy_bytes = path.read_bytes()
         payload = tomllib.loads(policy_bytes.decode("utf-8"))
@@ -111,9 +111,10 @@ def _validate_formal_policy(path: Path) -> str:
                 "formal Gemini policy is not the exact fail-closed rule set"
             )
         actual_rules.append((decision, priority, frozenset(tools)))
+    web_tools = {"google_web_search", "web_fetch"} if web else set()
     expected_rules = {
-        ("allow", 999, frozenset(FORMAL_READ_TOOLS)),
-        ("deny", 999, frozenset(FORMAL_DENIED_TOOLS)),
+        ("allow", 999, frozenset(set(FORMAL_READ_TOOLS) | web_tools)),
+        ("deny", 999, frozenset(set(FORMAL_DENIED_TOOLS) - web_tools)),
         ("deny", 998, frozenset({"*"})),
     }
     if len(actual_rules) != len(expected_rules) or set(actual_rules) != expected_rules:
@@ -122,9 +123,18 @@ def _validate_formal_policy(path: Path) -> str:
     from validate_v2 import _json
     try:
         manifest = _json(review_round._canonical_regular_file_bytes(
-            path.with_name("source-manifest.json"), "policy provenance"))
+            path.with_name("web-source-manifest.json" if web else "source-manifest.json"), "policy provenance"))
     except (OSError, ValueError):
         raise ValueError("formal Gemini policy digest provenance is unavailable") from None
+    if web:
+        if digest != "361b653b7f431f12542bbda7da7ee4af320ca70cd6ac0ba249e6c1b52259480b" or manifest != {
+            "source_repository": "https://github.com/codefoundry-io/triad-dispatch-spec",
+            "source_commit": "7f527ef1777336b93ca626744aedcd0c7d90aff9", "status": "candidate",
+            "source_path": "contracts/gemini-readonly-web-b.toml",
+            "sha256": {"gemini-formal-web.toml": digest},
+        }:
+            raise ValueError("formal Gemini web policy digest does not match the selected candidate")
+        return digest
     if digest != "01a267f591518964e30f94ffc45d496aae594435678380179b679d1aa8de189b" or manifest != {
         "source_repository": "https://github.com/codefoundry-io/triad-dispatch-spec",
         "source_commit": "6f0f2746f0bd74e16cf6df7c9ee5e0750d42d7d5", "status": "candidate",
@@ -160,10 +170,11 @@ def _run_preflight(
     selector_receipt: review_round.GoogleSelectorReceipt,
     *,
     v2_fields: dict | None = None,
+    web: bool = False,
 ) -> int:
-    policy = _formal_policy_path()
+    policy = _formal_policy_path().with_name("gemini-formal-web.toml") if web else _formal_policy_path()
     try:
-        policy_sha256 = _validate_formal_policy(policy)
+        policy_sha256 = _validate_formal_policy(policy, **({"web": True} if web else {}))
         version_result = subprocess.run(
             [gemini_bin, "--version"],
             cwd=cwd,
@@ -214,6 +225,7 @@ def _run_preflight(
                 "requested_approval_mode": "plan",
                 "review_id": selector_receipt.review_id,
                 "route": "gemini",
+                **({"review_web_authorized": True} if web else {}),
                 **(v2_fields or {}),
             },
             ensure_ascii=v2_fields is not None,
@@ -241,7 +253,7 @@ def main() -> int:
     p.add_argument("--cwd", default=None, help="Process working directory")
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
     p.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
-    p.add_argument("--web", action="store_true", help="Explicitly authorize raw web INVESTIGATION evidence")
+    p.add_argument("--web", action="store_true", help="Explicitly authorize web; REVIEW requires matching bound metadata and preflight")
     p.add_argument(
         "--model",
         default=None,
@@ -301,15 +313,15 @@ def main() -> int:
     except Exception as e:
         log(_common.input_path_error("--add-dir", None, process_cwd, e))
         return EXIT_ARG_ERROR
-    if args.web or args.add_dir:
+    if args.add_dir:
         if (args.preflight_only or args.pydantic in (FORMAL_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS) or any(
             value is not None for value in (args.expected_review_id, args.expected_family,
                 args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
         )):
-            log("--web/--add-dir is for raw INVESTIGATION, not formal REVIEW or preflight")
+            log("--add-dir is for raw INVESTIGATION, not formal REVIEW or preflight")
             return EXIT_ARG_ERROR
     web_clause = ""
-    if args.web:
+    if args.web and not args.preflight_only and args.pydantic not in (FORMAL_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS):
         try:
             web_clause = _common.load_web_evidence_clause(
                 Path(__file__).resolve().parents[1] / "prompts/investigation.md", gemini=True)
@@ -394,6 +406,12 @@ def main() -> int:
         return EXIT_ARG_ERROR
 
     selected_context = formal_verdict or args.preflight_only
+    if formal_verdict:
+        try:
+            _common.validate_review_web(args, args.prompt)
+        except ValueError as error:
+            log(str(error))
+            return EXIT_ARG_ERROR
     if selected_context and args.google_selector_receipt is None:
         log("formal Gemini route requires --google-selector-receipt")
         return EXIT_ARG_ERROR
@@ -428,6 +446,8 @@ def main() -> int:
                     selector_receipt,
                     expected_review_id=args.expected_review_id,
                 )
+                if args.web != selector_receipt.review_web_authorized:
+                    raise ValueError("Gemini web authorization does not match preflight")
                 review_round.validate_google_selector_prompt(
                     args.prompt,
                     selector_receipt,
@@ -443,16 +463,17 @@ def main() -> int:
         if selector_receipt is not None
         else require_binary("gemini")
     )
-    policy = _formal_policy_path()
+    policy = _formal_policy_path().with_name("gemini-formal-web.toml") if args.web else _formal_policy_path()
     if formal_verdict:
         try:
-            _validate_formal_policy(policy)
+            _validate_formal_policy(policy, **({"web": True} if args.web else {}))
         except ValueError as error:
             log(str(error))
             return EXIT_ARG_ERROR
     if args.preflight_only:
         return _run_preflight(gemini_bin, args.cwd, args.timeout, selector_receipt,
-                              **({"v2_fields": v2_fields} if v2_verdict else {}))
+                              **({"v2_fields": v2_fields} if v2_verdict else {}),
+                              **({"web": True} if args.web else {}))
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [

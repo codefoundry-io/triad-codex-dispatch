@@ -574,6 +574,32 @@ def record_wrapper_paths(result: RunResult, prompt_file: str | None, cwd: str | 
         log(f"resolved_prompt_file={prompt_path} effective_cwd={child_path}")
 
 
+def validate_review_web(args, prompt: str) -> None:
+    """A review flag is the caller's attestation of its bound owner request."""
+    from validate_v2 import _json
+    prefixes = ("Review metadata: ", "Review v2 metadata: ")
+    records = [line[len(prefix):] for line in prompt.splitlines()
+               for prefix in prefixes if line.startswith(prefix)]
+    if not records and not args.web:
+        return  # Existing no-web callers may supply their own prompt.
+    if len(records) != 1:
+        raise ValueError("review web authorization requires one bound metadata record")
+    metadata = _json(records[0])
+    authorized = metadata.get("review_web_authorized", False) if isinstance(metadata, dict) else None
+    if type(authorized) is not bool or authorized != args.web:
+        raise ValueError("--web must match bound review_web_authorized")
+    fields = ["review_id", "family", "content_digest"]
+    if args.pydantic in PACKAGED_V2_VERDICT_SPECS:
+        fields += ["leg_name", "attempt", "route"]
+    for field in fields:
+        expected = getattr(args, "expected_" + field)
+        if field == "route" and expected == "null":
+            expected = None
+        if (field not in metadata or type(metadata[field]) is not type(expected)
+                or metadata[field] != expected):
+            raise ValueError("review web authorization binding mismatch: " + field)
+
+
 def load_web_evidence_clause(path: Path, *, gemini: bool = False) -> str:
     document = path.read_text(encoding="utf-8")
     clauses = re.findall(r"^```text\n(.*?)\n```(?:\n|$)", document, re.MULTILINE | re.DOTALL)

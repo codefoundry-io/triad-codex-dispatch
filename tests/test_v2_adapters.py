@@ -66,10 +66,12 @@ def adapter_case(tmp_path, monkeypatch):
                     "model": value("--model"), "effort": value("--effort") if route == "agy" else None,
                     "route_args": ["--model", value("--model"), "--effort", value("--effort")] if route == "agy"
                                   else ["-m", value("--model")]}
+                if "--web" in argv:
+                    record["review_web_authorized"] = True
                 if route == "agy":
                     record["agy_version"] = "1.2.7"
                 else:
-                    policy = ROOT / "bin/policies/gemini-formal-readonly.toml"
+                    policy = ROOT / "bin/policies" / ("gemini-formal-web.toml" if "--web" in argv else "gemini-formal-readonly.toml")
                     record.update({"gemini_version": "0.60.0", "requested_approval_mode": "plan",
                         "effective_approval_mode": "unexposed", "read_only_enforcement": "packaged-mode-independent-policy",
                         "policy": str(policy), "policy_sha256": hashlib.sha256(policy.read_bytes()).hexdigest()})

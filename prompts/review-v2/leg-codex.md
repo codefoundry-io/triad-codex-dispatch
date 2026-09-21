@@ -17,7 +17,7 @@ The reviewed basis is at <worktree>. Read <brief-file> FIRST for the deployment 
 ## codex-read-grant (R-CONTAIN)
 
 ```text
-You MAY read authorized files under the working directory with read-only commands (cat, sed -n, rg, ls, git diff, git show, git log) to verify claims beyond the brief and patches — cite file:line for anything you assert from them. Do NOT read files outside the working directory — no home-directory or credentials, no system paths: nothing outside the repository is review material unless explicitly authorized and bound as an input. Inspect a symlink's path and link text without following its target automatically. Do NOT modify any file, change external state, run tests, scripts, builds, the code under review, or vendor CLIs. Do NOT access the network or search the web. Do not consult prior conversations or dispatch subagents.
+You MAY read authorized files under the working directory with read-only commands (cat, sed -n, rg, ls, git diff, git show, git log) to verify claims beyond the brief and patches — cite file:line for anything you assert from them. Do NOT read files outside the working directory — no home-directory or credentials, no system paths: nothing outside the repository is review material unless explicitly authorized and bound as an input. Inspect a symlink's path and link text without following its target automatically. Do NOT modify any file, change external state, run tests, scripts, builds, the code under review, or vendor CLIs. <review-web-policy> Do not consult prior conversations or dispatch subagents.
 ```
 
 ## codex-binding-line (R-BIND)

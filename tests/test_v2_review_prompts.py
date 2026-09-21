@@ -64,7 +64,7 @@ def test_exact_shared_payloads_have_one_candidate_provenance_manifest():
     root = ROOT / "prompts/review-v2"
     manifest = json.loads((root / "source-manifest.json").read_text())
     assert manifest["source_repository"] == "https://github.com/codefoundry-io/triad-dispatch-spec"
-    assert manifest["source_commit"] == "6bef14c0c42a13678594e8f2f039d1793b7cb127"
+    assert manifest["source_commit"] == "7f527ef1777336b93ca626744aedcd0c7d90aff9"
     assert manifest["status"] == "candidate"
     assert set(manifest["sha256"]) == set(bundle) == {
         "common-clauses.md", "leg-claude.md", "leg-codex.md", "leg-google.md"}
@@ -91,7 +91,7 @@ def test_missing_or_altered_shared_bytes_refuse_before_rendering(tmp_path, monke
         if damage == "manifest-duplicate":
             raw = raw.rstrip()[:-1] + ',"status":"candidate"}'
         else:
-            raw = raw.replace("6bef14c0c42a13678594e8f2f039d1793b7cb127", "0" * 40)
+            raw = raw.replace("7f527ef1777336b93ca626744aedcd0c7d90aff9", "0" * 40)
         target.write_text(raw)
     monkeypatch.setattr(mod, "BUNDLE_ROOT", copy)
     with pytest.raises(ValueError):

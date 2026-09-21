@@ -9,7 +9,7 @@ Explicit owner/project selection of **public v2** uses [the v2 procedure](refere
 for named rosters, producer/render/collector commands, host evidence and same-basis
 retry. Every enabled entry participates, including informational entries; never
 convert v2 results to legacy. Candidate presence changes no revision or existing gate.
-Raw authorized investigations remain available under [leg contracts](references/leg-contracts.md#authorized-agy-web-investigation).
+Raw [investigations](references/leg-contracts.md#authorized-agy-web-investigation) remain available; only a direct owner request enables [review web](references/review-web.md).
 
 Otherwise follow the legacy workflow below: one fresh review ID, one immutable
 basis, one Claude `LegVerdict`, one Google `LegVerdict`, and one fresh Codex

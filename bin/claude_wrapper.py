@@ -283,6 +283,7 @@ def main() -> int:
         help="Append a human-readable markdown row to "
              "_debug/<UTC-YYYY-MM-DD>/claude.md (per-call summary)",
     )
+    p.add_argument("--web", action="store_true", help="Explicit owner-authorized native web verification")
     args = p.parse_args()
 
     process_cwd = None
@@ -386,6 +387,13 @@ def main() -> int:
         log("Claude agent must be a nonblank native name; legacy formal review does not select agents")
         return EXIT_ARG_ERROR
 
+    if formal_bindings_complete:
+        try:
+            _common.validate_review_web(args, args.prompt)
+        except ValueError as error:
+            log(str(error))
+            return EXIT_ARG_ERROR
+
     claude_bin = require_binary("claude")
 
     def build_cmd(
@@ -406,6 +414,8 @@ def main() -> int:
             cmd += ["--add-dir", directory]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
+        if args.web:
+            cmd += ["--allowedTools", "WebSearch", "WebFetch"]
         if formal_bindings_complete:
             cmd += ["--permission-mode", "plan"]
         if native_schema is not None:

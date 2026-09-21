@@ -11,8 +11,10 @@ Raw investigations retain the version-gated headless compatibility unless
 `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag.
 Formal calls use `--sandbox read-only`. Without an explicit project, the route uses
 native `--mode plan` with a transient global-settings transaction
-that unions the five raw read-only deny rules plus `read_url(*)`, then
-restores the original bytes. Identical formal leases may overlap; different
+that unions the five raw read-only deny rules plus `read_url(*)` for default
+no-web review, then restores the original bytes. Explicitly requested review web
+uses the five raw denies and refuses an existing owner `read_url(*)` deny before
+inference without removing it. Identical formal leases may overlap; different
 raw/formal deny lists remain isolated. On AGY 1.1.20 or newer, the formal route passes a
 review-bound native `--json-schema` in plan mode and consumes the terminal
 `structured_output`. It then repeats strict local `LegVerdict` validation and
@@ -23,8 +25,8 @@ schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, forbids command and
 other action tools plus experiments, and undecidable uncertainty goes to
 `open_questions`. MCP calls are unavailable for the formal Google leg.
-Every REVIEW prohibits web research; external evidence requires a separate
-leader-authorized INVESTIGATION. Do not call `search_web` or `read_url_content`.
+REVIEW defaults to no web; only a direct owner request enables
+[the bound web option](../triad-cross-family-review/references/review-web.md).
 Use `grep_search`
 with the required `SearchPath` and `Query` arguments to search inside the review
 target identified by Review metadata, and use `list_dir`, `find_by_name`, and `view_file` as
@@ -50,12 +52,15 @@ admission, and separate round-integrity checks.
 
 An owner-provisioned dedicated project may use `--project <canonical-lowercase-UUID>`
 with an explicit `--cwd` and `--sandbox read-only`. The wrapper checks the project
-record's ID, single cwd resource, and the same six formal deny entries without a
+record's ID, single cwd resource, and the same six formal deny entries by default without a
 global settings lease or permission-file writes. Use the same UUID for preflight
 and dispatch, and for both Pro/Flash preflights in a paired review. Keep the
 project configuration stable during the call. Follow the exact
 [project invocation contract](../triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project);
 the wrapper does not create or modify projects.
+The explicitly requested review-web option uses the five raw read-only denies;
+an existing project `read_url(*)` deny causes refusal before inference and remains
+unchanged. Other owner denies also remain authoritative.
 
 Before formal review, require authenticated output proving:
 
@@ -94,7 +99,7 @@ an explicit 600-second wrapper provider-process deadline, and the AGY child gets
 `--print-timeout 590s`. Apply [convergence](../triad-cross-family-review/references/convergence.md)
 to observation waits and terminal outcomes. The formal Google prompt
 authorizes only AGY native file-read/search tools for local inspection.
-Web research is prohibited; MCP calls are denied by the
+Web research is prohibited by default; MCP calls are always denied by the
 formal read-only permission rules. It forbids command, shell, terminal,
 file-write/edit, notebook-execution, subagent, browser-actuation, and
 scratch-space tools plus experiments; undecidable uncertainty goes to

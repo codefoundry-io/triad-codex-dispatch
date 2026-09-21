@@ -2141,7 +2141,7 @@ def test_gemini_formal_rejects_non_google_prompt_before_provider(
     )
 
     assert gemini_wrapper.main() == _common.EXIT_ARG_ERROR
-    assert "formal prompt selector binding mismatch" in capsys.readouterr().err
+    assert "review web authorization binding mismatch: family" in capsys.readouterr().err
 
 
 def test_gemini_formal_policy_rejects_an_additional_allow_rule(tmp_path) -> None:

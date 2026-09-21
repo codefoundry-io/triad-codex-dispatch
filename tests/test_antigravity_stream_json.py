@@ -1702,7 +1702,7 @@ def test_formal_agy_rejects_non_google_prompt_before_binary_probe(
     )
 
     assert wrapper.main() == _common.EXIT_ARG_ERROR
-    assert "formal prompt selector binding mismatch" in capsys.readouterr().err
+    assert "review web authorization binding mismatch: family" in capsys.readouterr().err
 
 
 def test_formal_agy_rejects_non_google_expected_family_before_binary_probe(
