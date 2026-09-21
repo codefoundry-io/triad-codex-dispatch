@@ -1,8 +1,9 @@
 # triad-codex-dispatch
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
-로컬 설치를 선택합니다. 현재 `0.2.556` 후보는 `codex/agy-web-evidence` 브랜치에
-있으며, `main`과 공개된 `v0.2.555`에는 아직 포함되지 않았습니다.
+로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
+[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)에서
+버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 [English README](README.md)
 
@@ -81,7 +82,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    environment를 대신 선택할 수 있습니다.
 
 2. **설치 경로 선택.** 아래 명령은 일반 마켓플레이스의 공개 버전을 설치합니다.
-   Git 로컬 설치나 현재 후보는 [설치와 개인 설정](docs/installation.ko.md)을
+   Git 로컬 설치나 특정 커밋 고정은 [설치와 개인 설정](docs/installation.ko.md)을
    따르세요. 현재 approval 경계가 허용하면 Codex가 이 명령을 실행할 수 있습니다.
 
    ```bash
@@ -1066,12 +1067,12 @@ Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설�
 남깁니다. 기존 export·cleanup을 사용하며 별도 스케줄러·주기적 정리기·영구 웹 로그나
 설치 revision 변경을 추가하지 않습니다.
 
-## 직접 요청한 웹 검증 — 개발 후보
+## 직접 요청한 웹 검증
 
 사용자가 해당 리뷰에 직접 요청할 때만 모든 leg에 웹 검증을 허용합니다.
 신기술 여부로 자동 허용하지 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
 Raw Claude `--web`은 `WebSearch`/`WebFetch`를 허용하고 호출자 프롬프트를 보존합니다.
-설치된 릴리스나 공유 revision 채택을 뜻하지 않습니다.
+0.2.556 릴리스에 포함되며, 실계정 웹 실행 검증과 공유 revision 채택은 별도 단계입니다.
 
 ## 승인된 AGY 웹 조사
 

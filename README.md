@@ -3,8 +3,9 @@
 [한국어 README](README.ko.md)
 
 [Installation and personal settings](docs/installation.md): choose the normal
-marketplace or a local Git download. The current `0.2.556` candidate is on
-`codex/agy-web-evidence`; `main` and the published `v0.2.555` do not yet contain it.
+marketplace or a local Git download. Use `main` for the current release line;
+[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)
+provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
 codex to check codex's work and it inherits the same framing — the reasoning that
@@ -82,7 +83,7 @@ section is optional.
    workflow.
 
 2. **Choose an installation source.** The commands below use the normal
-   marketplace published line. For local Git installation or the current candidate,
+   marketplace published line. For local Git installation or a pinned commit,
    follow [Installation and personal settings](docs/installation.md) instead.
    Codex may run these commands when its current approval boundary permits the install:
 
@@ -1149,11 +1150,12 @@ identity. Unknown observations remain null/unexposed. Existing managed export
 and cleanup own these artifacts; this introduces no scheduler, background log
 cleaner, permanent web logger or installed revision adoption.
 
-## Owner-requested web (development candidate)
+## Owner-requested web
 
 [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) is available for all participating legs only on a direct request for that round.
 Raw Claude `--web` adds native `WebSearch`/`WebFetch` permission and keeps the caller prompt.
-This candidate is not an installed release or shared revision adoption.
+Release 0.2.556 includes this feature; authenticated web execution and shared
+revision adoption remain separate checks.
 
 ## Authorized AGY web investigation
 

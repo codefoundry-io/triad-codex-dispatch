@@ -8,11 +8,10 @@ under the same marketplace name.
 
 ## Select the version
 
-`0.2.556` is a candidate on `codex/agy-web-evidence`. The commands below select
-that branch. `main` and the published `v0.2.555` do not yet include this candidate.
-For the normal published line, replace `codex/agy-web-evidence` with `main`.
-For a reproducible candidate, use route B and check out the reviewed full commit
-ID from the delivery record. A candidate install does not publish a release.
+The commands below select `main`, the current release line.
+[Release v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)
+contains the versioned download and checksums. For a reproducible installation,
+use route B and check out the full commit ID recorded in the release notes.
 
 ## Prerequisites
 
@@ -46,11 +45,11 @@ export PATH="$HOME/.local/bin:$PATH"
 No local clone is needed:
 
 ```bash
-codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref codex/agy-web-evidence
+codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 ```
 
 For an already registered marketplace, use [Update](#update) to keep its existing
-source and tracked ref. To change either (including `main` to this candidate), run
+source and tracked ref. To change either (including a candidate branch to `main`), run
 the [Remove procedure](../README.md#remove) in order: installed bootstrap removal,
 plugin removal, then marketplace removal. Register the chosen source above or
 below and install again. Preserve other marketplace registrations and personal settings.
@@ -62,7 +61,7 @@ for later updates. The destination below must not already exist:
 
 ```bash
 mkdir -p "$HOME/.local/share"
-git clone --branch codex/agy-web-evidence --single-branch https://github.com/codefoundry-io/triad-codex-dispatch.git "$HOME/.local/share/triad-codex-dispatch"
+git clone --branch main --single-branch https://github.com/codefoundry-io/triad-codex-dispatch.git "$HOME/.local/share/triad-codex-dispatch"
 git -C "$HOME/.local/share/triad-codex-dispatch" rev-parse HEAD
 codex plugin marketplace add "$HOME/.local/share/triad-codex-dispatch"
 ```

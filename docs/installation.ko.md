@@ -8,11 +8,10 @@
 
 ## 설치할 버전 선택
 
-`0.2.556`은 `codex/agy-web-evidence` 브랜치의 배포 후보입니다. 아래 명령은 이
-브랜치를 선택합니다. `main`과 공개된 `v0.2.555`에는 아직 이 후보가 없습니다.
-일반 공개 버전을 사용하려면 `codex/agy-web-evidence`를 `main`으로 바꾸세요.
-동일한 후보를 재현하려면 B 경로에서 전달 기록의 검증된 전체 커밋 ID를 checkout합니다.
-후보 설치가 정식 릴리스 발행을 뜻하지는 않습니다.
+아래 명령은 최신 공개 버전 경로인 `main`을 선택합니다.
+[v0.2.556 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)에서
+버전별 다운로드와 체크섬을 확인할 수 있습니다. 같은 버전을 재현하려면 B 경로에서
+릴리스 노트에 기록된 전체 커밋 ID를 checkout합니다.
 
 ## 준비 사항
 
@@ -45,11 +44,11 @@ export PATH="$HOME/.local/bin:$PATH"
 Git 저장소를 직접 다운로드하지 않아도 됩니다:
 
 ```bash
-codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref codex/agy-web-evidence
+codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 ```
 
 이미 등록했다면 [업데이트](#업데이트)는 기존 경로와 추적 ref를 유지합니다.
-경로나 ref를 바꿀 때(`main`에서 현재 후보로 전환하는 경우 포함)는
+경로나 ref를 바꿀 때(후보 브랜치에서 `main`으로 전환하는 경우 포함)는
 [제거 절차](../README.ko.md#삭제)를 따라 설치된 bootstrap 제거, 플러그인 제거,
 마켓플레이스 제거 순서로 진행합니다. 위 또는 아래의 선택한 경로를 등록한 뒤
 다시 설치하세요. 다른 마켓플레이스와 개인 설정은 보존합니다.
@@ -61,7 +60,7 @@ codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref codex/agy
 
 ```bash
 mkdir -p "$HOME/.local/share"
-git clone --branch codex/agy-web-evidence --single-branch https://github.com/codefoundry-io/triad-codex-dispatch.git "$HOME/.local/share/triad-codex-dispatch"
+git clone --branch main --single-branch https://github.com/codefoundry-io/triad-codex-dispatch.git "$HOME/.local/share/triad-codex-dispatch"
 git -C "$HOME/.local/share/triad-codex-dispatch" rev-parse HEAD
 codex plugin marketplace add "$HOME/.local/share/triad-codex-dispatch"
 ```

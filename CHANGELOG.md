@@ -11,7 +11,7 @@
 - Documents marketplace and local Git installation, personal settings and
   updates in English and Korean. Uses Legacy Gemini CLI as the route label while
   retaining the actual version, authentication and policy prerequisites.
-- This is a release candidate. Packaging, installation, live provider checks and
+- Packaging, installation, live provider checks and
   shared-spec revision adoption remain separate verification claims.
 
 ## 0.2.555 — 2026-09-20
