@@ -2,6 +2,10 @@
 
 [한국어 README](README.ko.md)
 
+[Installation and personal settings](docs/installation.md): choose the normal
+marketplace or a local Git download. The current `0.2.556` candidate is on
+`codex/agy-web-evidence`; `main` and the published `v0.2.555` do not yet contain it.
+
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
 codex to check codex's work and it inherits the same framing — the reasoning that
 produced the bug is the reasoning that reviews it. triad-codex-dispatch gets you a
@@ -37,7 +41,7 @@ reaches out to the other families for you.
   autoapproval flag. Identical formal leases can overlap; raw/formal deny lists
   remain isolated. Raw investigations retain their web-compatible rules and
   version-gated headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-  REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Enterprise Gemini route requests explicit CLI Auto and native Plan
+  REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
   cache and removes competing API-key/ADC/Vertex/model selectors without reading
@@ -60,7 +64,7 @@ section is optional.
    workers you will use — the toolkit issues/refreshes no credentials:
    - `codex` — install, then `codex login`.
    - `agy` — preferred Google-family worker and required for personal Google Sign-In.
-   - `gemini` — required only for the AGY-absent Gemini Enterprise OAuth route.
+   - `gemini` — required for Legacy Gemini CLI use: AGY absent, existing Gemini Enterprise OAuth sign-in.
    - `claude` — Claude Code `>= 2.1.170`; bootstrap checks binary presence only
      and does not run a version probe.
 
@@ -77,20 +81,21 @@ section is optional.
    a trusted isolated Python environment only if it preserves the provider login
    workflow.
 
-2. **Plugin install (Codex can do).** No local clone is required for normal
-   users. Codex may run these commands when its current approval boundary
-   permits the install:
+2. **Choose an installation source.** The commands below use the normal
+   marketplace published line. For local Git installation or the current candidate,
+   follow [Installation and personal settings](docs/installation.md) instead.
+   Codex may run these commands when its current approval boundary permits the install:
 
    ```bash
    codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
-   python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
+   python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
    ```
 
 3. **User-run runtime setup.** The plugin installer does not run arbitrary
    post-install code. The last command in step 2 prints a safely quoted absolute
    bootstrap command from the returned `installedPath` with Python
    `shlex.join`. Run that printed command exactly in your normal login terminal.
-   Its shebang makes the shipped script directly executable.
+   Use the printed `bash` command so installation does not depend on executable bits.
 
    Before its first mutation, the script verifies that the selected Python can
    import the Pydantic 2 and jsonschema Draft 2020-12 APIs used by the toolkit.
@@ -121,8 +126,7 @@ section is optional.
    separate from AGY's provider-native read-only sandbox and Gemini's native Plan
    Mode plus packaged read/search-only policy.
 
-   Use an interactive workspace policy that is compatible with managed company
-   environments. Select the Workspace Write / on-request profile with Desktop or
+   Use an interactive workspace policy. Select the Workspace Write / on-request profile with Desktop or
    CLI `/permissions` when that profile is available. The equivalent persistent
    setting belongs to the user in `~/.codex/config.toml`, or to a trusted project
    in `.codex/config.toml`:
@@ -132,6 +136,10 @@ section is optional.
    approval_policy = "on-request"
    approvals_reviewer = "user"
    ```
+
+   Preserve existing settings. Change an existing key instead of appending a
+   duplicate, and keep these root-level fields before any `[table]` header.
+   If permission profiles are already configured, use that system instead.
 
    `approvals_reviewer = "user"` keeps each outside-sandbox request as a human
    Yes/No decision. Where organization policy permits an agent reviewer for those
@@ -186,8 +194,8 @@ section is optional.
    codex
    ```
 
-   Use `/status` to verify the active approval policy and `/debug-config` when a
-   project, profile, or managed layer changes the expected reviewer.
+   Use `/status` to verify the active approval policy. If your Codex build provides
+   `/debug-config`, use it when another config layer changes the expected reviewer.
 
 That is the whole required path. Repair is a proposal-only native-child step
 surfaced only when needed (see [Custom Subagents](#custom-subagents) and
@@ -198,7 +206,12 @@ surfaced only when needed (see [Custom Subagents](#custom-subagents) and
 Nothing in this section is needed for a normal individual install. Reach for a
 subsection only when its "do this ONLY if…" line applies to you.
 
-### Gemini Enterprise OAuth without AGY
+### Legacy Gemini CLI
+
+This label means the `gemini` executable route, distinct from AGY; it does not
+recommend downgrading. Formal review requires CLI `>=0.34.0` plus a successful
+version/help/policy preflight. The v2 Pro model default has separate version
+support checks. The canonical authentication value remains `gemini-enterprise`.
 
 *Do this only for an organization account already authenticated through Gemini
 CLI Sign in with Google.* If AGY is installed, the selector still prefers AGY.
@@ -240,6 +253,16 @@ enforces it (summarized under [Security](#security) below).
   session after install or update.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
+
+### Upgrading to 0.2.556
+
+0.2.556 includes the explicit public v2 workflow and directly requested all-leg
+web verification. Default review remains no-web. Existing legacy workflows,
+authentication boundaries and shared revision selection remain in place.
+
+Use the matching [marketplace or local Git update steps](docs/installation.md#update).
+Rerun bootstrap and open a fresh Codex session. Gemini live policy checks and
+authorized web checks remain separate from package validation.
 
 ### Upgrading to 0.2.555
 
@@ -339,7 +362,7 @@ the strict `LegVerdict` schema are unchanged.
 
 ### Upgrading to 0.2.548
 
-0.2.548 restores a company-safe formal Google route without making Gemini a
+0.2.548 restores the Legacy Gemini CLI formal Google route without making Gemini a
 post-failure retry. Before any family starts, the packaged selector records the
 owner-selected authentication class, prefers AGY, and chooses Gemini CLI only
 for Gemini Enterprise OAuth when AGY is absent. The selector exclusive-creates
@@ -444,7 +467,7 @@ not change the public three-family default, prepared-directory renderer, or
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.555-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -599,7 +622,7 @@ Honest boundaries, so you know where the toolkit stops:
 - **It does NOT manage vendor auth or tokens.** No token issue/refresh, no API-key
   injection, and no install-time provider probes. You log in with each vendor
   CLI's native login; an auth-shaped runtime error is surfaced for you to
-  re-login. There is no credential copying, sandbox-login attempt, company setup
+  re-login. There is no credential copying, sandbox-login attempt, account-provisioning
   flow, or authorization store.
 - **It does NOT install OS or Python packages.** You install the vendor CLIs,
   `python3`, the shipped Python requirements, and (on Linux/WSL2) `bubblewrap`
@@ -645,7 +668,7 @@ Honest boundaries, so you know where the toolkit stops:
 
 ```bash
 codex plugin marketplace upgrade triad-codex-dispatch
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
 ```
 
 Run the newly printed absolute command. A plain `--install` republishes the
@@ -711,7 +734,7 @@ uninstall command before removing the plugin cache (the script lives inside
 it):
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
 ```
 
 Run that printed absolute removal command, then remove the plugin registration:

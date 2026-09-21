@@ -8,7 +8,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development or superpowers:executing-plans.
 
-**Goal:** Preserve personal Google Sign-In and company Gemini Enterprise
+**Goal:** Preserve personal Google Sign-In and Gemini Enterprise
 Business Sign-In through the same executable AGY review route used by the
 deployed Claude-led TRIAD.
 

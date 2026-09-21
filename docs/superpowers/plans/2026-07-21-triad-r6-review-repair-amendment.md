@@ -40,7 +40,7 @@ deny policy. Live token-using containment spikes proved file and command writes 
   256 filesystem-encoded bytes before persistent installation changes.
 - Keep AGY primary and the existing Gemini Enterprise/Business fallback. Do not weaken the formal
   result schema or accept verdict synonyms.
-- Do not redesign the one-hour UUID/file-IPC cleanup or restore company-only setup.
+- Do not redesign the one-hour UUID/file-IPC cleanup or restore deployment-specific setup.
 
 ## Task 1: PTY and AGY route repairs
 

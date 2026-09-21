@@ -22,6 +22,9 @@ directly:
   consult; it does not choose or lead a formal Google-family review.
 - `$triad-cross-family-review` before risky merges.
 
+Documentation calls the `gemini` executable route Legacy Gemini CLI. Keep actual
+authentication identifiers and supported-version preflights unchanged.
+
 Keep the existing project gate on its selected protocol. When the owner/project
 explicitly selects public v2, follow the installed skill's `public-v2-review.md`
 procedure for the named roster, generated invocations, actual host evidence and
@@ -60,7 +63,7 @@ interpreter injection variables.
 
 Launch all TRIAD lifecycle, provider, test, and development commands outside the
 Codex workspace sandbox under the user-selected Codex host policy. Use an
-interactive company-compatible policy: `sandbox_mode = "workspace-write"`,
+interactive workspace policy: `sandbox_mode = "workspace-write"`,
 `approval_policy = "on-request"`, and `approvals_reviewer = "user"` for a human
 Yes/No decision. Where organization policy permits an agent reviewer, change
 only that last field to `approvals_reviewer = "auto_review"`; this changes the
@@ -70,6 +73,8 @@ sandbox. The OpenAI plugin model applies the host sandbox and approval policy to
 plugin capabilities and documents no plugin-level install-time sandbox grant.
 TRIAD does not install or mutate that host policy. Do not mix permission profiles
 with legacy `sandbox_mode` settings.
+Preserve existing config fields and tables. Set root-level permission keys before
+any TOML table header, and update existing keys rather than adding duplicates.
 
 Repair analysis uses a fresh native proposal-only child with prompt-controlled
 no-edit behavior. The child reads an untrusted absolute run-log path and the

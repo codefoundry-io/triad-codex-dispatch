@@ -1,5 +1,9 @@
 # triad-codex-dispatch
 
+[설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
+로컬 설치를 선택합니다. 현재 `0.2.556` 후보는 `codex/agy-web-evidence` 브랜치에
+있으며, `main`과 공개된 `v0.2.555`에는 아직 포함되지 않았습니다.
+
 [English README](README.md)
 
 **AI 코딩 어시스턴트는 자기 리뷰어와 blind spot 을 공유합니다.** codex 에게 codex 의
@@ -21,7 +25,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 ## 제공 기능
 
 - `skills/` 아래의 Codex 플러그인 skill.
-- bootstrap은 새로 Claude, agy, Gemini 세 provider wrapper command만 publish합니다.
+- bootstrap은 Claude, agy, Gemini 세 provider wrapper와 `review_round.py`
+  selector launcher를 publish합니다.
   `triad-setup` 및 `triad-doctor`는 remove-only legacy cleanup 이름입니다.
 - 정식 Google review는 어떤 family도 시작하기 전에 route를 선택해 고정합니다.
   AGY를 우선하며 개인 Google Sign-In에는 AGY가 필요합니다. owner가 Gemini
@@ -34,8 +39,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   lease는 동시 실행할 수 있고 raw/formal 목록은 격리됩니다. Raw 조사는 기존 웹
   기능과 버전별 headless 호환 처리를 유지하며 `AGY_NO_HEADLESS_AUTOAPPROVE=1`로
   해당 처리를 끌 수 있습니다. REVIEW는 기본적으로 웹을 금지합니다. 사용자가 해당 리뷰에 직접 요청하면
-  [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY의 MCP 호출도 차단합니다. Enterprise
-  Gemini route는 explicit CLI Auto와 native Plan Mode를 요청하고,
+  [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY의 MCP 호출도 차단합니다. Gemini 구버전 CLI
+  경로는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
   API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
@@ -58,7 +63,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    로그인합니다 — toolkit 은 credential 을 발급/refresh 하지 않습니다:
    - `codex` — 설치 후 `codex login`.
    - `agy` — 우선 Google-family worker이며 개인 Google Sign-In에는 필수.
-   - `gemini` — AGY가 없는 Gemini Enterprise OAuth route에서만 필수.
+   - `gemini` — AGY가 없는 Gemini 구버전 CLI 경로에서만 필수. 기존 Gemini Enterprise OAuth 인증을 사용합니다.
    - `claude` — Claude Code `>= 2.1.170`; bootstrap 은 binary 존재만 확인하며
      version probe 를 실행하지 않습니다.
 
@@ -75,19 +80,20 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    Installer는 provider login workflow를 보존하는 경우에만 trusted isolated Python
    environment를 대신 선택할 수 있습니다.
 
-2. **플러그인 설치(Codex가 수행 가능).** 일반 사용자는 local clone 이 필요
-   없습니다. 현재 approval 경계가 허용하면 Codex가 이 명령을 실행할 수 있습니다.
+2. **설치 경로 선택.** 아래 명령은 일반 마켓플레이스의 공개 버전을 설치합니다.
+   Git 로컬 설치나 현재 후보는 [설치와 개인 설정](docs/installation.ko.md)을
+   따르세요. 현재 approval 경계가 허용하면 Codex가 이 명령을 실행할 수 있습니다.
 
    ```bash
    codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
-   python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
+   python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
    ```
 
 3. **사용자가 실행하는 runtime setup.** 플러그인 installer는 임의의
    post-install 코드를 실행하지 않습니다. 2단계의 마지막 명령은 반환된
    `installedPath`로부터 Python `shlex.join`을 사용해 안전하게 인용된 절대 bootstrap
    명령을 출력합니다. 그 출력 명령을 일반 로그인 terminal에서 그대로 실행하세요.
-   shebang이 포함된 shipped script라 직접 실행할 수 있습니다.
+   실행 권한 비트에 의존하지 않도록 출력된 `bash` 명령을 사용합니다.
 
    첫 mutation 전에 스크립트는 선택된 Python이 toolkit에서 사용하는 Pydantic 2 및 jsonschema Draft 2020-12
    API를 import할 수 있는지 검사합니다. 불가능하면 멈추고
@@ -112,7 +118,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    sandbox 밖에서 실행합니다. 이 바깥쪽 host 경계는 AGY의 provider-native read-only
    sandbox 및 Gemini의 native Plan Mode + packaged read/search-only policy와 별개입니다.
 
-   관리형 회사 환경과 호환되는 interactive workspace 정책을 사용하세요. 해당
+   대화형 workspace 정책을 사용하세요. 해당
    profile이 제공되면 Desktop 또는 CLI `/permissions`에서 Workspace Write / on-request를
    선택합니다. 같은 설정을 지속하려면 user 범위 `~/.codex/config.toml` 또는 신뢰한
    프로젝트의 `.codex/config.toml`에 둡니다.
@@ -122,6 +128,10 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    approval_policy = "on-request"
    approvals_reviewer = "user"
    ```
+
+   기존 설정을 보존하고 같은 키를 중복 추가하지 말고 해당 값만 수정하세요.
+   위 최상위 키는 `[table]` 헤더보다 앞에 둡니다. 이미 permission profile을
+   사용한다면 해당 설정 방식을 유지하세요.
 
    `approvals_reviewer = "user"`는 outside-sandbox 요청마다 사람의 Yes/No 결정을
    유지합니다. 조직 정책이 agent reviewer를 허용하는 경우에만 이 필드만 바꿉니다.
@@ -171,8 +181,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    codex
    ```
 
-   `/status`로 활성 approval policy를 확인하고, project/profile/managed layer가 예상
-   reviewer를 바꾼 경우 `/debug-config`로 precedence를 확인하세요.
+   `/status`로 활성 approval policy를 확인하세요. 사용하는 Codex 빌드가
+   `/debug-config`를 제공하면 다른 설정 계층이 예상 reviewer를 바꾼 원인도 확인할 수 있습니다.
 
 이게 필수 경로의 전부입니다. repair 는 필요할 때만 surface 되는 proposal-only native-child
 단계입니다([Custom Subagent](#custom-subagent) 와 [보안](#보안-security) 참고).
@@ -182,7 +192,12 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 이 섹션의 어떤 것도 일반 개인 설치에는 필요 없습니다. 각 하위 섹션의 "다음 경우에만
 하세요…" 조건이 해당될 때만 보세요.
 
-### AGY가 없는 Gemini Enterprise OAuth
+### Gemini 구버전 CLI 사용
+
+이 명칭은 AGY와 구분되는 `gemini` 실행 파일 경로를 뜻하며 다운그레이드를 권하지
+않습니다. 정식 리뷰에는 CLI `>=0.34.0`과 version/help/policy preflight 통과가
+필요합니다. v2 Pro 기본 모델에는 별도 버전 지원 검사가 적용됩니다.
+인증 구분의 실제 식별자는 기존 `gemini-enterprise`를 유지합니다.
 
 *조직 계정으로 Gemini CLI Sign in with Google이 이미 완료된 경우에만.* AGY가
 설치되어 있으면 selector는 계속 AGY를 우선합니다. AGY가 없으면 어떤 family도
@@ -219,6 +234,16 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.556 업그레이드
+
+0.2.556은 명시적으로 선택하는 public v2 리뷰와 사용자가 직접 요청한 모든 leg의
+웹 검증을 포함합니다. 기본 리뷰는 계속 no-web이며 기존 legacy 절차, 인증 경계와
+공유 revision 선택을 유지합니다.
+
+설치 방식에 맞는 [마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를
+따르고 bootstrap을 다시 실행한 뒤 새 Codex 세션을 시작하세요. Gemini 실제 정책
+검증과 웹 허용 검증은 배포 패키지 검증과 별도로 수행합니다.
 
 ### 0.2.555 업그레이드
 
@@ -313,7 +338,7 @@ vendor로 분류한 실패 원인을 함께 수정하거나 transient vendor inc
 
 ### 0.2.548 업그레이드
 
-0.2.548은 Gemini를 사후 재시도로 만들지 않으면서 회사용 정식 Google route를
+0.2.548은 Gemini를 사후 재시도로 만들지 않으면서 Gemini 구버전 CLI 정식 Google route를
 복원합니다. 어떤 family도 시작하기 전에 packaged selector가 owner-selected 인증
 class를 기록하고 AGY를 우선하며, AGY가 없을 때만 Gemini Enterprise OAuth용 Gemini
 CLI를 선택합니다. selector는 review ID용 receipt 하나를 exclusive-create하고 preflight는
@@ -409,7 +434,7 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.555-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -555,7 +580,7 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 - **vendor 인증이나 token을 관리하지 않습니다.** token 발급/refresh, API-key
   주입, install-time provider probe가 없습니다. 각 vendor CLI의 native
   login으로 직접 로그인하며, runtime 인증 에러는 재로그인하라고 surface 됩니다.
-  credential 복사, sandbox login 시도, company setup flow, authorization store는 없습니다.
+  credential 복사, sandbox login 시도, 계정 프로비저닝 절차, authorization store는 없습니다.
 - **OS 또는 Python package를 설치하지 않습니다.** vendor CLI, `python3`, 배포된
   Python requirements, (Linux/WSL2에서) `bubblewrap`은 직접 설치하며, installer는
   three provider wrapper launchers와 review-round selector launcher만 쓰고
@@ -589,7 +614,7 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 
 ```bash
 codex plugin marketplace upgrade triad-codex-dispatch
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
 ```
 
 새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 permission state를 만들지 않고
@@ -650,7 +675,7 @@ fresh shell에서 현재 설치된 plugin 경로를 다시 확인해 managed uni
 출력한 뒤 plugin cache를 지우세요(script가 그 cache 안에 있습니다).
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
 ```
 
 출력된 절대 removal 명령을 실행한 다음 plugin registration을 제거합니다.

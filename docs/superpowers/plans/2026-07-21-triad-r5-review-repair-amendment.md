@@ -37,7 +37,7 @@ are confirmed:
   code 4. A start failure after any successful provider exec remains post-dispatch and ineligible
   for fallback.
 - Do not change valid `match` or `not_match` rule fields.
-- Do not restore company-only setup or the removed runtime commands.
+- Do not restore deployment-specific setup or the removed runtime commands.
 
 ## Task 1: Formal packet tree closure
 

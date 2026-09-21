@@ -31,7 +31,7 @@ established these defects:
 - Keep the one-hour best-effort UUID/file-IPC policy and unique private fallback.
 - Keep the canonical strict `FormalReview` validator and exact `SAFE` / `NOT-SAFE` literals.
 - Keep AGY primary and Gemini Enterprise/Business fallback eligibility unchanged.
-- Do not change provider login, owner authorization, company setup, or deployment posture.
+- Do not change provider login, owner authorization, account provisioning, or deployment posture.
 
 ## Task 1: Run-log and command ownership
 

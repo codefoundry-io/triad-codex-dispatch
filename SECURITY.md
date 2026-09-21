@@ -10,7 +10,9 @@ strict result custody, and deterministic owner apply.
 Formal Google review selects and freezes one route before any family starts.
 AGY is preferred and personal Google Sign-In requires it. When the owner selects
 Gemini Enterprise OAuth and AGY is absent, the selector may choose the already
-authenticated Gemini CLI instead. Without an explicit project, the
+authenticated Legacy Gemini CLI instead. This label distinguishes the `gemini`
+executable from AGY; it does not change the `gemini-enterprise` authentication
+class, version floor or preflight requirements. Without an explicit project, the
 AGY wrapper brackets `--sandbox read-only` in a transient global-settings
 transaction and restores the original bytes. Default formal preflight and dispatch use
 the five raw read-only denies plus `read_url(*)`; formal dispatch never supplies
