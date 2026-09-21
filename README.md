@@ -666,10 +666,8 @@ Honest boundaries, so you know where the toolkit stops:
 
 ## Update
 
-```bash
-codex plugin marketplace upgrade triad-codex-dispatch
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
-```
+Follow the [marketplace or local Git update procedure](docs/installation.md#update)
+to replace the installed cache while preserving personal settings.
 
 Run the newly printed absolute command. A plain `--install` republishes the
 three provider wrapper launchers plus the review-round selector launcher and performs exact plugin-owned legacy cleanup

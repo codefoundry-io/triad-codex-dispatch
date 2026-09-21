@@ -612,10 +612,8 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 
 ## 업데이트
 
-```bash
-codex plugin marketplace upgrade triad-codex-dispatch
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
-```
+[마켓플레이스 또는 로컬 Git 업데이트 절차](docs/installation.ko.md#업데이트)를
+따라 개인 설정을 보존하면서 설치 캐시를 교체하세요.
 
 새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 permission state를 만들지 않고
 three provider wrapper launchers와 review-round selector launcher를 다시 publish하며 exact plugin-owned legacy cleanup을

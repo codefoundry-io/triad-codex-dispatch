@@ -46,8 +46,8 @@ transaction that restores the original bytes. With --project, the wrapper valida
 owner-provisioned project permissions and leaves global settings unchanged. Unless the
 operator sets AGY_NO_HEADLESS_AUTOAPPROVE=1, AGY 1.1.3+ receives the
 wrapper-owned --dangerously-skip-permissions headless adaptation,
-matching the deployed Claude-led TRIAD. Company use may retain its existing
-Gemini Enterprise OAuth sign-in through the Gemini CLI fallback. Wrapper descendants remain
+matching the deployed Claude-led TRIAD. An existing Gemini Enterprise OAuth
+sign-in may be retained through the Legacy Gemini CLI route. Wrapper descendants remain
 scrubbed after trusted launcher and interpreter startup. Bootstrap does not
 install persistent global AGY permission policy.
 

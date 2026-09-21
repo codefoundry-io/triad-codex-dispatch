@@ -11,8 +11,8 @@ under the same marketplace name.
 `0.2.556` is a candidate on `codex/agy-web-evidence`. The commands below select
 that branch. `main` and the published `v0.2.555` do not yet include this candidate.
 For the normal published line, replace `codex/agy-web-evidence` with `main`.
-For a reproducible candidate, use the reviewed full commit ID from the delivery
-record instead of a moving branch. A candidate install does not publish a release.
+For a reproducible candidate, use route B and check out the reviewed full commit
+ID from the delivery record. A candidate install does not publish a release.
 
 ## Prerequisites
 
@@ -33,6 +33,14 @@ when required by the Codex sandbox. Python runtime dependencies come from the
 plugin's `requirements.txt`; bootstrap checks them before making changes and
 prints the exact install command if they are missing.
 
+Before running bootstrap, ensure `~/.local/bin` is on `PATH`. If it is missing,
+add this line once to your normal shell startup file, preserving its other
+contents, then open a new login terminal before continuing:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 ## A. Marketplace installation
 
 No local clone is needed:
@@ -43,9 +51,9 @@ codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref codex/agy
 
 For an already registered marketplace, use [Update](#update) to keep its existing
 source and tracked ref. To change either (including `main` to this candidate), run
-`codex plugin marketplace remove triad-codex-dispatch`, then register the chosen
-source above or below and reinstall the plugin. Preserve other marketplace
-registrations and existing personal settings.
+the [Remove procedure](../README.md#remove) in order: installed bootstrap removal,
+plugin removal, then marketplace removal. Register the chosen source above or
+below and install again. Preserve other marketplace registrations and personal settings.
 
 ## B. Local installation from Git
 
@@ -86,15 +94,7 @@ permission rules and credentials. It does not sign in or install dependencies.
 
 ## Personal settings
 
-1. **Command path.** If `~/.local/bin` is not already on `PATH`, add the following
-   line once to your normal shell startup file, preserving its other contents,
-   then open a new login terminal:
-
-   ```bash
-   export PATH="$HOME/.local/bin:$PATH"
-   ```
-
-2. **Codex permissions.** Use `/permissions` to select an interactive workspace
+1. **Codex permissions.** Use `/permissions` to select an interactive workspace
    policy before asking Codex to run TRIAD. For installations using the legacy
    configuration keys, set only these fields in either your existing
    `~/.codex/config.toml` or a trusted project's `.codex/config.toml`:
@@ -116,7 +116,7 @@ permission rules and credentials. It does not sign in or install dependencies.
    setting with `/status`; if your Codex build provides `/debug-config`, use it
    to inspect precedence.
 
-3. **Models and review settings.** Choose your leader model in Codex. For an
+2. **Models and review settings.** Choose your leader model in Codex. For an
    explicitly selected v2 workflow, review the packaged
    [default roster](../contracts/review-legs.default.json) and use
    `.agents/triad-review-legs.json` in the target project for supported overrides.
@@ -127,7 +127,7 @@ permission rules and credentials. It does not sign in or install dependencies.
    flag. Default reviews do not use web; request web verification directly for
    the specific round when needed.
 
-4. **Optional paths.** Default users do not need extra environment variables.
+3. **Optional paths.** Default users do not need extra environment variables.
    If you choose `TRIAD_BOOTSTRAP_BIN_DIR` or `TRIAD_CLASSIFIER_EXTENSION`, use an
    absolute path outside reviewed workspaces and rerun bootstrap. Do not add old
    `triad-setup`, `triad-doctor`, repair-agent or `shell_environment_policy`
@@ -152,6 +152,23 @@ authentication or policy enforcement. Validate normal review, permitted reads,
 denied writes/shell, and explicitly requested web separately on the chosen route.
 
 ## Update
+
+For an explicit cache replacement, first print the current installed bootstrap's
+removal command:
+
+```bash
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+```
+
+Run the printed command before removing its cache. It preserves owner-authored
+settings and learned classifier patches. If removal fails, resolve its reported
+problem before continuing. Then remove only this plugin, keeping the marketplace:
+
+```bash
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+```
+
+Refresh the registered source:
 
 - **Git-backed marketplace:** run
   `codex plugin marketplace upgrade triad-codex-dispatch`.

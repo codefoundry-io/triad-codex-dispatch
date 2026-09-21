@@ -76,7 +76,7 @@ established these compatible Major defects:
    Enterprise fallback route.
 2. Include every shipped migration template in stale fleet terminology tests.
 3. Keep the optional personal machine `/etc/codex/requirements.toml` remediation only if its text
-   no longer describes organizational distribution or a account-provisioning workflow.
+   no longer describes organizational distribution or an account-provisioning workflow.
 
 ## Task 5: Pre-freeze skill-contract repair
 

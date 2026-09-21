@@ -11,7 +11,7 @@
 `0.2.556`은 `codex/agy-web-evidence` 브랜치의 배포 후보입니다. 아래 명령은 이
 브랜치를 선택합니다. `main`과 공개된 `v0.2.555`에는 아직 이 후보가 없습니다.
 일반 공개 버전을 사용하려면 `codex/agy-web-evidence`를 `main`으로 바꾸세요.
-동일한 후보를 재현하려면 브랜치 대신 전달 기록의 검증된 전체 커밋 ID를 사용합니다.
+동일한 후보를 재현하려면 B 경로에서 전달 기록의 검증된 전체 커밋 ID를 checkout합니다.
 후보 설치가 정식 릴리스 발행을 뜻하지는 않습니다.
 
 ## 준비 사항
@@ -32,6 +32,14 @@ Python 3.12 이상, Codex, Claude Code 2.1.170 이상과 Google CLI 하나 이�
 `bubblewrap`도 설치하세요. Python 실행 의존성은 플러그인의 `requirements.txt`에
 있습니다. bootstrap은 변경 전에 의존성을 확인하고, 없으면 정확한 설치 명령을 출력합니다.
 
+bootstrap 실행 전에 `~/.local/bin`이 `PATH`에 있어야 합니다. 없다면 평소 사용하는
+셸 시작 파일의 기존 내용을 보존하면서 다음 줄을 한 번만 추가하고, 새 로그인 터미널을
+연 뒤 다음 단계로 진행하세요:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 ## A. 일반 마켓플레이스 설치
 
 Git 저장소를 직접 다운로드하지 않아도 됩니다:
@@ -42,9 +50,9 @@ codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref codex/agy
 
 이미 등록했다면 [업데이트](#업데이트)는 기존 경로와 추적 ref를 유지합니다.
 경로나 ref를 바꿀 때(`main`에서 현재 후보로 전환하는 경우 포함)는
-`codex plugin marketplace remove triad-codex-dispatch`를 실행하고 위 또는 아래의
-선택한 경로를 등록한 뒤 플러그인을 다시 설치하세요. 다른 마켓플레이스와 개인 설정은
-보존합니다.
+[제거 절차](../README.ko.md#삭제)를 따라 설치된 bootstrap 제거, 플러그인 제거,
+마켓플레이스 제거 순서로 진행합니다. 위 또는 아래의 선택한 경로를 등록한 뒤
+다시 설치하세요. 다른 마켓플레이스와 개인 설정은 보존합니다.
 
 ## B. Git 다운로드 후 로컬 설치
 
@@ -85,14 +93,7 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
 
 ## 개인 설정
 
-1. **명령 경로.** `~/.local/bin`이 `PATH`에 없다면 평소 사용하는 셸 시작 파일의
-   기존 내용을 보존하면서 다음 줄을 한 번만 추가하고 새 로그인 터미널을 엽니다:
-
-   ```bash
-   export PATH="$HOME/.local/bin:$PATH"
-   ```
-
-2. **Codex 권한.** Codex에 TRIAD 실행을 요청하기 전에 `/permissions`에서 대화형
+1. **Codex 권한.** Codex에 TRIAD 실행을 요청하기 전에 `/permissions`에서 대화형
    workspace 정책을 선택합니다. 기존 설정 키를 사용하는 설치에서는
    `~/.codex/config.toml` 또는 신뢰한 프로젝트의 `.codex/config.toml` 중 하나에서
    다음 항목만 설정합니다:
@@ -113,7 +114,7 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
    선택하고 위의 기존 키를 추가하지 마세요. `/status`로 적용 결과를 확인합니다.
    사용하는 Codex 빌드가 `/debug-config`를 제공하면 설정 우선순위도 확인할 수 있습니다.
 
-3. **모델과 리뷰 설정.** 리더 모델은 Codex에서 선택합니다. v2 절차를 명시적으로
+2. **모델과 리뷰 설정.** 리더 모델은 Codex에서 선택합니다. v2 절차를 명시적으로
    사용한다면 [기본 리뷰 구성](../contracts/review-legs.default.json)을 확인하고
    대상 프로젝트의 `.agents/triad-review-legs.json`에 지원되는 override를 둡니다.
    기존 항목은 유지하세요. 인증은 리뷰 실행 시 별도로 선택하며, Gemini 구버전 CLI
@@ -123,7 +124,7 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
    없습니다. 기본 리뷰는 웹을 사용하지 않으며 필요한 해당 라운드에 직접 웹 검증을
    요청해야 합니다.
 
-4. **선택 경로.** 기본 설치에는 추가 환경변수가 필요하지 않습니다.
+3. **선택 경로.** 기본 설치에는 추가 환경변수가 필요하지 않습니다.
    `TRIAD_BOOTSTRAP_BIN_DIR` 또는 `TRIAD_CLASSIFIER_EXTENSION`을 바꾼다면
    검토할 workspace 밖의 절대 경로를 사용하고 bootstrap을 다시 실행하세요.
    과거의 `triad-setup`, `triad-doctor`, repair-agent, `shell_environment_policy`
@@ -148,6 +149,22 @@ Gemini 구버전 CLI 사용은 `triad-gemini-dispatch`, AGY는
 쓰기·셸 실행 차단, 직접 요청한 웹 허용을 각각 확인하세요.
 
 ## 업데이트
+
+설치 캐시를 확실히 교체하려면 먼저 현재 설치된 bootstrap의 제거 명령을 출력합니다:
+
+```bash
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+```
+
+캐시를 삭제하기 전에 출력된 명령을 실행하세요. 사용자 작성 설정과 학습된 classifier
+patch는 보존됩니다. 제거가 실패하면 보고된 문제를 해결한 뒤 계속하세요.
+마켓플레이스 등록을 유지하면서 해당 플러그인만 제거합니다:
+
+```bash
+codex plugin remove triad-codex-dispatch@triad-codex-dispatch
+```
+
+등록된 소스를 갱신합니다:
 
 - **Git 원격 마켓플레이스:**
   `codex plugin marketplace upgrade triad-codex-dispatch`를 실행합니다.
