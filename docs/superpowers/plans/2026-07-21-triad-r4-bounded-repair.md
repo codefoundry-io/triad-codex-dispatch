@@ -128,7 +128,7 @@ Expected: all selected tests pass with only the three provider wrapper commands 
 - Produces: concise public claims for verified packet preflight, leader-owned formal retries, one-hour best-effort IPC cleanup, three installed commands, and user-owned provider login.
 
 - [ ] Add or update distribution assertions first so stale runtime-command and hidden formal-retry claims fail.
-- [ ] Update documentation and skills with the implemented behavior; do not add a company setup flow or a new authorization store.
+- [ ] Update documentation and skills with the implemented behavior; do not add an account-provisioning flow or a new authorization store.
 - [ ] Run distribution tests to green.
 - [ ] Run `skill-prompt-review` against the four shipped dispatch/review skills, fix only concrete contradictions or ambiguity, and record the review result in the R4 evidence directory.
 

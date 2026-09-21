@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.556 — 2026-09-21
+
+- Adds explicit public v2 roster resolution, invocation, per-entry evidence
+  collection and agreement while preserving the legacy review workflow.
+- Allows web verification across participating review legs only on a direct
+  request for the current round; preserves default no-web and other restrictions.
+- Preserves transport failures, nullable adapter defaults, original verdicts and
+  host observations; refuses reserved evidence paths before custody writes.
+- Documents marketplace and local Git installation, personal settings and
+  updates in English and Korean. Uses Legacy Gemini CLI as the route label while
+  retaining the actual version, authentication and policy prerequisites.
+- Packaging, installation, live provider checks and
+  shared-spec revision adoption remain separate verification claims.
+
 ## 0.2.555 — 2026-09-20
 
 - Completes provider stdin delivery and preserves reader/transport failure evidence.
@@ -141,7 +155,7 @@
   while removing competing API-key, ADC, Vertex, base-URL, Cloud Shell, and
   compute-ADC and ambient `GEMINI_MODEL` selectors from the formal Gemini child
   without reading values.
-- Makes bootstrap accept Gemini-only company installations, prefer AGY when both
+- Makes bootstrap accept Gemini-only local installations, prefer AGY when both
   CLIs exist, publish a managed launcher for the existing `review_round.py`
   selector with both install-resolved Google CLI pins, publish route-specific
   guidance, and hash both the formal policy and bootstrap script in
@@ -670,7 +684,7 @@
   provider wrapper commands; `triad-setup` and `triad-doctor` are remove-only
   legacy cleanup names. Provider installation and login remain user-owned in a
   normal authenticated terminal, with no credential copying, sandbox-login
-  attempt, company setup flow, or authorization store.
+  attempt, account-provisioning flow, or authorization store.
 - Rejects unlisted files and filesystem objects in a sealed review packet,
   preflights foreign profile/rules files before command publication, preserves
   malformed shell RC blocks, and claims managed profile/rules/legacy-agent
@@ -707,7 +721,7 @@
 - Keeps snapshot source reads beneath a retained repository descriptor, refuses
   filesystem entries Git cannot safely enumerate, normalizes sealed executable
   modes, and streams candidate verification. Personal migration templates no
-  longer contain company deployment or managed-configuration instructions.
+  longer contain fleet deployment or managed-configuration instructions.
 - Declares the formal-review runtime dependency in `requirements.txt`; bootstrap
   feature-probes Pydantic 2 before mutation and prints an argv-safe command for
   the owner-selected Python instead of installing packages itself.

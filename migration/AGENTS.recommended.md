@@ -17,10 +17,20 @@ directly:
 
 - `$triad-claude-dispatch` for a single-shot Claude Code consult.
 - `$triad-antigravity-dispatch` for an authorized raw INVESTIGATION consult,
-  including web-grounded research and live URL checks. REVIEW legs prohibit web research.
+  including web-grounded research and live URL checks. REVIEW defaults to no web; enable the bound all-leg option only on a direct owner request for that round.
 - `$triad-gemini-dispatch` for a standalone authorized Gemini CLI compatibility
   consult; it does not choose or lead a formal Google-family review.
 - `$triad-cross-family-review` before risky merges.
+
+Documentation calls the `gemini` executable route Legacy Gemini CLI. Keep actual
+authentication identifiers and supported-version preflights unchanged.
+
+Keep the existing project gate on its selected protocol. When the owner/project
+explicitly selects public v2, follow the installed skill's `public-v2-review.md`
+procedure for the named roster, generated invocations, actual host evidence and
+same-basis retry; the legacy formal route and failed-round rules below do not
+replace that procedure. Informational v2 entries participate fully. Candidate
+schema presence alone does not select v2 or adopt a revision tag.
 
 For formal review, record `personal-google` or `gemini-enterprise` before any
 family starts. Personal Google Sign-In requires AGY. Gemini Enterprise OAuth
@@ -53,7 +63,7 @@ interpreter injection variables.
 
 Launch all TRIAD lifecycle, provider, test, and development commands outside the
 Codex workspace sandbox under the user-selected Codex host policy. Use an
-interactive company-compatible policy: `sandbox_mode = "workspace-write"`,
+interactive workspace policy: `sandbox_mode = "workspace-write"`,
 `approval_policy = "on-request"`, and `approvals_reviewer = "user"` for a human
 Yes/No decision. Where organization policy permits an agent reviewer, change
 only that last field to `approvals_reviewer = "auto_review"`; this changes the
@@ -63,6 +73,8 @@ sandbox. The OpenAI plugin model applies the host sandbox and approval policy to
 plugin capabilities and documents no plugin-level install-time sandbox grant.
 TRIAD does not install or mutate that host policy. Do not mix permission profiles
 with legacy `sandbox_mode` settings.
+Preserve existing config fields and tables. Set root-level permission keys before
+any TOML table header, and update existing keys rather than adding duplicates.
 
 Repair analysis uses a fresh native proposal-only child with prompt-controlled
 no-edit behavior. The child reads an untrusted absolute run-log path and the
@@ -85,8 +97,10 @@ authority over other user-global paths.
 
 An owner-provisioned dedicated AGY project can be selected with
 `--project <canonical-lowercase-UUID> --cwd <absolute-review-root> --sandbox read-only`.
-Follow the canonical leg contract's project record and six formal deny prerequisites
-(the five raw read-only denies plus `read_url(*)`).
+Follow the canonical leg contract's project record and default no-web formal deny
+prerequisites (the five raw read-only denies plus `read_url(*)`). Explicitly requested
+review web retains the five raw denies and refuses an existing `read_url(*)` deny
+before inference without removing it.
 The wrapper validates that record without a global settings lease or permission
 mutation; provisioning remains separately authorized owner work. Use the same
 project for preflight and dispatch, and both Pro/Flash preflights when paired.

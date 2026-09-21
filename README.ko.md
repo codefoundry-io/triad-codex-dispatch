@@ -1,5 +1,10 @@
 # triad-codex-dispatch
 
+[설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
+로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
+[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)에서
+버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
+
 [English README](README.md)
 
 **AI 코딩 어시스턴트는 자기 리뷰어와 blind spot 을 공유합니다.** codex 에게 codex 의
@@ -21,7 +26,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 ## 제공 기능
 
 - `skills/` 아래의 Codex 플러그인 skill.
-- bootstrap은 새로 Claude, agy, Gemini 세 provider wrapper command만 publish합니다.
+- bootstrap은 Claude, agy, Gemini 세 provider wrapper와 `review_round.py`
+  selector launcher를 publish합니다.
   `triad-setup` 및 `triad-doctor`는 remove-only legacy cleanup 이름입니다.
 - 정식 Google review는 어떤 family도 시작하기 전에 route를 선택해 고정합니다.
   AGY를 우선하며 개인 Google Sign-In에는 AGY가 필요합니다. owner가 Gemini
@@ -29,20 +35,20 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
   않습니다. 명시적 `--project`가 없는 AGY route는 `--sandbox read-only`
   호출 동안 일시적 global-settings transaction으로
-  원래 바이트를 복원합니다. Formal AGY는 기존 다섯 deny에 `read_url(*)`를
+  원래 바이트를 복원합니다. 기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`를
   추가하고 headless 자동 승인 flag를 사용하지 않습니다. 동일한 formal deny
   lease는 동시 실행할 수 있고 raw/formal 목록은 격리됩니다. Raw 조사는 기존 웹
   기능과 버전별 headless 호환 처리를 유지하며 `AGY_NO_HEADLESS_AUTOAPPROVE=1`로
-  해당 처리를 끌 수 있습니다. 모든 REVIEW prompt는 웹을 금지하고 외부 조사는
-  별도로 승인된 INVESTIGATION에서 수행합니다. AGY의 MCP 호출도 차단합니다. Enterprise
-  Gemini route는 explicit CLI Auto와 native Plan Mode를 요청하고,
+  해당 처리를 끌 수 있습니다. REVIEW는 기본적으로 웹을 금지합니다. 사용자가 해당 리뷰에 직접 요청하면
+  [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY의 MCP 호출도 차단합니다. Gemini 구버전 CLI
+  경로는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
   API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
   runtime model은 `unexposed`입니다. 이는 OS 수준 confinement가 아니며
-  round-integrity mutation detection은 별도 검사입니다. 현재 Gemini policy는 웹
-  읽기·검색 도구를 허용하므로 이 route의 REVIEW 웹 금지는 prompt 지침이며,
-  코드로 강제되는 웹 차단이라고 주장하지 않습니다.
+  round-integrity mutation detection은 별도 검사입니다. B 전용 기본 Gemini policy는 두 웹
+  도구를 명시적으로 거부합니다. 조직 정책의 우선순위를 포함한 실제 적용 여부는
+  별도 라이브 검증 항목으로 유지합니다.
 - classifier gap에는 fresh native proposal-only child를 사용합니다. owner는 동일한
   인증된 로그인 터미널에서 bootstrap이 출력한
   `python3 bin/apply_patch.py ... --classifier-file ...` 명령으로 검증된 proposal을
@@ -58,7 +64,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    로그인합니다 — toolkit 은 credential 을 발급/refresh 하지 않습니다:
    - `codex` — 설치 후 `codex login`.
    - `agy` — 우선 Google-family worker이며 개인 Google Sign-In에는 필수.
-   - `gemini` — AGY가 없는 Gemini Enterprise OAuth route에서만 필수.
+   - `gemini` — AGY가 없는 Gemini 구버전 CLI 경로에서만 필수. 기존 Gemini Enterprise OAuth 인증을 사용합니다.
    - `claude` — Claude Code `>= 2.1.170`; bootstrap 은 binary 존재만 확인하며
      version probe 를 실행하지 않습니다.
 
@@ -75,19 +81,20 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    Installer는 provider login workflow를 보존하는 경우에만 trusted isolated Python
    environment를 대신 선택할 수 있습니다.
 
-2. **플러그인 설치(Codex가 수행 가능).** 일반 사용자는 local clone 이 필요
-   없습니다. 현재 approval 경계가 허용하면 Codex가 이 명령을 실행할 수 있습니다.
+2. **설치 경로 선택.** 아래 명령은 일반 마켓플레이스의 공개 버전을 설치합니다.
+   Git 로컬 설치나 특정 커밋 고정은 [설치와 개인 설정](docs/installation.ko.md)을
+   따르세요. 현재 approval 경계가 허용하면 Codex가 이 명령을 실행할 수 있습니다.
 
    ```bash
    codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
-   python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
+   python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--install"]))'
    ```
 
 3. **사용자가 실행하는 runtime setup.** 플러그인 installer는 임의의
    post-install 코드를 실행하지 않습니다. 2단계의 마지막 명령은 반환된
    `installedPath`로부터 Python `shlex.join`을 사용해 안전하게 인용된 절대 bootstrap
    명령을 출력합니다. 그 출력 명령을 일반 로그인 terminal에서 그대로 실행하세요.
-   shebang이 포함된 shipped script라 직접 실행할 수 있습니다.
+   실행 권한 비트에 의존하지 않도록 출력된 `bash` 명령을 사용합니다.
 
    첫 mutation 전에 스크립트는 선택된 Python이 toolkit에서 사용하는 Pydantic 2 및 jsonschema Draft 2020-12
    API를 import할 수 있는지 검사합니다. 불가능하면 멈추고
@@ -112,7 +119,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    sandbox 밖에서 실행합니다. 이 바깥쪽 host 경계는 AGY의 provider-native read-only
    sandbox 및 Gemini의 native Plan Mode + packaged read/search-only policy와 별개입니다.
 
-   관리형 회사 환경과 호환되는 interactive workspace 정책을 사용하세요. 해당
+   대화형 workspace 정책을 사용하세요. 해당
    profile이 제공되면 Desktop 또는 CLI `/permissions`에서 Workspace Write / on-request를
    선택합니다. 같은 설정을 지속하려면 user 범위 `~/.codex/config.toml` 또는 신뢰한
    프로젝트의 `.codex/config.toml`에 둡니다.
@@ -122,6 +129,10 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    approval_policy = "on-request"
    approvals_reviewer = "user"
    ```
+
+   기존 설정을 보존하고 같은 키를 중복 추가하지 말고 해당 값만 수정하세요.
+   위 최상위 키는 `[table]` 헤더보다 앞에 둡니다. 이미 permission profile을
+   사용한다면 해당 설정 방식을 유지하세요.
 
    `approvals_reviewer = "user"`는 outside-sandbox 요청마다 사람의 Yes/No 결정을
    유지합니다. 조직 정책이 agent reviewer를 허용하는 경우에만 이 필드만 바꿉니다.
@@ -171,8 +182,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    codex
    ```
 
-   `/status`로 활성 approval policy를 확인하고, project/profile/managed layer가 예상
-   reviewer를 바꾼 경우 `/debug-config`로 precedence를 확인하세요.
+   `/status`로 활성 approval policy를 확인하세요. 사용하는 Codex 빌드가
+   `/debug-config`를 제공하면 다른 설정 계층이 예상 reviewer를 바꾼 원인도 확인할 수 있습니다.
 
 이게 필수 경로의 전부입니다. repair 는 필요할 때만 surface 되는 proposal-only native-child
 단계입니다([Custom Subagent](#custom-subagent) 와 [보안](#보안-security) 참고).
@@ -182,7 +193,12 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 이 섹션의 어떤 것도 일반 개인 설치에는 필요 없습니다. 각 하위 섹션의 "다음 경우에만
 하세요…" 조건이 해당될 때만 보세요.
 
-### AGY가 없는 Gemini Enterprise OAuth
+### Gemini 구버전 CLI 사용
+
+이 명칭은 AGY와 구분되는 `gemini` 실행 파일 경로를 뜻하며 다운그레이드를 권하지
+않습니다. 정식 리뷰에는 CLI `>=0.34.0`과 version/help/policy preflight 통과가
+필요합니다. v2 Pro 기본 모델에는 별도 버전 지원 검사가 적용됩니다.
+인증 구분의 실제 식별자는 기존 `gemini-enterprise`를 유지합니다.
 
 *조직 계정으로 Gemini CLI Sign in with Google이 이미 완료된 경우에만.* AGY가
 설치되어 있으면 selector는 계속 AGY를 우선합니다. AGY가 없으면 어떤 family도
@@ -220,6 +236,16 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.556 업그레이드
+
+0.2.556은 명시적으로 선택하는 public v2 리뷰와 사용자가 직접 요청한 모든 leg의
+웹 검증을 포함합니다. 기본 리뷰는 계속 no-web이며 기존 legacy 절차, 인증 경계와
+공유 revision 선택을 유지합니다.
+
+설치 방식에 맞는 [마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를
+따르고 bootstrap을 다시 실행한 뒤 새 Codex 세션을 시작하세요. Gemini 실제 정책
+검증과 웹 허용 검증은 배포 패키지 검증과 별도로 수행합니다.
+
 ### 0.2.555 업그레이드
 
 0.2.555는 provider 전송, 리뷰 root 정리 전 증거 보존, canonical verdict 파싱,
@@ -227,9 +253,9 @@ class, route에서 identity를 추론하지 않습니다.
 review는 링크 대상을 따라가지 않고 범위 내 symlink text와 누락된 검토 범위를
 명시적으로 기록합니다.
 
-Formal REVIEW는 웹 조사를 금지합니다. AGY formal 호출은 URL-read deny를 추가하고
+0.2.555 릴리스의 기본 Formal REVIEW는 웹 조사를 금지합니다. AGY formal 호출은 URL-read deny를 추가하고
 headless autoapproval을 생략하며, raw INVESTIGATION 기능은 유지합니다. Gemini
-REVIEW의 웹 금지는 prompt 지침이며 policy에 의한 기계적 차단을 보장하지 않습니다.
+REVIEW는 B 전용 policy의 명시적 웹 deny를 사용하며 실제 적용 검증은 별도입니다.
 기존 인증 경로, 공개 verdict schema, 비활성 AGY hook을 유지합니다. 이번 릴리스는
 공유 스펙 revision 채택이나 cross-host 정합성 인증을 의미하지 않습니다.
 
@@ -313,7 +339,7 @@ vendor로 분류한 실패 원인을 함께 수정하거나 transient vendor inc
 
 ### 0.2.548 업그레이드
 
-0.2.548은 Gemini를 사후 재시도로 만들지 않으면서 회사용 정식 Google route를
+0.2.548은 Gemini를 사후 재시도로 만들지 않으면서 Gemini 구버전 CLI 정식 Google route를
 복원합니다. 어떤 family도 시작하기 전에 packaged selector가 owner-selected 인증
 class를 기록하고 AGY를 우선하며, AGY가 없을 때만 Gemini Enterprise OAuth용 Gemini
 CLI를 선택합니다. selector는 review ID용 receipt 하나를 exclusive-create하고 preflight는
@@ -356,7 +382,7 @@ duplicate progress event가 유효한 terminal review를 사후에 무효화하�
 검증이 admission gate로 유지됩니다.
 
 formal AGY 프롬프트는 계속 명시적인 정적 전용 계약입니다.
-native local file read/search만 허용하고 웹·MCP 호출을 차단하며 command, write, experiment, notebook, subagent, browser
+로컬 검사는 native file read/search만 허용하고, 웹은 기본적으로 차단하며 MCP 호출은 항상 차단하고 command, write, experiment, notebook, subagent, browser
 actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
 `open_questions`에 기록합니다. prepared directory 안에서는 native `list_dir`,
 `find_by_name`, `view_file`을 필요에 따라 사용하고, 필수 `SearchPath`와 `Query` 인자를
@@ -409,7 +435,7 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.555-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -555,7 +581,7 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 - **vendor 인증이나 token을 관리하지 않습니다.** token 발급/refresh, API-key
   주입, install-time provider probe가 없습니다. 각 vendor CLI의 native
   login으로 직접 로그인하며, runtime 인증 에러는 재로그인하라고 surface 됩니다.
-  credential 복사, sandbox login 시도, company setup flow, authorization store는 없습니다.
+  credential 복사, sandbox login 시도, 계정 프로비저닝 절차, authorization store는 없습니다.
 - **OS 또는 Python package를 설치하지 않습니다.** vendor CLI, `python3`, 배포된
   Python requirements, (Linux/WSL2에서) `bubblewrap`은 직접 설치하며, installer는
   three provider wrapper launchers와 review-round selector launcher만 쓰고
@@ -574,8 +600,10 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
   digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
   일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
-  Formal preflight와 dispatch는 여섯 review deny를 요구하며
-  `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
+  기본 웹 비활성 Formal preflight와 dispatch는 여섯 review deny를 요구합니다.
+  웹 검증을 직접 요청한 review는 기존 다섯 raw deny를 유지하며, owner의
+  `read_url(*)` 차단이 있으면 이를 제거하지 않고 실행 전에 거절합니다. 두 Formal
+  모드 모두 `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
   headless 호환 처리를 유지합니다.
   sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
   mutation detection은 별도의 fail-closed 검사입니다.
@@ -585,10 +613,8 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 
 ## 업데이트
 
-```bash
-codex plugin marketplace upgrade triad-codex-dispatch
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","add","triad-codex-dispatch@triad-codex-dispatch","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); root=pathlib.Path(data["installedPath"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--install"]))'
-```
+[마켓플레이스 또는 로컬 Git 업데이트 절차](docs/installation.ko.md#업데이트)를
+따라 개인 설정을 보존하면서 설치 캐시를 교체하세요.
 
 새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 permission state를 만들지 않고
 three provider wrapper launchers와 review-round selector launcher를 다시 publish하며 exact plugin-owned legacy cleanup을
@@ -648,7 +674,7 @@ fresh shell에서 현재 설치된 plugin 경로를 다시 확인해 managed uni
 출력한 뒤 plugin cache를 지우세요(script가 그 cache 안에 있습니다).
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join([str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
 ```
 
 출력된 절대 removal 명령을 실행한 다음 plugin registration을 제거합니다.
@@ -731,6 +757,48 @@ unredacted non-launcher path는 전체 stdout/stderr stream을 보존할 수 있
 failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor transcript를
 저장하고 age-floor cleanup까지 남습니다. 이 파일들은 민감한 데이터로 보고 필요하면
 `bin/_logs/`를 지우세요.
+
+### 로그 보관과 수명주기
+
+[공통 정리 계약](https://github.com/codefoundry-io/triad-dispatch-spec/blob/main/reference/review-rules.md#R-CLEANUP)은
+소유권 확인, 증거 export, 최근 sibling IPC 보호를 규정합니다. 아래 수치는 이 host의
+현재 구현값이며 양쪽 host의 공통 기본값은 아닙니다. 예약된 백그라운드 청소는 없습니다.
+
+| 자료 | 청소 시점과 현재 한도 |
+|---|---|
+| Audit, `bin/_logs/<cli>/audit.jsonl` | 기록 성공 후 활성 파일이 10 MiB를 넘으면 회전합니다. 회전 시 CLI별 오래된 적격 보관본부터 정리하여 최대 5개·50 MiB로 제한합니다. 활성 파일은 별도이며 기간 기준 삭제는 없습니다. |
+| 실패 IPC, `bin/_logs/<cli>/runs/` | 다음 일반 호출에서 3,600초 지난 적격 파일을 정리합니다. 실패 기록 후 100개·20 MiB를 넘으면 오래된 적격 파일부터 정리하지만 최근 sibling과 방금 쓴 기록은 보존합니다. 성공 호출은 실패 run-log를 만들지 않습니다. |
+| 명시적 v2 리뷰 기록, `results/<name>/attempt-N/logs/<cli>/runs/` | 성공·실패 모두 기존 형식으로 원본 provider 증거를 보관합니다. attempt별 root를 사용하고 관리형 cleanup 전에 export합니다. 성공 기록은 실패 IPC나 수리 요청이 아닙니다. |
+| 선택적 debug, `bin/_debug/<UTC-date>/<cli>.md` | `--debug`일 때만 기록하며 redacted mode에서는 생략합니다. 자동 보관 한도나 삭제는 없습니다. |
+| 임시 `triad-review-*` 할당 | 모든 writer 종료 후 검증된 `export`를 먼저 수행하고 명시적으로 `cleanup`합니다. 이후 `prepare`는 소유권과 export가 확인된 30일 초과 비활성 할당만 회수할 수 있습니다. [리뷰 증거 정리](#리뷰-증거-정리)를 참고하세요. |
+| Export한 리뷰 증거와 작업별 `_runs` 조사·스파이크 자료 | 자동 삭제하지 않습니다. 임시 리뷰 root를 정리해도 지정한 보관 목적지에는 남습니다. |
+| AGY 자체 `~/.gemini/antigravity-cli/brain` | TRIAD 청소 소유 범위 밖입니다. 이 표는 AGY 자체 보관 정책을 보증하지 않습니다. |
+
+`TRIAD_DISPATCH_LOG_DIR`는 audit·실패 로그 위치만 바꾸며 debug 위치는 바꾸지 않습니다.
+기본 위치에 실패 IPC를 쓰지 못하면 소유한 임시 fallback을 사용할 수 있고, 이후 적격
+호출에서 같은 기간 기준으로 정리합니다. 명시적으로 지정한 위치는 fallback하지 않습니다.
+파일 identity·링크 검사·I/O 문제로 정리를 거부하면 자료가 남을 수 있습니다.
+다음 호출이 없으면 다음 호출 시 청소도 실행되지 않습니다.
+근거: [로그 구현](bin/_common.py), [로그 정리 테스트](tests/test_log_cleanup.py),
+[리뷰 custody 테스트](tests/test_review_cleanup_custody.py).
+
+### 전송과 진단 기록
+
+Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실제 실행 route,
+시도한 실행 파일, 관측한 CLI 버전(미관측 시 `null`), attempt와 stdin 전달 상태를
+[공통 후보 계약](contracts/receipt-fields.json)에 맞춰 보존합니다. 인코딩·spawn
+실패는 `not-started`, 불완전한 전달은 `failed`이며 기존 timeout·vendor 오류를
+덮어쓰지 않습니다. 관측하지 못한 별도 transport는 `unexposed`입니다. AGY의 기존
+버전 검사와 검증된 Gemini preflight 버전을 재사용하며 추가 provider 호출은 없습니다.
+현재 legacy 호출은 `attempt=1`을 기록하며 capacity/schema-repair 횟수는 기존
+별도 필드 의미를 유지합니다. 명시적 v2 경로는 할당한 leg·attempt에 실제 native
+호스트 또는 CLI 관측을 결합합니다. preflight 버전으로 미노출 실행 버전을 채우지 않습니다.
+
+Wrapper main thread가 provider 결과를 수집하는 동안 SIGTERM/SIGHUP을 받으면
+소유한 프로세스 그룹과 reader/writer를 수거하고 기존 audit/run-log에 실패를
+기록합니다. 이미 출력한 성공 응답은 취소를 덮어쓰거나 재호출을 유발하지 못합니다.
+이전 signal handler는 복원하며 KeyboardInterrupt의 기존 수거 후 재발생 동작은
+유지합니다. SIGKILL이나 호스트 장애까지 수거한다고 보장하지 않습니다.
 
 Provider child가 시작된 경우 audit에 `effective_cwd`가 남을 수 있습니다.
 Dispatch 전에 host가 해석한 실행 디렉터리이며 redacted/hardened mode에서는
@@ -834,9 +902,10 @@ owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-low
 추가 owner deny rule은 보존하며, 이 모드에서는 프로젝트·전역 설정·전역 lease 파일을
 생성하거나 수정하지 않습니다.
 
-정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
+기본 웹 비활성 정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
 프로젝트 설정에 `read_url(*)`도 있어야 하며 누락되면 owner 설정을 바꾸지 않고
-거절합니다. 기존 preflight의
+거절합니다. 웹 검증을 직접 요청한 review는 이 전체 URL 차단이 남아 있으면 실행 전에
+거절하고 원래 규칙을 보존합니다. 기존 preflight의
 `route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
 프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
 native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙니다. `--project`를
@@ -937,6 +1006,31 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
 - Fresh repair child는 proposal 또는 escalation만 반환하고 classifier change를
   적용하지 않습니다.
 
+## 프로젝트 리뷰어 설정 확인
+
+provider를 실행하지 않고 v2 설정의 해석 결과를 확인합니다.
+
+```bash
+python3 /absolute/plugin/bin/review_round.py resolve-roster --project-root /absolute/project
+```
+
+해당 프로젝트의 `.agents/triad-review-legs.json`만 읽으며, 파일이 없으면
+[호스트 기본값](contracts/review-legs.default.json)의 Claude·native Codex·Google
+3개를 사용합니다. `name`별로 병합하고 중첩 필드는 병합하며 스칼라·배열은
+교체합니다. 새 이름은 완전한 항목이어야 합니다. 이름·원본 JSON 키 중복,
+알 수 없는 필드, 잘못된 vendor 블록, 미해결 템플릿, 링크·잘못된 파일은
+기본값으로 대체하지 않고 종료 코드 2로 거부합니다.
+
+출력에는 전체 설정, 활성 이름, 서로 다른 family와 설정 경로가 포함됩니다.
+`acceptance`는 데이터이며 informational 항목도 참여자입니다. model/effort의
+null은 dispatch 시 기본값을 적용하도록 그대로 보존합니다.
+`capabilities_checked=false`는 설정 검증만 했다는 의미입니다. 모델 가용성,
+dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다. 실행·수집은
+아래 명시적 v2 절차를 따릅니다. Gemini 기본 요청은 `gemini-3.1-pro-preview`이며
+HIGH는 CLI v0.60.0의
+[소스 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77)입니다.
+Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 값은 아닙니다.
+
 ## 오프라인 v2 후보 검증
 
 [공통 계약 후보](contracts/README.md)는 공유 커밋
@@ -951,3 +1045,60 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
 중복 키와 배포된 SHA-256을 검사합니다. 해시는 서명이 아닌 로컬 무결성 확인입니다.
 이 명령은 provider를 호출하거나 round를 승인하지 않습니다. v2 wrapper·renderer·수집기
 활성화 및 revision 채택도 별도 단계입니다. 기존 legacy 경로와 custom-schema 조사는 유지됩니다.
+
+## 명시적 public v2 리뷰
+
+현재 사용자·프로젝트 지침에서 v2를 명시적으로 선택하면
+[스킬의 v2 절차](skills/triad-cross-family-review/references/public-v2-review.md)를 따릅니다.
+`bin/review_round.py`의 `v2-create`, `v2-allocate`, `v2-record-cli`,
+`v2-record-native`, `v2-record-start-failure`, `v2-collect`가 프로젝트 roster,
+공통 프롬프트, native·wrapper 호출과 결합값 6개의 판정을 연결합니다.
+기존 legacy 개발 게이트와 wire 형식은 유지하며 결과를 상호 변환하지 않습니다.
+
+informational을 포함한 모든 활성 이름이 참여합니다. 원본 결과·run-log·호스트
+관측·읽기 증거와 준비 실패 기록을 attempt별로 보존합니다. 누락·무효 결과는
+합의를 막습니다. 원인 확인 후 변경 없는 실행 실패 항목만 재시도할 수 있고,
+소스나 리뷰 조건이 바뀌면 모든 항목이 새 기준으로 전체 범위를 검토합니다.
+Minor만 있는 부정 판정도 원래 선택을 보존합니다. 수집 명령 종료 0은 승인과
+다르며 JSON의 `INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED`, `AGREED`를 확인합니다.
+
+Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설정 지원 여부이며
+계정 접근권이나 실제 실행 모델의 증명이 아닙니다. 노출되지 않은 값은 null/unexposed로
+남깁니다. 기존 export·cleanup을 사용하며 별도 스케줄러·주기적 정리기·영구 웹 로그나
+설치 revision 변경을 추가하지 않습니다.
+
+## 직접 요청한 웹 검증
+
+사용자가 해당 리뷰에 직접 요청할 때만 모든 leg에 웹 검증을 허용합니다.
+신기술 여부로 자동 허용하지 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
+Raw Claude `--web`은 `WebSearch`/`WebFetch`를 허용하고 호출자 프롬프트를 보존합니다.
+0.2.556 릴리스에 포함되며, 실계정 웹 실행 검증과 공유 revision 채택은 별도 단계입니다.
+
+## 승인된 AGY 웹 조사
+
+사용자가 독립적인 웹 조사를 직접 요청하면
+`antigravity_wrapper.py --web --sandbox read-only`를 사용합니다. 사용자 프롬프트나
+프롬프트 파일과 선택적 custom schema를 받습니다. 리뷰에서 사용하려면 모든 leg의
+현재 허용 조건과 preflight·호출 옵션을 일치시켜야 합니다.
+Gemini raw wrapper도 `--web`을 받고 같은 지침의 도구 이름만 치환합니다. 기존
+Gemini 권한과 인증은 유지되며, 이 옵션이 권한 우회나 formal policy를 선택하지 않습니다.
+[호출과 증거 계약](skills/triad-cross-family-review/references/leg-contracts.md#authorized-agy-web-investigation)을 따릅니다.
+
+wrapper는 공통 근거 확인 지침을 프롬프트 맨 끝에 붙입니다. 검색 요약은 원문을 찾는
+단서이며, 인용한 페이지를 실제로 읽고 날짜·버전을 확인해야 합니다. 지침 추가만으로
+페이지 읽기나 해석의 정확성이 증명되지는 않습니다. 기존 로그 마스킹과 실패 시에만
+생기는 run-log는 유지되며, 일반 성공 로그에는 전체 웹 도구 호출 기록이 남지 않습니다.
+
+Known issue `KI-AGY-URL-BODY-PREFIX`: AGY 1.2.7은 일부 페이지의 원문을 앞부분만
+저장할 수 있습니다. 이 현상만으로 TRIAD 호출 실패로 판정하거나 자동 복구·재시도를
+시작하지 않습니다. 실제 호출 결과를 유지하고, 결론에 영향을 주는 불완전한 근거는
+불완전 또는 UNSURE로 표시합니다. 별개의 전송·스키마·모델 식별·무결성 실패 처리는
+유지합니다. [사용자 결정과 재현 근거](https://github.com/codefoundry-io/triad-dispatch-spec/blob/11582b0f6fe6cc6bd292cbb90dfd07dab452ed75/decisions/2026-09-20-owner-follow-up.md#ki-agy-url-body-prefix-non-fatal-known-issue)를 참고하세요.
+
+세 wrapper의 raw 호출은 승인된 추가 입력 폴더를 `--add-dir`로 반복 지정할 수
+있습니다. 호출 시작 cwd 기준으로 해석하고 기존 runtime-root 검사를 유지합니다.
+Claude·AGY는 native `--add-dir`, Gemini는 `--include-directories`로 전달합니다.
+Gemini는 쉼표가 포함된 단일 경로를 거부합니다. 기존 native 권한을 유지하며
+OS 읽기 전용 격리를 뜻하지 않습니다. REVIEW에서는 범위 밖 입력 추가를 거부합니다.
+성공 요약과 기존 audit에는 해석된 prompt-file·cwd가 기존 마스킹 정책에 따라
+기록됩니다. inline prompt의 파일 경로는 null이며, 거부 시 후보 경로도 마스킹합니다.

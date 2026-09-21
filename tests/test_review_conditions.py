@@ -106,6 +106,7 @@ def gemini_policy_case(tmp_path, monkeypatch):
         shutil.copy2(BIN / name, toolkit / name)
     policy = toolkit / "policies/gemini-formal-readonly.toml"
     shutil.copy2(BIN / "policies/gemini-formal-readonly.toml", policy)
+    shutil.copy2(BIN / "policies/source-manifest.json", policy.parent / "source-manifest.json")
     monkeypatch.setattr(review_round, "__file__", str(toolkit / "review_round.py"))
     monkeypatch.setattr(gemini_wrapper, "__file__", str(toolkit / "gemini_wrapper.py"))
     selected = Path(sys.executable).resolve()
@@ -144,24 +145,23 @@ def test_preflight_hashes_the_same_policy_bytes_it_validated(
     assert record.get("policy_sha256") == hashlib.sha256(original).hexdigest()
 
 
-def test_policy_change_refuses_old_receipt_and_fresh_preflight_rebinds(
-    gemini_policy_case, prepared, capsys,
+def test_policy_change_refuses_old_receipt_and_unpublished_fresh_preflight(
+    gemini_policy_case, capsys,
 ):
     policy, _, selector, receipt_path = gemini_policy_case
     _produce(gemini_policy_case, capsys)
-    before = review_round.validate_google_preflight_receipt(
+    review_round.validate_google_preflight_receipt(
         receipt_path, selector, expected_review_id=selector.review_id)
     policy.write_bytes(policy.read_bytes() + b"\n# semantically valid different policy bytes\n")
     with pytest.raises(review_round.RoundIntegrityError, match="policy"):
         review_round.validate_google_preflight_receipt(
             receipt_path, selector, expected_review_id=selector.review_id)
-    _produce(gemini_policy_case, capsys)
-    after = review_round.validate_google_preflight_receipt(
-        receipt_path, selector, expected_review_id=selector.review_id)
-    assert before.preflight_receipt_sha256 != after.preflight_receipt_sha256
-    brief = _prepared_brief(prepared)
-    assert _digest(replace(brief, google_selector_receipt=before)) != _digest(
-        replace(brief, google_selector_receipt=after))
+    # Even a comment edit requires a new published candidate; a preflight may
+    # not self-authorize different bytes under the existing provenance.
+    assert gemini_wrapper._run_preflight(str(selector.executable), None, 5, selector) == 3
+    evidence = capsys.readouterr()
+    assert not evidence.out
+    assert 'policy digest' in evidence.err
 
 
 @pytest.mark.parametrize("bad_hash", [None, "", "0" * 64, 123])

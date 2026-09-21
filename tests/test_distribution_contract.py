@@ -22,7 +22,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.555"
+    assert manifest["version"] == "0.2.556"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -36,7 +36,7 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     readme = _text(ROOT / "README.md")
     readme_ko = _text(ROOT / "README.ko.md")
 
-    assert f"## {version} — 2026-09-20" in changelog
+    assert f"## {version} — 2026-09-21" in changelog
     assert f"### Upgrading to {version}" in readme
     assert f"### {version} 업그레이드" in readme_ko
     assert f"_runs/distribution/{version}-final-r1" in readme
@@ -588,13 +588,15 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "user setting을 변경하지 않습니다" not in readme_ko
     assert "transient AGY global-settings transaction" in readme
     assert "일시적 AGY global-settings transaction" in readme_ko
-    assert "Formal AGY adds `read_url(*)`" in readme
-    assert "Formal AGY는 기존 다섯 deny에 `read_url(*)`" in readme_ko
+    assert "Default formal AGY adds `read_url(*)`" in readme
+    assert "기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`" in readme_ko
     assert "formal dispatch never supplies `--dangerously-skip-permissions`" in security
-    assert "Every REVIEW prompt prohibits web" in readme
-    assert "모든 REVIEW prompt는 웹을 금지" in readme_ko
+    assert "REVIEW defaults to no web" in readme
+    assert "REVIEW는 기본적으로 웹을 금지" in readme_ko
+    assert "직접 요청" in readme_ko and "review-web.md" in readme
     assert "MCP calls are also denied" in security
-    assert "REVIEW's prohibition of those tools is prompt-controlled" in security
+    assert "selected B Gemini profile explicitly denies `google_web_search` and `web_fetch`" in security
+    assert "do not infer complete mechanical web denial" in security
     for document, stale_claim in (
         (readme, "auto-approve removes interactive approval prompts, while"),
         (readme_ko, "auto-approve는 interactive approval prompt를 제거하지만"),
@@ -617,8 +619,8 @@ def test_standalone_agy_separates_formal_review_and_raw_investigation() -> None:
         "Formal preflight and dispatch never use `--dangerously-skip-permissions`",
         "five raw read-only deny rules plus `read_url(*)`",
         "Raw investigations retain the version-gated headless compatibility",
-        "Every REVIEW prohibits web research",
-        "separate leader-authorized INVESTIGATION",
+        "REVIEW defaults to no web",
+        "only a direct owner request enables",
         "same six formal deny entries",
         "Keep formal permission checks enabled",
     ):
@@ -728,8 +730,6 @@ def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> No
         "list_directory",
         "glob",
         "grep_search",
-        "google_web_search",
-        "web_fetch",
         "get_internal_docs",
     }
     denied_tools = {
@@ -743,6 +743,8 @@ def test_enterprise_gemini_fallback_is_pre_dispatch_frozen_and_read_only() -> No
         )
     }
     assert denied_tools == {
+        "google_web_search",
+        "web_fetch",
         "write_file",
         "replace",
         "run_shell_command",

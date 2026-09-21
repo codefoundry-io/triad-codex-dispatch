@@ -1,5 +1,9 @@
 # Review leg contracts
 
+The formal argv examples below are the legacy entry point. Explicit public v2
+uses [generated allocations and host evidence](public-v2-review.md); raw
+investigation and shared containment sections remain applicable to both paths.
+
 ## Contents
 
 - [Claude](#claude)
@@ -246,8 +250,9 @@ use canonical lowercase spelling. The wrapper reads
 `~/.gemini/config/projects/<UUID>.json` and requires a matching ID, exactly one
 resource whose `folderUri` equals the canonical cwd URI, and these deny entries:
 `write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`,
-`read_url(*)`. The last rule is required for formal preflight and dispatch;
-raw read-only investigation keeps the original five-rule requirement.
+`read_url(*)`. The last rule is required for default no-web formal preflight and dispatch;
+explicitly requested review web refuses that known whole-URL deny instead of removing it.
+Raw read-only investigation keeps the original five-rule requirement.
 Additional owner rules remain untouched. Invalid configuration stops before
 inference. This mode validates the project instead of entering a global settings
 transaction; it never creates or edits a project or permission record.
@@ -341,6 +346,42 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
   --expected-family codex \
   --expected-content-digest "$review_digest"
 ```
+
+## Authorized AGY web investigation
+
+Use a raw investigation when directly requested. For REVIEW, only a direct
+owner request enables [the current-round web option](review-web.md) for every leg;
+otherwise preserve no-web. Do not infer permission from the reviewed technology.
+
+```text
+TRIAD_DISPATCH_LOG_DIR="$investigation_log_dir" \
+python3 "$toolkit_root/bin/antigravity_wrapper.py" \
+  --prompt-file "$investigation_prompt_file" \
+  --cwd "$investigation_cwd" \
+  --sandbox read-only --web \
+  --model gemini-3.1-pro-high --effort high --timeout 600
+```
+
+An optional custom `--pydantic` schema remains available; do not pass formal
+verdict bindings, selector/preflight receipts or `--preflight-only`. The wrapper
+appends the sole `text` clause from packaged `prompts/investigation.md` last,
+preserving caller bytes. `prompts/source-manifest.json` records its shared source
+commit and SHA-256. No `--web` flag is passed to the vendor CLI.
+
+The standalone Gemini wrapper accepts the same raw `--web` marker, substituting
+`google_web_search`/`web_fetch` in the clause. Native authentication/permissions
+still govern; this option does not select the formal policy or bypass a denial.
+All raw wrappers accept repeated `--add-dir` for explicitly authorized inputs;
+formal review rejects unbound extra directories. Keep the requested read-only
+scope in the investigation brief: native directory grants are not an OS sandbox.
+Resolved prompt-file/cwd success evidence and refusal paths use existing masking.
+
+The leader checks completed page-fetch events against each cited URL and verifies
+the page's date/version and interpretation. A search-only or failed fetch is
+UNSURE, not evidence. Clause insertion alone is not this verification. Existing
+unredacted audit argv and failure run logs receive the final prompt; hardened
+audit masking and success-log truncation still apply. A successful ordinary call
+does not by itself provide complete exact prompt/fetch custody.
 
 ## Shared containment boundary
 

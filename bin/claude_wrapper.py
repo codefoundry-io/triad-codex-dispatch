@@ -239,6 +239,8 @@ def main() -> int:
         help="Process working directory (caller-owned — use a sibling directory for isolation)",
     )
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
+    p.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
+    p.add_argument("--agent", default=None, help="Native Claude agent for an explicit v2 or raw invocation")
     p.add_argument(
         "--model",
         default=None,
@@ -266,6 +268,9 @@ def main() -> int:
     p.add_argument("--expected-review-id", default=None)
     p.add_argument("--expected-family", choices=("claude",), default=None)
     p.add_argument("--expected-content-digest", default=None)
+    p.add_argument("--expected-leg-name", default=None)
+    p.add_argument("--expected-attempt", type=int, default=None)
+    p.add_argument("--expected-route", choices=("null", "agy", "gemini"), default=None)
     p.add_argument(
         "--repair-mode",
         action="store_true",
@@ -278,20 +283,33 @@ def main() -> int:
         help="Append a human-readable markdown row to "
              "_debug/<UTC-YYYY-MM-DD>/claude.md (per-call summary)",
     )
+    p.add_argument("--web", action="store_true", help="Explicit owner-authorized native web verification")
     args = p.parse_args()
 
+    process_cwd = None
     try:
         process_cwd = Path.cwd()
         _prompt_text = load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
     except Exception as e:
-        log(f"prompt load failed: {e}")
+        log(_common.input_path_error("prompt load", args.prompt_file, process_cwd, e))
         return EXIT_ARG_ERROR
     args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
         args.cwd = validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
     except Exception as e:
-        log(f"--cwd validation failed: {e}")
+        log(_common.input_path_error("--cwd", args.cwd, process_cwd, e))
+        return EXIT_ARG_ERROR
+
+    try:
+        args.add_dir = _common.validate_extra_directories(args.add_dir, process_cwd=process_cwd)
+    except Exception as e:
+        log(_common.input_path_error("--add-dir", None, process_cwd, e))
+        return EXIT_ARG_ERROR
+    if args.add_dir and (args.pydantic in (_common.PACKAGED_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS) or any(
+        value is not None for value in (args.expected_review_id, args.expected_family, args.expected_content_digest)
+    )):
+        log("--add-dir is for raw INVESTIGATION; REVIEW inputs must be bound in the round")
         return EXIT_ARG_ERROR
 
     if not args.prompt.strip():
@@ -316,7 +334,22 @@ def main() -> int:
         args.expected_content_digest,
     )
     formal_bindings_complete = all(value is not None for value in binding_values)
-    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS
+    v2_verdict = args.pydantic in _common.PACKAGED_V2_VERDICT_SPECS
+    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS or v2_verdict
+    if v2_verdict:
+        from verdict_v2 import bound_wrapper, producer_schema
+        try:
+            pydantic_cls = bound_wrapper(args, family="claude", route=None)
+            if args.fallback_model is not None or args.timeout <= 0:
+                raise ValueError("v2 review requires positive timeout and forbids fallback models")
+        except ValueError as error:
+            log(str(error))
+            return EXIT_ARG_ERROR
+    elif any(value is not None for value in (
+        args.expected_leg_name, args.expected_attempt, args.expected_route
+    )):
+        log("v2 bindings require --pydantic verdict_v2:LegVerdict")
+        return EXIT_ARG_ERROR
     if formal_verdict and not all(
         value is not None for value in binding_values
     ):
@@ -335,7 +368,7 @@ def main() -> int:
         if re.fullmatch(r"[0-9a-f]{64}", args.expected_content_digest) is None:
             log("expected content digest must be 64 lowercase hexadecimal characters")
             return EXIT_ARG_ERROR
-    if formal_bindings_complete and (
+    if formal_bindings_complete and not v2_verdict and (
         args.model != FORMAL_CLAUDE_MODEL
         or args.effort != FORMAL_CLAUDE_EFFORT
         or args.timeout != FORMAL_CLAUDE_TIMEOUT
@@ -346,6 +379,20 @@ def main() -> int:
             "--timeout 1200 and forbids --fallback-model"
         )
         return EXIT_ARG_ERROR
+
+    if args.agent is not None and (
+        not args.agent.strip() or any(char in args.agent for char in ("\x00", "\r", "\n"))
+        or (formal_bindings_complete and not v2_verdict)
+    ):
+        log("Claude agent must be a nonblank native name; legacy formal review does not select agents")
+        return EXIT_ARG_ERROR
+
+    if formal_bindings_complete:
+        try:
+            _common.validate_review_web(args, args.prompt)
+        except ValueError as error:
+            log(str(error))
+            return EXIT_ARG_ERROR
 
     claude_bin = require_binary("claude")
 
@@ -361,8 +408,14 @@ def main() -> int:
             cmd += ["--model", args.model]
         if args.effort:
             cmd += ["--effort", args.effort]
+        if args.agent is not None:
+            cmd += ["--agent", args.agent]
+        for directory in args.add_dir:
+            cmd += ["--add-dir", directory]
         if args.fallback_model:
             cmd += ["--fallback-model", args.fallback_model]
+        if args.web:
+            cmd += ["--allowedTools", "WebSearch", "WebFetch"]
         if formal_bindings_complete:
             cmd += ["--permission-mode", "plan"]
         if native_schema is not None:
@@ -371,7 +424,8 @@ def main() -> int:
 
     native_schema = None
     if pydantic_cls is not None:
-        schema_object = pydantic_cls.model_json_schema()
+        schema_object = (producer_schema(pydantic_cls) if v2_verdict
+                         else pydantic_cls.model_json_schema())
         if formal_bindings_complete:
             properties = schema_object["properties"]
             properties["review_id"]["const"] = args.expected_review_id
@@ -406,6 +460,11 @@ def main() -> int:
         )
 
     result._claude_receipt = _claude_receipt(result.stdout)
+    if v2_verdict:
+        result.review_binding = dict(pydantic_cls._binding)
+        result.transport = {**_common.transport_receipt("claude", result),
+                            "attempt": args.expected_attempt}
+    _common.record_wrapper_paths(result, args.prompt_file, args.cwd, process_cwd)
     audit_cmd = build_cmd(args.prompt, native_schema)
     persist_result_artifacts(
         "claude", sys.argv, audit_cmd, args.prompt, result, debug=args.debug

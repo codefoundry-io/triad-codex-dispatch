@@ -21,7 +21,7 @@ does not expose a documented hook that can grant shell permission. A distributed
 therefore cannot silently select a permission profile or promise an install-time host
 Yes/No dialog.
 
-Managed company environments remain on `workspace-write` with `on-request`. Human
+Managed environments remain on `workspace-write` with `on-request`. Human
 approval uses `approvals_reviewer = "user"`; `auto_review` is an organization-controlled
 alternative reviewer, not a permission grant. This feature never selects unrestricted
 filesystem access and never edits `sandbox_mode`, `approval_policy`,

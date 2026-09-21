@@ -4,6 +4,9 @@ This owner routing policy chooses the review families and one Google
 authentication class. It does not claim provider capability or authorize a
 provider beyond the current task's objective and external-data boundary.
 
+This table describes the legacy entry point. Explicit public v2 resolves its
+named roster and per-CLI settings through [the v2 procedure](public-v2-review.md).
+
 ## Required routes
 
 | Family | Formal route |
@@ -92,14 +95,15 @@ which does not by itself prove authentication, runtime model or policy enforceme
 
 ## Admission boundary
 
-Every REVIEW leg prohibits web research. Return missing external evidence as an
-open question for a separate authorized INVESTIGATION. AGY formal preflight and
+Every REVIEW leg defaults to no web; a direct owner request selects
+[the common bound option](review-web.md). Default AGY formal preflight and
 dispatch require `read_url(*)` in addition to the five raw read-only denies and
 omit headless autoapproval. Identical formal leases remain concurrent; mixed raw
 and formal lists retain existing isolation. Explicit project validation checks
 the same formal rules without changing the project. Raw invocation behavior is
-preserved. Gemini's current policy still permits its web read/search tools;
-the REVIEW prompt prohibits them, but this is not mechanical Gemini web denial.
+preserved. Gemini's default packaged REVIEW policy explicitly denies its web read/search
+tools and retains B's other deny rules. Byte/policy-engine checks remain distinct
+from unrun authenticated effective-policy checks.
 
 Provider permission modes are inputs to containment, not admission proof.
 Packaged prompt controls, local receipt and `LegVerdict` validation, and the

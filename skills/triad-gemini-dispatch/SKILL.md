@@ -15,6 +15,13 @@ with `--prompt-file` for long input, `--cwd`, optional `--model`, and optional
 `--pydantic module:Class`. A nonzero exit or malformed result is a failed
 dispatch, not substantive evidence.
 
+For explicitly authorized web research, add `--web`; the wrapper appends the
+shared page-fetch evidence procedure last with Gemini tool names. A search
+summary or successful exit is not verified source content. Keep incomplete or
+unfetched facts UNSURE. Use repeated `--add-dir` only for authorized additional
+inputs; existing native permissions remain authoritative. These raw options
+are refused on the formal review route.
+
 ## Formal ownership boundary
 
 This skill is a standalone compatibility consult only and never chooses or leads

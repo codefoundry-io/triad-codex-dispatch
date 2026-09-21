@@ -4,6 +4,10 @@ This file is the single normative contract for finding classification,
 zero-start failure, partial-start failure, reruns, and owner decisions. Other
 TRIAD instructions link here instead of restating these rules.
 
+The round/retry procedure below is the legacy workflow. An explicit public v2
+round uses [v2 collection and recovery](public-v2-review.md#collect-correct-and-close),
+while retaining this file's finding-classification and terminal-observation rules.
+
 ## Finding classification
 
 The leader reproduces every finding against the exact reviewed bytes and the

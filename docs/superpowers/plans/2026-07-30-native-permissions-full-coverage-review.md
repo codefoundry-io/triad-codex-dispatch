@@ -2749,12 +2749,12 @@ as `test_distribution_has_only_retained_non_permission_migration_guidance`.
 At this Task 6 boundary it inspects only Task-owned `migration/`,
 `scripts/bootstrap.sh`, and the already-corrected repair protocol: require only
 `migration/AGENTS.recommended.md`, absence of the three deleted templates and
-company/fleet material, and native permission neutrality. Do not inspect
+fleet material, and native permission neutrality. Do not inspect
 README, SECURITY, or status bytes that Task 8 owns, or provider-skill bytes
 that Task 7 owns. Rewrite
 the former combined test by splitting, not dropping, its remaining guards:
-Task 7 owns the provider-skill/company-fleet and Gemini-route assertions, and
-Task 8 owns the README/README.ko/SECURITY company-fleet assertions. Rewrite
+Task 7 owns the provider-skill/fleet and Gemini-route assertions, and
+Task 8 owns the README/README.ko/SECURITY fleet assertions. Rewrite
 `test_bootstrap_usage_describes_ordinary_codex_agent_review_requirements` to
 assert native permission neutrality and exact legacy cleanup without requiring
 profile/rule/repair-agent installation messaging.
@@ -3161,7 +3161,7 @@ owned by Task 7 skill/reference files:
   `test_company_fleet_guides_and_terms_are_removed_but_personal_templates_remain`
   into
   `test_provider_skills_retain_personal_routes_without_company_fleet_guidance`:
-  scan `PROVIDER_SKILLS` plus `REVIEW_SKILL` for the existing company/fleet
+  scan `PROVIDER_SKILLS` plus `REVIEW_SKILL` for the existing fleet
   stale-term set and preserve the Gemini skill's
   `business, Vertex, or API-key` route assertion. Task 6 keeps only its
   migration/bootstrap/protocol-owned portion, and Task 8 owns the public-doc
@@ -3413,7 +3413,7 @@ in this same RED/GREEN cycle:
 
 - add `test_public_docs_remain_personal_without_company_fleet_guidance` over
   README.md, README.ko.md, and SECURITY.md, preserving the public-document
-  stale company/fleet-term assertions split from the former combined test;
+  stale fleet-term assertions split from the former combined test;
 - retain
   `test_review_docs_distinguish_formal_advisory_and_sdd_test_boundaries` and
   update only its Task-8-owned README/SECURITY/CHANGELOG expectations to the

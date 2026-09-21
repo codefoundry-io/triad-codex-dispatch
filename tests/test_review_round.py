@@ -3866,6 +3866,8 @@ def test_rendered_metadata_json_escapes_every_free_form_value_without_legacy_int
     selector_receipt = brief.google_selector_receipt
     assert selector_receipt is not None
     expected_metadata = {
+        "review_web_clause_sha256": hashlib.sha256(review_round._review_web_contract(False).encode()).hexdigest(),
+        "review_web_authorized": False,
         "approved_boundary": list(brief.approved_boundary),
         "criteria": list(brief.criteria),
         "family": brief.family,

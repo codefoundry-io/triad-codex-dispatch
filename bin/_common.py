@@ -301,13 +301,18 @@ class RunResult:
     dispatch_phase: Optional[str] = None
     # Provider-exposed runtime identity, or ``unexposed`` when the route omits it.
     runtime_identity: Optional[str] = None
-    # Private local transport state; intentionally excluded from audit/run-log schemas.
+    # Common observed transport; shared unchanged by audit and failure IPC.
+    transport: Optional[dict] = None
+    # Explicit v2 invocation custody; absent for legacy and raw investigations.
+    review_binding: Optional[dict] = None
+    # Private failure controls remain distinct from the public delivery observation.
     _stdin_delivery_failed: bool = False
     _output_transport_failed: bool = False
     # Sanitized Claude audit evidence only; excluded from failure/repair IPC.
     _claude_receipt: Optional[dict] = None
     # Host-resolved launch cwd; audit-only evidence, not provider attestation.
     _effective_cwd: Optional[str] = None
+    _resolved_prompt_file: Optional[str] = None
     # Diagnostic event projection only; excluded from result/repair IPC.
     _agy_read_telemetry: Optional[dict] = None
 
@@ -317,6 +322,20 @@ class RunResult:
 def log(msg: str) -> None:
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
     print(f"[{ts}] {msg}", file=sys.stderr)
+
+
+def transport_receipt(cli: str, result: RunResult) -> dict:
+    """Expose observations only; custom/unobserved transports are not inferred."""
+    if result.transport is None:
+        return {
+            "schema_version": 2,
+            "stdin_delivery": "unexposed",
+            "route": "agy" if cli == "antigravity" else cli,
+            "binary": None,
+            "cli_version": None,
+            "attempt": 1,
+        }
+    return result.transport
 
 
 def require_binary(name: str) -> str:
@@ -515,6 +534,82 @@ def validate_wrapper_cwd(cwd: Optional[str], *, process_cwd: Path | None = None)
     return str(resolved)
 
 
+def input_path_error(label: str, value: str | None, process_cwd: Path | None, error: Exception) -> str:
+    """Report the resolved candidate through the existing audit privacy mode."""
+    if _audit_redact_enabled():
+        return f"{label} validation failed: {type(error).__name__}; candidate=<redacted:path>"
+    if process_cwd is None:
+        return f"{label} validation failed: {type(error).__name__}; entry cwd unavailable"
+    try:
+        path = Path(value).expanduser() if value else process_cwd
+        candidate = (path if path.is_absolute() else process_cwd / path).resolve(strict=False)
+    except (OSError, ValueError, RuntimeError):
+        return f"{label} validation failed: {type(error).__name__}"
+    return f"{label} validation failed: {error}; candidate={candidate}"
+
+
+def validate_extra_directories(values: list[str], *, process_cwd: Path) -> list[str]:
+    """Resolve explicitly supplied raw-call inputs with existing containment."""
+    resolved = []
+    for value in values:
+        if not value.strip():
+            raise ValueError("--add-dir requires a nonempty directory")
+        path = validate_wrapper_cwd(value, process_cwd=process_cwd)
+        if path not in resolved:
+            resolved.append(path)
+    return resolved
+
+
+def record_wrapper_paths(result: RunResult, prompt_file: str | None, cwd: str | None,
+                         process_cwd: Path) -> None:
+    if prompt_file is not None:
+        path = Path(prompt_file).expanduser()
+        result._resolved_prompt_file = str((path if path.is_absolute() else process_cwd / path).resolve())
+    if result.exit_code == EXIT_OK:
+        result._effective_cwd = result._effective_cwd or cwd or str(process_cwd)
+        redact = _audit_redact_enabled()
+        prompt_path = ("<redacted:prompt-file-path>" if redact and prompt_file is not None
+                       else result._resolved_prompt_file)
+        child_path = "<redacted:cwd-path>" if redact else result._effective_cwd
+        log(f"resolved_prompt_file={prompt_path} effective_cwd={child_path}")
+
+
+def validate_review_web(args, prompt: str) -> None:
+    """A review flag is the caller's attestation of its bound owner request."""
+    from validate_v2 import _json
+    prefixes = ("Review metadata: ", "Review v2 metadata: ")
+    records = [line[len(prefix):] for line in prompt.splitlines()
+               for prefix in prefixes if line.startswith(prefix)]
+    if not records and not args.web:
+        return  # Existing no-web callers may supply their own prompt.
+    if len(records) != 1:
+        raise ValueError("review web authorization requires one bound metadata record")
+    metadata = _json(records[0])
+    authorized = metadata.get("review_web_authorized", False) if isinstance(metadata, dict) else None
+    if type(authorized) is not bool or authorized != args.web:
+        raise ValueError("--web must match bound review_web_authorized")
+    fields = ["review_id", "family", "content_digest"]
+    if args.pydantic in PACKAGED_V2_VERDICT_SPECS:
+        fields += ["leg_name", "attempt", "route"]
+    for field in fields:
+        expected = getattr(args, "expected_" + field)
+        if field == "route" and expected == "null":
+            expected = None
+        if (field not in metadata or type(metadata[field]) is not type(expected)
+                or metadata[field] != expected):
+            raise ValueError("review web authorization binding mismatch: " + field)
+
+
+def load_web_evidence_clause(path: Path, *, gemini: bool = False) -> str:
+    document = path.read_text(encoding="utf-8")
+    clauses = re.findall(r"^```text\n(.*?)\n```(?:\n|$)", document, re.MULTILINE | re.DOTALL)
+    if document.count("```text") != 1 or len(clauses) != 1 or not clauses[0].strip():
+        raise ValueError("expected one nonempty terminated text clause")
+    clause = clauses[0]
+    return (clause.replace("search_web", "google_web_search").replace("read_url_content", "web_fetch")
+            if gemini else clause)
+
+
 def _redact_prompt_args(cmd: list[str]) -> list[str]:
     """Keep argv shape in durable audit logs without storing prompt payloads."""
     redacted: list[str] = []
@@ -523,6 +618,8 @@ def _redact_prompt_args(cmd: list[str]) -> list[str]:
         if redact_next is not None:
             if redact_next in {"prompt", "schema"}:
                 redacted.append(f"<redacted:{len(arg)} chars>")
+            elif redact_next == "input-directory":
+                redacted.append("<redacted:input-directory-path>")
             else:
                 redacted.append("<redacted:prompt-file-path>")
             redact_next = None
@@ -534,6 +631,10 @@ def _redact_prompt_args(cmd: list[str]) -> list[str]:
         if arg == "--prompt-file":
             redacted.append(arg)
             redact_next = "prompt-file"
+            continue
+        if arg in {"--add-dir", "--include-directories"}:
+            redacted.append(arg)
+            redact_next = "input-directory"
             continue
         if arg == "--json-schema":
             redacted.append(arg)
@@ -682,14 +783,18 @@ def classify(
 PACKAGED_VERDICT_SPECS = frozenset({
     "verdict_schema:LegVerdict", "verdict_schema.LegVerdict",
 })
+PACKAGED_V2_VERDICT_SPECS = frozenset({
+    "verdict_v2:LegVerdict", "verdict_v2.LegVerdict",
+})
 
 
-def _load_packaged_verdict_class():
+def _load_packaged_verdict_class(*, v2: bool = False):
     """Load the shipped verdict model from its exact sibling path."""
-    source = Path(__file__).resolve(strict=True).with_name("verdict_schema.py")
+    name = "verdict_v2" if v2 else "verdict_schema"
+    source = Path(__file__).resolve(strict=True).with_name(name + ".py")
     if source.is_symlink() or not source.is_file():
         raise ImportError("packaged verdict schema must be a regular sibling file")
-    module_name = "_triad_packaged_verdict_schema"
+    module_name = "_triad_packaged_" + name
     spec = importlib.util.spec_from_file_location(module_name, source)
     if spec is None or spec.loader is None:
         raise ImportError("unable to load packaged verdict schema")
@@ -722,8 +827,8 @@ def load_pydantic_class(spec: str):
             "pydantic 2 is unavailable in this Python runtime; run "
             f"`{install_command}` in your normal terminal"
         )
-    if spec in PACKAGED_VERDICT_SPECS:
-        cls = _load_packaged_verdict_class()
+    if spec in PACKAGED_VERDICT_SPECS | PACKAGED_V2_VERDICT_SPECS:
+        cls = _load_packaged_verdict_class(v2=spec in PACKAGED_V2_VERDICT_SPECS)
         if not (
             isinstance(cls, type)
             and BaseModel is not None
@@ -1303,6 +1408,53 @@ def _run_once(
     classify_and_log: bool = True,
     remove_env=(),
 ) -> RunResult:
+    """Capture catchable termination for this owned invocation, then restore it.
+
+    The handler only records state: raising between Popen and its assignment
+    could lose the child handle. The engine observes cancellation in its wait
+    loop and uses the same bounded group/reader cleanup as other terminal paths.
+    Library calls from non-main threads retain their caller's signal policy.
+    """
+    received: list[int] = []
+    previous = {}
+
+    def remember(signum, _frame):
+        if not received:
+            received.append(signum)
+
+    try:
+        if threading.current_thread() is threading.main_thread():
+            for signum in (signal.SIGTERM, signal.SIGHUP):
+                previous[signum] = signal.signal(signum, remember)
+        result = _run_once_owned(
+            cli, cmd, cwd, timeout, stdin_text, classify_and_log, remove_env,
+            received,
+        )
+        # Covers a signal arriving after the engine's final collection check.
+        if received and not result._output_transport_failed and result.exit_code != EXIT_TIMEOUT:
+            _mark_signal_failure(result, received[0])
+            log(f"[wrapper] {cli} unknown exit={result.exit_code} "
+                f"vendor={result.vendor_exit_code} elapsed={result.elapsed_s:.1f}s")
+        return result
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
+def _mark_signal_failure(result: RunResult, signum: int) -> None:
+    result.exit_code = EXIT_CLI_FAIL
+    result.classification = "unknown"
+    result.extraction_error = f"wrapper interrupted ({signal.Signals(signum).name})"
+    result._output_transport_failed = True
+    result.final_answer = ""
+    result.validated = None
+
+
+def _run_once_owned(
+    cli: str, cmd: list[str], cwd: Optional[str], timeout: int,
+    stdin_text: Optional[str], classify_and_log: bool, remove_env,
+    received: list[int],
+) -> RunResult:
     """One Popen invocation.
 
     stdout = capture-only (structured JSON/JSONL — not for human stream).
@@ -1315,10 +1467,18 @@ def _run_once(
     """
     effective_cwd = os.path.realpath(cwd or os.getcwd())
     log(
-        f"exec cwd={effective_cwd} timeout={timeout}s "
+        f"exec cwd={'<redacted:cwd-path>' if _audit_redact_enabled() else effective_cwd} timeout={timeout}s "
         f"argv={_redact_prompt_args(cmd)}"
     )
     start = time.monotonic()
+
+    def observed(result: RunResult, delivery: str) -> RunResult:
+        result.transport = {
+            **transport_receipt(cli, result),
+            "stdin_delivery": delivery,
+            "binary": cmd[0] if cmd else None,
+        }
+        return result
 
     stdin_bytes = None
     if stdin_text is not None:
@@ -1327,11 +1487,11 @@ def _run_once(
         except UnicodeError:
             diagnostic = "stdin delivery failed (encoding)"
             log(diagnostic)
-            return RunResult(
+            return observed(RunResult(
                 EXIT_CLI_FAIL, "", "", time.monotonic() - start,
                 classification="unknown", extraction_error=diagnostic,
                 _stdin_delivery_failed=True,
-            )
+            ), "not-started")
 
     # Scrub loader/interpreter injection vars so a poisoned parent env cannot
     # reach the vendor child (I-2/I-3). Explicit env= replaces the implicit
@@ -1357,10 +1517,10 @@ def _run_once(
     except OSError as e:
         elapsed = time.monotonic() - start
         log(f"OSError on spawn: {e}")
-        return RunResult(
+        return observed(RunResult(
             EXIT_ARG_ERROR, "", f"spawn failed: {e}\n", elapsed,
             classification="unknown",
-        )
+        ), "not-started")
 
     provider_pgid: Optional[int] = None
     if all(hasattr(os, name) for name in ("killpg", "getpgid", "getpgrp")):
@@ -1424,12 +1584,19 @@ def _run_once(
             )
             threads.append(thread)
             thread.start()
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
+        deadline = time.monotonic() + timeout
+        while not received:
+            try:
+                proc.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    break
+        if timed_out or received:
             _terminate_provider_process_group(
-                proc, f"timeout after {timeout}s", provider_pgid
+                proc, f"timeout after {timeout}s" if timed_out else
+                "wrapper termination requested", provider_pgid
             )
         _finish_stdin()
         # A reaped leader may still own descendants, even with closed pipes.
@@ -1508,6 +1675,8 @@ def _run_once(
 
     result._effective_cwd = effective_cwd
     result.vendor_exit_code = rc
+    if received and not timed_out:
+        _mark_signal_failure(result, received[0])
     if classify_and_log:
         if not (result._stdin_delivery_failed or result._output_transport_failed):
             result.classification = classify(
@@ -1521,7 +1690,8 @@ def _run_once(
     elif not (result._stdin_delivery_failed or result._output_transport_failed):
         result.classification = "unclassified"
 
-    return result
+    return observed(result, "not-used" if stdin_bytes is None else
+                    "failed" if delivery_failed else "complete")
 
 
 def run_cli_with_retry(
@@ -1536,6 +1706,7 @@ def run_cli_with_retry(
     prompt_via_stdin: bool = False,
     single_provider_call: bool = False,
     remove_env=(),
+    prompt_suffix: str = "",
 ) -> RunResult:
     """Top-level driver.
 
@@ -1647,7 +1818,9 @@ def run_cli_with_retry(
 
     schema_repair_attempt = 0
     while True:
-        cmd = cmd_builder(effective_prompt)
+        # The caller's final clause follows schema and retry instructions.
+        sent_prompt = effective_prompt + ("\n\n" + prompt_suffix if prompt_suffix else "")
+        cmd = cmd_builder(sent_prompt)
 
         # Layer 2: server-cap retry.
         max_retries = (
@@ -1656,7 +1829,7 @@ def run_cli_with_retry(
         result: Optional[RunResult] = None
         for attempt in range(max_retries + 1):
             run_once_kwargs = {
-                "stdin_text": effective_prompt if prompt_via_stdin else None,
+                "stdin_text": sent_prompt if prompt_via_stdin else None,
             }
             if remove_env:
                 run_once_kwargs["remove_env"] = remove_env
@@ -2015,6 +2188,7 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
         "classification": result.classification,
         "dispatch_phase": result.dispatch_phase,
         "runtime_identity": result.runtime_identity,
+        "transport": transport_receipt(cli, result),
         "mode": result.mode,
         "repair_attempt": result.repair_attempt,
         "schema_repair_attempt": result.schema_repair_attempt,
@@ -2031,8 +2205,14 @@ def audit(cli: str, cmd: list[str], prompt: str, result: RunResult) -> bool | No
         "extraction_error": _redact_cap(result.extraction_error),
         "validation_error": _redact_cap(result.validation_error),
     }
+    if result.review_binding is not None:
+        rec["review_binding"] = result.review_binding
     if result._effective_cwd is not None:
         rec["effective_cwd"] = "<redacted:cwd-path>" if redact else result._effective_cwd
+    rec["resolved_prompt_file"] = (
+        "<redacted:prompt-file-path>" if redact and result._resolved_prompt_file is not None
+        else result._resolved_prompt_file
+    )
     if cli == "antigravity" and result._agy_read_telemetry is not None:
         telemetry = result._agy_read_telemetry
         rec["agy_read_telemetry"] = (
@@ -2706,21 +2886,22 @@ def emit_run_log(
     prompt: str,
     result: RunResult,
 ) -> Optional[Path]:
-    """Write per-execution run-log on failure only.
+    """Write failure IPC or an explicitly bound v2 review's original evidence.
 
     Run-logs live at `_logs/<cli>/runs/<UTC-ts>-<pid>-<uuid8>.json`. The
     dispatch skill passes the opaque path to the fresh native proposal-only
     child without inline embedding (escape-safe and parallel-safe).
 
-    On success (`exit_code == EXIT_OK`), returns None and writes nothing because
-    no repair handoff is needed.
+    Ordinary success writes nothing. V2 review success retains the same raw
+    record in its caller-configured per-attempt namespace for collection/export;
+    this is review evidence, not a repair request or permanent investigation log.
 
     Self-prunes after write: if dir exceeds `_RUN_LOG_MAX_FILES` or
     `_RUN_LOG_MAX_BYTES`, eligible stale files are unlinked oldest-first.
     Fresh sibling IPC is retained even if that leaves a temporary overflow
     (best-effort, race-tolerant for parallel writes).
     """
-    if result.exit_code == EXIT_OK:
+    if result.exit_code == EXIT_OK and result.review_binding is None:
         return None
     if not cli or cli in (".", "..") or os.sep in cli:
         raise OSError(errno.EINVAL, "unsafe run-log CLI name")
@@ -2741,6 +2922,7 @@ def emit_run_log(
         "classification": result.classification,
         "dispatch_phase": result.dispatch_phase,
         "runtime_identity": result.runtime_identity,
+        "transport": transport_receipt(cli, result),
         "mode": result.mode,
         "elapsed_s": round(result.elapsed_s, 2),
         "stderr": result.stderr,
@@ -2751,6 +2933,8 @@ def emit_run_log(
         "validation_error": result.validation_error,
     }
 
+    if result.review_binding is not None:
+        rec["review_binding"] = result.review_binding
     payload = json.dumps(rec, ensure_ascii=False, indent=2).encode("utf-8")
 
     def write_under(runs_dir: Path) -> Path:

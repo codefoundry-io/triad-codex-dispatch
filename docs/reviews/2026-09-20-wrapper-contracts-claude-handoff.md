@@ -1,5 +1,8 @@
 # C8/C28 wrapper contract implementation handoff
 
+This is the C8/C28 slice record. Current whole-host status is maintained in the
+[shared Claude handoff](https://github.com/codefoundry-io/triad-dispatch-spec/blob/codex/host-b-preimplementation-audit/decisions/host-b-0555-contract-compliance-handoff.md).
+
 This slice implements the settled token-table and input-path portions of the
 [published shared candidate](https://github.com/codefoundry-io/triad-dispatch-spec/blob/055204c83e57bf87eeac5b2422f2b17340f7c53b/decisions/rev-2-implementation-spec.md).
 Remote main was fetched again before implementation and remained
@@ -33,10 +36,11 @@ configuration loader or duplicate editable contract was introduced.
   and cleanup retain their existing code paths. No SDK or path framework is added.
 - Review custody/result/selector/preflight/read-evidence path contracts remain
   absolute. This change does not relax their independent validation.
-- D-B1 policy composition and D-B2 exact investigation evidence custody remain
-  pending. C28 loader semantics are implemented independently; current audit
-  masking and success/failure receipts are unchanged. This slice does not close
-  C28 evidence recording or C29, switch public v2 dispatch, or claim V1–V5.
+- This slice supplied C28 loader semantics. The subsequent P4 implementation at
+  `8f12bd5` completed masked path evidence, separate B policy and both Google
+  investigation triggers under the settled D-B1/D-B2 answers. Neither slice
+  switches operational public v2 dispatch or claims V1–V5; consult the current
+  shared handoff for those remaining obligations.
 
 ## A maintainer patch scope
 

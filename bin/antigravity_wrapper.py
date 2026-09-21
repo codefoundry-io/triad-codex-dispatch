@@ -7,7 +7,7 @@ plan-mode calls pass the review-bound native finish schema, admit terminal
 ``structured_output``, and repeat local verdict binding. Explicit project calls
 validate owner-provisioned read-only permissions without a global lease. Other
 calls retain the transient global-settings transaction. Formal preflight and
-dispatch require six denies and omit headless adaptation; raw calls retain the
+dispatch default to six denies and omit headless adaptation; raw calls retain the
 version-gated adaptation.
 """
 
@@ -35,6 +35,7 @@ HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
 FORMAL_AGY_MODEL = "gemini-3.1-pro-high"
 FORMAL_AGY_EFFORT = "high"
 FORMAL_AGY_TIMEOUT = 600
+_WEB_EVIDENCE_PATH = Path(__file__).resolve().parents[1] / "prompts" / "investigation.md"
 FORMAL_AGY_ENV_REMOVE = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -47,6 +48,11 @@ FORMAL_AGY_ENV_REMOVE = (
     "GOOGLE_CLOUD_QUOTA_PROJECT",
     "AGY_ADC_AUTH",
 )
+
+
+def _load_web_evidence_clause() -> str:
+    """Load the one vendored C29 clause only for an authorized investigation."""
+    return _common.load_web_evidence_clause(_WEB_EVIDENCE_PATH)
 
 
 def _parse_agy_version(text: str) -> tuple[int, int, int] | None:
@@ -125,6 +131,7 @@ def _build_cmd(
     sandbox: bool = False,
     skip_permissions: bool = True,
     project: str | None = None,
+    add_dirs: tuple[str, ...] = (),
 ) -> list[str]:
     print_timeout = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = [agy_bin]
@@ -142,6 +149,8 @@ def _build_cmd(
         cmd += ["--json-schema", json_schema]
     if sandbox:
         cmd += ["--mode", "plan", "--sandbox"]
+    for directory in add_dirs:
+        cmd += ["--add-dir", directory]
     return cmd + _route_args(model, effort, project)
 
 
@@ -409,6 +418,8 @@ def main() -> int:
     prompt_group.add_argument("--prompt-file", help="Read a UTF-8 prompt file")
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--sandbox", choices=("read-only",), default=None)
+    parser.add_argument("--web", action="store_true",
+                        help="Explicitly authorized web; REVIEW binds this option; requires --sandbox read-only")
     parser.add_argument(
         "--project",
         help="Existing AGY project UUID; requires --cwd and --sandbox read-only",
@@ -416,6 +427,7 @@ def main() -> int:
     parser.add_argument("--model", default=None)
     parser.add_argument("--effort", choices=("low", "medium", "high"), default=None)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
     parser.add_argument("--pydantic", default=None, help="module:Class schema contract")
     parser.add_argument("--expected-review-id", default=None)
     parser.add_argument(
@@ -424,25 +436,43 @@ def main() -> int:
         default=None,
     )
     parser.add_argument("--expected-content-digest", default=None)
+    parser.add_argument("--expected-leg-name", default=None)
+    parser.add_argument("--expected-attempt", type=int, default=None)
+    parser.add_argument("--expected-route", choices=("null", "agy", "gemini"), default=None)
     parser.add_argument("--google-selector-receipt", type=Path, default=None)
     parser.add_argument("--google-preflight-receipt", type=Path, default=None)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
+    process_cwd = None
     try:
         process_cwd = Path.cwd()
         prompt = _common.load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
+    except Exception as exc:
+        _common.log(_common.input_path_error("prompt load", args.prompt_file, process_cwd, exc))
+        return _common.EXIT_ARG_ERROR
+    try:
         cwd = _common.validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
+        args.add_dir = _common.validate_extra_directories(args.add_dir, process_cwd=process_cwd)
         if args.project is not None:
             _agy_settings.validate_project_id(args.project)
             if cwd is None or args.sandbox != "read-only":
                 raise ValueError("--project requires --cwd and --sandbox read-only")
     except Exception as exc:
-        _common.log(f"argument validation failed: {exc}")
+        _common.log(_common.input_path_error("argument", args.cwd, process_cwd, exc))
+        return _common.EXIT_ARG_ERROR
+    if args.add_dir and (args.preflight_only or args.pydantic in (_common.PACKAGED_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS) or any(
+        value is not None for value in (args.expected_review_id, args.expected_family,
+            args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
+    )):
+        _common.log("--add-dir is for raw INVESTIGATION; REVIEW inputs must be bound in the round")
         return _common.EXIT_ARG_ERROR
     if not prompt.strip() or args.timeout <= 0:
         _common.log("prompt must be non-empty and timeout must be positive")
+        return _common.EXIT_ARG_ERROR
+    if args.web and args.sandbox != "read-only":
+        _common.log("--web requires --sandbox read-only")
         return _common.EXIT_ARG_ERROR
     _common.prune_stale_run_logs("antigravity")
 
@@ -459,7 +489,22 @@ def main() -> int:
         args.expected_family,
         args.expected_content_digest,
     )
-    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS
+    v2_verdict = args.pydantic in _common.PACKAGED_V2_VERDICT_SPECS
+    formal_verdict = args.pydantic in _common.PACKAGED_VERDICT_SPECS or v2_verdict
+    if v2_verdict:
+        from verdict_v2 import bound_wrapper
+        import google_preflight_v2
+        if not args.preflight_only:
+            try:
+                pydantic_cls = bound_wrapper(args, family="google", route="agy")
+            except ValueError as exc:
+                _common.log(str(exc))
+                return _common.EXIT_ARG_ERROR
+    elif any(value is not None for value in (
+        args.expected_leg_name, args.expected_attempt, args.expected_route
+    )):
+        _common.log("v2 bindings require --pydantic verdict_v2:LegVerdict")
+        return _common.EXIT_ARG_ERROR
     if (not args.preflight_only and formal_verdict
             and not any(value is not None for value in binding_values)):
         _common.log("formal verdict schema requires all formal verdict bindings")
@@ -500,10 +545,19 @@ def main() -> int:
         return _common.EXIT_ARG_ERROR
 
     formal_bindings = all(value is not None for value in binding_values)
-    if formal_bindings and args.timeout != FORMAL_AGY_TIMEOUT:
+    if formal_bindings and not v2_verdict and args.timeout != FORMAL_AGY_TIMEOUT:
         _common.log("formal AGY review requires --timeout 600")
         return _common.EXIT_ARG_ERROR
     selected_context = args.preflight_only or formal_bindings
+    try:
+        if formal_bindings:
+            _common.validate_review_web(args, prompt)
+        elif args.web and not args.preflight_only:
+            prompt += "\n\n" + _load_web_evidence_clause()
+    except (OSError, UnicodeError, ValueError) as error:
+        message = str(error) if formal_bindings else f"web evidence clause unavailable: {error}"
+        _common.log(message)
+        return _common.EXIT_ARG_ERROR
     if selected_context and args.google_selector_receipt is None:
         _common.log("formal AGY route requires --google-selector-receipt")
         return _common.EXIT_ARG_ERROR
@@ -519,6 +573,7 @@ def main() -> int:
         _common.log("Google preflight receipt is reserved for formal dispatch")
         return _common.EXIT_ARG_ERROR
     selector_receipt = None
+    v2_fields = None
     if args.google_selector_receipt is not None:
         try:
             selector_receipt = review_round.load_google_selector_receipt(
@@ -527,14 +582,20 @@ def main() -> int:
                 expected_route="agy",
                 expected_wrapper=Path(__file__).resolve(),
             )
-            if formal_bindings:
+            if v2_verdict:
+                v2_fields = google_preflight_v2.fields(args, cwd, selector_receipt)
+            if formal_bindings and v2_verdict:
+                google_preflight_v2.load_receipt(
+                    args.google_preflight_receipt, selector_receipt, args, cwd, prompt)
+            elif formal_bindings:
                 selector_receipt = review_round.validate_google_preflight_receipt(
                     args.google_preflight_receipt,
                     selector_receipt,
                     expected_review_id=args.expected_review_id,
                 )
                 if (
-                    args.model != selector_receipt.model
+                    args.web != selector_receipt.review_web_authorized
+                    or args.model != selector_receipt.model
                     or args.effort != selector_receipt.effort
                     or tuple(_route_args(args.model, args.effort, args.project))
                     != selector_receipt.route_args
@@ -548,11 +609,11 @@ def main() -> int:
                     expected_review_id=args.expected_review_id,
                     expected_content_digest=args.expected_content_digest,
                 )
-        except review_round.RoundIntegrityError as exc:
+        except (review_round.RoundIntegrityError, ValueError, OSError) as exc:
             _common.log(f"Google selector receipt rejected: {exc}")
             return _common.EXIT_ARG_ERROR
 
-    if args.preflight_only and (
+    if args.preflight_only and not v2_verdict and (
         args.model not in (FORMAL_AGY_MODEL, "gemini-3.8-flash-high") or args.effort != FORMAL_AGY_EFFORT
     ):
         _common.log(
@@ -583,12 +644,13 @@ def main() -> int:
             return _common.EXIT_TERMINAL
 
     deny_rules = (
-        _agy_settings.build_deny_rules(args.sandbox, formal_review=selected_context)
+        _agy_settings.build_deny_rules(args.sandbox, formal_review=selected_context and not args.web)
         if args.sandbox is not None else []
     )
     if args.project is not None:
         settings_guard = _agy_settings.agy_project_guard(
-            args.project, cwd, formal_review=selected_context
+            args.project, cwd, formal_review=selected_context and not args.web,
+            **({"require_web": True} if selected_context and args.web else {}),
         )
     else:
         try:
@@ -597,7 +659,8 @@ def main() -> int:
             _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
             return _common.EXIT_ARG_ERROR
         settings_guard = _agy_settings.agy_settings_guard(
-            deny_rules, lock_timeout=lock_timeout
+            deny_rules, lock_timeout=lock_timeout,
+            **({"require_web": True} if selected_context and args.web else {}),
         )
 
     if args.preflight_only:
@@ -617,11 +680,13 @@ def main() -> int:
             "review_id": selector_receipt.review_id,
             "route": "agy",
             "route_args": _route_args(args.model, args.effort, args.project),
+            **({"review_web_authorized": True} if args.web else {}),
+            **(v2_fields or {}),
         }
         sys.stdout.write(
             json.dumps(
                 receipt,
-                ensure_ascii=False,
+                ensure_ascii=v2_verdict,
                 sort_keys=True,
                 separators=(",", ":"),
             )
@@ -659,6 +724,7 @@ def main() -> int:
         sandbox=args.sandbox == "read-only",
         skip_permissions=not selected_context and _agy_needs_skip_permissions(version),
         project=args.project,
+        add_dirs=tuple(args.add_dir),
     )
     run_options: dict[str, Any] = {"classify_and_log": False}
     if formal_bindings:
@@ -696,6 +762,12 @@ def main() -> int:
             result.extraction_error = (result.extraction_error or "") + "; AGY settings release also failed"
         result.final_answer = ""
         result.validated = None
+    result.transport = {**_common.transport_receipt("antigravity", result),
+                        "cli_version": _version_text(version)}
+    if v2_verdict:
+        result.review_binding = dict(pydantic_cls._binding)
+        result.transport["attempt"] = args.expected_attempt
+    _common.record_wrapper_paths(result, args.prompt_file, cwd, process_cwd)
     _common.log(
         f"[wrapper] antigravity {result.classification} "
         f"exit={result.exit_code} vendor={result.vendor_exit_code} "

@@ -18,7 +18,7 @@ established these compatible Major defects:
 3. Antigravity settings transactions can follow predictable temporary-file symlinks and truncate
    foreign targets.
 4. The review snapshot source opener does not reject symlinked directory ancestors.
-5. The recommended requirements template retains company/organization deployment language that
+5. The recommended requirements template retains organization deployment language that
    was explicitly removed, while its stale-term test omits migration templates.
 
 ## Scope limits
@@ -74,9 +74,9 @@ established these compatible Major defects:
 1. Remove ChatGPT Business/Enterprise, organization deployment, managed-fleet, and MDM setup
    wording from the personal requirements template without removing the separate Gemini
    Enterprise fallback route.
-2. Include every shipped migration template in stale company/fleet terminology tests.
+2. Include every shipped migration template in stale fleet terminology tests.
 3. Keep the optional personal machine `/etc/codex/requirements.toml` remediation only if its text
-   no longer describes organizational distribution or a company setup workflow.
+   no longer describes organizational distribution or an account-provisioning workflow.
 
 ## Task 5: Pre-freeze skill-contract repair
 

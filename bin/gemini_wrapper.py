@@ -57,8 +57,6 @@ FORMAL_READ_TOOLS = {
     "list_directory",
     "glob",
     "grep_search",
-    "google_web_search",
-    "web_fetch",
     "get_internal_docs",
 }
 FORMAL_DENIED_TOOLS = {
@@ -67,6 +65,8 @@ FORMAL_DENIED_TOOLS = {
     "run_shell_command",
     "enter_plan_mode",
     "exit_plan_mode",
+    "google_web_search",
+    "web_fetch",
 }
 
 
@@ -83,7 +83,7 @@ def _rule_tools(rule: dict[str, object]) -> set[str]:
     return set()
 
 
-def _validate_formal_policy(path: Path) -> str:
+def _validate_formal_policy(path: Path, *, web: bool = False) -> str:
     try:
         policy_bytes = path.read_bytes()
         payload = tomllib.loads(policy_bytes.decode("utf-8"))
@@ -111,14 +111,38 @@ def _validate_formal_policy(path: Path) -> str:
                 "formal Gemini policy is not the exact fail-closed rule set"
             )
         actual_rules.append((decision, priority, frozenset(tools)))
+    web_tools = {"google_web_search", "web_fetch"} if web else set()
     expected_rules = {
-        ("allow", 999, frozenset(FORMAL_READ_TOOLS)),
-        ("deny", 999, frozenset(FORMAL_DENIED_TOOLS)),
+        ("allow", 999, frozenset(set(FORMAL_READ_TOOLS) | web_tools)),
+        ("deny", 999, frozenset(set(FORMAL_DENIED_TOOLS) - web_tools)),
         ("deny", 998, frozenset({"*"})),
     }
     if len(actual_rules) != len(expected_rules) or set(actual_rules) != expected_rules:
         raise ValueError("formal Gemini policy is not the exact fail-closed rule set")
-    return hashlib.sha256(policy_bytes).hexdigest()
+    digest = hashlib.sha256(policy_bytes).hexdigest()
+    from validate_v2 import _json
+    try:
+        manifest = _json(review_round._canonical_regular_file_bytes(
+            path.with_name("web-source-manifest.json" if web else "source-manifest.json"), "policy provenance"))
+    except (OSError, ValueError):
+        raise ValueError("formal Gemini policy digest provenance is unavailable") from None
+    if web:
+        if digest != "361b653b7f431f12542bbda7da7ee4af320ca70cd6ac0ba249e6c1b52259480b" or manifest != {
+            "source_repository": "https://github.com/codefoundry-io/triad-dispatch-spec",
+            "source_commit": "7f527ef1777336b93ca626744aedcd0c7d90aff9", "status": "candidate",
+            "source_path": "contracts/gemini-readonly-web-b.toml",
+            "sha256": {"gemini-formal-web.toml": digest},
+        }:
+            raise ValueError("formal Gemini web policy digest does not match the selected candidate")
+        return digest
+    if digest != "01a267f591518964e30f94ffc45d496aae594435678380179b679d1aa8de189b" or manifest != {
+        "source_repository": "https://github.com/codefoundry-io/triad-dispatch-spec",
+        "source_commit": "6f0f2746f0bd74e16cf6df7c9ee5e0750d42d7d5", "status": "candidate",
+        "source_path": "contracts/gemini-readonly-b.toml",
+        "sha256": {"gemini-formal-readonly.toml": digest},
+    }:
+        raise ValueError("formal Gemini policy digest does not match the selected candidate")
+    return digest
 
 
 def _supports_formal_help_contract(help_text: str) -> bool:
@@ -144,10 +168,13 @@ def _run_preflight(
     cwd: str | None,
     timeout: int,
     selector_receipt: review_round.GoogleSelectorReceipt,
+    *,
+    v2_fields: dict | None = None,
+    web: bool = False,
 ) -> int:
-    policy = _formal_policy_path()
+    policy = _formal_policy_path().with_name("gemini-formal-web.toml") if web else _formal_policy_path()
     try:
-        policy_sha256 = _validate_formal_policy(policy)
+        policy_sha256 = _validate_formal_policy(policy, **({"web": True} if web else {}))
         version_result = subprocess.run(
             [gemini_bin, "--version"],
             cwd=cwd,
@@ -162,6 +189,9 @@ def _run_preflight(
         gemini_version = review_round.validate_formal_gemini_version(
             version_result.stdout.strip()
         )
+        if v2_fields is not None:
+            from google_preflight_v2 import gemini_model_support
+            gemini_model_support(v2_fields["model"], gemini_version)
         completed = subprocess.run(
             [gemini_bin, "--help"],
             cwd=cwd,
@@ -195,8 +225,10 @@ def _run_preflight(
                 "requested_approval_mode": "plan",
                 "review_id": selector_receipt.review_id,
                 "route": "gemini",
+                **({"review_web_authorized": True} if web else {}),
+                **(v2_fields or {}),
             },
-            ensure_ascii=False,
+            ensure_ascii=v2_fields is not None,
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -220,6 +252,8 @@ def main() -> int:
     )
     p.add_argument("--cwd", default=None, help="Process working directory")
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
+    p.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
+    p.add_argument("--web", action="store_true", help="Explicitly authorize web; REVIEW requires matching bound metadata and preflight")
     p.add_argument(
         "--model",
         default=None,
@@ -233,6 +267,9 @@ def main() -> int:
     p.add_argument("--expected-review-id", default=None)
     p.add_argument("--expected-family", choices=("google",), default=None)
     p.add_argument("--expected-content-digest", default=None)
+    p.add_argument("--expected-leg-name", default=None)
+    p.add_argument("--expected-attempt", type=int, default=None)
+    p.add_argument("--expected-route", choices=("null", "agy", "gemini"), default=None)
     p.add_argument("--google-selector-receipt", type=Path, default=None)
     p.add_argument("--google-preflight-receipt", type=Path, default=None)
     p.add_argument("--preflight-only", action="store_true")
@@ -250,25 +287,50 @@ def main() -> int:
     )
     args = p.parse_args()
 
+    process_cwd = None
     try:
         process_cwd = Path.cwd()
         _prompt_text = load_prompt_text(args.prompt, args.prompt_file, process_cwd=process_cwd)
     except Exception as e:
-        log(f"prompt load failed: {e}")
+        log(_common.input_path_error("prompt load", args.prompt_file, process_cwd, e))
         return EXIT_ARG_ERROR
     args.prompt = _prompt_text  # downstream code keeps using args.prompt
 
     try:
         args.cwd = validate_wrapper_cwd(args.cwd, process_cwd=process_cwd)
     except Exception as e:
-        log(f"--cwd validation failed: {e}")
+        log(_common.input_path_error("--cwd", args.cwd, process_cwd, e))
         return EXIT_ARG_ERROR
 
     if not args.prompt.strip():
         log("empty prompt")
         return EXIT_ARG_ERROR
 
-    formal_verdict = args.pydantic in FORMAL_VERDICT_SPECS
+    try:
+        args.add_dir = _common.validate_extra_directories(args.add_dir, process_cwd=process_cwd)
+        if any("," in directory for directory in args.add_dir):
+            raise ValueError("Gemini --include-directories cannot represent a comma in one path")
+    except Exception as e:
+        log(_common.input_path_error("--add-dir", None, process_cwd, e))
+        return EXIT_ARG_ERROR
+    if args.add_dir:
+        if (args.preflight_only or args.pydantic in (FORMAL_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS) or any(
+            value is not None for value in (args.expected_review_id, args.expected_family,
+                args.expected_content_digest, args.google_selector_receipt, args.google_preflight_receipt)
+        )):
+            log("--add-dir is for raw INVESTIGATION, not formal REVIEW or preflight")
+            return EXIT_ARG_ERROR
+    web_clause = ""
+    if args.web and not args.preflight_only and args.pydantic not in (FORMAL_VERDICT_SPECS | _common.PACKAGED_V2_VERDICT_SPECS):
+        try:
+            web_clause = _common.load_web_evidence_clause(
+                Path(__file__).resolve().parents[1] / "prompts/investigation.md", gemini=True)
+        except (OSError, UnicodeError, ValueError) as e:
+            log(f"web evidence clause unavailable: {e}")
+            return EXIT_ARG_ERROR
+
+    v2_verdict = args.pydantic in _common.PACKAGED_V2_VERDICT_SPECS
+    formal_verdict = (args.pydantic in FORMAL_VERDICT_SPECS or v2_verdict) and not args.preflight_only
     pydantic_cls = None
     if args.pydantic:
         try:
@@ -276,6 +338,24 @@ def main() -> int:
         except Exception as e:
             log(f"--pydantic load failed: {e}")
             return EXIT_ARG_ERROR
+
+    if v2_verdict:
+        from verdict_v2 import bound_wrapper
+        import google_preflight_v2
+        if args.repair_mode:
+            log("v2 review uses explicit per-entry attempts, not repair-mode")
+            return EXIT_ARG_ERROR
+        if not args.preflight_only:
+            try:
+                pydantic_cls = bound_wrapper(args, family="google", route="gemini")
+            except ValueError as error:
+                log(str(error))
+                return EXIT_ARG_ERROR
+    elif any(value is not None for value in (
+        args.expected_leg_name, args.expected_attempt, args.expected_route
+    )):
+        log("v2 bindings require --pydantic verdict_v2:LegVerdict")
+        return EXIT_ARG_ERROR
 
     binding_values = (
         args.expected_review_id,
@@ -312,20 +392,26 @@ def main() -> int:
     ):
         log("expected review ID has invalid syntax")
         return EXIT_ARG_ERROR
-    if formal_verdict and not args.preflight_only and (
+    if formal_verdict and not v2_verdict and (
         args.timeout != FORMAL_GEMINI_TIMEOUT or args.model is not None
     ):
         log(
             "formal Gemini review requires --timeout 600 and CLI Auto model routing"
         )
         return EXIT_ARG_ERROR
-    if args.preflight_only and (
+    if args.preflight_only and not v2_verdict and (
         args.pydantic is not None or args.model is not None or args.repair_mode
     ):
         log("Gemini formal preflight does not accept model, schema, or repair controls")
         return EXIT_ARG_ERROR
 
     selected_context = formal_verdict or args.preflight_only
+    if formal_verdict:
+        try:
+            _common.validate_review_web(args, args.prompt)
+        except ValueError as error:
+            log(str(error))
+            return EXIT_ARG_ERROR
     if selected_context and args.google_selector_receipt is None:
         log("formal Gemini route requires --google-selector-receipt")
         return EXIT_ARG_ERROR
@@ -339,6 +425,8 @@ def main() -> int:
         log("Google preflight receipt is reserved for formal dispatch")
         return EXIT_ARG_ERROR
     selector_receipt = None
+    v2_fields = None
+    v2_preflight = None
     if args.google_selector_receipt is not None:
         try:
             selector_receipt = review_round.load_google_selector_receipt(
@@ -347,19 +435,26 @@ def main() -> int:
                 expected_route="gemini",
                 expected_wrapper=Path(__file__).resolve(),
             )
-            if formal_verdict:
+            if v2_verdict:
+                v2_fields = google_preflight_v2.fields(args, args.cwd, selector_receipt)
+            if formal_verdict and v2_verdict:
+                v2_preflight = google_preflight_v2.load_receipt(
+                    args.google_preflight_receipt, selector_receipt, args, args.cwd, args.prompt)
+            elif formal_verdict:
                 selector_receipt = review_round.validate_google_preflight_receipt(
                     args.google_preflight_receipt,
                     selector_receipt,
                     expected_review_id=args.expected_review_id,
                 )
+                if args.web != selector_receipt.review_web_authorized:
+                    raise ValueError("Gemini web authorization does not match preflight")
                 review_round.validate_google_selector_prompt(
                     args.prompt,
                     selector_receipt,
                     expected_review_id=args.expected_review_id,
                     expected_content_digest=args.expected_content_digest,
                 )
-        except review_round.RoundIntegrityError as error:
+        except (review_round.RoundIntegrityError, ValueError, OSError) as error:
             log(f"Google selector receipt rejected: {error}")
             return EXIT_ARG_ERROR
 
@@ -368,15 +463,17 @@ def main() -> int:
         if selector_receipt is not None
         else require_binary("gemini")
     )
-    policy = _formal_policy_path()
+    policy = _formal_policy_path().with_name("gemini-formal-web.toml") if args.web else _formal_policy_path()
     if formal_verdict:
         try:
-            _validate_formal_policy(policy)
+            _validate_formal_policy(policy, **({"web": True} if args.web else {}))
         except ValueError as error:
             log(str(error))
             return EXIT_ARG_ERROR
     if args.preflight_only:
-        return _run_preflight(gemini_bin, args.cwd, args.timeout, selector_receipt)
+        return _run_preflight(gemini_bin, args.cwd, args.timeout, selector_receipt,
+                              **({"v2_fields": v2_fields} if v2_verdict else {}),
+                              **({"web": True} if args.web else {}))
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [
@@ -389,7 +486,7 @@ def main() -> int:
         if formal_verdict:
             cmd += [
                 "-m",
-                "auto",
+                args.model if v2_verdict else "auto",
                 "--approval-mode",
                 "plan",
                 "--policy",
@@ -397,6 +494,8 @@ def main() -> int:
             ]
         elif args.model:
             cmd += ["-m", args.model]
+        for directory in args.add_dir:
+            cmd += ["--include-directories", directory]
         return cmd
 
     result = run_cli_with_retry(
@@ -410,10 +509,17 @@ def main() -> int:
         repair_mode=args.repair_mode,
         single_provider_call=formal_verdict,
         remove_env=FORMAL_GEMINI_REMOVED_ENV if formal_verdict else (),
+        prompt_suffix=web_clause,
     )
 
     if formal_verdict:
         result.runtime_identity = result.runtime_identity or "unexposed"
+        result.transport = _common.transport_receipt("gemini", result)
+        if not v2_verdict:
+            result.transport = {**result.transport, "cli_version": selector_receipt.cli_version}
+        if v2_verdict:
+            result.review_binding = dict(pydantic_cls._binding)
+            result.transport["attempt"] = args.expected_attempt
 
     if formal_verdict and result.exit_code == _common.EXIT_OK:
         for field, expected in (
@@ -429,9 +535,11 @@ def main() -> int:
                 result.validated = None
                 break
 
-    audit_cmd = build_cmd(args.prompt)
+    audit_prompt = args.prompt + ("\n\n" + web_clause if web_clause else "")
+    audit_cmd = build_cmd(audit_prompt)
+    _common.record_wrapper_paths(result, args.prompt_file, args.cwd, process_cwd)
     persist_result_artifacts(
-        "gemini", sys.argv, audit_cmd, args.prompt, result, debug=args.debug
+        "gemini", sys.argv, audit_cmd, audit_prompt, result, debug=args.debug
     )
 
     if pydantic_cls and result.validated is not None:
