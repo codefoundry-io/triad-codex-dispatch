@@ -2,7 +2,7 @@
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
-[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)에서
+[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 [English README](README.md)
@@ -65,7 +65,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    - `codex` — 설치 후 `codex login`.
    - `agy` — 우선 Google-family worker이며 개인 Google Sign-In에는 필수.
    - `gemini` — AGY가 없는 Gemini 구버전 CLI 경로에서만 필수. 기존 Gemini Enterprise OAuth 인증을 사용합니다.
-   - `claude` — Claude Code `>= 2.1.170`; bootstrap 은 binary 존재만 확인하며
+   - `claude` — 기본 Opus 5.5 경로는 Claude Code `>= 2.1.280`; bootstrap 은 binary 존재만 확인하며
      version probe 를 실행하지 않습니다.
 
    `git`, `python3 >= 3.12`, 그리고 그 동일 Python runtime의 Pydantic 2와 `jsonschema>=4.26,<5`도
@@ -235,6 +235,19 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.557 업그레이드
+
+0.2.557은 기본 Claude 리뷰 모델을 `claude-opus-5-5`, effort를 `xhigh`로
+고정하고 preflight에서 Opus 5.5를 인식합니다. 이 기본 경로는
+[Opus 5.5가 추가된 Claude Code 2.1.280](https://github.com/anthropics/claude-code/releases/tag/v2.1.280)
+이상이 필요합니다. 기존 v2 모델 override, null
+선택과 지원되는 이전 모델은 계속 사용할 수 있으며 raw 호출은 호출자의 선택을
+유지합니다. Legacy formal 경로는 새로운 정확한 모델 ID를 요구합니다.
+
+[마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를 따라
+bootstrap을 다시 실행한 뒤 새 Codex 세션을 시작하세요. 모델 선택 확인만으로
+계정의 사용 권한이나 실제 추론 성공을 증명하지는 않습니다.
 
 ### 0.2.556 업그레이드
 
@@ -412,7 +425,7 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
-완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1200`을
+완전히 바인딩된 formal Claude route는 `--model claude-opus-5-5 --effort xhigh --timeout 1200`을
 사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
 현재 route timing은 Claude wrapper deadline 1,200초, AGY 또는 Gemini wrapper deadline
 600초, fresh Codex의 반복 가능한 1,200초 observation wait입니다. terminal outcome 해석은
@@ -435,7 +448,7 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

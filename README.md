@@ -4,7 +4,7 @@
 
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
-[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)
+[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)
 provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
@@ -66,7 +66,7 @@ section is optional.
    - `codex` — install, then `codex login`.
    - `agy` — preferred Google-family worker and required for personal Google Sign-In.
    - `gemini` — required for Legacy Gemini CLI use: AGY absent, existing Gemini Enterprise OAuth sign-in.
-   - `claude` — Claude Code `>= 2.1.170`; bootstrap checks binary presence only
+   - `claude` — Claude Code `>= 2.1.280` for the default Opus 5.5 route; bootstrap checks binary presence only
      and does not run a version probe.
 
    You also need `git`, `python3 >= 3.12`, Pydantic 2 and `jsonschema>=4.26,<5`
@@ -254,6 +254,19 @@ enforces it (summarized under [Security](#security) below).
   session after install or update.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
+
+### Upgrading to 0.2.557
+
+0.2.557 pins the default Claude review model to `claude-opus-5-5` with `xhigh`
+and recognizes Opus 5.5 during preflight. This default requires Claude Code
+`>= 2.1.280`, the [release that added Opus 5.5](https://github.com/anthropics/claude-code/releases/tag/v2.1.280).
+Existing v2 model overrides, null
+selection and supported older models remain available; raw calls still use the
+caller's selection. The legacy formal route requires the exact new model ID.
+
+Follow the [marketplace or local Git update steps](docs/installation.md#update),
+rerun bootstrap and open a fresh Codex session. Model selection checks do not
+establish account entitlement or authenticated inference.
 
 ### Upgrading to 0.2.556
 
@@ -445,7 +458,7 @@ locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
-it uses `--model opus --effort xhigh --timeout 1200` with no `--fallback-model`.
+it uses `--model claude-opus-5-5 --effort xhigh --timeout 1200` with no `--fallback-model`.
 Current route timing is a 1,200-second Claude wrapper deadline, a 600-second AGY
 or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex observation
 waits. Terminal-outcome interpretation is owned by the cross-family
@@ -468,7 +481,7 @@ not change the public three-family default, prepared-directory renderer, or
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

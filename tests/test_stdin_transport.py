@@ -331,8 +331,9 @@ def test_claude_prompt_file_reaches_text_stdin_once(
     monkeypatch.setattr(_common, "_LOG_DIR", log_root)
     monkeypatch.setattr(_common, "_LOG_DIR_CONFIGURED", True)
     monkeypatch.setenv("TRIAD_AUDIT_REDACT_PROMPTS", "1")
+    model = "claude-opus-5-5" if formal else "opus"
     args = ["claude_wrapper.py", "--prompt-file", str(prompt_file),
-            "--cwd", str(tmp_path), "--model", "opus", "--effort", "xhigh"]
+            "--cwd", str(tmp_path), "--model", model, "--effort", "xhigh"]
     if formal:
         args += ["--pydantic", "verdict_schema:LegVerdict", "--timeout", "1200",
                  "--expected-review-id", "review-r1", "--expected-family", "claude",
@@ -352,7 +353,7 @@ def test_claude_prompt_file_reaches_text_stdin_once(
     assert len(children) == 1
     assert PROMPT not in record["argv"] and loaded not in record["argv"]
     assert record["argv"][:5] == ["--print", "--input-format", "text", "--output-format", "json"]
-    assert record["argv"][record["argv"].index("--model") + 1] == "opus"
+    assert record["argv"][record["argv"].index("--model") + 1] == ("claude-opus-5-5" if formal else "opus")
     assert record["argv"][record["argv"].index("--effort") + 1] == "xhigh"
     if formal:
         assert record["argv"][record["argv"].index("--permission-mode") + 1] == "plan"

@@ -4,7 +4,7 @@
     {
       "name": "claude", "vendor": "claude", "enabled": true,
       "acceptance": "required", "timeout_s": 1200,
-      "claude": {"agent": null, "model": "opus", "effort": "xhigh"}
+      "claude": {"agent": null, "model": "claude-opus-5-5", "effort": "xhigh"}
     },
     {
       "name": "codex", "vendor": "codex", "enabled": true,
