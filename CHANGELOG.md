@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.557 — 2026-09-25
 
 - Pins the Claude review default to `claude-opus-5-5` with `xhigh` in the v2
   roster and legacy formal route; recognizes Opus 5.5 during capability preflight.

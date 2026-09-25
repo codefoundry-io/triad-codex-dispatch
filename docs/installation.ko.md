@@ -9,7 +9,7 @@
 ## 설치할 버전 선택
 
 아래 명령은 최신 공개 버전 경로인 `main`을 선택합니다.
-[v0.2.556 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)에서
+[v0.2.557 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)에서
 버전별 다운로드와 체크섬을 확인할 수 있습니다. 같은 버전을 재현하려면 B 경로에서
 릴리스 노트에 기록된 전체 커밋 ID를 checkout합니다.
 

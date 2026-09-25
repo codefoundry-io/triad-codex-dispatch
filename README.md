@@ -4,7 +4,7 @@
 
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
-[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)
+[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)
 provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
@@ -255,6 +255,17 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.557
+
+0.2.557 pins the default Claude review model to `claude-opus-5-5` with `xhigh`
+and recognizes Opus 5.5 during preflight. Existing v2 model overrides, null
+selection and supported older models remain available; raw calls still use the
+caller's selection. The legacy formal route requires the exact new model ID.
+
+Follow the [marketplace or local Git update steps](docs/installation.md#update),
+rerun bootstrap and open a fresh Codex session. Model selection checks do not
+establish account entitlement or authenticated inference.
+
 ### Upgrading to 0.2.556
 
 0.2.556 includes the explicit public v2 workflow and directly requested all-leg
@@ -468,7 +479,7 @@ not change the public three-family default, prepared-directory renderer, or
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

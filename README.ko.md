@@ -2,7 +2,7 @@
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
-[v0.2.556](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.556)에서
+[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 [English README](README.md)
@@ -236,6 +236,17 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.557 업그레이드
+
+0.2.557은 기본 Claude 리뷰 모델을 `claude-opus-5-5`, effort를 `xhigh`로
+고정하고 preflight에서 Opus 5.5를 인식합니다. 기존 v2 모델 override, null
+선택과 지원되는 이전 모델은 계속 사용할 수 있으며 raw 호출은 호출자의 선택을
+유지합니다. Legacy formal 경로는 새로운 정확한 모델 ID를 요구합니다.
+
+[마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를 따라
+bootstrap을 다시 실행한 뒤 새 Codex 세션을 시작하세요. 모델 선택 확인만으로
+계정의 사용 권한이나 실제 추론 성공을 증명하지는 않습니다.
+
 ### 0.2.556 업그레이드
 
 0.2.556은 명시적으로 선택하는 public v2 리뷰와 사용자가 직접 요청한 모든 leg의
@@ -435,7 +446,7 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.556-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
