@@ -41,7 +41,7 @@ def call_wrapper(tmp_path, monkeypatch, capsys):
         prompt = "Verify the requested external fact."
         if mode != "raw":
             schema = "verdict_v2:LegVerdict" if mode == "v2" else "verdict_schema:LegVerdict"
-            options += ["--pydantic", schema, "--model", "opus", "--effort", "xhigh", "--timeout", "1200"]
+            options += ["--pydantic", schema, "--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1200"]
             for field in fields:
                 options += ["--expected-" + field.replace("_", "-"), "null" if data[field] is None else str(data[field])]
             if authorized is not None:

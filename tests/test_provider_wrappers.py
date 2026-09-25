@@ -1023,7 +1023,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
             "--prompt",
             "review",
             "--model",
-            "opus",
+            "claude-opus-5-5",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1044,7 +1044,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
     assert len(calls) == 1
     for option in ("--model", "--effort", "--permission-mode", "--json-schema"):
         assert calls[0].count(option) == 1
-    assert calls[0][calls[0].index("--model") + 1] == "opus"
+    assert calls[0][calls[0].index("--model") + 1] == "claude-opus-5-5"
     assert calls[0][calls[0].index("--effort") + 1] == "xhigh"
     assert calls[0][calls[0].index("--permission-mode") + 1] == "plan"
     assert "--fallback-model" not in calls[0]
@@ -1096,7 +1096,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
             "--prompt",
             "review",
             "--model",
-            "opus",
+            "claude-opus-5-5",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1121,14 +1121,16 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
     (
         ("--effort", "xhigh", "--timeout", "1200"),
         ("--model", "sonnet", "--effort", "xhigh", "--timeout", "1200"),
-        ("--model", "opus", "--timeout", "1200"),
-        ("--model", "opus", "--effort", "high", "--timeout", "1200"),
-        ("--model", "opus", "--effort", "xhigh"),
-        ("--model", "opus", "--effort", "xhigh", "--timeout", "1199"),
-        ("--model", "opus", "--effort", "xhigh", "--timeout", "1201"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "1200"),
+        ("--model", "claude-opus-5", "--effort", "xhigh", "--timeout", "1200"),
+        ("--model", "claude-opus-5-5", "--timeout", "1200"),
+        ("--model", "claude-opus-5-5", "--effort", "high", "--timeout", "1200"),
+        ("--model", "claude-opus-5-5", "--effort", "xhigh"),
+        ("--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1199"),
+        ("--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1201"),
         (
             "--model",
-            "opus",
+            "claude-opus-5-5",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1138,7 +1140,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
         ),
         (
             "--model",
-            "opus",
+            "claude-opus-5-5",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1150,6 +1152,8 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
     ids=(
         "missing-model",
         "wrong-model",
+        "moving-opus-alias",
+        "older-opus-pin",
         "missing-effort",
         "wrong-effort",
         "default-timeout",
@@ -1189,7 +1193,7 @@ def test_claude_formal_leg_rejects_unpinned_route_before_provider_resolution(
 
     assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
     assert (
-        "formal Claude route requires --model opus --effort xhigh --timeout 1200 "
+        "formal Claude route requires --model claude-opus-5-5 --effort xhigh --timeout 1200 "
         "and forbids --fallback-model" in capsys.readouterr().err
     )
 

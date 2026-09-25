@@ -412,7 +412,7 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
-완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1200`을
+완전히 바인딩된 formal Claude route는 `--model claude-opus-5-5 --effort xhigh --timeout 1200`을
 사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
 현재 route timing은 Claude wrapper deadline 1,200초, AGY 또는 Gemini wrapper deadline
 600초, fresh Codex의 반복 가능한 1,200초 observation wait입니다. terminal outcome 해석은

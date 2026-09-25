@@ -11,7 +11,7 @@ permission selection native. The fully bound formal `LegVerdict` route adds
 native per-call Plan Mode without changing persistent user configuration.
 Explicitly requested `--web` preapproves native `WebSearch`/`WebFetch`; review calls
 must also match the [bound round condition](../triad-cross-family-review/references/review-web.md).
-The fully bound formal route rejects any model other than `opus`, any effort
+The fully bound formal route rejects any model other than `claude-opus-5-5`, any effort
 other than `xhigh`, any timeout other than `1200`, and every `--fallback-model`
 before provider resolution.
 
@@ -29,7 +29,7 @@ before provider resolution.
 ## Cross-family review leg
 
 Use `triad-cross-family-review` and read its
-`references/leg-contracts.md`. The formal Claude route is `--model opus
+`references/leg-contracts.md`. The formal Claude route is `--model claude-opus-5-5
 --effort xhigh --timeout 1200 --pydantic verdict_schema:LegVerdict
 --expected-review-id "$review_id" --expected-family claude
 --expected-content-digest "$review_digest"`. Claude reviews only; it does not

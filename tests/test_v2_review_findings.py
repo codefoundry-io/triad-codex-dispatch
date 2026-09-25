@@ -141,7 +141,7 @@ def test_new_names_preserve_documented_omitted_selection_defaults(adapter_case, 
         assert result["agent"] is None
         assert result["model"] == block["claude"].get("model")
         assert result["effort"] == block["claude"].get("effort")
-        assert result["selected_model"] == "claude-opus-5"
+        assert result["selected_model"] == "claude-opus-5-5"
         assert not any("--agent" in call for call in calls)
     else:
         assert (result["route"], result["model"], result["effort"]) == ("agy", "gemini-3.1-pro-high", "high")

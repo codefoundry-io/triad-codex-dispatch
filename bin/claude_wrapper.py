@@ -6,7 +6,7 @@ effort, fallback-model, working-directory, timeout, schema, and debug controls.
 Provider-owned permission and trust settings are left to the native CLI for
 ordinary calls. The exact formally bound ``LegVerdict`` route adds native
 ``--permission-mode plan`` and fails before provider resolution unless it uses
-``opus`` with ``xhigh`` effort, a 1,200-second timeout, and no fallback model.
+``claude-opus-5-5`` with ``xhigh`` effort, a 1,200-second timeout, and no fallback model.
 
 Stdout is the final answer text from envelope `.result` (or, with
 ``--pydantic``, the validated JSON object). Stderr is wrapper logging and
@@ -35,7 +35,7 @@ from _common import (
 
 
 EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
-FORMAL_CLAUDE_MODEL = "opus"
+FORMAL_CLAUDE_MODEL = "claude-opus-5-5"
 FORMAL_CLAUDE_EFFORT = "xhigh"
 FORMAL_CLAUDE_TIMEOUT = 1200
 
@@ -375,7 +375,7 @@ def main() -> int:
         or args.fallback_model is not None
     ):
         log(
-            "formal Claude route requires --model opus --effort xhigh "
+            "formal Claude route requires --model claude-opus-5-5 --effort xhigh "
             "--timeout 1200 and forbids --fallback-model"
         )
         return EXIT_ARG_ERROR

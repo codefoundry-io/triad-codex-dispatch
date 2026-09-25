@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Pins the Claude review default to `claude-opus-5-5` with `xhigh` in the v2
+  roster and legacy formal route; recognizes Opus 5.5 during capability preflight.
+- Preserves v2 model overrides, nullable selection, supported older models and
+  raw caller passthrough. Existing timeout, web, authentication and no-fallback
+  controls remain in effect.
+
 ## 0.2.556 — 2026-09-21
 
 - Adds explicit public v2 roster resolution, invocation, per-entry evidence

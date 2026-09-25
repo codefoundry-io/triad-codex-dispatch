@@ -155,7 +155,7 @@ def test_dotted_verdict_retains_formal_route_guard(route, monkeypatch, capsys):
             "--expected-review-id", "review-r1", "--expected-family", family,
             "--expected-content-digest", "a" * 64]
     if route == "claude":
-        argv += ["--model", "opus", "--effort", "xhigh", "--timeout", "1199"]
+        argv += ["--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1199"]
         expected = "formal Claude route requires"
     else:
         argv += ["--sandbox", "read-only", "--timeout", "599"]

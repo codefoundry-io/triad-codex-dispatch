@@ -44,13 +44,15 @@ def adapter_case(tmp_path, monkeypatch):
             if "--help" in argv:
                 return "--print --model --effort --agent --no-session-persistence --permission-mode --output-format\n"
             if argv[-1] == "/model":
-                return "Current model: `Opus 5 (1M context)` (effort: xhigh)\n"
+                return "Current model: `Opus 5.5 (1M context)` (effort: xhigh)\n"
             if argv[-1].startswith("/model "):
                 if "bad-model" in argv:
                     return "Model not found: bad-model\n"
                 if "--agent" in argv and argv[argv.index("--agent") + 1] == "missing-agent":
                     raise ValueError("agent does not exist")
-                return "Set model to Opus 5 for this session only\n"
+                label = {"claude-opus-5": "Opus 5", "claude-opus-4-6": "Opus 4.6"}.get(
+                    argv[-1].removeprefix("/model "), "Opus 5.5")
+                return f"Set model to {label} for this session only\n"
             if "--preflight-only" in argv:
                 assert "--pydantic" in argv and argv[argv.index("--pydantic") + 1] == "verdict_v2:LegVerdict"
                 def value(flag):
@@ -93,12 +95,38 @@ def test_resolved_three_family_invocations_have_real_capability_evidence(adapter
     output = mod.prepare_adapters(roster, **kwargs)
     assert set(output) == {"claude", "codex", "google"}
     assert output["codex"]["transport_route"] == "native" and output["codex"]["binary"] is None
-    assert output["claude"]["model"] == "opus" and output["claude"]["effort"] == "xhigh"
+    assert output["claude"]["model"] == "claude-opus-5-5" and output["claude"]["effort"] == "xhigh"
+    assert output["claude"]["selected_model"] == "claude-opus-5-5"
     assert output["google"]["route"] == "agy"
     assert all(item["capabilities_checked"] for item in output.values())
     assert Path(output["google"]["preflight_file"]).is_file()
     assert any("--preflight-only" in call for call in calls)
     assert not any(Path(call[0]).name == "codex" for call in calls)
+
+
+def test_C34_opus_55_pin_rejects_provider_selection_of_opus_5(adapter_case, monkeypatch):
+    mod, roster, kwargs, _, _ = adapter_case()
+    roster["legs"][0]["claude"]["model"] = "claude-opus-5-5"
+    original = mod.probe
+    monkeypatch.setattr(mod, "probe", lambda argv, **kw:
+        "Set model to Opus 5 for this session only\n"
+        if argv[-1] == "/model claude-opus-5-5" else original(argv, **kw))
+    with pytest.raises(ValueError, match="substituted a different requested model"):
+        mod.prepare_adapters(roster, **kwargs)
+
+
+def test_C12_explicit_older_claude_project_model_remains_selectable(adapter_case):
+    mod, _, kwargs, calls, _ = adapter_case()
+    config = kwargs["cwd"] / ".agents" / "triad-review-legs.json"
+    config.parent.mkdir()
+    config.write_text(json.dumps({
+        "schema": "triad-review-legs.v2",
+        "legs": [{"name": "claude", "claude": {"model": "claude-opus-5"}}],
+    }))
+    result = mod.prepare_adapters(resolve_roster(kwargs["cwd"]), **kwargs)["claude"]
+    assert (result["model"], result["selected_model"], result["effort"]) == (
+        "claude-opus-5", "claude-opus-5", "xhigh")
+    assert any(call[-1] == "/model claude-opus-5" for call in calls)
 
 
 def test_explicit_gemini_pin_uses_own_block_with_agy_present(adapter_case):

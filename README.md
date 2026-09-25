@@ -445,7 +445,7 @@ locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
-it uses `--model opus --effort xhigh --timeout 1200` with no `--fallback-model`.
+it uses `--model claude-opus-5-5 --effort xhigh --timeout 1200` with no `--fallback-model`.
 Current route timing is a 1,200-second Claude wrapper deadline, a 600-second AGY
 or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex observation
 waits. Terminal-outcome interpretation is owned by the cross-family

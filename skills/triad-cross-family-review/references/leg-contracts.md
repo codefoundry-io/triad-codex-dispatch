@@ -41,7 +41,7 @@ TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
 python3 "$toolkit_root/bin/claude_wrapper.py" \
   --prompt-file "$review_prompt_file" \
   --cwd "$review_target_cwd" \
-  --model opus \
+  --model claude-opus-5-5 \
   --effort xhigh \
   --timeout 1200 \
   --pydantic verdict_schema:LegVerdict \
@@ -52,7 +52,7 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 ```
 
 The wrapper adds Claude's native `--permission-mode plan` and requires the exact
-`opus`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
+`claude-opus-5-5`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
 checks formal bindings and locally validates the terminal JSON. Read/search tools
 remain available inside the authorized boundary under existing user permissions.
 The result stays provisional until final integrity succeeds.
