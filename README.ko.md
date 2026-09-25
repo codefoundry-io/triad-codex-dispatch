@@ -65,7 +65,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    - `codex` — 설치 후 `codex login`.
    - `agy` — 우선 Google-family worker이며 개인 Google Sign-In에는 필수.
    - `gemini` — AGY가 없는 Gemini 구버전 CLI 경로에서만 필수. 기존 Gemini Enterprise OAuth 인증을 사용합니다.
-   - `claude` — Claude Code `>= 2.1.170`; bootstrap 은 binary 존재만 확인하며
+   - `claude` — 기본 Opus 5.5 경로는 Claude Code `>= 2.1.280`; bootstrap 은 binary 존재만 확인하며
      version probe 를 실행하지 않습니다.
 
    `git`, `python3 >= 3.12`, 그리고 그 동일 Python runtime의 Pydantic 2와 `jsonschema>=4.26,<5`도
@@ -239,7 +239,9 @@ class, route에서 identity를 추론하지 않습니다.
 ### 0.2.557 업그레이드
 
 0.2.557은 기본 Claude 리뷰 모델을 `claude-opus-5-5`, effort를 `xhigh`로
-고정하고 preflight에서 Opus 5.5를 인식합니다. 기존 v2 모델 override, null
+고정하고 preflight에서 Opus 5.5를 인식합니다. 이 기본 경로는
+[Opus 5.5가 추가된 Claude Code 2.1.280](https://github.com/anthropics/claude-code/releases/tag/v2.1.280)
+이상이 필요합니다. 기존 v2 모델 override, null
 선택과 지원되는 이전 모델은 계속 사용할 수 있으며 raw 호출은 호출자의 선택을
 유지합니다. Legacy formal 경로는 새로운 정확한 모델 ID를 요구합니다.
 

@@ -16,7 +16,8 @@
 ## 준비 사항
 
 macOS, Linux 또는 WSL2의 평소 로그인 터미널을 사용합니다. Git, Bash,
-Python 3.12 이상, Codex, Claude Code 2.1.170 이상과 Google CLI 하나 이상이 필요합니다.
+Python 3.12 이상, Codex, 기본 Opus 5.5 경로용 Claude Code 2.1.280 이상과
+Google CLI 하나 이상이 필요합니다.
 
 - AGY를 우선 사용하며 개인 Google Sign-In에는 AGY가 필요합니다.
 - **Gemini 구버전 CLI 사용**은 AGY와 구분되는 `gemini` 실행 파일 경로를 뜻합니다.
@@ -25,6 +26,12 @@ Python 3.12 이상, Codex, Claude Code 2.1.170 이상과 Google CLI 하나 이�
   필요합니다. 기존 selector는 AGY가 없을 때만 이 경로를 선택합니다.
   v2 Pro 기본 모델에는 별도 버전 지원 검사가 있습니다.
   [리뷰 구성 안내](../README.ko.md#프로젝트-리뷰어-설정-확인)를 참고하세요.
+
+[Claude Code 2.1.280에서 Opus 5.5가 추가됐습니다](https://github.com/anthropics/claude-code/releases/tag/v2.1.280).
+이 릴리스는 2.1.282로 확인했습니다. v2 adapter의 기존 preflight 인터페이스
+최소 버전은 이 모델 요구사항과 별개입니다. bootstrap은 실행 파일 존재를 확인하며
+모델 사용 권한이나 실제 runtime effort를 확인하지는 않습니다. 새 기본 모델을
+사용하기 전에 Claude Code를 업데이트하세요.
 
 각 CLI의 기본 로그인 절차로 인증합니다(Codex는 `codex login`). TRIAD는 계정을
 설정하거나 인증 정보를 복사하지 않습니다. Linux/WSL2에서 Codex sandbox가 요구하면

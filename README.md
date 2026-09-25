@@ -66,7 +66,7 @@ section is optional.
    - `codex` — install, then `codex login`.
    - `agy` — preferred Google-family worker and required for personal Google Sign-In.
    - `gemini` — required for Legacy Gemini CLI use: AGY absent, existing Gemini Enterprise OAuth sign-in.
-   - `claude` — Claude Code `>= 2.1.170`; bootstrap checks binary presence only
+   - `claude` — Claude Code `>= 2.1.280` for the default Opus 5.5 route; bootstrap checks binary presence only
      and does not run a version probe.
 
    You also need `git`, `python3 >= 3.12`, Pydantic 2 and `jsonschema>=4.26,<5`
@@ -258,7 +258,9 @@ enforces it (summarized under [Security](#security) below).
 ### Upgrading to 0.2.557
 
 0.2.557 pins the default Claude review model to `claude-opus-5-5` with `xhigh`
-and recognizes Opus 5.5 during preflight. Existing v2 model overrides, null
+and recognizes Opus 5.5 during preflight. This default requires Claude Code
+`>= 2.1.280`, the [release that added Opus 5.5](https://github.com/anthropics/claude-code/releases/tag/v2.1.280).
+Existing v2 model overrides, null
 selection and supported older models remain available; raw calls still use the
 caller's selection. The legacy formal route requires the exact new model ID.
 

@@ -7,6 +7,8 @@
 - Preserves v2 model overrides, nullable selection, supported older models and
   raw caller passthrough. Existing timeout, web, authentication and no-fallback
   controls remain in effect.
+- Updates the default-route installation prerequisite to Claude Code 2.1.280+,
+  the release that added Opus 5.5; verified locally with 2.1.282.
 
 ## 0.2.556 — 2026-09-21
 

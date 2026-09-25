@@ -16,7 +16,8 @@ use route B and check out the full commit ID recorded in the release notes.
 ## Prerequisites
 
 Use your normal login terminal on macOS, Linux or WSL2. Install Git, Bash,
-Python 3.12+, Codex, Claude Code 2.1.170+ and at least one Google CLI:
+Python 3.12+, Codex, Claude Code 2.1.280+ for the default Opus 5.5 route,
+and at least one Google CLI:
 
 - AGY is preferred and required for personal Google Sign-In.
 - **Legacy Gemini CLI** means the `gemini` executable route, distinct from AGY.
@@ -25,6 +26,12 @@ Python 3.12+, Codex, Claude Code 2.1.170+ and at least one Google CLI:
   OAuth sign-in. AGY must be absent for the legacy selector to choose this route.
   The v2 Pro default has separate version support checks; see the
   [roster reference](../README.md#project-review-roster-check).
+
+Claude Code [2.1.280 added Opus 5.5](https://github.com/anthropics/claude-code/releases/tag/v2.1.280).
+This release was checked with 2.1.282. The v2 adapter's older preflight-interface
+floor is separate from this model requirement; bootstrap checks binary presence,
+not model entitlement or effective runtime effort. Upgrade Claude Code before
+using the new default.
 
 Sign in using each vendor's native workflow (`codex login` for Codex). TRIAD does
 not configure accounts or copy credentials. On Linux/WSL2, install `bubblewrap`
