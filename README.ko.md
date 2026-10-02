@@ -1047,7 +1047,7 @@ Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 �
 ## 오프라인 v2 후보 검증
 
 [공통 계약 후보](contracts/README.md)는 공유 커밋
-055204c83e57bf87eeac5b2422f2b17340f7c53b의 원문입니다.
+04245c740afc9be36ad7702a134f71aec8ff0b7f의 원문입니다.
 절대 정규 경로의 일반 결과 파일과 예상 결합값 6개를 지정합니다.
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
@@ -1068,12 +1068,25 @@ Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 �
 공통 프롬프트, native·wrapper 호출과 결합값 6개의 판정을 연결합니다.
 기존 legacy 개발 게이트와 wire 형식은 유지하며 결과를 상호 변환하지 않습니다.
 
-informational을 포함한 모든 활성 이름이 참여합니다. 원본 결과·run-log·호스트
-관측·읽기 증거와 준비 실패 기록을 attempt별로 보존합니다. 누락·무효 결과는
-합의를 막습니다. 원인 확인 후 변경 없는 실행 실패 항목만 재시도할 수 있고,
-소스나 리뷰 조건이 바뀌면 모든 항목이 새 기준으로 전체 범위를 검토합니다.
-Minor만 있는 부정 판정도 원래 선택을 보존합니다. 수집 명령 종료 0은 승인과
-다르며 JSON의 `INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED`, `AGREED`를 확인합니다.
+요청의 `review_kind`는 `formal-plan`, `pre-merge`, `implementation-review`입니다.
+생략하면 `pre-merge`이며 null·알 수 없는 값은 거부합니다. 플랜 리뷰는 계획대로
+요구사항을 달성할 수 있는지, 코드 리뷰는 실제 변경과 영향받는 소비자를 검토합니다.
+플랜 승인은 미래 코드의 승인이 아닙니다. 단계·권한·출력은 도구가 결합하고,
+현재 요구사항·환경·근거는 리더가 제공합니다. 지원·고정·실제 관측 버전과 모르는
+내용을 구분해서 전달합니다.
+
+informational을 포함한 모든 선택된 활성 항목이 명시적으로 승인해야 합니다.
+비어 있지 않은 구성이라면 leg 수나 모델 계열 수는 합의 조건이 아닙니다.
+exact model ID와 위에서 설명한 기존 JSON 설정 방식을 유지합니다. Minor만 있는
+반대도 유효한 COMPLETE 결과이지만 합의를 막습니다. 수집 명령 종료 0은 승인과
+다르며 JSON의 `INCOMPLETE`, `BLOCKED`, `AGREED`를 확인합니다.
+
+원본 결과·run-log·호스트 관측·읽기 증거와 준비 실패 기록을 attempt별로 보존합니다.
+원인 확인 후 변경 없는 실행 실패만 재시도하며, 소스나 리뷰 조건이 바뀌면 모든
+항목이 새 기준으로 전체 범위를 검토합니다. 리더는 지적을 확인하고 필요한 범위만
+고칩니다. 다음 라운드에는 현재 쟁점 요약 하나와 필요한 근거를 현재 결합된 입력에
+담습니다. 정리된 과거 경로만으로 근거를 대신할 수 없습니다. 확인 가능한 진전은
+계속하되, 반복이나 별도 예외를 승인으로 바꾸지 않고 소진된 논쟁을 종료합니다.
 
 Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설정 지원 여부이며
 계정 접근권이나 실제 실행 모델의 증명이 아닙니다. 노출되지 않은 값은 null/unexposed로

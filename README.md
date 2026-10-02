@@ -1126,7 +1126,7 @@ not a Gemini effort flag or proof of account access/effective runtime identity.
 ## Offline v2 candidate validation
 
 The [candidate contract bundle](contracts/README.md) comes from shared commit
-055204c83e57bf87eeac5b2422f2b17340f7c53b. Use this explicit source CLI with an
+04245c740afc9be36ad7702a134f71aec8ff0b7f. Use this explicit source CLI with an
 absolute canonical regular result file and all six expected binding values:
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
@@ -1149,13 +1149,26 @@ The operational commands are `v2-create`, `v2-allocate`, `v2-record-cli`,
 clauses, native/wrapper invocation and canonical six-field verdict validation.
 The existing legacy development gate stays separate; no wire conversion occurs.
 
-Every enabled named entry participates, including informational entries. Preserve
-original per-attempt results, raw run logs, host/read observations and failed
-preparation evidence. Missing/invalid results block agreement. A diagnosed
-failed-to-run entry may retry on unchanged inputs; source or review-condition
-changes require a fresh full-roster review. Minor-only negative results retain
-their selection deviation. Collection exit 0 is not admission: inspect
-`INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED` or `AGREED` in its JSON.
+Set request `review_kind` to `formal-plan`, `pre-merge` or `implementation-review`;
+omission defaults to `pre-merge`, while null and unknown values refuse. Plan review
+assesses the plan as written; code review inspects the actual change and affected
+consumers. Plan approval does not approve future code. The toolkit binds phase,
+permissions and output; the leader supplies current requirements, environment and
+evidence. Distinguish supported, locked and observed versions and explicit unknowns.
+
+Every selected enabled entry must explicitly approve, including informational
+entries. Any nonempty roster may agree regardless of family count. Keep exact
+model IDs and edits in the existing JSON roster configuration described above.
+A Minor-only negative remains a valid COMPLETE result and blocks agreement.
+Collection exit 0 is not admission: inspect `INCOMPLETE`, `BLOCKED` or `AGREED`.
+
+Preserve per-attempt results, run logs, host/read observations and preparation
+failures. Only a diagnosed failed-to-run entry may retry unchanged inputs;
+changed source or review conditions require a fresh full-roster review. The
+leader verifies findings, makes minimal in-scope corrections, and rebuilds one
+current residual with necessary evidence in current bound inputs. Historical
+paths alone are insufficient after cleanup. Continue verified progress; stop
+exhausted disputes without turning repetition or an owner exception into approval.
 
 Native Codex stays native. Installed interface/catalog checks prove supported
 requested controls, not authenticated service access or effective runtime
