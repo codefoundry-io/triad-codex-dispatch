@@ -1,5 +1,6 @@
 """Actual roster adapters select supported controls before any paid inference."""
 import copy
+import contextlib
 import hashlib
 import importlib
 import importlib.util
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import review_round
 from review_roster import resolve_roster
+from test_v2_google_wrappers import route
 
 
 def implementation():
@@ -40,7 +42,7 @@ def adapter_case(tmp_path, monkeypatch):
             calls.append(argv)
             executable = Path(argv[0]).name
             if "--version" in argv:
-                return "2.1.271 (Claude Code)\n"
+                return "2.1.280 (Claude Code)\n"
             if "--help" in argv:
                 return "--print --model --effort --agent --no-session-persistence --permission-mode --output-format\n"
             if argv[-1] == "/model":
@@ -208,3 +210,71 @@ def test_receipt_is_exclusive_and_retry_rechecks_its_own_attempt(adapter_case):
     two = mod.prepare_adapters(roster, **kwargs, attempt=2)
     assert one["google"]["preflight_file"] != two["google"]["preflight_file"]
     assert json.loads(Path(two["google"]["preflight_file"]).read_text())["attempt"] == 2
+
+
+@pytest.mark.parametrize("version,missing_control,accepted", [
+    ("2.1.300", False, True), ("2.1.300", True, False),
+    ("2.1.205", False, True), ("2.1.204", False, False),
+])
+def test_C65_later_cli_version_preserves_capability_checks(adapter_case, monkeypatch, version, missing_control, accepted):
+    mod, roster, kwargs, calls, _ = adapter_case()
+    # The 2.1.205 seam is generic control support, not Opus 5.5 support.
+    if version in ("2.1.205", "2.1.204"):
+        roster["legs"][0]["claude"].update(model="claude-opus-4-6", effort="high")
+    original = mod.probe
+    def probe(argv, **kw):
+        if argv[-1] == "--version":
+            return version + " (Claude Code)\n"
+        result = original(argv, **kw)
+        return result.replace("--no-session-persistence", "") if missing_control and argv[-1] == "--help" else result
+    monkeypatch.setattr(mod, "probe", probe)
+    if not accepted:
+        with pytest.raises(ValueError):
+            mod.prepare_adapters(roster, **kwargs)
+        assert not any(call[-1].startswith("/model") for call in calls)
+        return
+    result = mod.prepare_adapters(roster, **kwargs)["claude"]
+    model, effort = ("claude-opus-4-6", "high") if version == "2.1.205" else ("claude-opus-5-5", "xhigh")
+    assert (result["cli_version"], result["model"], result["selected_model"], result["effort"]) == (version, model, model, effort)
+    assert any(call[-1] == "/model " + model for call in calls)
+
+
+@pytest.mark.parametrize("case", ["later", "missing-capability", "missing-control", "below-floor"])
+def test_C65_google_later_versions_keep_actual_preflight_controls(route, monkeypatch, case):
+    import antigravity_wrapper as agy
+    import gemini_wrapper as gemini
+    name = route["name"]
+    version = "1.3.0" if name == "agy" else "0.61.0"
+    if name == "agy":
+        monkeypatch.setattr(agy, "_probe_agy_version", lambda _: (1, 1, 19) if case == "below-floor" else (1, 3, 0))
+        if case == "missing-capability":
+            monkeypatch.setattr(agy, "_probe_agy_models", lambda _: set())
+        if case == "missing-control":
+            @contextlib.contextmanager
+            def unavailable_guard(*args, **kwargs):
+                raise ValueError("required read-only settings control unavailable")
+                yield
+            monkeypatch.setattr(agy._agy_settings, "agy_settings_guard", unavailable_guard)
+    else:
+        original = gemini.subprocess.run
+        def probe(argv, **kw):
+            if argv[-1] == "--version":
+                return subprocess.CompletedProcess(argv, 0, ("0.59.9" if case == "below-floor" else version) + "\n", "")
+            result = original(argv, **kw)
+            if case == "missing-capability":
+                result.stdout = result.stdout.replace("--model", "--removed-model")
+            if case == "missing-control":
+                result.stdout = result.stdout.replace("--policy", "--removed-policy")
+            return result
+        monkeypatch.setattr(gemini.subprocess, "run", probe)
+    rc, output, error = route["invoke"](["--preflight-only"])
+    assert route["calls"] == []
+    if case != "later":
+        assert rc != 0 and output == ""
+        return
+    assert rc == 0, error
+    record = json.loads(output)
+    assert record["agy_version" if name == "agy" else "gemini_version"] == version
+    assert record["model"] == ("gemini-3.1-pro-high" if name == "agy" else "gemini-3.1-pro-preview")
+    assert record["effort"] == ("high" if name == "agy" else None)
+    assert record["provider_started"] is False

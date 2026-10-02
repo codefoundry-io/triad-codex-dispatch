@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import review_round
+from test_v2_review_prompts import decoded_context
 from test_review_round import worktree, _lifecycle_packet
 from test_v2_producer_adapter import verdict
 
@@ -111,6 +112,32 @@ def finish(fixture, allocation, *, changes=None, failed=False, reads=None,
 
 def all_success(fixture):
     return {name: finish(fixture, start(fixture, name)) for name in fixture[1]["enabled"]}
+
+
+@pytest.mark.parametrize("residual", ["", '현재 rebuttal: "증거"\n```excerpt```\nUnknown: deployed context'])
+def test_C62_current_residual_is_included_once(round_fixture, residual):
+    objective = '지원 2.1.205; locked 2.1.280; observed 2.1.300\nUnknown: runtime'
+    criteria = ['현재 계약 "검토"', 'Unknown: deployment\n`source` evidence']
+    fixture = round_fixture(request_changes={"prior_residual": residual,
+                                            "objective": objective, "criteria": criteria})
+    _, basis, root, *_ = fixture
+    task_path = root / "shared/TASK.md"
+    supplied_task_bytes = task_path.read_bytes()
+    (root / "results/old-transcript.md").write_text("OLD_TRANSCRIPT_SENTINEL: historical approval")
+    assert basis["request"]["prior_residual"] == residual
+    contexts = []
+    for name in basis["enabled"]:
+        allocation = start(fixture, name)
+        rendered = Path(allocation["prompt_file"]).read_text()
+        scope, decoded_residual = decoded_context(rendered)
+        assert decoded_residual == residual
+        assert scope["objective"] == objective
+        assert scope["criteria"] == criteria
+        assert rendered.count("Prior findings and rebuttal evidence:") == 1
+        assert "OLD_TRANSCRIPT_SENTINEL" not in rendered
+        contexts.append((scope, decoded_residual))
+    assert all(context == contexts[0] for context in contexts)
+    assert task_path.read_bytes() == supplied_task_bytes
 
 
 def test_all_n_entries_and_resolved_invocations_are_bound_before_inference(round_fixture):

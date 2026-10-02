@@ -154,3 +154,62 @@ def test_C60_each_family_has_one_phase_purpose(tmp_path, family, phase):
 def test_C60_renderer_rejects_invalid_phase(tmp_path, phase):
     with pytest.raises(ValueError):
         renderer().render_prompt(**arguments(tmp_path), review_kind=phase)
+
+
+def decoded_context(rendered):
+    scope = json.loads(rendered.split("Bound review scope:\n", 1)[1].splitlines()[0])
+    lines = rendered.split("Prior findings and rebuttal evidence:\n", 1)[1].splitlines()
+    return scope, json.loads(lines[1])
+
+
+@pytest.mark.parametrize("family", ["claude", "codex", "google"])
+@pytest.mark.parametrize("residual", ["", '현재 finding: "인용"\n```evidence```\nUnknown: runtime identity'])
+def test_C61_context_round_trips_without_semantic_interpretation(tmp_path, family, residual):
+    args = arguments(tmp_path, family)
+    objective = '지원 2.1.205; locked 2.1.280; observed 2.1.300\n"unknown": entitlement'
+    criteria = ['현재 소스 `확인`', 'Unknown: effective runtime\n"승인" 증거']
+    task_bytes = '현재 TASK: "한글"\n```data```\nUnknown: deployment context'.encode()
+    args.update(objective=objective, criteria=criteria, residual=residual)
+    args["brief_file"].write_bytes(task_bytes)
+    (tmp_path / "old-transcript.md").write_text("OLD_TRANSCRIPT_SENTINEL: historical approval")
+    rendered = renderer().render_prompt(**args)
+    scope, decoded_residual = decoded_context(rendered)
+    assert decoded_residual == residual
+    assert scope["objective"] == objective
+    assert scope["criteria"] == criteria
+    assert scope["approved_boundary"] == args["approved_boundary"]
+    assert rendered.count("Prior findings and rebuttal evidence:") == 1
+    assert "OLD_TRANSCRIPT_SENTINEL" not in rendered
+    assert args["brief_file"].read_bytes() == task_bytes
+
+
+@pytest.mark.parametrize("residual", [None, 0, False, [], {}])
+def test_C61_non_string_residual_refuses(tmp_path, residual):
+    args = arguments(tmp_path)
+    args["residual"] = residual
+    with pytest.raises(ValueError):
+        renderer().render_prompt(**args)
+
+
+@pytest.mark.parametrize("field,value", [("objective", ""), ("criteria", []), ("criteria", [""]),
+                                        ("approved_boundary", []), ("approved_boundary", [" "])])
+def test_C61_context_keeps_required_scope_checks(tmp_path, field, value):
+    args = arguments(tmp_path)
+    args[field] = value
+    with pytest.raises(ValueError):
+        renderer().render_prompt(**args)
+
+
+@pytest.mark.parametrize("task_kind", ["empty", "directory", "symlink"])
+def test_C61_task_requires_regular_file_without_nonempty_semantics(tmp_path, task_kind):
+    args = arguments(tmp_path)
+    task = args["brief_file"]
+    task.unlink()
+    if task_kind == "empty":
+        task.write_bytes(b"")
+        renderer().render_prompt(**args)
+        assert task.read_bytes() == b""
+    else:
+        task.mkdir() if task_kind == "directory" else task.symlink_to(args["diff_file"])
+        with pytest.raises(ValueError):
+            renderer().render_prompt(**args)

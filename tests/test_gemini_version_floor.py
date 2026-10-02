@@ -19,7 +19,7 @@ def version_case(tmp_path):
     return selector, selected, tmp_path
 
 
-def _probe(case, monkeypatch, *, version="0.60.0", failure=None):
+def _probe(case, monkeypatch, *, version="0.60.0", failure=None, missing_policy=False):
     selector, selected, cwd = case
     calls = []
     def run(argv, **kwargs):
@@ -31,7 +31,10 @@ def _probe(case, monkeypatch, *, version="0.60.0", failure=None):
                 raise OSError("synthetic version failure")
             return subprocess.CompletedProcess(argv, 1 if failure == "nonzero" else 0,
                                                version + "\n", "")
-        return subprocess.CompletedProcess(argv, 0, _formal_gemini_help(), "")
+        help_text = _formal_gemini_help()
+        if missing_policy:
+            help_text = help_text.replace("--policy", "--removed-policy")
+        return subprocess.CompletedProcess(argv, 0, help_text, "")
     monkeypatch.setattr(gemini_wrapper.subprocess, "run", run)
     monkeypatch.setattr(gemini_wrapper, "run_cli_with_retry", lambda *a, **kw:
                         pytest.fail("preflight started provider inference"))
@@ -113,3 +116,21 @@ def test_observed_version_changes_the_common_basis(version_case, prepared, monke
             approved_boundary=("source",), google_selector_receipt=receipt)
         digests.append(_review_metadata(review_round.render_review_prompt(brief))["content_digest"])
     assert digests[0] != digests[1]
+
+
+@pytest.mark.parametrize("version,missing_policy,accepted", [
+    ("0.61.0", False, True), ("0.61.0", True, False),
+    ("0.34.0", False, True), ("0.33.9", False, False),
+])
+def test_C65_formal_gemini_later_version_preserves_capability_checks(version_case, monkeypatch, capsys, version, missing_policy, accepted):
+    result, calls = _probe(version_case, monkeypatch, version=version, missing_policy=missing_policy)
+    output = capsys.readouterr().out
+    if accepted:
+        assert result == 0
+        record = json.loads(output)
+        assert record["gemini_version"] == version
+        assert record["provider_started"] is False
+        assert record["requested_approval_mode"] == "plan"
+    else:
+        assert result == _common.EXIT_ARG_ERROR and output == ""
+    assert [argv[-1] for argv, _ in calls] == (["--version"] if version == "0.33.9" else ["--version", "--help"])
