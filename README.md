@@ -4,7 +4,7 @@
 
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
-[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)
+[v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)
 provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
@@ -255,6 +255,25 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.558
+
+0.2.558 normalizes and binds public v2 `review_kind`: `formal-plan`,
+`pre-merge` (the omission default), and `implementation-review`. Each selects
+the shared plan or code review purpose. Every selected enabled entry must return
+explicit `SAFE` approval regardless of family count; a valid Minor-only negative
+result remains nonapproved.
+
+Leader guidance now covers current context, verified findings and refutations,
+evidence preservation and one compact residual. Reopening requires new evidence;
+exhausted wording disputes stop without approval. Exact models and JSON
+configuration, authentication, guarded cleanup and the legacy workflow remain
+available. Vendored provenance remains `04245c7`; shared main `19f0cf1` is an
+authoring-guide publication, not revision adoption. This release does not claim
+measured prompt-quality gains or authenticated service conformance.
+
+Follow the [marketplace or local Git update steps](docs/installation.md#update),
+rerun bootstrap and open a fresh Codex session.
+
 ### Upgrading to 0.2.557
 
 0.2.557 pins the default Claude review model to `claude-opus-5-5` with `xhigh`
@@ -481,7 +500,7 @@ not change the public three-family default, prepared-directory renderer, or
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

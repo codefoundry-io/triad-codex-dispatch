@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.558 — 2026-10-02
+
+- Normalizes and binds public v2 `review_kind`: `formal-plan`, `pre-merge`
+  (the omission default), and `implementation-review`, selecting the shared plan
+  or code review purpose throughout the round.
+- Requires explicit `SAFE` approval from every selected enabled entry regardless
+  of family count. Valid Minor-only negative results remain nonapproved.
+- Clarifies leader handling of current context, verified findings, refutations,
+  retained evidence and one compact residual; reopening needs new evidence and
+  exhausted wording disputes stop without approval.
+- Preserves exact models and JSON configuration, authentication, guarded cleanup
+  and the legacy workflow. The vendored shared provenance remains `04245c7`;
+  shared main `19f0cf1` publishes authoring guidance only.
+- Records source verification without claiming measured prompt-quality gains,
+  authenticated service conformance or shared revision adoption.
+
 ## 0.2.557 — 2026-09-25
 
 - Pins the Claude review default to `claude-opus-5-5` with `xhigh` in the v2
