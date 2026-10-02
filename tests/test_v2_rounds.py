@@ -24,7 +24,7 @@ def implementation():
 
 @pytest.fixture
 def round_fixture(tmp_path, monkeypatch, worktree):
-    def build(*, make_basis=True, adapter_transform=None):
+    def build(*, make_basis=True, adapter_transform=None, request_changes=None):
         mod = implementation()
         config_dir = worktree / ".agents"
         config_dir.mkdir()
@@ -68,6 +68,7 @@ def round_fixture(tmp_path, monkeypatch, worktree):
                    "approved_boundary": ["local plugin"], "authentication_class": "personal-google",
                    "native_capabilities": {"source": "native-spawn-tool", "models": {"gpt-5.6-terra": ["high", "xhigh"]}},
                    "prior_residual": "Prior finding and rebuttal: no inherited approval."}
+        request.update(request_changes or {})
         basis = mod.create_basis(request, root=root) if make_basis else None
         return mod, basis, root, worktree, request, calls
     return build
@@ -236,3 +237,79 @@ def test_no_attempt_or_terminal_result_can_be_overwritten(round_fixture):
     finish(round_fixture, alloc)
     with pytest.raises(ValueError):
         finish(round_fixture, alloc)
+
+
+@pytest.mark.parametrize("phase", ["omitted", "formal-plan", "implementation-review", "pre-merge",
+                                  None, "unknown", "", 1, True, [], {}])
+def test_C60_phase_request_default_and_refusal_before_probes(round_fixture, phase):
+    mod, _, root, _, request, calls = round_fixture(make_basis=False)
+    if phase != "omitted":
+        request["review_kind"] = phase
+    if phase not in ("omitted", "formal-plan", "implementation-review", "pre-merge"):
+        with pytest.raises(ValueError):
+            mod.create_basis(request, root=root)
+        assert calls == []
+        assert not (root / "basis-v2.json").exists()
+        assert not (root / "preflight-v2").exists()
+        return
+    basis = mod.create_basis(request, root=root)
+    expected = "pre-merge" if phase == "omitted" else phase
+    assert basis["request"]["review_kind"] == expected
+    for name in basis["enabled"]:
+        item = mod.allocate_attempt(Path(basis["basis_file"]), name)
+        metadata = json.loads(Path(item["prompt_file"]).read_text().splitlines()[0].split(": ", 1)[1])
+        assert metadata["review_kind"] == expected
+
+
+@pytest.mark.parametrize("phase", ["formal-plan", "implementation-review", "pre-merge"])
+def test_C60_failed_to_run_retry_preserves_phase(round_fixture, phase):
+    fixture = round_fixture(request_changes={"review_kind": phase})
+    mod, basis, root, *_ = fixture
+    for name in basis["enabled"]:
+        finish(fixture, start(fixture, name), failed=name == "trial")
+    original = {str(path): path.read_bytes() for path in (root / "results").rglob("*") if path.is_file()}
+    second = mod.allocate_attempt(Path(basis["basis_file"]), "trial", diagnosis="transient failure diagnosed")
+    assert second["binding"]["attempt"] == 2
+    assert second["binding"]["content_digest"] == basis["content_digest"]
+    metadata = json.loads(Path(second["prompt_file"]).read_text().splitlines()[0].split(": ", 1)[1])
+    assert metadata["review_kind"] == phase
+    finish(fixture, second)
+    assert mod.collect(Path(basis["basis_file"]))["status"] == "AGREED"
+    assert {name: Path(name).read_bytes() for name in original} == original
+
+
+def test_C60_phase_drift_requires_new_basis(round_fixture):
+    mod, basis, *_ = round_fixture(request_changes={"review_kind": "formal-plan"})
+    path = Path(basis["basis_file"])
+    changed = copy.deepcopy(basis)
+    changed["request"]["review_kind"] = "implementation-review"
+    raw = mod._bytes(changed)
+    path.write_bytes(raw)
+    # Even a refreshed file checksum cannot admit a changed substantive basis.
+    path.with_suffix(".json.sha256").write_text(mod._hash(raw) + "\n")
+    with pytest.raises(ValueError, match="content digest mismatch"):
+        mod.allocate_attempt(path, "codex")
+    with pytest.raises(ValueError, match="content digest mismatch"):
+        mod.collect(path)
+
+
+def test_C60_phase_alone_changes_digest_and_default_normalizes(round_fixture, monkeypatch):
+    mod, _, root, _, request, _ = round_fixture(make_basis=False)
+    # Keep root, review ID, capture and preparation equal. Suppress only writes
+    # so repeated production construction can compare exactly the same inputs.
+    preparation = mod._preparation(root)
+    monkeypatch.setattr(mod, "_preparation", lambda supplied_root: preparation)
+    monkeypatch.setattr(mod, "_seal", lambda path, value: None)
+    omitted = mod.create_basis(request, root=root)
+    explicit = mod.create_basis({**request, "review_kind": "pre-merge"}, root=root)
+    assert omitted["request"]["review_kind"] == "pre-merge"
+    assert omitted == explicit
+    plan = mod.create_basis({**request, "review_kind": "formal-plan"}, root=root)
+    code = mod.create_basis({**request, "review_kind": "implementation-review"}, root=root)
+    def other_inputs(basis):
+        result = copy.deepcopy(basis)
+        result.pop("content_digest")
+        result["request"].pop("review_kind")
+        return result
+    assert other_inputs(plan) == other_inputs(code) == other_inputs(explicit)
+    assert len({plan["content_digest"], code["content_digest"], explicit["content_digest"]}) == 3

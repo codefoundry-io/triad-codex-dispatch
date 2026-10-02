@@ -24,7 +24,8 @@ REAL_RUN_ONCE = _common._run_once
 REAL_SUBPROCESS_RUN = subprocess.run
 
 
-def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, worktree, route, monkeypatch):
+@pytest.mark.parametrize("phase", ["omitted", "formal-plan", "implementation-review", "pre-merge"])
+def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, worktree, route, monkeypatch, phase):
     """A stdin-only collector loses healthy Google results after real argv delivery."""
     name = route["name"]
     selector = route["home"] / "collector-selector.json"
@@ -54,9 +55,12 @@ def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, 
             preflight_sha256=hashlib.sha256(preflight.read_bytes()).hexdigest())
         return adapters
 
-    fixture = round_fixture(adapter_transform=actual_preflight)
+    fixture = round_fixture(adapter_transform=actual_preflight,
+                            request_changes={} if phase == "omitted" else {"review_kind": phase})
     mod, basis, *_ = fixture
     item = start(fixture, "google")
+    metadata = json.loads(Path(item["prompt_file"]).read_text().splitlines()[0].split(": ", 1)[1])
+    assert metadata["review_kind"] == ("pre-merge" if phase == "omitted" else phase)
     data = verdict(**item["binding"])
     envelope = ({"event": "result", "result": {"status": "SUCCESS", "response": json.dumps(data),
                                                "structured_output": data}}
