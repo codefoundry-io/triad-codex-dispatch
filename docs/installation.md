@@ -149,9 +149,11 @@ Settings references: [Codex configuration](https://learn.chatgpt.com/docs/config
 ### Gemini CLI 3.8 Flash setup
 
 Checked **2026-10-02**. For native Gemini CLI, request `gemini-3.8-flash`;
-AGY's `gemini-3.8-flash-high` is a separate selection slug. This model requires
-stable CLI **0.61.0 or newer** in TRIAD; upgrade through your existing CLI install
-method if needed. Older supported v2 models retain their 0.60.0 floor: this is
+AGY's `gemini-3.8-flash-high` is a separate selection slug. TRIAD's version floor
+for this model is **0.61.0**; upgrade through your existing CLI install method
+if needed. This verified setup guidance covers stable **0.61.0 or newer**;
+preview/nightly channels are outside its verified scope, separate from adapter
+version acceptance. Older supported v2 models retain their 0.60.0 floor: this is
 a model-specific requirement, not a blanket pin to the latest CLI. Version
 0.60.0 lacks the 3.8 alias and can remap strings ending in `flash` to an older
 model ([tagged routing source](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/models.ts#L230-L270)).
@@ -207,7 +209,9 @@ Without a new provider request, run `gemini --version`, inspect the applicable
 settings and any `--model`/`GEMINI_MODEL` override, and view `/model` in an
 **already open** Gemini session without sending a prompt. These show the binary
 version and selected/requested model, not backend entitlement or actual runtime
-model. Main-chat selection also does not override subagent models.
+model. Subagents with an explicit model keep that selection; custom subagents
+default to `inherit`, using the main-session model
+([v0.61.0 subagent schema](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/docs/core/subagents.md#configuration-schema)).
 
 ## Verify the installation
 

@@ -500,14 +500,14 @@ Pro prompt or Pro receipt can stand in for Flash custody. This fixed opt-in does
 not change the public three-family default, prepared-directory renderer, or
 `LegVerdict` fields, and does not configure a workspace's admission composition.
 
-Maintainers can verify exact clean-HEAD archive bytes before installation:
-
 Each host runs the common regression suite and its own OS-specific checks:
 macOS on macOS, Ubuntu on Ubuntu. The other OS is tested by its own host or
 native CI runner; do not substitute a Docker/emulated run from this host.
 Record commit, OS, architecture, Python version and skips with each result.
 An unavailable other host is a recorded handoff, not an invented test pass or
 an additional release gate.
+
+Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
 /bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'

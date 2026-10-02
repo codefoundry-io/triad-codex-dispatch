@@ -146,8 +146,10 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
 ### Gemini CLI 3.8 Flash 설정
 
 확인일: **2026-10-02**. Native Gemini CLI에서는 `gemini-3.8-flash`를 요청합니다.
-AGY의 `gemini-3.8-flash-high`는 별도 선택 slug입니다. TRIAD에서 이 모델은
-안정 CLI **0.61.0 이상**을 요구하므로 필요하면 기존 CLI 설치 방식으로 업데이트하세요.
+AGY의 `gemini-3.8-flash-high`는 별도 선택 slug입니다. TRIAD에서 이 모델의 버전
+하한은 **0.61.0**이며 필요하면 기존 CLI 설치 방식으로 업데이트하세요.
+검증된 설정 안내는 안정 버전 **0.61.0 이상**을 대상으로 합니다. preview/nightly는
+이 안내의 검증 범위 밖이며 adapter의 버전 수용 조건과는 별개입니다.
 지원되는 이전 v2 모델의 0.60.0 하한은 유지합니다. 모델별 조건이며 모든 모델에
 최신 CLI를 고정하는 조건은 아닙니다. 0.60.0에는 3.8 alias가 없고 `flash`로 끝나는
 문자열을 이전 모델로 바꿀 수 있습니다
@@ -205,7 +207,9 @@ OAuth 경계를 우회하는 수단이 아닙니다.
 `--model`/`GEMINI_MODEL` override를 확인하세요. **이미 열린** Gemini 세션에서는
 prompt를 보내지 않고 `/model` 화면을 확인할 수 있습니다. 이는 binary 버전과
 선택·요청 모델을 보여주며 backend 접근권이나 실제 runtime 모델을 증명하지 않습니다.
-Main chat 모델 선택은 subagent 모델도 덮어쓰지 않습니다.
+모델을 명시한 subagent는 해당 선택을 유지합니다. Custom subagent의 기본값은
+`inherit`이며 main session 모델을 사용합니다
+([v0.61.0 subagent schema](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/docs/core/subagents.md#configuration-schema)).
 
 ## 설치 확인
 

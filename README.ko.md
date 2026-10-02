@@ -466,13 +466,13 @@ dispatch 시 Flash 자신의 receipt와 일치하는 model/high 인자를 사용
 opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdict`
 필드를 바꾸지 않으며 workspace admission 구성을 자동 설정하지 않습니다.
 
-maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
-
 각 호스트는 공통 회귀 검사와 자기 OS 전용 검사만 실행합니다. macOS는 macOS에서,
 Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해당 OS의 CI runner가
 담당합니다. 이 호스트의 Docker·에뮬레이션 실행으로 다른 OS 담당의 검증을 대신하지
 않습니다. 결과마다 커밋, OS, 아키텍처, Python 버전과 skip을 기록합니다. 다른 호스트가
 없으면 인계 사항으로 남기며, 통과로 간주하거나 추가 릴리스 게이트를 만들지 않습니다.
+
+maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
 /bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
