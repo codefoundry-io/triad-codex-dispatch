@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,52 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import review_round
+
+
+def test_C20_C63_current_evidence_survives_eligible_previous_cleanup(tmp_path, monkeypatch):
+    from test_review_round import _git
+    base, source, members = _fixture(tmp_path)
+    monkeypatch.setattr(review_round.tempfile, "gettempdir", lambda: str(base))
+    _git(source, "init")
+    _git(source, "add", "a.txt")
+    _git(source, "commit", "-m", "fixture source")
+    previous = review_round.prepare_review_workspace("previous", source, members, temp_root=base)
+    previous_root = Path(previous.root)
+    previous_output = previous_root / "results/necessary-excerpt.txt"
+    excerpt = '이전 관찰: "quoted"\n```output```\nUnknown: runtime identity\n'.encode()
+    previous_output.write_bytes(excerpt)
+    current = review_round.prepare_review_workspace("current", source, members, temp_root=base)
+    current_root, shared = Path(current.root), Path(current.shared_dir)
+    evidence = shared / "EVIDENCE.md"
+    supplied_evidence = ("Provenance only: " + str(previous_output) + "\n").encode() + previous_output.read_bytes()
+    evidence.write_bytes(supplied_evidence)
+    (shared / "TASK.md").write_text("Judge the materialized excerpt in EVIDENCE.md.\n")
+    (shared / "REVIEW.diff").write_text("current patch\n")
+    review_round.create_source_manifest(shared)
+    snapshot = review_round.capture_round(shared, source)
+    digest = hashlib.sha256(supplied_evidence).hexdigest()
+    manifest = json.loads((shared / "SOURCE_SHA256SUMS").read_text())
+    assert {row["path"]: row["sha256"] for row in manifest}["EVIDENCE.md"] == digest
+    # Terminal provider/adjudication ownership is supplied by this fixture.
+    # Helpers guard allocation/export custody, not live provider detection.
+    review_round.export_review_workspace("previous", previous_root, (tmp_path / "durable").resolve(), temp_root=base)
+    assert review_round.cleanup_review_workspace("previous", previous_root, temp_root=base).removed
+    assert not previous_output.exists()
+    assert evidence.read_bytes() == supplied_evidence
+    assert hashlib.sha256(evidence.read_bytes()).hexdigest() == digest
+    review_round.verify_round(snapshot, shared, source)
+    assert (tmp_path / "durable/artifacts/results/necessary-excerpt.txt").read_bytes() == excerpt
+    # The leader has not exported current in-progress custody: this refusal
+    # demonstrates the export guard, not process liveness.
+    with pytest.raises(review_round.RoundIntegrityError, match="export"):
+        review_round.cleanup_review_workspace("current", current_root, temp_root=base)
+    assert evidence.read_bytes() == supplied_evidence
+    foreign = base / "triad-review-foreign"
+    foreign.mkdir()
+    (foreign / "keep.txt").write_bytes(excerpt)
+    with pytest.raises(review_round.RoundIntegrityError, match="allocation"):
+        review_round.cleanup_review_workspace("foreign", foreign, temp_root=base)
+    assert (foreign / "keep.txt").read_bytes() == excerpt
 
 
 def _fixture(tmp_path):

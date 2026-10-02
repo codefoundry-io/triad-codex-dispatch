@@ -5,7 +5,7 @@
 ## codex-intro (R-VERIFY)
 
 ```text
-You are the codex leg of a cross-family pre-merge review.
+You are the codex leg of this independent <review-kind> review.
 ```
 
 ## codex-tree-entry (R-PREPARE)
@@ -36,11 +36,12 @@ Return exactly ONE LegVerdict JSON object matching your enforced output schema â
 
 1. codex-intro
 2. common:adversarial-framing
-3. codex-tree-entry
-4. codex-read-grant
-5. common:repo-relative-pin
-6. common:severity-instruction
-7. common:verdict-selection-rule
-8. common:smell-criterion
-9. codex-binding-line
-10. codex-closing
+3. common:<review-purpose> (plan-purpose or code-purpose, selected by review_kind)
+4. common:current-basis
+5. codex-tree-entry
+6. codex-read-grant
+7. common:repo-relative-pin
+8. common:severity-instruction
+9. common:verdict-selection-rule
+10. codex-binding-line
+11. codex-closing

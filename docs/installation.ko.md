@@ -9,7 +9,7 @@
 ## 설치할 버전 선택
 
 아래 명령은 최신 공개 버전 경로인 `main`을 선택합니다.
-[v0.2.557 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)에서
+[v0.2.558 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)에서
 버전별 다운로드와 체크섬을 확인할 수 있습니다. 같은 버전을 재현하려면 B 경로에서
 릴리스 노트에 기록된 전체 커밋 ID를 checkout합니다.
 
@@ -140,6 +140,76 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
 [sandbox와 승인](https://learn.chatgpt.com/docs/sandboxing),
 [permission profiles](https://learn.chatgpt.com/docs/permissions),
 [로컬 플러그인 경로](https://developers.openai.com/plugins/build/plugins).
+
+<a id="gemini-cli-38-high"></a>
+
+### Gemini CLI 3.8 Flash 설정
+
+확인일: **2026-10-02**. Native Gemini CLI에서는 `gemini-3.8-flash`를 요청합니다.
+AGY의 `gemini-3.8-flash-high`는 별도 선택 slug입니다. TRIAD에서 이 모델의 버전
+하한은 **0.61.0**이며 필요하면 기존 CLI 설치 방식으로 업데이트하세요.
+검증된 설정 안내는 안정 버전 **0.61.0 이상**을 대상으로 합니다. preview/nightly는
+이 안내의 검증 범위 밖이며 adapter의 버전 수용 조건과는 별개입니다.
+지원되는 이전 v2 모델의 0.60.0 하한은 유지합니다. 모델별 조건이며 모든 모델에
+최신 CLI를 고정하는 조건은 아닙니다. 0.60.0에는 3.8 alias가 없고 `flash`로 끝나는
+문자열을 이전 모델로 바꿀 수 있습니다
+([태그가 고정된 routing 소스](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/models.ts#L230-L270)).
+
+Native 대화형 세션에서는 `gemini --model gemini-3.8-flash`로 정확한 ID를 요청합니다.
+v0.61.0 기본 alias는 **HIGH** generation 설정을 상속합니다
+([태그가 고정된 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/packages/core/src/config/defaultModelConfigs.ts#L31-L140)).
+HIGH는 CLI effort flag가 아니며 provider 내부 추론 동작의 증명도 아닙니다.
+
+선택을 저장하려면 기존 `~/.gemini/settings.json` 또는
+`<project-root>/.gemini/settings.json`에 아래 항목을 병합하세요. 프로젝트 설정이
+사용자 설정보다 우선합니다
+([태그가 고정된 설정 문서](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/docs/reference/configuration.md#L44-L60)).
+다른 필드는 보존하세요. CLI `--model`이나 `GEMINI_MODEL` 값이 이를 덮어쓸 수 있습니다.
+
+```json
+{"model": {"name": "gemini-3.8-flash"}}
+```
+
+명시적 HIGH 설정은 선택 사항이며 기존의 낮은 설정을 덮어쓸 때 사용할 수 있습니다.
+아래 필드를 병합하고 기존 `customOverrides` 배열에 규칙을 **추가**하세요.
+기존 배열이나 파일 전체를 교체하지 마세요. 지원되는 구조는
+[태그가 고정된 설정 schema](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/packages/cli/src/config/settingsSchema.ts#L1144-L1192)에 정의되어 있습니다.
+
+```json
+{
+  "model": {"name": "gemini-3.8-flash"},
+  "modelConfigs": {
+    "customOverrides": [{
+      "match": {"model": "gemini-3.8-flash"},
+      "modelConfig": {
+        "generateContentConfig": {
+          "thinkingConfig": {"thinkingLevel": "HIGH"}
+        }
+      }
+    }]
+  }
+}
+```
+
+`previewFeatures`나 `experimental.dynamicModelConfiguration` 활성화는 필요 없습니다.
+Dynamic 설정, alias, rollout은 실제 적용 ID를 바꿀 수 있으며 더 구체적인 규칙이나
+runtime override도 우선할 수 있습니다.
+[태그가 고정된 ID resolver](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/packages/core/src/config/models.ts#L234-L363)를 참고하세요.
+
+TRIAD v2에서는 `.agents/triad-review-legs.json`의 **기존 선택된 Google entry**에
+`"gemini": {"model": "gemini-3.8-flash", "effort": null}`을 병합합니다.
+entry 이름, 다른 entry와 route/authentication 선택은 보존하며 배포 기본 roster는
+변경하지 않습니다. 위 CLI 설정은 Gemini JSON 파일에 두고 TRIAD roster에 새로운
+키로 넣지 마세요. 필수 인증 경로를 유지해야 하며 API key는 TRIAD의 Enterprise
+OAuth 경계를 우회하는 수단이 아닙니다.
+
+새 provider 요청 없이 `gemini --version`을 실행하고 적용되는 설정 및
+`--model`/`GEMINI_MODEL` override를 확인하세요. **이미 열린** Gemini 세션에서는
+prompt를 보내지 않고 `/model` 화면을 확인할 수 있습니다. 이는 binary 버전과
+선택·요청 모델을 보여주며 backend 접근권이나 실제 runtime 모델을 증명하지 않습니다.
+모델을 명시한 subagent는 해당 선택을 유지합니다. Custom subagent의 기본값은
+`inherit`이며 main session 모델을 사용합니다
+([v0.61.0 subagent schema](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/docs/core/subagents.md#configuration-schema)).
 
 ## 설치 확인
 

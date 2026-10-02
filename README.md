@@ -4,7 +4,7 @@
 
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
-[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)
+[v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)
 provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
@@ -255,6 +255,28 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.558
+
+0.2.558 normalizes and binds public v2 `review_kind`: `formal-plan`,
+`pre-merge` (the omission default), and `implementation-review`. Each selects
+the shared plan or code review purpose. Every selected enabled entry must return
+explicit `SAFE TO MERGE` approval regardless of family count; a valid Minor-only negative
+result remains nonapproved.
+
+Leader guidance now covers current context, verified findings and refutations,
+evidence preservation and one compact residual. Reopening requires new evidence;
+exhausted wording disputes stop without approval. Exact models and JSON
+configuration, authentication, guarded cleanup and the legacy workflow remain
+available. The vendored bundle moves from `055204c` (contracts) and `7f527ef`
+(prompts) to `04245c7`. Shared v2 clauses revise adversarial framing, add
+current-basis guidance, remove `smell-criterion` from the default leg order and
+remove `ultrathink` from the Claude intro. Shared main `19f0cf1` publishes
+authoring guidance and is not adopted. This release does not claim
+measured prompt-quality gains or authenticated service conformance.
+
+Follow the [marketplace or local Git update steps](docs/installation.md#update),
+rerun bootstrap and open a fresh Codex session.
+
 ### Upgrading to 0.2.557
 
 0.2.557 pins the default Claude review model to `claude-opus-5-5` with `xhigh`
@@ -478,10 +500,17 @@ Pro prompt or Pro receipt can stand in for Flash custody. This fixed opt-in does
 not change the public three-family default, prepared-directory renderer, or
 `LegVerdict` fields, and does not configure a workspace's admission composition.
 
+Each host runs the common regression suite and its own OS-specific checks:
+macOS on macOS, Ubuntu on Ubuntu. The other OS is tested by its own host or
+native CI runner; do not substitute a Docker/emulated run from this host.
+Record commit, OS, architecture, Python version and skips with each result.
+An unavailable other host is a recorded handoff, not an invented test pass or
+an additional release gate.
+
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -1122,11 +1151,15 @@ existing legacy gate. Use the explicit v2 procedure below for execution and coll
 The Gemini default requests `gemini-3.1-pro-preview`; HIGH is its CLI v0.60.0
 [source default](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77),
 not a Gemini effort flag or proof of account access/effective runtime identity.
+For optional `gemini-3.8-flash`, the catalog requires stable Gemini CLI 0.61.0
+or later compatible versions; earlier models retain their existing support floor.
+See [Gemini 3.8 selection and HIGH settings](docs/installation.md#gemini-cli-38-high).
+This does not change the shipped roster or the separate AGY model slug.
 
 ## Offline v2 candidate validation
 
 The [candidate contract bundle](contracts/README.md) comes from shared commit
-055204c83e57bf87eeac5b2422f2b17340f7c53b. Use this explicit source CLI with an
+04245c740afc9be36ad7702a134f71aec8ff0b7f. Use this explicit source CLI with an
 absolute canonical regular result file and all six expected binding values:
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
@@ -1149,13 +1182,26 @@ The operational commands are `v2-create`, `v2-allocate`, `v2-record-cli`,
 clauses, native/wrapper invocation and canonical six-field verdict validation.
 The existing legacy development gate stays separate; no wire conversion occurs.
 
-Every enabled named entry participates, including informational entries. Preserve
-original per-attempt results, raw run logs, host/read observations and failed
-preparation evidence. Missing/invalid results block agreement. A diagnosed
-failed-to-run entry may retry on unchanged inputs; source or review-condition
-changes require a fresh full-roster review. Minor-only negative results retain
-their selection deviation. Collection exit 0 is not admission: inspect
-`INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED` or `AGREED` in its JSON.
+Set request `review_kind` to `formal-plan`, `pre-merge` or `implementation-review`;
+omission defaults to `pre-merge`, while null and unknown values refuse. Plan review
+assesses the plan as written; code review inspects the actual change and affected
+consumers. Plan approval does not approve future code. The toolkit binds phase,
+permissions and output; the leader supplies current requirements, environment and
+evidence. Distinguish supported, locked and observed versions and explicit unknowns.
+
+Every selected enabled entry must explicitly approve, including informational
+entries. Any nonempty roster may agree regardless of family count. Keep exact
+model IDs and edits in the existing JSON roster configuration described above.
+A Minor-only negative remains a valid COMPLETE result and blocks agreement.
+Collection exit 0 is not admission: inspect `INCOMPLETE`, `BLOCKED` or `AGREED`.
+
+Preserve per-attempt results, run logs, host/read observations and preparation
+failures. Only a diagnosed failed-to-run entry may retry unchanged inputs;
+changed source or review conditions require a fresh full-roster review. The
+leader verifies findings, makes minimal in-scope corrections, and rebuilds one
+current residual with necessary evidence in current bound inputs. Historical
+paths alone are insufficient after cleanup. Continue verified progress; stop
+exhausted disputes without turning repetition or an owner exception into approval.
 
 Native Codex stays native. Installed interface/catalog checks prove supported
 requested controls, not authenticated service access or effective runtime

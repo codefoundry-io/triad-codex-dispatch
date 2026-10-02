@@ -7,6 +7,9 @@ TRIAD instructions link here instead of restating these rules.
 The round/retry procedure below is the legacy workflow. An explicit public v2
 round uses [v2 collection and recovery](public-v2-review.md#collect-correct-and-close),
 while retaining this file's finding-classification and terminal-observation rules.
+For v2, its linked procedure additionally defines all-selected explicit approval,
+compact current residuals, evidence-based reopening and stopping exhausted items
+without approval. Its phase/count/outcome rules do not change the legacy gate below.
 
 ## Finding classification
 

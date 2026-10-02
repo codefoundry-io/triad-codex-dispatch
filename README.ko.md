@@ -2,7 +2,7 @@
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
-[v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)에서
+[v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 [English README](README.md)
@@ -236,6 +236,27 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.558 업그레이드
+
+0.2.558은 public v2 `review_kind`를 정규화하고 바인딩합니다. 지원 단계는
+`formal-plan`, 생략 시 기본값인 `pre-merge`, `implementation-review`이며,
+각 단계에서 공유 plan 또는 code 리뷰 목적을 선택합니다. family 수와 관계없이
+선택한 모든 enabled entry의 명시적 `SAFE TO MERGE` 승인이 필요합니다. 유효한
+Minor-only 부정 결과는 승인되지 않은 상태로 남습니다.
+
+리더 지침은 현재 context, 검증한 finding과 반박 근거, 증거 보존 및 하나의
+간결한 residual을 다룹니다. 닫힌 항목을 다시 열려면 새로운 증거가 필요하며,
+소진된 표현 논쟁은 승인 없이 중단합니다. 정확한 모델과 JSON 설정, 인증,
+보호된 cleanup 및 legacy 절차는 유지합니다. 번들은 contracts `055204c`와
+prompts `7f527ef`에서 `04245c7`로 이동합니다. 공유 v2 clause는 adversarial
+framing을 수정하고 current-basis 지침을 추가하며, 기본 leg 순서에서
+`smell-criterion`을 제거하고 Claude intro에서 `ultrathink`를 제거합니다.
+공유 main `19f0cf1`은 작성 가이드 공개이며 채택하지 않습니다.
+이 릴리스는 측정된 prompt 품질 향상이나 인증된 서비스 conformance를 주장하지 않습니다.
+
+[마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를 따라
+bootstrap을 다시 실행한 뒤 새 Codex 세션을 시작하세요.
+
 ### 0.2.557 업그레이드
 
 0.2.557은 기본 Claude 리뷰 모델을 `claude-opus-5-5`, effort를 `xhigh`로
@@ -445,10 +466,16 @@ dispatch 시 Flash 자신의 receipt와 일치하는 model/high 인자를 사용
 opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdict`
 필드를 바꾸지 않으며 workspace admission 구성을 자동 설정하지 않습니다.
 
+각 호스트는 공통 회귀 검사와 자기 OS 전용 검사만 실행합니다. macOS는 macOS에서,
+Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해당 OS의 CI runner가
+담당합니다. 이 호스트의 Docker·에뮬레이션 실행으로 다른 OS 담당의 검증을 대신하지
+않습니다. 결과마다 커밋, OS, 아키텍처, Python 버전과 skip을 기록합니다. 다른 호스트가
+없으면 인계 사항으로 남기며, 통과로 간주하거나 추가 릴리스 게이트를 만들지 않습니다.
+
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.557-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -1043,11 +1070,15 @@ dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다
 HIGH는 CLI v0.60.0의
 [소스 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77)입니다.
 Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 값은 아닙니다.
+선택 모델 `gemini-3.8-flash`는 stable Gemini CLI 0.61.0부터 호환되는 후속 버전을
+지원하며, 기존 모델의 지원 최소 버전은 유지합니다.
+[Gemini 3.8 선택 및 HIGH 설정](docs/installation.ko.md#gemini-cli-38-high)을 참고하세요.
+배포 기본 리뷰 구성과 별도 AGY 모델 slug는 바꾸지 않습니다.
 
 ## 오프라인 v2 후보 검증
 
 [공통 계약 후보](contracts/README.md)는 공유 커밋
-055204c83e57bf87eeac5b2422f2b17340f7c53b의 원문입니다.
+04245c740afc9be36ad7702a134f71aec8ff0b7f의 원문입니다.
 절대 정규 경로의 일반 결과 파일과 예상 결합값 6개를 지정합니다.
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
@@ -1068,12 +1099,25 @@ Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 �
 공통 프롬프트, native·wrapper 호출과 결합값 6개의 판정을 연결합니다.
 기존 legacy 개발 게이트와 wire 형식은 유지하며 결과를 상호 변환하지 않습니다.
 
-informational을 포함한 모든 활성 이름이 참여합니다. 원본 결과·run-log·호스트
-관측·읽기 증거와 준비 실패 기록을 attempt별로 보존합니다. 누락·무효 결과는
-합의를 막습니다. 원인 확인 후 변경 없는 실행 실패 항목만 재시도할 수 있고,
-소스나 리뷰 조건이 바뀌면 모든 항목이 새 기준으로 전체 범위를 검토합니다.
-Minor만 있는 부정 판정도 원래 선택을 보존합니다. 수집 명령 종료 0은 승인과
-다르며 JSON의 `INCOMPLETE`, `BLOCKED`, `OWNER_DECISION_REQUIRED`, `AGREED`를 확인합니다.
+요청의 `review_kind`는 `formal-plan`, `pre-merge`, `implementation-review`입니다.
+생략하면 `pre-merge`이며 null·알 수 없는 값은 거부합니다. 플랜 리뷰는 계획대로
+요구사항을 달성할 수 있는지, 코드 리뷰는 실제 변경과 영향받는 소비자를 검토합니다.
+플랜 승인은 미래 코드의 승인이 아닙니다. 단계·권한·출력은 도구가 결합하고,
+현재 요구사항·환경·근거는 리더가 제공합니다. 지원·고정·실제 관측 버전과 모르는
+내용을 구분해서 전달합니다.
+
+informational을 포함한 모든 선택된 활성 항목이 명시적으로 승인해야 합니다.
+비어 있지 않은 구성이라면 leg 수나 모델 계열 수는 합의 조건이 아닙니다.
+exact model ID와 위에서 설명한 기존 JSON 설정 방식을 유지합니다. Minor만 있는
+반대도 유효한 COMPLETE 결과이지만 합의를 막습니다. 수집 명령 종료 0은 승인과
+다르며 JSON의 `INCOMPLETE`, `BLOCKED`, `AGREED`를 확인합니다.
+
+원본 결과·run-log·호스트 관측·읽기 증거와 준비 실패 기록을 attempt별로 보존합니다.
+원인 확인 후 변경 없는 실행 실패만 재시도하며, 소스나 리뷰 조건이 바뀌면 모든
+항목이 새 기준으로 전체 범위를 검토합니다. 리더는 지적을 확인하고 필요한 범위만
+고칩니다. 다음 라운드에는 현재 쟁점 요약 하나와 필요한 근거를 현재 결합된 입력에
+담습니다. 정리된 과거 경로만으로 근거를 대신할 수 없습니다. 확인 가능한 진전은
+계속하되, 반복이나 별도 예외를 승인으로 바꾸지 않고 소진된 논쟁을 종료합니다.
 
 Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설정 지원 여부이며
 계정 접근권이나 실제 실행 모델의 증명이 아닙니다. 노출되지 않은 값은 null/unexposed로

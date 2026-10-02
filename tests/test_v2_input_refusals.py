@@ -59,3 +59,16 @@ def test_malformed_request_values_use_the_command_refusal_contract_before_prepar
     assert calls == []
     assert not (root / "basis-v2.json").exists()
     assert not (root / "preflight-v2").exists()
+
+
+@pytest.mark.parametrize("phase", [None, "unknown", "", 1, True, [], {}])
+def test_C60_cli_phase_refusal_precedes_probes_and_custody(round_fixture, phase, capsys):
+    _, _, root, _, request, calls = round_fixture(make_basis=False)
+    request["review_kind"] = phase
+    request_file = root.parent / "bad-phase-request.json"
+    request_file.write_text(json.dumps(request))
+    assert review_round.main(["v2-create", "--request-file", str(request_file), "--root", str(root)]) == 2
+    assert capsys.readouterr().err.startswith("review_round:")
+    assert calls == []
+    assert not (root / "basis-v2.json").exists()
+    assert not (root / "preflight-v2").exists()

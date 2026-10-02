@@ -7,7 +7,7 @@
 ## google-intro (R-VERIFY)
 
 ```text
-You are the Google-family leg of a cross-family pre-merge review.
+You are the Google-family leg of this independent <review-kind> review.
 ```
 
 ## google-tree-entry (R-PREPARE)
@@ -56,15 +56,16 @@ Return exactly ONE LegVerdict JSON object matching the provided schema — no pr
 
 1. google-intro
 2. common:adversarial-framing
-3. google-tree-entry
-4. common:data-fence-caveat
-5. common:severity-instruction
-6. common:verdict-selection-rule
-7. common:smell-criterion
-8. google-binding-line
-9. google-read-grant
-10. google-tool-conventions
-11. google-a-hook-audit (A active-hook route only)
-12. google-findings-shape-pin
-13. common:repo-relative-pin
-14. google-closing
+3. common:<review-purpose> (plan-purpose or code-purpose, selected by review_kind)
+4. common:current-basis
+5. google-tree-entry
+6. common:data-fence-caveat
+7. common:severity-instruction
+8. common:verdict-selection-rule
+9. google-binding-line
+10. google-read-grant
+11. google-tool-conventions
+12. google-a-hook-audit (A active-hook route only)
+13. google-findings-shape-pin
+14. common:repo-relative-pin
+15. google-closing

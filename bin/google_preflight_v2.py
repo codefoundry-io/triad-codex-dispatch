@@ -9,7 +9,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry
 
 import review_round
-from validate_v2 import _json, load_contracts
+from validate_v2 import _json, load_contracts, validate_review_kind
 
 
 def gemini_model_support(model: str, version: str) -> None:
@@ -17,7 +17,8 @@ def gemini_model_support(model: str, version: str) -> None:
     version = review_round.validate_formal_gemini_version(version)
     data = _json(review_round._canonical_regular_file_bytes(
         Path(__file__).resolve().parent / "data/gemini-models.json", "Gemini model support"))
-    minimum = tuple(map(int, data["minimum_version"].split(".")))
+    support = data.get("model_overrides", {}).get(model, data)
+    minimum = tuple(map(int, support["minimum_version"].split(".")))
     core = tuple(map(int, version.split("-", 1)[0].split("+", 1)[0].split(".")))
     if core < minimum or (core == minimum and "-" in version) or model not in data["models"]:
         raise ValueError("requested Gemini model lacks versioned CLI support evidence")
@@ -109,6 +110,11 @@ def load_receipt(path: Path, selector, args, cwd: str | None, prompt: str) -> di
         metadata["review_web_authorized"] = True
     prefix = "Review v2 metadata: "
     lines = [line[len(prefix):] for line in prompt.splitlines() if line.startswith(prefix)]
-    if len(lines) != 1 or _json(lines[0]) != metadata:
+    if len(lines) != 1:
+        raise ValueError("v2 Google prompt binding mismatch")
+    actual = _json(lines[0])
+    if isinstance(actual, dict) and "review_kind" in actual:
+        metadata["review_kind"] = validate_review_kind(actual["review_kind"])
+    if actual != metadata:
         raise ValueError("v2 Google prompt binding mismatch")
     return record

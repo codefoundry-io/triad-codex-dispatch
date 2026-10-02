@@ -9,7 +9,7 @@ under the same marketplace name.
 ## Select the version
 
 The commands below select `main`, the current release line.
-[Release v0.2.557](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.557)
+[Release v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)
 contains the versioned download and checksums. For a reproducible installation,
 use route B and check out the full commit ID recorded in the release notes.
 
@@ -143,6 +143,75 @@ Settings references: [Codex configuration](https://learn.chatgpt.com/docs/config
 [sandbox and approvals](https://learn.chatgpt.com/docs/sandboxing),
 [permission profiles](https://learn.chatgpt.com/docs/permissions),
 [local plugin sources](https://developers.openai.com/plugins/build/plugins).
+
+<a id="gemini-cli-38-high"></a>
+
+### Gemini CLI 3.8 Flash setup
+
+Checked **2026-10-02**. For native Gemini CLI, request `gemini-3.8-flash`;
+AGY's `gemini-3.8-flash-high` is a separate selection slug. TRIAD's version floor
+for this model is **0.61.0**; upgrade through your existing CLI install method
+if needed. This verified setup guidance covers stable **0.61.0 or newer**;
+preview/nightly channels are outside its verified scope, separate from adapter
+version acceptance. Older supported v2 models retain their 0.60.0 floor: this is
+a model-specific requirement, not a blanket pin to the latest CLI. Version
+0.60.0 lacks the 3.8 alias and can remap strings ending in `flash` to an older
+model ([tagged routing source](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/models.ts#L230-L270)).
+
+For a native interactive session, `gemini --model gemini-3.8-flash` requests
+the exact ID. The v0.61.0 built-in alias inherits **HIGH** generation configuration
+([tagged defaults](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/packages/core/src/config/defaultModelConfigs.ts#L31-L140));
+HIGH is not a CLI effort flag or an attestation of provider-internal reasoning.
+
+To persist selection, merge this into your existing `~/.gemini/settings.json`
+or `<project-root>/.gemini/settings.json`; project settings override user settings
+([tagged settings reference](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/docs/reference/configuration.md#L44-L60)).
+Preserve other fields; a CLI `--model` or `GEMINI_MODEL` value can override it.
+
+```json
+{"model": {"name": "gemini-3.8-flash"}}
+```
+
+Explicit HIGH is optional, for example to override an existing lower setting.
+Merge these fields and **append** the rule to existing `customOverrides`; do not
+replace existing arrays or the whole file. The supported shape is defined in
+the [tagged settings schema](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/packages/cli/src/config/settingsSchema.ts#L1144-L1192).
+
+```json
+{
+  "model": {"name": "gemini-3.8-flash"},
+  "modelConfigs": {
+    "customOverrides": [{
+      "match": {"model": "gemini-3.8-flash"},
+      "modelConfig": {
+        "generateContentConfig": {
+          "thinkingConfig": {"thinkingLevel": "HIGH"}
+        }
+      }
+    }]
+  }
+}
+```
+
+Neither `previewFeatures` nor enabling `experimental.dynamicModelConfiguration`
+is needed. Dynamic configuration, aliases and rollout can alter the effective
+ID; more specific/runtime overrides can also win. See the
+[tagged ID resolver](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/packages/core/src/config/models.ts#L234-L363).
+
+For TRIAD v2, merge `"gemini": {"model": "gemini-3.8-flash", "effort": null}`
+into the **existing selected Google entry** in `.agents/triad-review-legs.json`.
+Keep its name, other entries and route/authentication selection; the packaged
+default roster is unchanged. Native CLI settings above belong in Gemini's JSON
+files, not new TRIAD roster keys. Keep the required authentication route; an API
+key is not a bypass for TRIAD's Enterprise OAuth boundary.
+
+Without a new provider request, run `gemini --version`, inspect the applicable
+settings and any `--model`/`GEMINI_MODEL` override, and view `/model` in an
+**already open** Gemini session without sending a prompt. These show the binary
+version and selected/requested model, not backend entitlement or actual runtime
+model. Subagents with an explicit model keep that selection; custom subagents
+default to `inherit`, using the main-session model
+([v0.61.0 subagent schema](https://github.com/google-gemini/gemini-cli/blob/v0.61.0/docs/core/subagents.md#configuration-schema)).
 
 ## Verify the installation
 

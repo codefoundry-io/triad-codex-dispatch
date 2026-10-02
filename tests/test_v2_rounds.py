@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import review_round
+from test_v2_review_prompts import decoded_context
 from test_review_round import worktree, _lifecycle_packet
 from test_v2_producer_adapter import verdict
 
@@ -24,15 +25,17 @@ def implementation():
 
 @pytest.fixture
 def round_fixture(tmp_path, monkeypatch, worktree):
-    def build(*, make_basis=True, adapter_transform=None):
+    def build(*, make_basis=True, adapter_transform=None, request_changes=None, config_legs=None):
         mod = implementation()
         config_dir = worktree / ".agents"
         config_dir.mkdir()
         config = config_dir / "triad-review-legs.json"
-        config.write_text(json.dumps({"schema": "triad-review-legs.v2", "legs": [{
+        default_legs = [{
             "name": "trial", "vendor": "codex", "enabled": True,
             "acceptance": "informational", "timeout_s": 120,
-            "codex": {"model": "gpt-5.6-terra", "reasoning": "high"}}]}))
+            "codex": {"model": "gpt-5.6-terra", "reasoning": "high"}}]
+        config.write_text(json.dumps({"schema": "triad-review-legs.v2",
+                                      "legs": default_legs if config_legs is None else config_legs}))
         root, shared = _lifecycle_packet(tmp_path, monkeypatch, "v2-fixture", source_root=worktree)
         calls = []
 
@@ -68,6 +71,7 @@ def round_fixture(tmp_path, monkeypatch, worktree):
                    "approved_boundary": ["local plugin"], "authentication_class": "personal-google",
                    "native_capabilities": {"source": "native-spawn-tool", "models": {"gpt-5.6-terra": ["high", "xhigh"]}},
                    "prior_residual": "Prior finding and rebuttal: no inherited approval."}
+        request.update(request_changes or {})
         basis = mod.create_basis(request, root=root) if make_basis else None
         return mod, basis, root, worktree, request, calls
     return build
@@ -110,6 +114,32 @@ def all_success(fixture):
     return {name: finish(fixture, start(fixture, name)) for name in fixture[1]["enabled"]}
 
 
+@pytest.mark.parametrize("residual", ["", '현재 rebuttal: "증거"\n```excerpt```\nUnknown: deployed context'])
+def test_C62_current_residual_is_included_once(round_fixture, residual):
+    objective = '지원 2.1.205; locked 2.1.280; observed 2.1.300\nUnknown: runtime'
+    criteria = ['현재 계약 "검토"', 'Unknown: deployment\n`source` evidence']
+    fixture = round_fixture(request_changes={"prior_residual": residual,
+                                            "objective": objective, "criteria": criteria})
+    _, basis, root, *_ = fixture
+    task_path = root / "shared/TASK.md"
+    supplied_task_bytes = task_path.read_bytes()
+    (root / "results/old-transcript.md").write_text("OLD_TRANSCRIPT_SENTINEL: historical approval")
+    assert basis["request"]["prior_residual"] == residual
+    contexts = []
+    for name in basis["enabled"]:
+        allocation = start(fixture, name)
+        rendered = Path(allocation["prompt_file"]).read_text()
+        scope, decoded_residual = decoded_context(rendered)
+        assert decoded_residual == residual
+        assert scope["objective"] == objective
+        assert scope["criteria"] == criteria
+        assert rendered.count("Prior findings and rebuttal evidence:") == 1
+        assert "OLD_TRANSCRIPT_SENTINEL" not in rendered
+        contexts.append((scope, decoded_residual))
+    assert all(context == contexts[0] for context in contexts)
+    assert task_path.read_bytes() == supplied_task_bytes
+
+
 def test_all_n_entries_and_resolved_invocations_are_bound_before_inference(round_fixture):
     round_fixture = round_fixture()
     mod, basis, root, _, _, calls = round_fixture
@@ -146,7 +176,7 @@ def test_unfinished_entry_blocks_and_all_n_positive_completion_agrees(round_fixt
     assert len(outcome["legs"]) == 4
 
 
-@pytest.mark.parametrize("kind", ["blocking", "uncertainty", "minor-negative"])
+@pytest.mark.parametrize("kind", ["blocking", "uncertainty"])
 def test_informational_label_never_exempts_findings_or_questions(round_fixture, kind):
     round_fixture = round_fixture()
     mod, basis, *_ = round_fixture
@@ -164,9 +194,68 @@ def test_informational_label_never_exempts_findings_or_questions(round_fixture, 
                     "context_known": True}]
         finish(round_fixture, alloc, changes=changes)
     outcome = mod.collect(Path(basis["basis_file"]))
-    assert outcome["status"] == ("AGREED" if kind == "minor-negative" else "BLOCKED")
-    if kind == "minor-negative":
-        assert outcome["selection_deviations"] == ["trial"]
+    assert outcome["status"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("negative", ["DO NOT MERGE", "MERGE WITH FIXES"])
+def test_C13_minor_negative_is_complete_but_blocked(round_fixture, negative):
+    fixture = round_fixture()
+    mod, basis, *_ = fixture
+    for name in basis["enabled"]:
+        result = finish(fixture, start(fixture, name), changes={
+            "verdict": negative, "findings": [{
+                "path": "source.py", "line": 1, "severity": "Minor", "summary": "fixture",
+                "trigger": "fixture input", "evidence": "source.py:1", "context_known": True,
+            }],
+        } if name == "trial" else {})
+        assert result["state"] == "COMPLETE"  # Both negative tokens remain wire-valid.
+    basis_file = Path(basis["basis_file"])
+    outcome = mod.collect(basis_file)
+    assert outcome["legs"]["trial"]["state"] == "COMPLETE"
+    assert outcome["selection_deviations"] == ["trial"]
+    assert outcome["status"] == "BLOCKED"
+    with pytest.raises(ValueError):
+        mod.allocate_attempt(basis_file, "trial", diagnosis="disagree with verdict")
+
+
+@pytest.mark.parametrize("vendors,families", [
+    (["codex"], ["codex"]),
+    (["codex", "codex"], ["codex"]),
+    (["codex", "claude", "google"], ["claude", "codex", "google"]),
+])
+@pytest.mark.parametrize("negative", [False, True])
+def test_C33_nonempty_roster_approval_independent_of_family_count(round_fixture, vendors, families, negative):
+    disabled = [{"name": name, "enabled": False} for name in ("claude", "codex", "google")]
+    selections = {"codex": {"model": "gpt-5.6-terra", "reasoning": "high"},
+                  "claude": {"model": "opus", "effort": "high"},
+                  "google": {"model": "gemini-3.1-pro-high", "effort": "high"}}
+    entries = [{"name": f"trial-{index}", "vendor": vendor, "enabled": True,
+                "acceptance": "informational", "timeout_s": 120,
+                "agy" if vendor == "google" else vendor: selections[vendor]}
+               for index, vendor in enumerate(vendors)]
+    fixture = round_fixture(config_legs=disabled + entries)
+    mod, basis, _, _, _, calls = fixture
+    assert calls == [[entry["name"] for entry in entries]]
+    for entry in entries:
+        adapter = basis["adapters"][entry["name"]]
+        selection = selections[entry["vendor"]]
+        assert adapter["model"] == selection["model"]
+        assert adapter["effort"] == selection.get("reasoning", selection.get("effort"))
+        finish(fixture, start(fixture, entry["name"]), changes={
+            "verdict": "DO NOT MERGE", "open_questions": ["unresolved evidence"],
+        } if negative and entry["name"] == "trial-0" else {})
+    outcome = mod.collect(Path(basis["basis_file"]))
+    assert outcome["families"] == families
+    assert outcome["status"] == ("BLOCKED" if negative else "AGREED")
+
+
+def test_C33_zero_enabled_entries_refuse_before_adapters(round_fixture):
+    fixture = round_fixture(make_basis=False, config_legs=[
+        {"name": name, "enabled": False} for name in ("claude", "codex", "google")])
+    mod, _, root, _, request, calls = fixture
+    with pytest.raises(ValueError, match="at least one enabled entry"):
+        mod.create_basis(request, root=root)
+    assert calls == []
 
 
 def test_same_basis_failed_entry_only_retry_preserves_completed_siblings(round_fixture):
@@ -236,3 +325,79 @@ def test_no_attempt_or_terminal_result_can_be_overwritten(round_fixture):
     finish(round_fixture, alloc)
     with pytest.raises(ValueError):
         finish(round_fixture, alloc)
+
+
+@pytest.mark.parametrize("phase", ["omitted", "formal-plan", "implementation-review", "pre-merge",
+                                  None, "unknown", "", 1, True, [], {}])
+def test_C60_phase_request_default_and_refusal_before_probes(round_fixture, phase):
+    mod, _, root, _, request, calls = round_fixture(make_basis=False)
+    if phase != "omitted":
+        request["review_kind"] = phase
+    if phase not in ("omitted", "formal-plan", "implementation-review", "pre-merge"):
+        with pytest.raises(ValueError):
+            mod.create_basis(request, root=root)
+        assert calls == []
+        assert not (root / "basis-v2.json").exists()
+        assert not (root / "preflight-v2").exists()
+        return
+    basis = mod.create_basis(request, root=root)
+    expected = "pre-merge" if phase == "omitted" else phase
+    assert basis["request"]["review_kind"] == expected
+    for name in basis["enabled"]:
+        item = mod.allocate_attempt(Path(basis["basis_file"]), name)
+        metadata = json.loads(Path(item["prompt_file"]).read_text().splitlines()[0].split(": ", 1)[1])
+        assert metadata["review_kind"] == expected
+
+
+@pytest.mark.parametrize("phase", ["formal-plan", "implementation-review", "pre-merge"])
+def test_C60_failed_to_run_retry_preserves_phase(round_fixture, phase):
+    fixture = round_fixture(request_changes={"review_kind": phase})
+    mod, basis, root, *_ = fixture
+    for name in basis["enabled"]:
+        finish(fixture, start(fixture, name), failed=name == "trial")
+    original = {str(path): path.read_bytes() for path in (root / "results").rglob("*") if path.is_file()}
+    second = mod.allocate_attempt(Path(basis["basis_file"]), "trial", diagnosis="transient failure diagnosed")
+    assert second["binding"]["attempt"] == 2
+    assert second["binding"]["content_digest"] == basis["content_digest"]
+    metadata = json.loads(Path(second["prompt_file"]).read_text().splitlines()[0].split(": ", 1)[1])
+    assert metadata["review_kind"] == phase
+    finish(fixture, second)
+    assert mod.collect(Path(basis["basis_file"]))["status"] == "AGREED"
+    assert {name: Path(name).read_bytes() for name in original} == original
+
+
+def test_C60_phase_drift_requires_new_basis(round_fixture):
+    mod, basis, *_ = round_fixture(request_changes={"review_kind": "formal-plan"})
+    path = Path(basis["basis_file"])
+    changed = copy.deepcopy(basis)
+    changed["request"]["review_kind"] = "implementation-review"
+    raw = mod._bytes(changed)
+    path.write_bytes(raw)
+    # Even a refreshed file checksum cannot admit a changed substantive basis.
+    path.with_suffix(".json.sha256").write_text(mod._hash(raw) + "\n")
+    with pytest.raises(ValueError, match="content digest mismatch"):
+        mod.allocate_attempt(path, "codex")
+    with pytest.raises(ValueError, match="content digest mismatch"):
+        mod.collect(path)
+
+
+def test_C60_phase_alone_changes_digest_and_default_normalizes(round_fixture, monkeypatch):
+    mod, _, root, _, request, _ = round_fixture(make_basis=False)
+    # Keep root, review ID, capture and preparation equal. Suppress only writes
+    # so repeated production construction can compare exactly the same inputs.
+    preparation = mod._preparation(root)
+    monkeypatch.setattr(mod, "_preparation", lambda supplied_root: preparation)
+    monkeypatch.setattr(mod, "_seal", lambda path, value: None)
+    omitted = mod.create_basis(request, root=root)
+    explicit = mod.create_basis({**request, "review_kind": "pre-merge"}, root=root)
+    assert omitted["request"]["review_kind"] == "pre-merge"
+    assert omitted == explicit
+    plan = mod.create_basis({**request, "review_kind": "formal-plan"}, root=root)
+    code = mod.create_basis({**request, "review_kind": "implementation-review"}, root=root)
+    def other_inputs(basis):
+        result = copy.deepcopy(basis)
+        result.pop("content_digest")
+        result["request"].pop("review_kind")
+        return result
+    assert other_inputs(plan) == other_inputs(code) == other_inputs(explicit)
+    assert len({plan["content_digest"], code["content_digest"], explicit["content_digest"]}) == 3

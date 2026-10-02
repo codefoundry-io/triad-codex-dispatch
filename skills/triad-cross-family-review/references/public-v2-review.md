@@ -49,6 +49,7 @@ Request shape (substitute the actual paths, scope and exposed capabilities):
   "prepared_dir": "/canonical/temp/triad-review-review-123/shared",
   "worktree": "/absolute/project",
   "mode": "guarded-worktree",
+  "review_kind": "implementation-review",
   "objective": "Review the approved change and affected unchanged consumers",
   "criteria": ["correctness", "contract completeness"],
   "approved_boundary": ["src/", "tests/"],
@@ -62,7 +63,30 @@ Request shape (substitute the actual paths, scope and exposed capabilities):
 }
 ```
 
+`review_kind` is `formal-plan`, `pre-merge` or `implementation-review`. Omission
+defaults to `pre-merge`; explicit null, unknown strings and other types refuse
+before capture or adapter preparation. `formal-plan` asks whether the plan as
+written can deliver the requirements; the two code stages inspect actual changes
+and affected consumers. Plan approval does not approve future implementation.
+The selected purpose is rendered once and bound with the normalized request.
+
 `review_web_authorized` is optional, strictly boolean and defaults to false. Set it true only for a direct current-round owner request.
+
+### Mechanical fields and leader context
+
+| Supplied by the toolkit | Supplied by the leader |
+|---|---|
+| Normalized phase, invocation bindings, selected route, web permission, output schema | Objective, criteria, approved boundary, requirements, current environment and evidence |
+| Exact configured model/effort and capability observations | Supported versions, declared/locked versions, observed/tested versions, and explicit unknowns |
+
+Use existing objective/criteria, TASK, optional EVIDENCE and source members for
+the context. `prior_residual` carries one concise current account of unresolved
+claims and necessary counterevidence. These are prose, faithfully transported as
+data; schema checks do not establish semantic completeness. Keep support policy,
+lockfile declarations and runtime observations distinct. CLI patch observations
+are not equality pins: retain justified version floors and required controls.
+The generic Claude session-control floor does not establish support for every
+configured model. Account access and actual runtime identity need separate evidence.
 
 `mode` is `guarded-worktree` or `prepared-directory`. Both bind the managed
 packet and canonical worktree; the former reviews the worktree, the latter the
@@ -96,7 +120,9 @@ exact pinned shared clauses and authoritative v2 schema. Never edit its output.
   agent handle. Use observation waits until the terminal host result; a wait
   timeout is not provider failure or cancellation authority. `timeout_s` is
   retained configuration, not an unsupported native spawn argument or inferred
-  wall-clock enforcement.
+  wall-clock enforcement. A fresh conversation does not demonstrate disabled
+  memory or isolation from inherited host instructions. Record the actual route
+  limits; do not change global memory settings to claim independent review.
 - CLI: execute the returned argv literally, with its env and canonical target
   cwd. Redirect wrapper stdout/stderr to the returned exclusive `stdout_file`
   and `stderr_file`. Do not interpolate argv values into an unquoted shell
@@ -173,12 +199,14 @@ Command exit 0 means collection ran; use its structured status for the outcome:
 | Status | Meaning |
 |---|---|
 | `INCOMPLETE` | Any enabled entry is absent, failed or invalid |
-| `BLOCKED` | A completed entry has Critical/must-fix findings or open questions |
-| `OWNER_DECISION_REQUIRED` | All entries completed without blockers, but required three-family coverage is absent |
-| `AGREED` | Every enabled entry completed, no blockers remain and three-family coverage is present |
+| `BLOCKED` | A complete entry has a blocker/open question or any verdict other than `SAFE TO MERGE` |
+| `AGREED` | Every selected enabled entry completed and explicitly returned `SAFE TO MERGE`, without blockers/open questions |
 
-All acceptance labels participate. A Minor-only negative is a valid result and
-its name is recorded in `selection_deviations`; it is not silently rewritten.
+Missing/failed/invalid results take precedence over `BLOCKED`. Any nonempty
+selected roster is valid; entry count and family count add no veto. Every
+acceptance label participates, including `informational`. A Minor-only negative
+is a valid COMPLETE result, remains in `selection_deviations`, and blocks
+agreement. A separate owner exception or resource stop never changes that result.
 The collector rechecks bound source, toolkit, roster, prompts, receipts and
 original host files. Hashes detect drift, not a malicious owner rewriting the
 entire custody root. Agreement does not authorize merge, installation or release.
@@ -190,10 +218,35 @@ Preparation failure during this retry also keeps its own receipts. A valid
 negative or malformed completed answer is not a retryable transport failure.
 
 Any source or substantive review-condition change requires a fresh review ID,
-new basis and full-scope review by every enabled entry. Carry prior findings and
-rebuttals into `prior_residual`; no prior approval transfers. Diagnose successful
-sibling findings even when another entry failed. In-scope source corrections
-therefore require the entire roster again, not just the failed entry.
+new basis and full-scope review by every enabled entry. No prior approval
+transfers. Diagnose successful sibling findings even when another entry failed.
+In-scope source corrections therefore require the entire roster again, not just
+the failed entry.
+
+The leader checks findings against current source, requirements and evidence.
+Separate concrete defects from optional redesign, apply the smallest necessary
+in-scope correction, and preserve rejected findings with their refuting evidence.
+A static contradiction can be checked without execution. Before each new round,
+rebuild one current `prior_residual` with open claims, their present disposition
+and necessary counterevidence; do not append whole debate transcripts. Copy any
+earlier excerpt or test result needed now into current bound TASK/EVIDENCE/source
+members. An old path is provenance, not a promise of access after cleanup.
+
+Continue while checked corrections, counterexamples or resolution of necessary
+unknowns make material progress. Reopen a closed point only for new counterevidence,
+a relevant change or a demonstrated refutation error. Exhausted wording disputes
+stop without approval; other independently progressing issues may continue.
+Different votes alone are not contradictory verified claims. The latter require
+the owner to resolve the conflict; repetition, quotas and separate exceptions
+cannot manufacture `AGREED`. Record unresolved issues and a stop reason separately.
+
+TRIAD does not arrange fresh-context experiments to measure prompt or skill
+efficacy. A leader's reenactment or wording preference does not prove improved
+review quality. For source-skill development, follow the checkout's applicable
+development policy separately. Where that policy requires bounded workflow and
+structural compliance checks, use a dedicated fresh executor on the canonical
+source skill; it must not dispatch providers or conduct an operational review.
+Those checks are not defect-recall measurements.
 
 After all writers terminate and findings are adjudicated, use the existing
 managed `export --review-id ID --expected-root ROOT --output DESTINATION`, then

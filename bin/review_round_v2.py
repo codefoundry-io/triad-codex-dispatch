@@ -16,7 +16,7 @@ from referencing import Registry
 import review_round as lifecycle
 from review_prompts_v2 import load_bundle, render_prompt
 from review_roster import resolve_roster
-from validate_v2 import BINDING_FIELDS, _json, load_contracts, validate_verdict
+from validate_v2 import BINDING_FIELDS, _json, load_contracts, validate_review_kind, validate_verdict
 from verdict_v2 import bound_verdict
 
 
@@ -127,12 +127,13 @@ def _load_basis(path: Path) -> dict:
 def create_basis(request: dict, *, root: Path) -> dict:
     required = {"review_id", "project_root", "prepared_dir", "worktree", "mode", "objective",
                 "criteria", "approved_boundary", "authentication_class", "native_capabilities"}
-    if not isinstance(request, dict) or not required <= set(request) or set(request) - required - {"prior_residual", "review_web_authorized"}:
+    if not isinstance(request, dict) or not required <= set(request) or set(request) - required - {"prior_residual", "review_web_authorized", "review_kind"}:
         raise ValueError("invalid v2 review request fields")
     request = _json(_bytes(request))
     request.setdefault("review_web_authorized", False)
     if type(request["review_web_authorized"]) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
+    request["review_kind"] = validate_review_kind(request.get("review_kind", "pre-merge"))
     lifecycle._validate_review_id(request["review_id"])
     root = lifecycle._canonical_directory(root, "v2 review root")
     prepared = Path(request["prepared_dir"])
@@ -195,7 +196,8 @@ def _prompt(basis: dict, binding: dict, adapter: dict) -> str:
         objective=request["objective"], criteria=request["criteria"],
         approved_boundary=request["approved_boundary"], residual=request.get("prior_residual", ""),
         google_preflight_sha256=adapter["preflight_sha256"],
-        review_web_authorized=request.get("review_web_authorized", False))
+        review_web_authorized=request.get("review_web_authorized", False),
+        review_kind=request["review_kind"])
 
 
 def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict:
@@ -522,12 +524,11 @@ def collect(basis_file: Path) -> dict:
         families.add(verdict["family"])
         blocking = bool(verdict["open_questions"]) or any(
             finding["severity"] in ("Critical", "must-fix") for finding in verdict["findings"])
-        blocked |= blocking
+        blocked |= blocking or verdict["verdict"] != "SAFE TO MERGE"
         if not blocking and verdict["verdict"] != "SAFE TO MERGE":
             deviations.append(name)
         legs[name] = {"state": "COMPLETE", "attempt": verdict["attempt"], "verdict": verdict}
-    status = ("INCOMPLETE" if missing else "BLOCKED" if blocked else
-              "OWNER_DECISION_REQUIRED" if len(families) < 3 else "AGREED")
+    status = "INCOMPLETE" if missing else "BLOCKED" if blocked else "AGREED"
     _load_basis(basis_file)
     return {"status": status, "content_digest": basis["content_digest"], "legs": legs,
             "families": sorted(families), "missing": missing, "selection_deviations": deviations}

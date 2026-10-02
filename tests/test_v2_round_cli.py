@@ -187,3 +187,19 @@ def test_boolean_attempt_in_read_receipt_cannot_equal_integer_binding(round_fixt
              "exposure": "unexposed", "observations": None}
     with pytest.raises(ValueError):
         finish(fixture, allocation, reads=reads)
+
+
+@pytest.mark.parametrize("phase", ["omitted", "formal-plan", "implementation-review", "pre-merge"])
+def test_C60_cli_create_normalizes_and_renders_phase(round_fixture, phase, capsys):
+    mod, _, root, _, request, _ = round_fixture(make_basis=False)
+    if phase != "omitted":
+        request["review_kind"] = phase
+    request_file = root.parent / "phase-request.json"
+    request_file.write_text(json.dumps(request))
+    assert review_round.main(["v2-create", "--request-file", str(request_file), "--root", str(root)]) == 0
+    basis = json.loads(capsys.readouterr().out)
+    expected = "pre-merge" if phase == "omitted" else phase
+    assert basis["request"]["review_kind"] == expected
+    item = mod.allocate_attempt(Path(basis["basis_file"]), "codex")
+    metadata = json.loads(Path(item["prompt_file"]).read_text().splitlines()[0].split(": ", 1)[1])
+    assert metadata["review_kind"] == expected

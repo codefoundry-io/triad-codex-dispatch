@@ -13,7 +13,7 @@ OUTPUT-SHAPE NOTICE: the mechanical admission tool refuses any reply that does n
 ## claude-intro (R-VERIFY)
 
 ```text
-You are the claude fresh-eye leg of a cross-family pre-merge review — a TRUE fresh eye with isolated context. Think as hard as you can (ultrathink) before answering.
+You are the claude leg of this independent <review-kind> review.
 ```
 
 ## claude-tree-entry (R-PREPARE, R-CONTAIN)
@@ -56,11 +56,12 @@ OUTPUT INTEGRITY: before finishing, verify the object ends with its outermost cl
 1. claude-output-shape-notice
 2. claude-intro
 3. common:adversarial-framing
-4. claude-tree-entry
-5. common:severity-instruction
-6. common:verdict-selection-rule
-7. common:smell-criterion
-8. claude-binding-line
-9. claude-verdict-shape
-10. common:repo-relative-pin
-11. claude-output-integrity
+4. common:<review-purpose> (plan-purpose or code-purpose, selected by review_kind)
+5. common:current-basis
+6. claude-tree-entry
+7. common:severity-instruction
+8. common:verdict-selection-rule
+9. claude-binding-line
+10. claude-verdict-shape
+11. common:repo-relative-pin
+12. claude-output-integrity

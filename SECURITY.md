@@ -376,8 +376,9 @@ schema APIs before persistent writes and never installs Python packages itself.
 
 Explicit v2 operational collection uses immutable named-entry/attempt custody
 within the existing managed review lifecycle. It binds the complete roster,
-source/toolkit, clauses, selected route, requested controls and capability
-receipts. CLI collection checks the actual wrapper argv, per-attempt run-log
+source/toolkit, clauses, normalized review phase, selected route, requested
+controls and capability receipts. Invalid phases refuse before capture/preparation;
+every selected enabled entry must explicitly approve. CLI collection checks the actual wrapper argv, per-attempt run-log
 ownership and raw stdout/stderr; native collection uses host terminal metadata
 and original final-message bytes. Never accept model-authored host receipts.
 Unexposed observations remain null, separate from observed empty sets.

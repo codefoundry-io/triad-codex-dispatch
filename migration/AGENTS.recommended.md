@@ -29,7 +29,10 @@ Keep the existing project gate on its selected protocol. When the owner/project
 explicitly selects public v2, follow the installed skill's `public-v2-review.md`
 procedure for the named roster, generated invocations, actual host evidence and
 same-basis retry; the legacy formal route and failed-round rules below do not
-replace that procedure. Informational v2 entries participate fully. Candidate
+replace that procedure. Every selected enabled v2 entry explicitly approves,
+including informational entries; any nonempty roster is valid regardless of
+family count. Use the request's review_kind for plan versus code purpose and
+retain current evidence through the existing export/cleanup lifecycle. Candidate
 schema presence alone does not select v2 or adopt a revision tag.
 
 For formal review, record `personal-google` or `gemini-enterprise` before any

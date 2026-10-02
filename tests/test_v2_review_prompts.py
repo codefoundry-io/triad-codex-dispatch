@@ -40,12 +40,13 @@ def test_every_family_uses_shared_order_binding_schema_and_previous_evidence(tmp
     args = arguments(tmp_path, family)
     text = mod.render_prompt(**args)
     metadata = [line for line in text.splitlines() if line.startswith("Review v2 metadata: ")]
-    expected = dict(args["expected"])
+    expected = dict(args["expected"], review_kind="pre-merge")
     if family == "google":
         expected["google_preflight_receipt_sha256"] = "b" * 64
     assert len(metadata) == 1 and json.loads(metadata[0].split(": ", 1)[1]) == expected
-    assert "Actively try to DISPROVE" in text
-    assert "coverage first" in text and "smell" in text
+    assert "Review independently." in text
+    assert "coverage first" in text
+    assert "Check evidence-backed code smells" not in text
     assert "SAFE TO MERGE" in text and "schema_version=2" in text
     assert "Prior finding: line 42" in text
     assert "````text\n" in text, "residual fence must exceed the contained backtick run"
@@ -64,7 +65,7 @@ def test_exact_shared_payloads_have_one_candidate_provenance_manifest():
     root = ROOT / "prompts/review-v2"
     manifest = json.loads((root / "source-manifest.json").read_text())
     assert manifest["source_repository"] == "https://github.com/codefoundry-io/triad-dispatch-spec"
-    assert manifest["source_commit"] == "7f527ef1777336b93ca626744aedcd0c7d90aff9"
+    assert manifest["source_commit"] == "04245c740afc9be36ad7702a134f71aec8ff0b7f"
     assert manifest["status"] == "candidate"
     assert set(manifest["sha256"]) == set(bundle) == {
         "common-clauses.md", "leg-claude.md", "leg-codex.md", "leg-google.md"}
@@ -91,7 +92,7 @@ def test_missing_or_altered_shared_bytes_refuse_before_rendering(tmp_path, monke
         if damage == "manifest-duplicate":
             raw = raw.rstrip()[:-1] + ',"status":"candidate"}'
         else:
-            raw = raw.replace("7f527ef1777336b93ca626744aedcd0c7d90aff9", "0" * 40)
+            raw = raw.replace("04245c740afc9be36ad7702a134f71aec8ff0b7f", "0" * 40)
         target.write_text(raw)
     monkeypatch.setattr(mod, "BUNDLE_ROOT", copy)
     with pytest.raises(ValueError):
@@ -125,7 +126,90 @@ def test_cli_and_distribution_expose_explicit_v2_without_replacing_legacy(tmp_pa
     distribution = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(distribution)
     required = {"bin/review_prompts_v2.py", "bin/verdict_v2.py", "bin/google_preflight_v2.py",
-                "bin/data/gemini-models.json", "prompts/review-v2/source-manifest.json"}
+                "bin/data/gemini-models.json", "prompts/review-v2/source-manifest.json",
+                "contracts/review-kind.schema.json"}
     required.update("prompts/review-v2/" + name for name in mod.load_bundle())
     assert required <= set(distribution.HASH_TARGETS)
     assert "render-worktree" in _parser().format_help()
+
+
+@pytest.mark.parametrize("family", ["claude", "codex", "google"])
+@pytest.mark.parametrize("phase", ["formal-plan", "pre-merge", "implementation-review"])
+def test_C60_each_family_has_one_phase_purpose(tmp_path, family, phase):
+    mod = renderer()
+    text = mod.render_prompt(**arguments(tmp_path, family), review_kind=phase)
+    metadata = json.loads(text.splitlines()[0].split(": ", 1)[1])
+    common = mod._clauses(mod.load_bundle()["common-clauses.md"])
+    purpose = "plan-purpose" if phase == "formal-plan" else "code-purpose"
+    other = "code-purpose" if phase == "formal-plan" else "plan-purpose"
+    assert metadata["review_kind"] == phase
+    assert text.count(common[purpose]) == 1
+    assert common[other] not in text
+    assert "<review-purpose>" not in text and "<review-kind>" not in text
+    assert common["current-basis"] in text
+    assert common["smell-criterion"] not in text
+
+
+@pytest.mark.parametrize("phase", [None, "plan", "", False, 1, [], {}])
+def test_C60_renderer_rejects_invalid_phase(tmp_path, phase):
+    with pytest.raises(ValueError):
+        renderer().render_prompt(**arguments(tmp_path), review_kind=phase)
+
+
+def decoded_context(rendered):
+    scope = json.loads(rendered.split("Bound review scope:\n", 1)[1].splitlines()[0])
+    lines = rendered.split("Prior findings and rebuttal evidence:\n", 1)[1].splitlines()
+    return scope, json.loads(lines[1])
+
+
+@pytest.mark.parametrize("family", ["claude", "codex", "google"])
+@pytest.mark.parametrize("residual", ["", '현재 finding: "인용"\n```evidence```\nUnknown: runtime identity'])
+def test_C61_context_round_trips_without_semantic_interpretation(tmp_path, family, residual):
+    args = arguments(tmp_path, family)
+    objective = '지원 2.1.205; locked 2.1.280; observed 2.1.300\n"unknown": entitlement'
+    criteria = ['현재 소스 `확인`', 'Unknown: effective runtime\n"승인" 증거']
+    task_bytes = '현재 TASK: "한글"\n```data```\nUnknown: deployment context'.encode()
+    args.update(objective=objective, criteria=criteria, residual=residual)
+    args["brief_file"].write_bytes(task_bytes)
+    (tmp_path / "old-transcript.md").write_text("OLD_TRANSCRIPT_SENTINEL: historical approval")
+    rendered = renderer().render_prompt(**args)
+    scope, decoded_residual = decoded_context(rendered)
+    assert decoded_residual == residual
+    assert scope["objective"] == objective
+    assert scope["criteria"] == criteria
+    assert scope["approved_boundary"] == args["approved_boundary"]
+    assert rendered.count("Prior findings and rebuttal evidence:") == 1
+    assert "OLD_TRANSCRIPT_SENTINEL" not in rendered
+    assert args["brief_file"].read_bytes() == task_bytes
+
+
+@pytest.mark.parametrize("residual", [None, 0, False, [], {}])
+def test_C61_non_string_residual_refuses(tmp_path, residual):
+    args = arguments(tmp_path)
+    args["residual"] = residual
+    with pytest.raises(ValueError):
+        renderer().render_prompt(**args)
+
+
+@pytest.mark.parametrize("field,value", [("objective", ""), ("criteria", []), ("criteria", [""]),
+                                        ("approved_boundary", []), ("approved_boundary", [" "])])
+def test_C61_context_keeps_required_scope_checks(tmp_path, field, value):
+    args = arguments(tmp_path)
+    args[field] = value
+    with pytest.raises(ValueError):
+        renderer().render_prompt(**args)
+
+
+@pytest.mark.parametrize("task_kind", ["empty", "directory", "symlink"])
+def test_C61_task_requires_regular_file_without_nonempty_semantics(tmp_path, task_kind):
+    args = arguments(tmp_path)
+    task = args["brief_file"]
+    task.unlink()
+    if task_kind == "empty":
+        task.write_bytes(b"")
+        renderer().render_prompt(**args)
+        assert task.read_bytes() == b""
+    else:
+        task.mkdir() if task_kind == "directory" else task.symlink_to(args["diff_file"])
+        with pytest.raises(ValueError):
+            renderer().render_prompt(**args)

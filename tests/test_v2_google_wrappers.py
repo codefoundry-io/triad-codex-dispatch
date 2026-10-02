@@ -44,16 +44,17 @@ def route(request, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(agy, "_probe_agy_version", lambda _: (1, 2, 7))
     monkeypatch.setattr(agy, "_probe_agy_models", lambda _: {model})
 
+    state = {"output": {}, "vendor_exit": 0, "gemini_version": "0.60.0"}
+
     def probe(cmd, **kwargs):
         assert cmd in ([str(executable), "--version"], [str(executable), "--help"])
-        text = "0.60.0\n" if cmd[-1] == "--version" else (
+        text = state["gemini_version"] + "\n" if cmd[-1] == "--version" else (
             '  -m, --model Model [string]\n'
             '  --approval-mode Set the approval mode [choices: "default", "plan"]\n'
             '  --policy Additional policy files or directories to load [array]\n')
         return subprocess.CompletedProcess(cmd, 0, text, "")
 
     monkeypatch.setattr(gemini.subprocess, "run", probe)
-    state = {"output": {}, "vendor_exit": 0}
 
     def provider(cli, cmd, cwd, timeout, **kwargs):
         calls.append((cmd, cwd, timeout, kwargs))
@@ -86,8 +87,8 @@ def route(request, tmp_path, monkeypatch, capsys):
                 state=state, options=options, invoke=invoke, selector=selector)
 
 
-def ready(route):
-    rc, output, error = route["invoke"](["--preflight-only"])
+def ready(route, *, web=False):
+    rc, output, error = route["invoke"](["--preflight-only", *(["--web"] if web else [])])
     assert rc == 0, error
     assert route["calls"] == []
     receipt = json.loads(output)
@@ -102,7 +103,9 @@ def ready(route):
     metadata = {**{key: verdict(route=route["name"], leg_name="google-second")[key]
                   for key in ("review_id", "family", "content_digest", "leg_name", "attempt", "route")},
                 "google_preflight_receipt_sha256": hashlib.sha256(file.read_bytes()).hexdigest()}
-    options = list(route["options"])
+    options = [*route["options"], *(["--web"] if web else [])]
+    if web:
+        metadata["review_web_authorized"] = True
     options[options.index("--prompt") + 1] = "Review v2 metadata: " + json.dumps(metadata, sort_keys=True) + "\nRead the bound source."
     options += ["--expected-family", "google", "--expected-content-digest", "a" * 64,
                 "--google-preflight-receipt", str(file)]
@@ -129,6 +132,30 @@ def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settin
     record = json.loads((route["home"] / "logs" / cli / "audit.jsonl").read_text())
     assert record["transport"]["attempt"] == 2
     assert record["transport"]["cli_version"] == ("1.2.7" if route["name"] == "agy" else None)
+
+
+def test_gemini_38_exact_model_reaches_actual_wrapper_dispatch(route):
+    if route["name"] != "gemini":
+        pytest.skip("Gemini CLI model contract")
+    route["model"] = "gemini-3.8-flash"
+    route["options"][route["options"].index("--model") + 1] = "gemini-3.8-flash"
+    route["state"]["gemini_version"] = "0.61.0"
+    options, _ = ready(route)
+    rc, output, error = route["invoke"](base=options)
+    assert rc == 0, error
+    assert json.loads(output)["attempt"] == 2
+    assert len(route["calls"]) == 1
+    cmd = route["calls"][0][0]
+    assert cmd[cmd.index("-m") + 1] == "gemini-3.8-flash"
+    assert "--effort" not in cmd
+
+
+def test_gemini_effort_refuses_before_provider(route):
+    if route["name"] != "gemini":
+        pytest.skip("Gemini CLI effort contract")
+    rc, output, _ = route["invoke"](["--preflight-only", "--effort", "high"])
+    assert rc == 2  # argparse refuses the unsupported CLI option.
+    assert output == "" and route["calls"] == []
 
 
 @pytest.mark.parametrize("change", [{"leg_name": "sibling"}, {"attempt": 1}, {"open_questions": ["missing source"]}])
@@ -171,3 +198,37 @@ def test_v2_unknown_requested_model_refuses_before_inference(route):
     options[options.index("--model") + 1] = "not-an-installed-model"
     rc, _, _ = route["invoke"](["--preflight-only"], base=options)
     assert rc != 0 and route["calls"] == []
+
+
+@pytest.mark.parametrize("phase", ["formal-plan", "pre-merge", "implementation-review"])
+@pytest.mark.parametrize("web", [False, True])
+def test_C60_rendered_google_phase_metadata_reaches_wrapper(route, phase, web):
+    import hashlib
+    from test_v2_review_prompts import arguments, renderer
+    options, receipt = ready(route, web=web)
+    args = arguments(route["home"], "google")
+    original = json.loads(options[options.index("--prompt") + 1].splitlines()[0].split(": ", 1)[1])
+    args["expected"] = {key: original[key] for key in
+                        ("review_id", "family", "content_digest", "leg_name", "attempt", "route")}
+    args["google_preflight_sha256"] = hashlib.sha256(receipt.read_bytes()).hexdigest()
+    options[options.index("--prompt") + 1] = renderer().render_prompt(
+        **args, review_kind=phase, review_web_authorized=web)
+    rc, output, error = route["invoke"](base=options)
+    assert rc == 0, error
+    assert json.loads(output)["attempt"] == 2
+    assert len(route["calls"]) == 1
+
+
+@pytest.mark.parametrize("change", [
+    {"review_kind": None}, {"review_kind": "unknown"}, {"review_kind": False},
+    {"review_kind": 1}, {"review_kind": []}, {"review_kind": {}},
+    {"review_kind": "pre-merge", "unrelated": True},
+])
+def test_C60_invalid_or_extra_google_metadata_refuses_before_provider(route, change):
+    options, _ = ready(route)
+    prompt = options[options.index("--prompt") + 1]
+    metadata = json.loads(prompt.splitlines()[0].split(": ", 1)[1])
+    metadata.update(change)
+    options[options.index("--prompt") + 1] = "Review v2 metadata: " + json.dumps(metadata) + "\nRead the bound source."
+    rc, _, _ = route["invoke"](base=options)
+    assert rc == _common.EXIT_ARG_ERROR and route["calls"] == []
