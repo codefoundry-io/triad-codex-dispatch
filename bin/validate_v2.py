@@ -18,8 +18,8 @@ from verdict_schema import _read_canonical_regular_file, _reject_duplicate_membe
 
 CONTRACT_ROOT = Path(__file__).resolve().parents[1] / "contracts"
 SOURCE_REPOSITORY = "https://github.com/codefoundry-io/triad-dispatch-spec"
-SOURCE_COMMIT = "055204c83e57bf87eeac5b2422f2b17340f7c53b"
-PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-fields.json")
+SOURCE_COMMIT = "04245c740afc9be36ad7702a134f71aec8ff0b7f"
+PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-fields.json", "review-kind.schema.json")
 BINDING_FIELDS = ("review_id", "family", "content_digest", "leg_name", "attempt", "route")
 
 
@@ -69,6 +69,20 @@ def load_contracts() -> dict:
             raise ValueError(f"invalid candidate contract: {name}") from None
         schemas[name] = schema
     return schemas
+
+
+def validate_review_kind(value: object) -> str:
+    """Validate an explicit phase offline; callers own omission defaults."""
+    try:
+        schema = load_contracts()["review-kind.schema.json"]
+        Draft202012Validator(schema, registry=Registry()).validate(value)
+        return value
+    except ValidationError as error:
+        raise ValueError(f"schema violation at {error.json_path}: {error.validator}") from None
+    except Unresolvable:
+        raise ValueError("external or unresolved schema reference") from None
+    except RecursionError:
+        raise ValueError("JSON/schema nesting exceeds decoder limit") from None
 
 
 def validate_verdict(raw: str | bytes, *, expected: dict) -> dict:

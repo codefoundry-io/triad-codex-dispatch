@@ -17,8 +17,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "bin/validate_v2.py"
-SHARED_COMMIT = "055204c83e57bf87eeac5b2422f2b17340f7c53b"
-PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-fields.json")
+SHARED_COMMIT = "04245c740afc9be36ad7702a134f71aec8ff0b7f"
+PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-fields.json", "review-kind.schema.json")
 BINDING = dict(review_id="review-v2", family="codex", content_digest="a" * 64,
                leg_name="codex-main", attempt=1, route=None)
 
@@ -242,3 +242,12 @@ def test_cli_preserves_escaped_unicode_without_output_encoding_failure(tmp_path)
     )
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == data
+
+
+def test_C60_review_kind_schema(validator):
+    assert hasattr(validator, "validate_review_kind"), "review phase validation is required"
+    for phase in ("formal-plan", "pre-merge", "implementation-review"):
+        assert validator.validate_review_kind(phase) == phase
+    for value in (None, "plan", "", False, 1, [], {}):
+        with pytest.raises(ValueError):
+            validator.validate_review_kind(value)

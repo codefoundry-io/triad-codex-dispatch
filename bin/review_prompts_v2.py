@@ -7,11 +7,11 @@ import re
 from pathlib import Path
 
 import review_round
-from validate_v2 import _json
+from validate_v2 import _json, validate_review_kind
 from verdict_v2 import bound_verdict
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1] / "prompts/review-v2"
-SOURCE_COMMIT = "7f527ef1777336b93ca626744aedcd0c7d90aff9"
+SOURCE_COMMIT = "04245c740afc9be36ad7702a134f71aec8ff0b7f"
 PAYLOADS = ("common-clauses.md", "leg-claude.md", "leg-codex.md", "leg-google.md")
 _A_ONLY = {"claude-output-shape-notice", "claude-output-integrity", "google-a-hook-audit"}
 
@@ -68,7 +68,9 @@ def review_web_clause(authorized: bool) -> str:
 def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
                   packet_files: list[Path], diff_file: Path, objective: str,
                   criteria: list[str], approved_boundary: list[str], residual: str = "",
-                  google_preflight_sha256: str | None = None, review_web_authorized: bool = False) -> str:
+                  google_preflight_sha256: str | None = None, review_web_authorized: bool = False,
+                  review_kind: str = "pre-merge") -> str:
+    review_kind = validate_review_kind(review_kind)
     model = bound_verdict(expected)
     bundle = load_bundle()
     root = review_round._canonical_directory(worktree, "v2 review worktree")
@@ -83,7 +85,7 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
                    for values in (criteria, approved_boundary))):
         raise ValueError("v2 objective, criteria and approved boundary are required")
     web_clause = review_web_clause(review_web_authorized)
-    metadata = dict(expected)
+    metadata = dict(expected, review_kind=review_kind)
     if review_web_authorized:
         metadata["review_web_authorized"] = True
     if expected["family"] == "google":
@@ -93,7 +95,9 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
     elif google_preflight_sha256 is not None:
         raise ValueError("non-Google prompt cannot own a Google preflight")
     common = _clauses(bundle["common-clauses.md"])
-    leg_text = bundle[f"leg-{expected['family']}.md"]
+    purpose = "plan-purpose" if review_kind == "formal-plan" else "code-purpose"
+    leg_text = bundle[f"leg-{expected['family']}.md"].replace(
+        "common:<review-purpose>", "common:" + purpose)
     leg = _clauses(leg_text)
     order = re.findall(r"^\d+\. ([\w:-]+)", leg_text, re.MULTILINE)
     pieces = []
@@ -105,7 +109,7 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
         except KeyError as error:
             raise ValueError("missing ordered shared clause") from error
     replacements = {
-        "review-web-policy": web_clause,
+        "review-web-policy": web_clause, "review-kind": review_kind,
         "worktree": str(root), "brief-file": str(brief_file),
         "gated-patch-file": str(diff_file), "packet-files": json.dumps([str(path) for path in packet_files]),
         "review-id": expected["review_id"], "content-digest": expected["content_digest"],

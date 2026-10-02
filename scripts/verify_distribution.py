@@ -53,6 +53,7 @@ HASH_TARGETS = (
     "contracts/review-legs.schema.json",
     "contracts/review-legs.default.json",
     "contracts/receipt-fields.json",
+    "contracts/review-kind.schema.json",
     "contracts/source-manifest.json",
     "prompts/investigation.md",
     "prompts/source-manifest.json",

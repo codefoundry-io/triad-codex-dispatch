@@ -86,8 +86,8 @@ def route(request, tmp_path, monkeypatch, capsys):
                 state=state, options=options, invoke=invoke, selector=selector)
 
 
-def ready(route):
-    rc, output, error = route["invoke"](["--preflight-only"])
+def ready(route, *, web=False):
+    rc, output, error = route["invoke"](["--preflight-only", *(["--web"] if web else [])])
     assert rc == 0, error
     assert route["calls"] == []
     receipt = json.loads(output)
@@ -102,7 +102,9 @@ def ready(route):
     metadata = {**{key: verdict(route=route["name"], leg_name="google-second")[key]
                   for key in ("review_id", "family", "content_digest", "leg_name", "attempt", "route")},
                 "google_preflight_receipt_sha256": hashlib.sha256(file.read_bytes()).hexdigest()}
-    options = list(route["options"])
+    options = [*route["options"], *(["--web"] if web else [])]
+    if web:
+        metadata["review_web_authorized"] = True
     options[options.index("--prompt") + 1] = "Review v2 metadata: " + json.dumps(metadata, sort_keys=True) + "\nRead the bound source."
     options += ["--expected-family", "google", "--expected-content-digest", "a" * 64,
                 "--google-preflight-receipt", str(file)]
@@ -171,3 +173,37 @@ def test_v2_unknown_requested_model_refuses_before_inference(route):
     options[options.index("--model") + 1] = "not-an-installed-model"
     rc, _, _ = route["invoke"](["--preflight-only"], base=options)
     assert rc != 0 and route["calls"] == []
+
+
+@pytest.mark.parametrize("phase", ["formal-plan", "pre-merge", "implementation-review"])
+@pytest.mark.parametrize("web", [False, True])
+def test_C60_rendered_google_phase_metadata_reaches_wrapper(route, phase, web):
+    import hashlib
+    from test_v2_review_prompts import arguments, renderer
+    options, receipt = ready(route, web=web)
+    args = arguments(route["home"], "google")
+    original = json.loads(options[options.index("--prompt") + 1].splitlines()[0].split(": ", 1)[1])
+    args["expected"] = {key: original[key] for key in
+                        ("review_id", "family", "content_digest", "leg_name", "attempt", "route")}
+    args["google_preflight_sha256"] = hashlib.sha256(receipt.read_bytes()).hexdigest()
+    options[options.index("--prompt") + 1] = renderer().render_prompt(
+        **args, review_kind=phase, review_web_authorized=web)
+    rc, output, error = route["invoke"](base=options)
+    assert rc == 0, error
+    assert json.loads(output)["attempt"] == 2
+    assert len(route["calls"]) == 1
+
+
+@pytest.mark.parametrize("change", [
+    {"review_kind": None}, {"review_kind": "unknown"}, {"review_kind": False},
+    {"review_kind": 1}, {"review_kind": []}, {"review_kind": {}},
+    {"review_kind": "pre-merge", "unrelated": True},
+])
+def test_C60_invalid_or_extra_google_metadata_refuses_before_provider(route, change):
+    options, _ = ready(route)
+    prompt = options[options.index("--prompt") + 1]
+    metadata = json.loads(prompt.splitlines()[0].split(": ", 1)[1])
+    metadata.update(change)
+    options[options.index("--prompt") + 1] = "Review v2 metadata: " + json.dumps(metadata) + "\nRead the bound source."
+    rc, _, _ = route["invoke"](base=options)
+    assert rc == _common.EXIT_ARG_ERROR and route["calls"] == []
