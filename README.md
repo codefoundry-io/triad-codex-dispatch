@@ -260,15 +260,18 @@ enforces it (summarized under [Security](#security) below).
 0.2.558 normalizes and binds public v2 `review_kind`: `formal-plan`,
 `pre-merge` (the omission default), and `implementation-review`. Each selects
 the shared plan or code review purpose. Every selected enabled entry must return
-explicit `SAFE` approval regardless of family count; a valid Minor-only negative
+explicit `SAFE TO MERGE` approval regardless of family count; a valid Minor-only negative
 result remains nonapproved.
 
 Leader guidance now covers current context, verified findings and refutations,
 evidence preservation and one compact residual. Reopening requires new evidence;
 exhausted wording disputes stop without approval. Exact models and JSON
 configuration, authentication, guarded cleanup and the legacy workflow remain
-available. Vendored provenance remains `04245c7`; shared main `19f0cf1` is an
-authoring-guide publication, not revision adoption. This release does not claim
+available. The vendored bundle moves from `055204c` (contracts) and `7f527ef`
+(prompts) to `04245c7`. Shared v2 clauses revise adversarial framing, add
+current-basis guidance, remove `smell-criterion` from the default leg order and
+remove `ultrathink` from the Claude intro. Shared main `19f0cf1` publishes
+authoring guidance and is not adopted. This release does not claim
 measured prompt-quality gains or authenticated service conformance.
 
 Follow the [marketplace or local Git update steps](docs/installation.md#update),

@@ -241,14 +241,17 @@ class, route에서 identity를 추론하지 않습니다.
 0.2.558은 public v2 `review_kind`를 정규화하고 바인딩합니다. 지원 단계는
 `formal-plan`, 생략 시 기본값인 `pre-merge`, `implementation-review`이며,
 각 단계에서 공유 plan 또는 code 리뷰 목적을 선택합니다. family 수와 관계없이
-선택한 모든 enabled entry의 명시적 `SAFE` 승인이 필요합니다. 유효한
+선택한 모든 enabled entry의 명시적 `SAFE TO MERGE` 승인이 필요합니다. 유효한
 Minor-only 부정 결과는 승인되지 않은 상태로 남습니다.
 
 리더 지침은 현재 context, 검증한 finding과 반박 근거, 증거 보존 및 하나의
 간결한 residual을 다룹니다. 닫힌 항목을 다시 열려면 새로운 증거가 필요하며,
 소진된 표현 논쟁은 승인 없이 중단합니다. 정확한 모델과 JSON 설정, 인증,
-보호된 cleanup 및 legacy 절차는 유지합니다. 번들의 provenance는 `04245c7`을
-유지하며 공유 main `19f0cf1`은 작성 가이드 공개일 뿐 revision 채택이 아닙니다.
+보호된 cleanup 및 legacy 절차는 유지합니다. 번들은 contracts `055204c`와
+prompts `7f527ef`에서 `04245c7`로 이동합니다. 공유 v2 clause는 adversarial
+framing을 수정하고 current-basis 지침을 추가하며, 기본 leg 순서에서
+`smell-criterion`을 제거하고 Claude intro에서 `ultrathink`를 제거합니다.
+공유 main `19f0cf1`은 작성 가이드 공개이며 채택하지 않습니다.
 이 릴리스는 측정된 prompt 품질 향상이나 인증된 서비스 conformance를 주장하지 않습니다.
 
 [마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를 따라

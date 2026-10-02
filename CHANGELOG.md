@@ -5,14 +5,18 @@
 - Normalizes and binds public v2 `review_kind`: `formal-plan`, `pre-merge`
   (the omission default), and `implementation-review`, selecting the shared plan
   or code review purpose throughout the round.
-- Requires explicit `SAFE` approval from every selected enabled entry regardless
+- Requires explicit `SAFE TO MERGE` approval from every selected enabled entry regardless
   of family count. Valid Minor-only negative results remain nonapproved.
 - Clarifies leader handling of current context, verified findings, refutations,
   retained evidence and one compact residual; reopening needs new evidence and
   exhausted wording disputes stop without approval.
+- Updates shared v2 clauses with revised adversarial framing and current-basis
+  guidance, removes `smell-criterion` from the default leg order, and removes
+  `ultrathink` from the Claude intro.
 - Preserves exact models and JSON configuration, authentication, guarded cleanup
-  and the legacy workflow. The vendored shared provenance remains `04245c7`;
-  shared main `19f0cf1` publishes authoring guidance only.
+  and the legacy workflow. The vendored bundle moves from `055204c` (contracts)
+  and `7f527ef` (prompts) to `04245c7`; shared main `19f0cf1` publishes authoring
+  guidance only and is not adopted.
 - Records source verification without claiming measured prompt-quality gains,
   authenticated service conformance or shared revision adoption.
 
