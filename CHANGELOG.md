@@ -2,6 +2,10 @@
 
 ## 0.2.558 — 2026-10-02
 
+- Adds optional Gemini CLI `gemini-3.8-flash` support with its stable 0.61.0
+  compatibility floor, preserving earlier models' existing floor and defaults.
+  Documents native model selection and inherited HIGH settings separately from
+  AGY effort and runtime identity; each OS owner runs that OS's verification.
 - Normalizes and binds public v2 `review_kind`: `formal-plan`, `pre-merge`
   (the omission default), and `implementation-review`, selecting the shared plan
   or code review purpose throughout the round.

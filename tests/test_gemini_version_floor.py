@@ -11,6 +11,26 @@ from test_provider_wrappers import (
 from test_review_round import _canonical_json_bytes, _prepared_digest, _review_metadata, ReviewBrief, prepared, review_round
 
 
+@pytest.mark.parametrize("model,version,accepted", [
+    ("gemini-3.8-flash", "0.61.0", True),
+    ("gemini-3.8-flash", "0.60.0", False),
+    ("gemini-3.8-flash", "0.60.9", False),
+    ("gemini-3.8-flash", "0.61.0-preview.1", False),
+    ("gemini-3.8-flash", "0.62.0", True),
+    ("gemini-3.8-flash", "1.0.0", True),
+    ("gemini-3.1-pro-preview", "0.60.0", True),
+    ("gemini-3.5-flash", "0.60.0", True),
+])
+def test_model_specific_stable_cli_floor(model, version, accepted):
+    from google_preflight_v2 import gemini_model_support
+
+    if accepted:
+        gemini_model_support(model, version)
+    else:
+        with pytest.raises(ValueError):
+            gemini_model_support(model, version)
+
+
 @pytest.fixture
 def version_case(tmp_path):
     path, _, selected = _google_selector_fixture(tmp_path)

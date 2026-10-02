@@ -468,6 +468,12 @@ opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdic
 
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
+각 호스트는 공통 회귀 검사와 자기 OS 전용 검사만 실행합니다. macOS는 macOS에서,
+Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해당 OS의 CI runner가
+담당합니다. 이 호스트의 Docker·에뮬레이션 실행으로 다른 OS 담당의 검증을 대신하지
+않습니다. 결과마다 커밋, OS, 아키텍처, Python 버전과 skip을 기록합니다. 다른 호스트가
+없으면 인계 사항으로 남기며, 통과로 간주하거나 추가 릴리스 게이트를 만들지 않습니다.
+
 ```bash
 /bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
 ```
@@ -1064,6 +1070,10 @@ dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다
 HIGH는 CLI v0.60.0의
 [소스 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77)입니다.
 Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 값은 아닙니다.
+선택 모델 `gemini-3.8-flash`는 stable Gemini CLI 0.61.0부터 호환되는 후속 버전을
+지원하며, 기존 모델의 지원 최소 버전은 유지합니다.
+[Gemini 3.8 선택 및 HIGH 설정](docs/installation.ko.md#gemini-cli-38-high)을 참고하세요.
+배포 기본 리뷰 구성과 별도 AGY 모델 slug는 바꾸지 않습니다.
 
 ## 오프라인 v2 후보 검증
 

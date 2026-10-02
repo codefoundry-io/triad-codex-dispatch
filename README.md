@@ -502,6 +502,13 @@ not change the public three-family default, prepared-directory renderer, or
 
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
+Each host runs the common regression suite and its own OS-specific checks:
+macOS on macOS, Ubuntu on Ubuntu. The other OS is tested by its own host or
+native CI runner; do not substitute a Docker/emulated run from this host.
+Record commit, OS, architecture, Python version and skips with each result.
+An unavailable other host is a recorded handoff, not an invented test pass or
+an additional release gate.
+
 ```bash
 /bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
 ```
@@ -1144,6 +1151,10 @@ existing legacy gate. Use the explicit v2 procedure below for execution and coll
 The Gemini default requests `gemini-3.1-pro-preview`; HIGH is its CLI v0.60.0
 [source default](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77),
 not a Gemini effort flag or proof of account access/effective runtime identity.
+For optional `gemini-3.8-flash`, the catalog requires stable Gemini CLI 0.61.0
+or later compatible versions; earlier models retain their existing support floor.
+See [Gemini 3.8 selection and HIGH settings](docs/installation.md#gemini-cli-38-high).
+This does not change the shipped roster or the separate AGY model slug.
 
 ## Offline v2 candidate validation
 

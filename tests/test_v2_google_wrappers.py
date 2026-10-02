@@ -44,16 +44,17 @@ def route(request, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(agy, "_probe_agy_version", lambda _: (1, 2, 7))
     monkeypatch.setattr(agy, "_probe_agy_models", lambda _: {model})
 
+    state = {"output": {}, "vendor_exit": 0, "gemini_version": "0.60.0"}
+
     def probe(cmd, **kwargs):
         assert cmd in ([str(executable), "--version"], [str(executable), "--help"])
-        text = "0.60.0\n" if cmd[-1] == "--version" else (
+        text = state["gemini_version"] + "\n" if cmd[-1] == "--version" else (
             '  -m, --model Model [string]\n'
             '  --approval-mode Set the approval mode [choices: "default", "plan"]\n'
             '  --policy Additional policy files or directories to load [array]\n')
         return subprocess.CompletedProcess(cmd, 0, text, "")
 
     monkeypatch.setattr(gemini.subprocess, "run", probe)
-    state = {"output": {}, "vendor_exit": 0}
 
     def provider(cli, cmd, cwd, timeout, **kwargs):
         calls.append((cmd, cwd, timeout, kwargs))
@@ -131,6 +132,30 @@ def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settin
     record = json.loads((route["home"] / "logs" / cli / "audit.jsonl").read_text())
     assert record["transport"]["attempt"] == 2
     assert record["transport"]["cli_version"] == ("1.2.7" if route["name"] == "agy" else None)
+
+
+def test_gemini_38_exact_model_reaches_actual_wrapper_dispatch(route):
+    if route["name"] != "gemini":
+        pytest.skip("Gemini CLI model contract")
+    route["model"] = "gemini-3.8-flash"
+    route["options"][route["options"].index("--model") + 1] = "gemini-3.8-flash"
+    route["state"]["gemini_version"] = "0.61.0"
+    options, _ = ready(route)
+    rc, output, error = route["invoke"](base=options)
+    assert rc == 0, error
+    assert json.loads(output)["attempt"] == 2
+    assert len(route["calls"]) == 1
+    cmd = route["calls"][0][0]
+    assert cmd[cmd.index("-m") + 1] == "gemini-3.8-flash"
+    assert "--effort" not in cmd
+
+
+def test_gemini_effort_refuses_before_provider(route):
+    if route["name"] != "gemini":
+        pytest.skip("Gemini CLI effort contract")
+    rc, output, _ = route["invoke"](["--preflight-only", "--effort", "high"])
+    assert rc == 2  # argparse refuses the unsupported CLI option.
+    assert output == "" and route["calls"] == []
 
 
 @pytest.mark.parametrize("change", [{"leg_name": "sibling"}, {"attempt": 1}, {"open_questions": ["missing source"]}])

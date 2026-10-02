@@ -17,7 +17,8 @@ def gemini_model_support(model: str, version: str) -> None:
     version = review_round.validate_formal_gemini_version(version)
     data = _json(review_round._canonical_regular_file_bytes(
         Path(__file__).resolve().parent / "data/gemini-models.json", "Gemini model support"))
-    minimum = tuple(map(int, data["minimum_version"].split(".")))
+    support = data.get("model_overrides", {}).get(model, data)
+    minimum = tuple(map(int, support["minimum_version"].split(".")))
     core = tuple(map(int, version.split("-", 1)[0].split("+", 1)[0].split(".")))
     if core < minimum or (core == minimum and "-" in version) or model not in data["models"]:
         raise ValueError("requested Gemini model lacks versioned CLI support evidence")
