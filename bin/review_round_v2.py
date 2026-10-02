@@ -524,12 +524,11 @@ def collect(basis_file: Path) -> dict:
         families.add(verdict["family"])
         blocking = bool(verdict["open_questions"]) or any(
             finding["severity"] in ("Critical", "must-fix") for finding in verdict["findings"])
-        blocked |= blocking
+        blocked |= blocking or verdict["verdict"] != "SAFE TO MERGE"
         if not blocking and verdict["verdict"] != "SAFE TO MERGE":
             deviations.append(name)
         legs[name] = {"state": "COMPLETE", "attempt": verdict["attempt"], "verdict": verdict}
-    status = ("INCOMPLETE" if missing else "BLOCKED" if blocked else
-              "OWNER_DECISION_REQUIRED" if len(families) < 3 else "AGREED")
+    status = "INCOMPLETE" if missing else "BLOCKED" if blocked else "AGREED"
     _load_basis(basis_file)
     return {"status": status, "content_digest": basis["content_digest"], "legs": legs,
             "families": sorted(families), "missing": missing, "selection_deviations": deviations}

@@ -24,15 +24,17 @@ def implementation():
 
 @pytest.fixture
 def round_fixture(tmp_path, monkeypatch, worktree):
-    def build(*, make_basis=True, adapter_transform=None, request_changes=None):
+    def build(*, make_basis=True, adapter_transform=None, request_changes=None, config_legs=None):
         mod = implementation()
         config_dir = worktree / ".agents"
         config_dir.mkdir()
         config = config_dir / "triad-review-legs.json"
-        config.write_text(json.dumps({"schema": "triad-review-legs.v2", "legs": [{
+        default_legs = [{
             "name": "trial", "vendor": "codex", "enabled": True,
             "acceptance": "informational", "timeout_s": 120,
-            "codex": {"model": "gpt-5.6-terra", "reasoning": "high"}}]}))
+            "codex": {"model": "gpt-5.6-terra", "reasoning": "high"}}]
+        config.write_text(json.dumps({"schema": "triad-review-legs.v2",
+                                      "legs": default_legs if config_legs is None else config_legs}))
         root, shared = _lifecycle_packet(tmp_path, monkeypatch, "v2-fixture", source_root=worktree)
         calls = []
 
@@ -147,7 +149,7 @@ def test_unfinished_entry_blocks_and_all_n_positive_completion_agrees(round_fixt
     assert len(outcome["legs"]) == 4
 
 
-@pytest.mark.parametrize("kind", ["blocking", "uncertainty", "minor-negative"])
+@pytest.mark.parametrize("kind", ["blocking", "uncertainty"])
 def test_informational_label_never_exempts_findings_or_questions(round_fixture, kind):
     round_fixture = round_fixture()
     mod, basis, *_ = round_fixture
@@ -165,9 +167,68 @@ def test_informational_label_never_exempts_findings_or_questions(round_fixture, 
                     "context_known": True}]
         finish(round_fixture, alloc, changes=changes)
     outcome = mod.collect(Path(basis["basis_file"]))
-    assert outcome["status"] == ("AGREED" if kind == "minor-negative" else "BLOCKED")
-    if kind == "minor-negative":
-        assert outcome["selection_deviations"] == ["trial"]
+    assert outcome["status"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("negative", ["DO NOT MERGE", "MERGE WITH FIXES"])
+def test_C13_minor_negative_is_complete_but_blocked(round_fixture, negative):
+    fixture = round_fixture()
+    mod, basis, *_ = fixture
+    for name in basis["enabled"]:
+        result = finish(fixture, start(fixture, name), changes={
+            "verdict": negative, "findings": [{
+                "path": "source.py", "line": 1, "severity": "Minor", "summary": "fixture",
+                "trigger": "fixture input", "evidence": "source.py:1", "context_known": True,
+            }],
+        } if name == "trial" else {})
+        assert result["state"] == "COMPLETE"  # Both negative tokens remain wire-valid.
+    basis_file = Path(basis["basis_file"])
+    outcome = mod.collect(basis_file)
+    assert outcome["legs"]["trial"]["state"] == "COMPLETE"
+    assert outcome["selection_deviations"] == ["trial"]
+    assert outcome["status"] == "BLOCKED"
+    with pytest.raises(ValueError):
+        mod.allocate_attempt(basis_file, "trial", diagnosis="disagree with verdict")
+
+
+@pytest.mark.parametrize("vendors,families", [
+    (["codex"], ["codex"]),
+    (["codex", "codex"], ["codex"]),
+    (["codex", "claude", "google"], ["claude", "codex", "google"]),
+])
+@pytest.mark.parametrize("negative", [False, True])
+def test_C33_nonempty_roster_approval_independent_of_family_count(round_fixture, vendors, families, negative):
+    disabled = [{"name": name, "enabled": False} for name in ("claude", "codex", "google")]
+    selections = {"codex": {"model": "gpt-5.6-terra", "reasoning": "high"},
+                  "claude": {"model": "opus", "effort": "high"},
+                  "google": {"model": "gemini-3.1-pro-high", "effort": "high"}}
+    entries = [{"name": f"trial-{index}", "vendor": vendor, "enabled": True,
+                "acceptance": "informational", "timeout_s": 120,
+                "agy" if vendor == "google" else vendor: selections[vendor]}
+               for index, vendor in enumerate(vendors)]
+    fixture = round_fixture(config_legs=disabled + entries)
+    mod, basis, _, _, _, calls = fixture
+    assert calls == [[entry["name"] for entry in entries]]
+    for entry in entries:
+        adapter = basis["adapters"][entry["name"]]
+        selection = selections[entry["vendor"]]
+        assert adapter["model"] == selection["model"]
+        assert adapter["effort"] == selection.get("reasoning", selection.get("effort"))
+        finish(fixture, start(fixture, entry["name"]), changes={
+            "verdict": "DO NOT MERGE", "open_questions": ["unresolved evidence"],
+        } if negative and entry["name"] == "trial-0" else {})
+    outcome = mod.collect(Path(basis["basis_file"]))
+    assert outcome["families"] == families
+    assert outcome["status"] == ("BLOCKED" if negative else "AGREED")
+
+
+def test_C33_zero_enabled_entries_refuse_before_adapters(round_fixture):
+    fixture = round_fixture(make_basis=False, config_legs=[
+        {"name": name, "enabled": False} for name in ("claude", "codex", "google")])
+    mod, _, root, _, request, calls = fixture
+    with pytest.raises(ValueError, match="at least one enabled entry"):
+        mod.create_basis(request, root=root)
+    assert calls == []
 
 
 def test_same_basis_failed_entry_only_retry_preserves_completed_siblings(round_fixture):
