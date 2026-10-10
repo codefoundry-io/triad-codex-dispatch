@@ -617,6 +617,12 @@ U6b retains declared-root/floor migration and normal sweep/cap/archive checks.
 The proposed generic cleanup.py above is not a selected interface or dependency.
 Independent diagnosis and shared ba04c60/C4 boundaries precede U6a code.
 
+U6a completed: B `a4fd93c` / shared `c55dca6`, pushed and remote-matched.
+Final340affected/29standalone/2347full passed,4skipped; four validators and fresh
+R3 all-four SAFE/matching integrity. Custody export/exact cleanup are complete.
+U6b's enclosing normal-log-folder proof mapping remains open in PR13comment
+6096200341; this result does not close declaration/migration or C69 conformance.
+
 ## U7 — AGY isolation without shared settings writes
 
 **Rules:** R-CONTAIN/R-REVIEW-WEB/R-THREAT; C6/C23/C32/C68;
@@ -678,6 +684,16 @@ ordinary operator signals and I/O failures; no new vendor event speculation.
 - [ ] Implement only supported gaps, run complete affected modules, and review
   the smallest coherent lifecycle outcome. Split unrelated findings if review
   could accept one independently; update estimates accordingly.
+
+Measured DL-88 evidence is shared at `c55dca6` /
+`decisions/2026-10-10-b-terminal-evidence.md`: the actual B shared driver returns
+a valid synthetic answer in the control, but raises and returns no RunResult
+when its terminal diagnostic sink raises BrokenPipeError. No live provider,
+real stderr or product edit. A e9960053 already drops failed diagnostic writes;
+its source was read, not executed. Independent diagnosis and the smallest
+existing-contract correction remain next; do not expand this to speculative
+vendor error classes. DL-123..126 needs no B port; other old rows remain
+individual evidence checks, not confirmed defects.
 
 ## U10 — Reconcile and hand off
 

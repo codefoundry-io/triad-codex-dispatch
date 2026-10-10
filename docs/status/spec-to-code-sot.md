@@ -75,7 +75,65 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**Active stage: U6a verified and reviewed; publish checkpoint. U7 awaits owner design choice.**
+**Active stage: U6a completed and pushed. U6b clarification and U7 owner design
+choice remain open; U9 has one measured terminal-output gap.**
+
+Source `a4fd93c6283349df67bdb5c4d718a52144ac4547` is pushed and remote-matched.
+Shared completion `c55dca6` records C4/C5 fallback evidence separately from
+U6b/DL-77/C69. Shared authoring1/1 and182tests passed. Remote main remains
+`3afc4d7e931e55d601dd74877bdbe65e610a8e59`; PR12 inspected head is0ccc7c1.
+PR13 checked through6096424215 with no newer A reply. Current read-only A
+e9960053 is clean; its intervening test-harness changes do not change the
+relevant cleanup/settings/diagnostic runtime.
+
+U6a now requires actual fallback allocation proof, preserves unmarked residue,
+records deletion start before removing anything, resumes only an unchanged
+remainder and removes proof last. Overlapping sweeps serialize on the existing
+proof descriptor; busy allocations skip. Own-call failed writes remove only
+their own empty new directory. Production+160/-19,net141,one file; no new public
+cleanup service. [Unit plan](../superpowers/plans/2026-10-10-u6a-fallback-ownership.md).
+
+Final dedicated GREEN-concurrent:340affected,29/29standalone,2347full passed,
+4skipped and all four validators. Source/log integrity and exact fixture cleanup
+passed. Fresh `triad-fallback-ownership-20261010-r3`: all four SAFE,
+ALL_SELECTED_APPROVED / ROUND_INTEGRITY_OK; adjudication, custody export and
+exact stages cleaned. Runtime/tests still match those verified bytes. macOS
+Python3.12.13; Ubuntu NOT RUN. Earlier failed reviews and ineffective first
+concurrency test remain evidence, not current approval. Optional detailed
+residue diagnostics remain a disclosed nonblocking limit. The verification
+guide now requires an invocation-owned TMPDIR before Python starts.
+
+PR12 dispositions: DL-149 paid-tier advice is absent from searched shipped B
+Markdown. DL-150's stale relative-prompt CHANGELOG sentence is removed; current
+process-cwd behavior was already implemented/tested. DL-151's stream fold is
+unmeasured; no length cap or output workaround is added. DL-123..126 introduces
+no B port: current common behavior already agrees, while A's internal census,
+stream and audit changes remain A-owned.
+
+Remaining actions, in dependency order:
+
+1. U6b: resolve the enclosing normal-log-folder ownership mapping requested in
+   PR13comment6096200341 before declaration/migration code. Do not infer a new
+   per-file-marker or public deletion API requirement.
+2. U7: wait for the explicit owner choice between existing profile/plan/sandbox/
+   integrity with an acknowledged prevention limit and a project permission
+   prerequisite. The current-profile probe read/listed, but attempted no write;
+   mechanical prevention remains UNVERIFIED. No U7 product edit is authorized
+   by the unanswered choice. Details: workspace
+   `_runs/infra/20261010-spec-to-code/u7/disposition.md`.
+3. U9: independent diagnosis and bounded correction planning for DL-88. Actual
+   shared-driver fixture returns the answer in the control; a BrokenPipeError
+   on its terminal diagnostic instead raises without a RunResult. No provider
+   or real stderr was changed. Current A already drops failed diagnostic writes;
+   it was read, not executed or copied. Shared `c55dca6` records the evidence.
+   Other old lifecycle claims remain classified individually, not assumed bugs.
+4. U2 evidence reconciliation and U10 final integration remain. U1T and U6a are
+   complete; U8 and unused Claude-agent work remain withdrawn. Keep the task hook
+   until whole-task completion and its explicit cleanup checklist.
+
+No installation, adopted revision, merge, release or whole-task completion.
+
+### Earlier U1T/U6a checkpoints (historical; current position above)
 
 At B5f5dda5b plus the reviewed candidate, model values remain one opaque option
 value through the Python-wrapper and affected Google parsers. AGY changes only

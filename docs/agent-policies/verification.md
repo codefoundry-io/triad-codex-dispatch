@@ -15,8 +15,14 @@ Read for source checks or release verification.
   host command uses the cwd required by the applicable host policy (otherwise this checkout).
   Before Python tooling, record `command -v python3`, `python3 --version`, and
   `python3 -m pytest --version` in the same `/bin/zsh -lic` environment.
-  Run the full repository suite with
-  `/bin/zsh -lic 'python3 -m pytest -q "$1/tests" --rootdir "$1" -p no:cacheprovider' triad-tests /absolute/path/to/this-checkout`.
+  Before Python starts, set `TMPDIR` to an existing canonical temporary directory
+  allocated by this verification invocation. Wrapper tests can reach the default
+  fallback sweep; individual test fixtures do not isolate the whole suite or
+  its child processes. Pass the owned directory as `$2` and run the full suite:
+  `/bin/zsh -lic 'TMPDIR="$2" python3 -m pytest -q "$1/tests" --rootdir "$1" -p no:cacheprovider' triad-tests /absolute/path/to/this-checkout /absolute/path/to/invocation-owned-temp-directory`.
+  Use the same isolation for focused tests and standalone runners. Retain that
+  directory until all children terminate; cleanup may remove only this
+  invocation's exact allocation. Record the effective temp path with the result.
 - When `scripts/bootstrap.sh` changes, also run
   `/bin/zsh -lic 'bash -n "$1/scripts/bootstrap.sh"' triad-bootstrap /absolute/path/to/this-checkout`.
 - Run

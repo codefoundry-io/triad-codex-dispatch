@@ -76,7 +76,7 @@ existing record. Exact internal fields are host-owned, not public spec fields.
   invocation-owned TMPDIR/log directory.
 - [x] Complete fresh opus/xhigh, AGY Pro/high, AGY Flash/high, Astra/high unit
   review; adjudicate findings, export custody and clean exact current stages.
-- [ ] Publish the reviewed source checkpoint and accurate shared case evidence.
+- [x] Publish the reviewed source checkpoint and accurate shared case evidence.
   Update SoT; U6b/DL-77 remains open and whole-task hook remains installed.
 
 No install, merge, adopted revision, release or whole-task completion is implied.
@@ -141,3 +141,8 @@ and exact stage cleanup. Optional per-candidate diagnostic detail remains a
 nonblocking limit; no new runtime logger surface is required. The actual full
 suite was isolated; clarify the general verification command's TMPDIR requirement
 as a documentation follow-up. Reviewed runtime/tests remain unchanged.
+
+Published: B `a4fd93c6283349df67bdb5c4d718a52144ac4547` and shared `c55dca6`
+are pushed and remote-matched. C4/C5 reference this verified fallback behavior;
+U6b/DL-77/C69 remain pending. Shared authoring1/1 and182tests pass. The local
+verification guide now requires invocation-owned TMPDIR before Python starts.
