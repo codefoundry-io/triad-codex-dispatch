@@ -102,7 +102,11 @@ authorization unchanged. Fresh GREEN-r3: 297 affected passed, 4 skipped; prior f
 four validators, source/log integrity and exact fixture cleanup pass. All-four
 SAFE/matching integrity, adjudication and exact review cleanup complete. Shared
 evidence published at 885e52e019bad28abef9edcaea1bce4d00f9dbab after authoring
-1/1 and 182 tests passed. Authorized B checkpoint push follows. Whole-task hook stays.
+1/1 and 182 tests passed. B source checkpoint 7a082baabe64fce48671d1c37bda11cf7b120e30 is pushed and
+verified equal to origin/codex/opus-5-5-default. PR13 result:
+https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094085304.
+Next: assess DL-39 standing review-web policy against the common contract and
+current B/A behavior before dependent changes; preserve native ownership. Whole-task hook stays.
 
 ### Earlier U3d checkpoints (historical; current position above)
 

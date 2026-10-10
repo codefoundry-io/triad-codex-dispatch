@@ -26,7 +26,7 @@ tests +80-130, payload/docs +50-90. No new public CLI or result schema field.
   four validators, unchanged source/log hashes and exact temporary cleanup.
 - [x] Complete independent Claude/AGY Pro/AGY Flash/fresh Codex review on one
   current basis, adjudicate real defects, verify integrity and exact cleanup.
-- [ ] Record shared/SoT evidence and push the authorized candidate checkpoint.
+- [x] Record shared/SoT evidence and push the authorized candidate checkpoint.
 
 Commands: /bin/zsh -lic, require_escalated, outer workspace cwd. Keep the
 existing checkout and unrelated files. Owner reviews prompt wording later;
@@ -124,4 +124,5 @@ owner three-pass bound. No fourth prompt round or new required backlog is added.
 
 Shared evidence published at885e52e019bad28abef9edcaea1bce4d00f9dbab;
 authoring1/1 and182tests pass. Final production +17/-14 (net+3).
-Authorized source checkpoint push is next. No install/merge/release.
+Source checkpoint7a082baabe64fce48671d1c37bda11cf7b120e30 is pushed and
+remote-verified. Shared completion is posted at PR13comment6094085304. No install/merge/release.
