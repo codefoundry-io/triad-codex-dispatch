@@ -2775,6 +2775,129 @@ def apply_classifier_patch(
 
 # ─── Per-execution run-log (dispatch SKILL input) ─────────────────────────
 
+def _fallback_json(value: dict) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def _fallback_identity(entry: os.stat_result) -> dict[str, int]:
+    if not stat.S_ISDIR(entry.st_mode) or entry.st_uid != os.getuid():
+        raise OSError(errno.EPERM, "fallback directory is not owned")
+    return {"uid": entry.st_uid, "device": entry.st_dev, "inode": entry.st_ino}
+
+
+def _record_fallback(path: Path) -> None:
+    """Publish allocation proof after the failure IPC itself is preserved."""
+    root = path.parent
+    base_fd = _open_directory_nofollow(root.parent, create=False)
+    proof_fd = -1
+    try:
+        record = {"version": 1, "role": "fallback-ipc", "root": str(root),
+                  "identity": _fallback_identity(root.lstat()), "run_log": path.name}
+        proof_fd = _open_regular_nofollow(base_fd, f".{root.name}.allocation.json",
+            flags=os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        _write_all(proof_fd, _fallback_json(record))
+        os.fsync(proof_fd)
+    finally:
+        if proof_fd >= 0:
+            os.close(proof_fd)
+        os.close(base_fd)
+
+
+def _fallback_inventory(root_fd: int, run_log: str) -> dict[str, list[int]]:
+    """Fallback IPC is flat: its original log and optional repair companion."""
+    inventory = {}
+    for name in sorted(os.listdir(root_fd)):
+        entry = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+        if (name not in (run_log, run_log + ".repair.json")
+                or not (stat.S_ISREG(entry.st_mode) or stat.S_ISLNK(entry.st_mode))
+                or (stat.S_ISREG(entry.st_mode) and entry.st_nlink != 1)):
+            raise OSError(errno.EPERM, "unexpected fallback contents")
+        inventory[name] = [entry.st_dev, entry.st_ino, entry.st_mode,
+                           entry.st_size, entry.st_mtime_ns]
+    return inventory
+
+
+def _prune_fallback(base_fd: int, root: Path, cutoff: float) -> None:
+    """Keep the allocation record until the exact proven tree is gone."""
+    proof_name = f".{root.name}.allocation.json"
+    proof_fd = _open_regular_nofollow(base_fd, proof_name,
+        flags=os.O_RDWR, normalize_mode=False)
+    root_fd = -1
+    try:
+        # Different dispatches may sweep the same machine-level allocation.
+        if not _bounded_flock(proof_fd, timeout_s=0):
+            return
+        if not _regular_fd_matches_name(base_fd, proof_name, proof_fd):
+            raise OSError(errno.ESTALE, "fallback allocation changed before lock")
+        proof_identity = os.fstat(proof_fd)
+        if proof_identity.st_uid != os.getuid() or proof_identity.st_size > 65536:
+            raise OSError(errno.EPERM, "invalid fallback proof owner or size")
+        raw = os.read(proof_fd, 65537)
+        first, separator, tail = raw.partition(b"\n")
+        record = json.loads(first)
+        if (not separator or not isinstance(record, dict)
+                or first + separator != _fallback_json(record)
+                or set(record) != {"version", "role", "root", "identity", "run_log"}
+                or type(record["version"]) is not int or record["version"] != 1
+                or record["role"] != "fallback-ipc" or record["root"] != str(root)
+                or not isinstance(record["identity"], dict)
+                or set(record["identity"]) != {"uid", "device", "inode"}
+                or any(type(v) is not int for v in record["identity"].values())
+                or record["identity"]["uid"] != os.getuid()
+                or not isinstance(record["run_log"], str)
+                or not record["run_log"].endswith(".json")
+                or os.sep in record["run_log"]):
+            raise OSError(errno.EPERM, "invalid fallback allocation")
+        # The first line remains allocation proof if a stop interrupts the
+        # appended deletion-start line. No deletion begins before a full line.
+        started = json.loads(tail) if tail.endswith(b"\n") else None
+        if tail.endswith(b"\n") and (not isinstance(started, dict)
+                or set(started) != {"deleting"} or not isinstance(started["deleting"], dict)
+                or tail != _fallback_json(started)):
+            raise OSError(errno.EPERM, "invalid fallback deletion record")
+        if started is None and proof_identity.st_mtime >= cutoff:
+            return
+        try:
+            entry = os.stat(root.name, dir_fd=base_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            _unlink_regular_if_same(base_fd, proof_name, proof_identity)
+            return
+        if _fallback_identity(entry) != record["identity"]:
+            raise OSError(errno.ESTALE, "fallback allocation identity changed")
+        root_fd = os.open(root.name, os.O_RDONLY | _audit_open_flags(
+            "O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC"), dir_fd=base_fd)
+        if _fallback_identity(os.fstat(root_fd)) != record["identity"]:
+            raise OSError(errno.ESTALE, "fallback directory changed during open")
+        actual = _fallback_inventory(root_fd, record["run_log"])
+        if started is None:
+            os.lseek(proof_fd, len(first) + 1, os.SEEK_SET)
+            os.ftruncate(proof_fd, len(first) + 1)
+            _write_all(proof_fd, _fallback_json({"deleting": actual}))
+            os.fsync(proof_fd)
+        elif any(started["deleting"].get(name) != facts for name, facts in actual.items()):
+            raise OSError(errno.ESTALE, "fallback contents changed after cleanup started")
+        if not _regular_fd_matches_name(base_fd, proof_name, proof_fd):
+            raise OSError(errno.ESTALE, "fallback allocation record changed")
+        for name, facts in actual.items():
+            current = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+            if [current.st_dev, current.st_ino, current.st_mode,
+                    current.st_size, current.st_mtime_ns] != facts:
+                raise OSError(errno.ESTALE, "fallback leaf changed")
+            if stat.S_ISLNK(current.st_mode):
+                os.unlink(name, dir_fd=root_fd)
+            elif not _unlink_regular_if_same(root_fd, name, current):
+                raise OSError(errno.EIO, "fallback leaf was not removed")
+        if _fallback_identity(os.stat(root.name, dir_fd=base_fd,
+                follow_symlinks=False)) != record["identity"]:
+            raise OSError(errno.ESTALE, "fallback directory replaced during cleanup")
+        os.rmdir(root.name, dir_fd=base_fd)
+        _unlink_regular_if_same(base_fd, proof_name, proof_identity)
+    finally:
+        if root_fd >= 0:
+            os.close(root_fd)
+        os.close(proof_fd)
+
+
 def emit_run_log(
     cli: str,
     wrapper_cmd: list[str],
@@ -2878,7 +3001,23 @@ def emit_run_log(
         fallback_root = Path(
             tempfile.mkdtemp(prefix=f"triad-{cli}-run-log-")
         ).resolve(strict=True)
-        path = write_under(fallback_root)
+        try:
+            path = write_under(fallback_root)
+        except Exception:
+            # Only this call's allocation; rmdir preserves any remaining data.
+            try:
+                fallback_root.rmdir()
+            except OSError:
+                pass
+            raise
+        try:
+            _record_fallback(path)
+        except Exception:
+            # Keep usable repair IPC even when cleanup proof cannot be stored.
+            try:
+                log("cleanup-proof-unavailable: fallback IPC retained")
+            except OSError:
+                pass
 
     return path
 
@@ -3027,7 +3166,8 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     # `emit_run_log` uses a unique private temp directory only when the
     # import-time log root is unconfigured and its primary root is unusable.
     # Explicit configured-root failure has no fallback. Sweep prior unconfigured
-    # fallback IPC directories on the same age-floor contract as normal run logs.
+    # fallback IPC only with allocation proof aged by at least one hour;
+    # unmarked residue is preserved. Normal logs below use each file's mtime.
     prune_stale_tmp_dirs(f"triad-{cli}-run-log-", age_floor_s=age_floor_s)
     runs_dir = _LOG_DIR / cli / "runs"
     cutoff = time.time() - max(0, age_floor_s)
@@ -3073,22 +3213,17 @@ def prune_stale_tmp_dirs(
     age_floor_s: int = _STALE_IPC_AGE_FLOOR_S,
     base: Optional[str] = None,
 ) -> None:
-    """Next-run cleanup of leaked `tempfile.mkdtemp(prefix=...)` report dirs.
+    """Sweep proven fallback IPC allocations; preserve unmarked old residue.
 
-    The codex `--task` fan-out path auto-creates `<TMPDIR>/codex_report_*` dirs
-    (synthesis + per-agent raw reports) for leader inspection and never unlinks
-    them — a true per-fan-out leak. This sweeps prior ones older than
-    `age_floor_s` at the START of a dispatch, mirroring `prune_stale_run_logs`:
-    the current run's dir is freshly created (< floor) so it is preserved for
-    the leader to read. Best-effort, per-dir tolerant.
-
-    `base` defaults to the system temp dir (`tempfile.gettempdir()`).
+    Prefixes select candidates, never ownership. Allocation proof supplies the
+    age and exact directory identity, survives interruption and is removed last.
+    `base` is an isolated stand-in; otherwise use the system temporary directory.
     """
     # The system temp root may be exposed through macOS's `/var` symlink; it is
     # trusted only when selected internally. Caller-provided bases remain
     # literal so a symlinked managed root is skipped by the no-follow open.
     base_dir = Path(base) if base else Path(tempfile.gettempdir()).resolve()
-    cutoff = time.time() - max(0, age_floor_s)
+    cutoff = time.time() - max(_STALE_IPC_AGE_FLOOR_S, age_floor_s)
     try:
         base_fd = _open_directory_nofollow(base_dir, create=False)
     except OSError:
@@ -3098,15 +3233,21 @@ def prune_stale_tmp_dirs(
             names = os.listdir(base_fd)
         except OSError:
             return
-        for name in names:
-            if not name.startswith(prefix):
-                continue
+        suffix = ".allocation.json"
+        candidates = {name for name in names if name.startswith(prefix)}
+        candidates.update(name[1:-len(suffix)] for name in names
+                          if name.startswith("." + prefix) and name.endswith(suffix))
+        skipped = False
+        for name in sorted(candidates):
             try:
-                entry = os.stat(name, dir_fd=base_fd, follow_symlinks=False)
-                if stat.S_ISDIR(entry.st_mode) and entry.st_mtime < cutoff:
-                    shutil.rmtree(name, dir_fd=base_fd, ignore_errors=True)
+                _prune_fallback(base_fd, base_dir / name, cutoff)
+            except (OSError, ValueError, TypeError):
+                skipped = True
+        if skipped:
+            try:
+                log("cleanup-skipped: unproven or changed fallback IPC retained")
             except OSError:
-                continue
+                pass
     finally:
         try:
             os.close(base_fd)

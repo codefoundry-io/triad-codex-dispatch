@@ -968,11 +968,19 @@ defaults. There is no scheduled background cleaner.
 
 `TRIAD_DISPATCH_LOG_DIR` changes the audit/failure-log root, not the debug root.
 Default-root failure IPC may use an owned temporary fallback; a later eligible
-dispatch applies its age-floor sweep there too. An explicitly configured root
-does not fall back. Cleanup is best effort: stale file identity, link checks or
+dispatch applies its age-floor sweep there too. New fallback folders carry an
+allocation record beside the folder. The sweep checks that record and preserves
+old unmarked folders, invalid proof and unexpected contents. Such residue under
+the system temp root (`triad-<cli>-run-log-*`) needs operator review; later
+automatic sweeps do not adopt it. It keeps the proof
+through interruption and removes it last; resumed deletion accepts only the
+unchanged remaining log/repair files. Failure to store cleanup proof does not
+hide an already-written failure log. An explicitly configured root does not
+fall back. Cleanup is best effort: stale file identity, link checks or
 I/O refusal can leave residue. No later invocation means no next-run cleanup.
 Implementation and regression sources: [log helpers](bin/_common.py),
-[log cleanup tests](tests/test_log_cleanup.py), and
+[log cleanup tests](tests/test_log_cleanup.py),
+[fallback ownership tests](tests/test_fallback_cleanup_ownership.py), and
 [review custody tests](tests/test_review_cleanup_custody.py).
 
 ### Transport and diagnostic records

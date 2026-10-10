@@ -75,7 +75,7 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**U1T implementation and unit review complete; publication and U6a next.**
+**Active stage: U6a verified and reviewed; publish checkpoint. U7 awaits owner design choice.**
 
 At B5f5dda5b plus the reviewed candidate, model values remain one opaque option
 value through the Python-wrapper and affected Google parsers. AGY changes only
@@ -113,12 +113,78 @@ exception; authoring1/1 and182tests passed, pushed and verified. PR13 comment
 6095933437 shares exact evidence/sequence and was read back. No real system-temp
 sweep or actual user-data-loss incident is claimed.
 
-Next: finish U1T source/shared publication, then U6a's existing fallback
+U1T sourceed8b76f and sharedd3a4412 are pushed and remote-matched; PR13
+comment6095971207 reports completion. Next: U6a's existing fallback
 allocation/sweep ownership correction. U6b separately owns declared roots/floors
 and normal sweep/cap/archive migration. Use the bounded research/design record
 at workspace `_runs/infra/20261010-spec-to-code/u6/disposition.md`; no new generic
 deletion service/API or A-native port. Keep proven review export/identity/subset
-cleanup. Source tests must isolate their temporary base. U6 production untouched.
+cleanup. Source tests must isolate their temporary base. U6a plan:
+../superpowers/plans/2026-10-10-u6a-fallback-ownership.md. Fresh dedicated RED
+completed16failed/37passed without errors before product edits. Fresh GREEN
+completed334affected,29/29standalone and2341full passed/4skipped, plus all four
+validators. Scoped source and captured run logs matched; exact fixture removed.
+Initial RED's fixture teardown errors remain recorded and were corrected before
+product edits. Production+144/-17,net127,one file. Fresh review
+`triad-fallback-ownership-20261010-r1` follows. No new public deletion API or
+complete declaration-conformance claim. PR13 rechecked through6095971207;
+no new A reply.
+
+Independent U7 research: shared04cf1a7 records the provider-free two-folder
+synthetic settings spike. The existing guard exposes its temporary settings to
+the second folder and restores over that fixture writer's new value on exit.
+No real user setting or provider was touched; no live incident is claimed.
+Replacement selection still requires independent diagnosis and Tier1 evidence;
+a substantial containment/design change returns to the owner before code.
+
+U6a R1 all-four SAFE/matching integrity; Claude's four Minor findings were
+adjudicated and exact stages cleaned. Add own-call empty-folder rollback when
+the fallback leaf write fails; strengthen symlink/proof-failure tests and cover
+partial start data. Clarify retained-residue docs. Refute the claimed real-temp
+full-suite sweep: the actual runner sets an owned TMPDIR for every subprocess.
+Fresh RED-rollback reproduced1failed/55passed; source/log integrity and cleanup
+passed. The eight-net-line own-call rollback is implemented; fresh GREEN and
+complete R2 follow. Final GREEN-rollback now completed337affected,
+29/29standalone,2344full passed/4skipped and four validators. Source/log
+integrity and exact fixture cleanup passed. R2 reviews current bytes; R1
+approval does not cover them. Shared39e1fef and
+PR13comment6096231782 record the bounded follow-up before product edits.
+PR13 comment6096200341 shares U6/U7 evidence and U6b's sharedc5b8bfe ownership
+mapping question. PR12 now0ccc7c1 adds DL-149/150/151; B's CHANGELOG has the
+stale relative-prompt sentence, to remove after this unit. No paid-tier advice
+found in searched shipped Markdown; no new AGY length workaround is selected.
+
+U6a R2 completed with matching integrity, three SAFE and native NOT-SAFE.
+Fresh dedicated RED-concurrent-valid1failed/18passed reproduced replacement of
+a durable deletion-start inventory by an overlapping stale reader and deletion
+of a changed repair remainder. Earlier RED-concurrent19passed missed the
+interleaving because the proof age had refreshed; retained as invalid RED.
+Shared dc48e3e adds the existing C5 boundary, authoring1/1 and182tests pass;
+PR13comment6096424215 requests review before the correction. R2 adjudication,
+export and exact stage cleanup completed. The bounded fix reuses the existing
+nonblocking lock on the proof descriptor before reading, skips a busy allocation
+and rechecks identity. Added leaf-symlink target-survival controls and corrected
+the stale caller comment. Fresh GREEN-concurrent passed340affected,
+29/29standalone,2347full/4skipped and all four validators. Source/log integrity
+and exact fixture cleanup passed. Production+160/-19,net141,one file; complete
+R3 completed all-four SAFE / ALL_SELECTED_APPROVED / ROUND_INTEGRITY_OK.
+Adjudication/export/exact stage cleanup completed; runtime/tests stay unchanged.
+Optional per-candidate diagnostic detail is retained as a nonblocking limit;
+the generic verification guide's TMPDIR requirement will be clarified in a
+documentation follow-up. These results cover the current concurrency correction.
+
+U7 diagnosis is complete across Claude/Google/fresh Codex. One actual CLI probe
+using the existing profile without B's settings transaction read/listed the
+owned fixture and wrote nothing; no write call was attempted, so enforcement
+remains UNVERIFIED. Settings/profile matched and exact fixture was removed.
+Evidence: workspace `_runs/infra/20261010-spec-to-code/u7/disposition.md` and
+`profile-probe/receipt.json`; shared dc48e3e records the same facts. The owner
+has been asked to choose the simple existing-profile/plan/sandbox/integrity
+posture with an explicit pre-execution-prevention limit, or a project-based
+permission prerequisite. Raw migration and old-backup preservation are included.
+Neither is selected; no U7 product edit while that design question is pending.
+Initial U9 current-source mapping is read-only research, not completed checks:
+workspace `_runs/infra/20261010-spec-to-code/u9-initial-mapping.md`.
 
 Other remaining groups: U2 evidence reconciliation, U7 measured settings
 isolation, U9 remaining-case mapping and U10 integration/final reconciliation.

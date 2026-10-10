@@ -895,10 +895,17 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 
 `TRIAD_DISPATCH_LOG_DIR`는 audit·실패 로그 위치만 바꾸며 debug 위치는 바꾸지 않습니다.
 기본 위치에 실패 IPC를 쓰지 못하면 소유한 임시 fallback을 사용할 수 있고, 이후 적격
-호출에서 같은 기간 기준으로 정리합니다. 명시적으로 지정한 위치는 fallback하지 않습니다.
+호출에서 같은 기간 기준으로 정리합니다. 새 fallback 폴더는 옆에 생성 기록을 남깁니다.
+정리는 그 기록을 확인하며, 기록 없는 이전 폴더·잘못된 증명·예상 밖 내용은 보존합니다.
+삭제가 중단돼도 증명을 유지하고, 남은 로그·repair 파일이 바뀌지 않았을 때만 재개하며
+증명은 마지막에 지웁니다. 증명 저장 실패가 이미 쓴 실패 로그를 숨기지는 않습니다.
+명시적으로 지정한 위치는 fallback하지 않습니다.
 파일 identity·링크 검사·I/O 문제로 정리를 거부하면 자료가 남을 수 있습니다.
 다음 호출이 없으면 다음 호출 시 청소도 실행되지 않습니다.
+시스템 임시 경로의 `triad-<cli>-run-log-*` 중 소유 근거를 확인하지 못한 잔여물은
+운영자가 확인해야 하며, 이후 자동 정리에서 소유한 것으로 간주하지 않습니다.
 근거: [로그 구현](bin/_common.py), [로그 정리 테스트](tests/test_log_cleanup.py),
+[fallback 소유권 테스트](tests/test_fallback_cleanup_ownership.py),
 [리뷰 custody 테스트](tests/test_review_cleanup_custody.py).
 
 ### 전송과 진단 기록

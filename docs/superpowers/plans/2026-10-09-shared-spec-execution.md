@@ -601,7 +601,7 @@ and effort remain host-owned. No wording scenario probe was needed.
 and config lookup against the shared schema; record ownership, age and resume
 semantics. No command name is silently invented by this roadmap.
 
-- [ ] Inventory current roots/proofs/floors and compare A's implementation to
+- [x] Inventory current roots/proofs/floors and compare A's implementation to
   the contract. Confirm invocation-time owned temporary cleanup exceptions.
 - [ ] Resolve entry-point/migration design before RED; ask the owner only if
   it changes shared surfaces or requires an unresolved trade-off.
@@ -610,6 +610,12 @@ semantics. No command name is silently invented by this roadmap.
   live age floors and exports survive; name-shaped unowned temp dirs remain.
 - [ ] Route owning deletions through the agreed code and replace manual-delete
   advice. Run cleanup/bootstrap contract tests and complete formal review.
+
+Execution split (2026-10-10): U6a corrects the demonstrated fallback-folder
+ownership omission with existing entry points; [bounded plan](2026-10-10-u6a-fallback-ownership.md).
+U6b retains declared-root/floor migration and normal sweep/cap/archive checks.
+The proposed generic cleanup.py above is not a selected interface or dependency.
+Independent diagnosis and shared ba04c60/C4 boundaries precede U6a code.
 
 ## U7 — AGY isolation without shared settings writes
 
@@ -623,7 +629,7 @@ DL-58/107/112/122/124. Read-only hook behavior is evaluated at common boundaries
 must preserve B's containment result without writing/locking machine settings.
 Do not automatically port A's removed internal census or new native mechanism.
 
-- [ ] Run a provider-free two-workspace state-interaction spike. Separate
+- [x] Run a provider-free two-workspace state-interaction spike. Separate
   observed file mutation/locking from any unmeasured effect on a live vendor.
 - [ ] Specify and review the replacement containment evidence, setup ownership
   and legacy/raw migration. A significant loss/change stops for owner decision.
@@ -633,6 +639,15 @@ Do not automatically port A's removed internal census or new native mechanism.
   handled only under its existing ownership proof.
 - [ ] Implement the accepted bounded replacement, verify containment and full
   AGY regressions, then obtain the required formal review.
+
+Research complete, implementation awaits owner: shared dc48e3e records three
+independent diagnoses and one current-profile fixture run. It read/listed but
+attempted no write; settings/profile stayed unchanged and exact fixture was
+removed. This does not prove mechanical write prevention. The concrete choice
+is existing profile/plan/sandbox/integrity with that explicit limit, or a larger
+operator-provisioned project prerequisite. Raw migration and old backup evidence
+are part of the decision. No copied settings/auth root, new hook or routine read
+audit is selected. Details: workspace `_runs/infra/20261010-spec-to-code/u7/disposition.md`.
 
 ## U8 — Withdrawn by owner, 2026-10-10
 

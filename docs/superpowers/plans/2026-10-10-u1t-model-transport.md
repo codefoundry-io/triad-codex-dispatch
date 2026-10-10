@@ -53,7 +53,7 @@ observable outcome; no new abstraction or transport layer.
 - [x] Fresh complete owner-selected review: opus/xhigh, AGY Pro/high,
   AGY Flash/high and fresh Astra/high on one guarded worktree basis. Read
   related source freely within the product boundary; no routine read audit.
-- [ ] Adjudicate, export/clean exact review stage/cwd, update shared evidence,
+- [x] Adjudicate, export/clean exact review stage/cwd, update shared evidence,
   publish source/checkpoint and report remaining work. Whole-task hook stays.
 
 No installation, adopted-revision update, merge or release is authorized here.
@@ -133,3 +133,6 @@ current defect, so no new helper/assertion or required backlog. All producers
 terminal; result bindings/integrity/adjudication/export/exact cleanup complete.
 Current shared main3afc4d7, PR12 11934f11, A0be173bf clean; later A work is
 documentation/comments only. Source/shared publication follows this checkpoint.
+
+Published sourceed8b76f / sharedd3a4412, remote equality verified; PR13
+comment6095971207. Whole-task hook retained; next U6a.
