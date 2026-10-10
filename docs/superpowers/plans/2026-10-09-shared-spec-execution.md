@@ -620,8 +620,9 @@ Independent diagnosis and shared ba04c60/C4 boundaries precede U6a code.
 U6a completed: B `a4fd93c` / shared `c55dca6`, pushed and remote-matched.
 Final340affected/29standalone/2347full passed,4skipped; four validators and fresh
 R3 all-four SAFE/matching integrity. Custody export/exact cleanup are complete.
-U6b's enclosing normal-log-folder proof mapping remains open in PR13comment
-6096200341; this result does not close declaration/migration or C69 conformance.
+U6b's enclosing normal-log-folder proof mapping received A's answer in
+PR13comment6097553901 and PR12 d805b50/DL-152. Current source/spec comparison is
+next; receipt of a reply does not close declaration/migration or C69 conformance.
 
 ## U7 — AGY isolation without shared settings writes
 
@@ -646,7 +647,7 @@ Do not automatically port A's removed internal census or new native mechanism.
 - [ ] Implement the accepted bounded replacement, verify containment and full
   AGY regressions, then obtain the required formal review.
 
-Research complete, implementation awaits owner: shared dc48e3e records three
+Earlier research (superseded next action below): shared dc48e3e records three
 independent diagnoses and one current-profile fixture run. It read/listed but
 attempted no write; settings/profile stayed unchanged and exact fixture was
 removed. This does not prove mechanical write prevention. The concrete choice
@@ -654,6 +655,16 @@ is existing profile/plan/sandbox/integrity with that explicit limit, or a larger
 operator-provisioned project prerequisite. Raw migration and old backup evidence
 are part of the decision. No copied settings/auth root, new hook or routine read
 audit is selected. Details: workspace `_runs/infra/20261010-spec-to-code/u7/disposition.md`.
+
+Current next action after owner-requested Opus/xhigh and Astra/xhigh web research:
+evaluate the documented excludeDefaultComponents profile candidate on CLI1.3.3
+before choosing a project prerequisite or accepting a prevention limit. Assess
+inheritCustomizations separately: it also suppresses inherited rules. The earlier
+binary question is deferred, not answered. Current issue1015 evidence is not
+proof of effective exclusion failure/success; A formal review also has a separate
+active PreToolUse hook. No automatic hook/census/cwd port, installation or source
+change. Shared `decisions/2026-10-10-b-agy-current-capabilities.md` records primary
+URLs, report adjudication and the bounded future fixture. No trial was run yet.
 
 ## U8 — Withdrawn by owner, 2026-10-10
 

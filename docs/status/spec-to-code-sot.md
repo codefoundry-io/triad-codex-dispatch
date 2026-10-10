@@ -75,16 +75,18 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**Active stage: U6a completed and pushed. U6b clarification and U7 owner design
-choice remain open; U9 has one measured terminal-output gap.**
+**Active stage: U6a completed and pushed. U6b reply received for source/spec
+comparison; U7 has a newer profile candidate to verify before a design choice.
+U9 has one measured terminal-output gap.**
 
 Source `a4fd93c6283349df67bdb5c4d718a52144ac4547` is pushed and remote-matched.
 Shared completion `c55dca6` records C4/C5 fallback evidence separately from
 U6b/DL-77/C69. Shared authoring1/1 and182tests passed. Remote main remains
 `3afc4d7e931e55d601dd74877bdbe65e610a8e59`; PR12 inspected head is0ccc7c1.
-PR13 checked through6096424215 with no newer A reply. Current read-only A
-e9960053 is clean; its intervening test-harness changes do not change the
-relevant cleanup/settings/diagnostic runtime.
+At U6a publication, PR13 had no newer A reply through6096424215 and read-only A
+was e9960053. Latest research refresh: PR13comment6097553901 answers U6b;
+PR12 is d805b50, A404eb0ab is clean, and remote main remains3afc4d7. The U7
+research source fingerprints matched; B runtime was not changed.
 
 U6a now requires actual fallback allocation proof, preserves unmarked residue,
 records deletion start before removing anything, resumes only an unchanged
@@ -112,15 +114,22 @@ stream and audit changes remain A-owned.
 
 Remaining actions, in dependency order:
 
-1. U6b: resolve the enclosing normal-log-folder ownership mapping requested in
-   PR13comment6096200341 before declaration/migration code. Do not infer a new
-   per-file-marker or public deletion API requirement.
-2. U7: wait for the explicit owner choice between existing profile/plan/sandbox/
-   integrity with an acknowledged prevention limit and a project permission
-   prerequisite. The current-profile probe read/listed, but attempted no write;
-   mechanical prevention remains UNVERIFIED. No U7 product edit is authorized
-   by the unanswered choice. Details: workspace
-   `_runs/infra/20261010-spec-to-code/u7/disposition.md`.
+1. U6b: PR13comment6097553901 answers the enclosing log-folder proof question;
+   PR12 d805b50 adds DL-152 and its R-CLEANUP clarification. Compare that text
+   and current source before declaration/migration code; it is no longer an
+   unanswered A request. No per-file-marker or public deletion API is implied.
+2. U7: owner-requested fresh Opus/xhigh and Astra/xhigh web research completed.
+   Local/GitHub CLI1.3.3 confirms the docs release page lags at1.3.1. First test
+   the documented excludeDefaultComponents candidate; assess inheritCustomizations
+   separately because disabling it also drops rules. Issue1015 does not prove
+   current exclusion failure or success. The previous two-option owner question
+   is deferred until this narrower candidate is assessed; no implementation or
+   acceptance of reduced protection is inferred. A's formal route has an active
+   hook beyond its standalone wrapper/profile/census. Detailed evidence and
+   original independent results: workspace
+   `_runs/infra/20261010-spec-to-code/u7-current-research/` and shared decision
+   `decisions/2026-10-10-b-agy-current-capabilities.md`. No new AGY inference,
+   profile installation, settings change or hook activation was performed.
 3. U9: independent diagnosis and bounded correction planning for DL-88. Actual
    shared-driver fixture returns the answer in the control; a BrokenPipeError
    on its terminal diagnostic instead raises without a RunResult. No provider
