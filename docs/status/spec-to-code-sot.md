@@ -144,10 +144,12 @@ at interpreter startup fails before provider launch; README cleanup wording
 retains generic "all writers" while the operational skill is explicit. Both
 verified; no further wording round or automatic backlog. Evidence includes
 `r3-adjudication.md` under the current workspace investigation root.
-This unit is complete; commit/push and shared C1/C2/C9/DL-88 evidence follow.
+This unit is complete: sourceba1b6dc and shared3061281 are pushed. Shared authoring1/1
+and182tests passed; C1/C2/C9/DL-88 evidence and the replacement guidance are shared
+in PR13comment6101997909. The source remains on the existing development branch.
 The next outer capacity/schema restart removal proposal awaits the owner's
 choice. Do not interpret input-availability approval as approval of that policy.
-Prior runtime basis47a1503; current branch HEAD959d828 with bounded dirty candidate.
+Prior runtime basis47a1503; completed unit sourceba1b6dc follows baseline959d828.
 Neither RED nor leader checks are formal admission. Main merge needs scenario-based
 review and separate approval. The whole-task hook remains while work is unfinished.
 

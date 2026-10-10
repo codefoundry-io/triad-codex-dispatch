@@ -8,7 +8,7 @@
 
 **Spec:** Shared `reference/review-rules.md#R-TERMINAL`, C1/C2/C9 and `decisions/2026-10-11-vendor-invocation-boundary.md` at877621c; superseded DL-70/DL-87 queues retired atfb7c962. Both commits are pushed to PR13. Authoring1/1 and182tests pass.
 
-**Status:** Implementation and required verification/review complete. Fresh R3 all four SAFE with matching integrity after the bounded R1 corrections. Publication of source and shared evidence follows; no merge/install/release or whole-task completion.
+**Status:** Complete and published: sourceba1b6dc, shared evidence3061281, PR13comment6101997909. Fresh R3 all four SAFE with matching integrity after the bounded R1 corrections. No merge/install/release or whole-task completion.
 
 ## Approved input-delivery decision
 
@@ -52,7 +52,7 @@ The diagnostic helper is an existing consumer: adapt it to the same direct-child
 - [x] Replace obsolete thread-phase/group-prescription tests with the five observable scenarios above; retain applicable current regressions.
 - [x] Fresh dedicated GREEN:238affected/2362full passed,4skipped; four validators and diff check passed. Exact cleanup/source integrity passed; Ubuntu not run. Full suite includes distribution contracts; no release archive requested.
 - [x] Complete required independent multi-family unit review: R3 all four SAFE/ALL_SELECTED_APPROVED/ROUND_INTEGRITY_OK; exact cleanup complete. R2 failed before start due to a leader script quoting error, not source behavior.
-- [ ] Commit/push, update shared evidence and SoT. The next retry-policy unit additionally requires the pending owner choice.
+- [x] Commit/push sourceba1b6dc and shared3061281, update evidence and SoT; PR13comment6101997909 shared. The next retry-policy unit requires the pending owner choice.
 
 ## Remaining audit units
 
@@ -64,7 +64,7 @@ Fresh dedicated RED:4failed/6passed; corrected standalone stderr-line assertion 
 
 Candidate removes custom PIPE threads/mirror/group sweep, shares direct-child termination and finite byte snapshot with diagnostics, and drops failed diagnostic lines without buffering them. Initial leader check19passed/4obsolete thread tests failed; those fixtures were replaced with partial file-preparation and actual wait-interrupt behavior. Broader check168passed/1failed: a test incorrectly expected retries from the existing single-call native parser; corrected to one invocation without changing parser/retry behavior.
 
-Current production delta: approximately+140/-281 (net-141), novel core below120lines; tests approximately+180/-344 including new scenarios. English/Korean/security/candidate receipt docs updated. No release, install, adoption or admission claim. Next: correction GREEN and complete fresh four-entry R2.
+Current production delta: approximately+140/-281 (net-141), novel core below120lines; tests approximately+180/-344 including new scenarios. English/Korean/security/candidate receipt docs updated. Unit review completed as recorded below; no release, install or adoption claim.
 
 R1 returned Claude NOT-SAFE and three SAFE with ROUND_INTEGRITY_OK. Its source
 instructions retained process-group cleanup and unqualified writer termination.
