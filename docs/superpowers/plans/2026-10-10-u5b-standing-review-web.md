@@ -31,7 +31,7 @@ docs +50-90. Python 3.12+, existing pytest and lifecycle tooling only.
   regressions and four skill validators; source/log equality and exact cleanup.
 - [x] Independent Claude, AGY Pro, AGY Flash and fresh Codex full-scope review,
   source integrity, findings adjudication and exact stage/cwd cleanup.
-- [ ] Update shared B evidence/remaining legacy distinction and SoT, validate
+- [x] Update shared B evidence/remaining legacy distinction and SoT, validate
   authoring and publish the authorized checkpoint to PR13.
 
 Review focus: invalid caller values must refuse before preparation; missing native
@@ -120,3 +120,7 @@ No behavioral defect or required new backlog; no fourth wording round.
 The shared B C32 pointer and DL-39 candidate status are refreshed. Native-host
 mechanics remain separate. Final task reconciliation must preserve the recorded
 legacy difference without silently retiring a public workflow.
+
+Published source `b6680818ac562815c6e2280e1f2b122c1ae6cd0d` and shared `7fb5bb2fc1a663d7822e72f17c3c49518016391a`; remote heads
+verified. Shared authoring1/1 and182tests pass. PR13 reply: https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094950337.
+Unit complete; the whole spec-to-code task and its hook remain active.

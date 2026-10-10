@@ -75,7 +75,8 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-Latest check: PR13 remains885e52e0 with no A reply after6094085304; fetched
+Latest publication: PR13 head7fb5bb2f, B reply6094950337; no A reply
+after6093708612 at the latest check. Fetched
 main3afc4d7, PR12head507c64bb, read-only A25d6fd5a. DL-146/147 are A repair
 completion records corresponding to completed B U4b; no duplicate port.
 U5b plan: ../superpowers/plans/2026-10-10-u5b-standing-review-web.md.
@@ -86,11 +87,12 @@ unchanged source/logs and exact cleanup. Complete independent web-enabled R3:
 all-four SAFE, ROUND_INTEGRITY_OK, adjudicated/exported/cleaned. Earlier workflow,
 fixture and invocation failures remain in the unit evidence; no reused approval.
 After R1 and R2, current documentation was corrected. GREEN-docs371/4 then
-focused GREEN-r3 distribution/migration checks and four validators pass.
-Full2280/4 predates only docs; recorded production/tests are unchanged. Shared evidence and authorized checkpoint publication follow. Whole-task hook
+focused GREEN-r3:46 distribution/migration checks and four validators pass.
+Full2280/4 predates only docs; recorded production/tests are unchanged. Shared7fb5bb2f and sourceb6680818 are pushed;
+PR13 result: https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094950337. Whole-task hook
 stays. Native ownership, legacy DL-59 difference, installed revision and U7
 settings architecture are unchanged. No whole-task completion or release claim.
-Next after publication: U1T opaque model-value transport, starting with the
+Next: U1T opaque model-value transport, starting with the
 already-agreed shared rule and existing parser evidence; no model-name grammar.
 
 PR13 new A reply6093708612 (2026-10-10T04:20:54Z) agrees with the current
@@ -108,7 +110,7 @@ do not authorize B/native ports; classifier outcome wording is an existing U2
 reconciliation input. Remaining groups: U1T, U2, U5, U6, U7, U9, plus U10 final
 integration. Whole-task hook stays; no install/merge/release.
 
-**Active stage: 4 — U5b complete; publication then U1T assessment.**
+**Active stage: 4 — U5b complete and published; U1T assessment next.**
 
 U5a plan: ../superpowers/plans/2026-10-10-u5a-shared-review-context.md.
 Fresh RED9failed/288passed/4skipped reproduces absent prepared date/common
@@ -1428,3 +1430,5 @@ v2 as no-web by default. Corrected that material omission and the same stale
 default in current AGY/project guidance. Historical release notes retained.
 No production/test edits; R2 adjudicated/exported/cleaned. Focused documentation
 and skill checks, then a complete fresh R3 follow; prior approval is not reused.
+
+2026-10-10 | U5b publication | Source b6680818ac562815c6e2280e1f2b122c1ae6cd0d and shared 7fb5bb2fc1a663d7822e72f17c3c49518016391a pushed and verified against their remote branches. Shared authoring1/1 and182tests passed. PR13 reply https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094950337 read back exactly. All-three review stages/cwds cleaned; R1/R2 evidence retained. Next U1T uses existing Gemini/parser evidence and A agreement; Claude/AGY parser gaps remain separate. Whole-task hook retained.
