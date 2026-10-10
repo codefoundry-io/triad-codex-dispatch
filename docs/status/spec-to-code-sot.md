@@ -84,7 +84,8 @@ dependent behavior, so both hosts can implement the same clarified contract.
 **Active stage: U7 implementation and approved two-profile setup complete.
 Final dedicated GREEN:304affected/2364full passed,4skipped. Fresh R3 all four
 SAFE with ROUND_INTEGRITY_OK; custody exported and exact stages removed.
-Source/spec publication follows this completion record. Next: U6b comparison,
+Source47a1503 and sharedc66e515 are pushed; PR13comment6100271567
+shares completion. Shared authoring1/1 and182tests pass. Next: U6b comparison,
 then U9 measured terminal-output gap, U2 evidence mapping and U10 integration.**
 
 Owner2026-10-11 explicitly proceeded after the exclusion-profile live results and

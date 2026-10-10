@@ -123,3 +123,7 @@ suggestions dispositioned, no remaining functional blocker. Exact stages removed
 after custody export. U7 complete; source/spec publication accompanies this record.
 Two installed profiles already match source; no full plugin installation or release.
 Remaining task: U6b, U9, U2 reconciliation and U10; keep startup hook.
+
+Publication complete: source47a1503 and sharedc66e515 pushed;
+PR13comment6100271567 shares final evidence. Shared authoring1/1 and182tests
+passed. This final progress-only update changes no reviewed product/test bytes.
