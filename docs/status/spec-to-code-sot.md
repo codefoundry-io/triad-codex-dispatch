@@ -95,9 +95,12 @@ RED17failed/3passed includes two mixed Gemini fixture failures. No product edit,
 GREEN or new formal review. Outside-source U6b/U9 drafts are evidence-only.
 Current plan: [vendor invocation boundary](../superpowers/plans/2026-10-11-vendor-invocation-boundary.md).
 Fresh main remains3afc4d7; PR13 has no newer A reply after6100596687; read-only
-A remains1de943af. Google and fresh Astra/high diagnosis recommend owned stream
-files plus direct-child supervision; Claude/opus/xhigh is still running. Neither
-diagnosis nor a synthetic test is formal admission.
+A remains1de943af. Google, fresh Astra/high and Claude/opus/xhigh diagnoses all
+completed and recommend owned stream files. Google/Codex recommend direct-child
+supervision; Claude's timeout-group-retention suggestion has no measured vendor
+requirement and is not selected under the owner's descendant responsibility
+direction. Invalid UTF-8 rejection remains; it needs no new owner choice.
+Neither diagnosis nor a synthetic test is formal admission.
 
 Standard-library spike:2MB exact input succeeds; inherited-output fixture takes
 1.548s with communicate versus0.048s with files. Both accept early stdin close.
@@ -112,8 +115,10 @@ authorized, but this newly identified observable difference is pending. No
 dependent normative or runtime edits before the answer. The shared decision is
 `decisions/2026-10-11-vendor-invocation-boundary.md`, published as7d731ef and
 shared in PR13comment6101372915 (read back); its authoring check passes1/1.
-Only design/progress documents changed. Complete every started diagnosis and
-record it; then settle the choice and amend shared rules/cases before RED/code.
+Only design/progress documents changed; every started provider/probe is terminal.
+Settle the choice and amend shared rules/cases before RED/code. The diagnosis
+fingerprint was after dispatch; subsequent leader changes were excluded design
+documents only. No formal integrity or whole-worktree-equality claim is made.
 Main merge needs scenario-based review and separate approval. The whole-task
 hook remains while work is unfinished.
 

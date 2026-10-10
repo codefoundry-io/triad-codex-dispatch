@@ -46,7 +46,7 @@ The diagnostic helper is an existing consumer: adapt it to the same direct-child
 
 **Interfaces:** Preserve `_run_once(...) -> RunResult`, public exit vocabulary, wrapper options and receipt keys. The approved input-delivery meaning must be reflected in the shared rule and C9 before dependent tests/code.
 
-- [ ] Refresh main/PR13 and compare A/B source; independently diagnose with Claude, Google and fresh Codex. Refresh and source comparison are complete; Google/Codex returned, Claude is still running. Record all terminal outcomes before synthesis.
+- [x] Refresh main/PR13 and compare A/B source; independently diagnose with Claude, Google and fresh Codex. All three completed. They recommend file capture; Claude additionally proposes retaining timeout group kill, which lacks a measured vendor requirement and is not selected under the approved vendor-owned descendant boundary. Invalid UTF-8 rejection stays, so it needs no new decision.
 - [x] Compare standard-library transports in an isolated, provider-free spike. Do not treat it as vendor lifecycle conformance.
 - [ ] Settle the input-delivery decision and amend the shared rule/cases/unit/decision; validate and publish the same commit to PR13.
 - [ ] Leader writes bounded behavior fixtures against canonical source. Fresh dedicated `triad-skill-executor` observes RED for descendant preservation/final capture and diagnostic independence; preserve success/timeout/auth/binding controls.
