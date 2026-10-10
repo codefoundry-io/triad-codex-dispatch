@@ -1,5 +1,11 @@
 # Shared specification conformance implementation plan
 
+**Owner steering2026-10-11:** implementation expansion is suspended for the
+[vendor-responsibility audit](../../status/2026-10-11-vendor-responsibility-audit.md).
+Do not execute U6b/U9 checklists automatically. Reassess whether each shared
+requirement belongs to TRIAD or the vendor before proposing its implementation.
+Completed work remains evidence; this does not authorize broad deletion or merge.
+
 > **For agentic workers:** Use `superpowers:executing-plans` for leader-owned,
 > sequential implementation. Independent research may use fresh read-only
 > children. Each functional unit completes its required review before the next

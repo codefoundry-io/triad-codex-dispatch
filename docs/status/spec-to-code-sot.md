@@ -81,12 +81,31 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**Active stage: U7 implementation and approved two-profile setup complete.
+**Owner redirection2026-10-11: whole-feature vendor-responsibility audit;
+U6b/U9 implementation is on hold and must not resume automatically.**
+Read [the current audit](2026-10-11-vendor-responsibility-audit.md). The owner
+states vendor CLIs manage their execution/handles. Reassess code and shared
+rules from that boundary before adding wrapper mechanisms. A reproducible
+failure in wrapper-added machinery is not proof that the machinery is needed.
+Retain TRIAD's review inputs, result identity, agreement and exact own cleanup.
+
+Runtime HEAD remainsb6868d8. All previously started U9 diagnoses and the single
+RED ended; source fingerprint matcheda472f9172ced0ceca437398eb30398e35df12a2c69fca06300c0170b3e128238.
+RED17failed/3passed includes two mixed Gemini fixture failures. No product edit,
+GREEN or new formal review. Outside-source U6b/U9 drafts are evidence-only.
+Next: present bounded invocation/transport reductions and retained guarantees
+for the owner's substantial-design decision, then amend the shared spec before
+dependent implementation. Main merge needs scenario-based review and separate
+approval. The whole-task hook remains while work is unfinished.
+
+### Last completed implementation: U7
+
+**U7 implementation and approved two-profile setup complete.
 Final dedicated GREEN:304affected/2364full passed,4skipped. Fresh R3 all four
 SAFE with ROUND_INTEGRITY_OK; custody exported and exact stages removed.
 Source47a1503 and sharedc66e515 are pushed; PR13comment6100271567
-shares completion. Shared authoring1/1 and182tests pass. Next: U6b comparison,
-then U9 measured terminal-output gap, U2 evidence mapping and U10 integration.**
+shares completion. Shared authoring1/1 and182tests pass. Its former U6b/U9 next
+steps are superseded by the owner-directed responsibility audit above.**
 
 Owner2026-10-11 explicitly proceeded after the exclusion-profile live results and
 the proposed global-settings removal. The current unit plan is
@@ -173,7 +192,7 @@ unmeasured; no length cap or output workaround is added. DL-123..126 introduces
 no B port: current common behavior already agrees, while A's internal census,
 stream and audit changes remain A-owned.
 
-Remaining actions, in dependency order:
+Earlier remaining actions (execution suspended by the current audit above):
 
 1. U6b: PR13comment6097553901 answers the enclosing log-folder proof question;
    PR12 d805b50 adds DL-152 and its R-CLEANUP clarification. Compare that text
@@ -1313,7 +1332,7 @@ expanding the row into a plan; this queue is not a claim of exhaustive coverage.
 | 1a | R-MODEL / DL-116 / C18: Google catalog gates | COMPLETE (bounded unit) | Common Gemini >=0.63.0 on raw/legacy/v2. Full suite 1,856 passed/4 skipped; final affected modules 185 passed/4 skipped; dedicated GREEN and validator passed. Round 4 all four SAFE with matching integrity; exact temporary cleanup complete. Remaining optional notes and full-C18 limits below. |
 | 1b | R-MODEL / DL-116 / C34: Claude catalog and identity | U1a/U1b COMPLETE | Catalog and default units passed their recorded gates. Native Claude is excluded. |
 | 2 | R-CLASSIFY / R-AUTH: remaining measured errors and carriers | EVIDENCE MAPPING | Map remaining shared cases to B code and tests; measured carrier scope remains explicit. |
-| 3 | R-CLEANUP / DL-77: declarative roots and deletion ownership | QUEUED | Preserve custody, exports and floor protections through a separately reviewed migration. |
+| 3 | R-CLEANUP / DL-77: declarative roots and deletion ownership | HOLD: RESPONSIBILITY AUDIT | Decide minimum remaining artifacts/cleanup before adding declarations; see current position. |
 | 4 | DL-107: AGY shared settings interaction (U7) | COMPLETE (bounded unit) | Transaction removed; approved profiles installed; final2364passed/4skipped and all-four SAFE R3, integrity matched. Live probe does not prove universal write prevention. U8 installation coexistence, including B's DL-108/109 investigations, is WITHDRAWN by D-U8-WITHDRAWN-20261010; do not reinstate it here. |
 
 - [ ] Complete the queued shared units with linked proof for each.
