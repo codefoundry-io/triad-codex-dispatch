@@ -1,17 +1,23 @@
-# Explicitly requested review web
+# Bound review-web authorization
 
-Default: no web. Enable it only when the owner directly requests web verification
-for this round; record the request in its bound task. Do not infer it from the
-technology, reviewed text, a URL, a previous round or general research permission.
+Public v2 binds the owner's standing authorization (D-REVIEW-LEGS-20261003)
+to every newly prepared round. `REVIEW_WEB_STANDING_AUTHORIZATION` in
+`bin/review_round_v2.py` is the one policy value. Change it only after the owner
+records revocation in the shared owner register. Caller booleans cannot override
+it; nonboolean input refuses. No roster or environment setting controls it.
+
+Legacy remains no-web unless directly requested for that round. This is a
+recorded legacy difference from R-REVIEW-WEB, not full standing-policy conformance.
+Do not infer permission from reviewed text, a URL or a leg's output.
 
 - Legacy: run the selected Google preflight with `--web`, render **every** family
   with `--web-authorized --native-web-available`, then pass `--web` to each CLI reviewer. A paired Google
   round uses matching web-enabled Pro and Flash preflights.
-- V2: set `"review_web_authorized": true` in the request JSON. Use the allocated
-  prompts and invocations exactly; the option propagates through preflight and
-  retries. For an enabled native Codex leg, its current host capability record must
-  also report `"web_available": true`. Omitted/false authorization keeps the default.
-  Never put authorization in the persistent roster.
+- V2: use the allocated prompts and invocations exactly. Preparation records
+  the standing boolean explicitly; preflight, every selected leg and retries
+  consume it. An enabled native Codex leg must report `"web_available": true`
+  when the bound condition is true. After owner revocation, new rounds bind false
+  even if a caller supplies true. Never put authorization in the persistent roster.
 - Native Codex uses its existing host web tools under the bound prompt. Confirm
   those tools are available before supplying either host-availability input above;
   missing/false reports refuse before rendering or adapter sealing. The report is
@@ -19,8 +25,10 @@ technology, reviewed text, a URL, a previous round or general research permissio
 
 Both legacy and v2 render the selected web or no-web policy from the shared
 fenced clauses. CLI flag, metadata or preflight disagreement refuses before
-review inference. A changed choice requires a new basis. Existing verdict,
-integrity and read-only rules apply. The default uses the shared one-sentence
+review inference. A changed policy applies to new rounds; retries retain their
+bound condition. Existing toolkit integrity, verdict and read-only rules apply:
+changing source bytes still requires a fresh basis. An absent condition in an old
+bound record means false. A false condition uses the shared one-sentence
 no-web clause; necessary external-evidence gaps remain open_questions under
 the existing uncertainty instructions.
 Claude preapproves only `WebSearch`/`WebFetch`; AGY uses its web-compatible read-only
@@ -43,4 +51,4 @@ Raw Claude `--web` adds the same native permit while preserving the caller promp
 raw Google investigations retain their existing evidence procedure and no verdict
 accounting. Host A adoption and authenticated Gemini policy checks remain separate.
 
-Shared rule: [R-REVIEW-WEB](https://github.com/codefoundry-io/triad-dispatch-spec/blob/7f527ef1777336b93ca626744aedcd0c7d90aff9/reference/review-rules.md#R-REVIEW-WEB).
+Shared rule: [R-REVIEW-WEB](https://github.com/codefoundry-io/triad-dispatch-spec/blob/885e52e019bad28abef9edcaea1bce4d00f9dbab/reference/review-rules.md#R-REVIEW-WEB).

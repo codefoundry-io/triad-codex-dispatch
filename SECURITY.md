@@ -23,13 +23,14 @@ authenticated Legacy Gemini CLI instead. This label distinguishes the `gemini`
 executable from AGY; it does not change the `gemini-enterprise` authentication
 class, version floor or preflight requirements. Without an explicit project, the
 AGY wrapper brackets `--sandbox read-only` in a transient global-settings
-transaction and restores the original bytes. Default formal preflight and dispatch use
+transaction and restores the original bytes. Legacy default formal preflight and dispatch use
 the five raw read-only denies plus `read_url(*)`; formal dispatch never supplies
 `--dangerously-skip-permissions`. Identical formal deny leases can overlap, while
 raw/formal lists remain isolated by the existing deny-key and lock timeout.
 Raw investigations retain their existing web-compatible rules and version-gated
 headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-REVIEW defaults to no web. A direct owner request may enable the bound all-leg
+Public v2 binds standing web authorization. Legacy REVIEW defaults to no web; a
+direct owner request may enable its bound all-leg
 [review web option](skills/triad-cross-family-review/references/review-web.md). On the AGY route, MCP calls are also denied.
 The provider-managed sandbox is not OS-level
 confinement, and round-integrity mutation detection is a separate fail-closed
@@ -453,8 +454,11 @@ collection. These hashes detect drift, not an actor rewriting all custody.
 
 ## Explicit web permission
 
-The current-round `review_web_authorized` boolean is absent/false by default and
-never a persistent roster permission. All CLI review invocations require matching
+Public v2 explicitly binds `review_web_authorized` from the owner's standing
+authorization, currently true. Only recorded owner revocation changes the source
+policy constant; caller booleans cannot override it and other types refuse.
+An absent condition in a previously bound record means false. Legacy remains
+per-request, default false. This is never a persistent roster permission. All CLI review invocations require matching
 metadata and preflight. Claude adds only native WebSearch/WebFetch preapproval;
 AGY preserves its existing read-only lease and owner denies; Gemini selects the
 complete `gemini-formal-web.toml` plus `web-source-manifest.json`, differing only
@@ -465,7 +469,7 @@ Authenticated Gemini web checks remain NOT RUN. No permanent policy is installed
 ## Explicit web investigations
 
 AGY `--web` requires `--sandbox read-only`. In REVIEW it must match the current
-bound owner request and preflight. It does not relax any pre-existing owner deny rule.
+bound authorization and preflight. It does not relax any pre-existing owner deny rule.
 On the raw route it appends the single vendored investigation clause after validating the caller
 prompt and operation. Missing or malformed clause content fails before provider
 work. The prompt manifest and distribution checks track copied source bytes;

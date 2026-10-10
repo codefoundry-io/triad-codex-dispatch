@@ -40,6 +40,8 @@ def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, 
 
     def actual_preflight(adapters):
         options = list(route["options"])
+        if adapters["google"]["review_web_authorized"]:
+            options.append("--web")
         for flag, value in (("--cwd", str(worktree)), ("--expected-review-id", "v2-fixture"),
                             ("--expected-leg-name", "google"), ("--expected-attempt", "1"),
                             ("--google-selector-receipt", str(selector))):

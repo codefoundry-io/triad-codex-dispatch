@@ -552,7 +552,7 @@ verification consumes the stored run record, not another vendor invocation.
 U5a candidate complete: exact sharedca3d990 clauses, bound preparation date,
 A-only header selection and late-answer recollection guidance. Fresh GREEN
 297 affected fresh; 2273 full prior R2 passed, 4 skipped, four validators; all-four SAFE
-with matching integrity and cleanup. DL-39 standing-web policy remains separate.
+with matching integrity and cleanup. DL-39 v2 standing-web binding completed in U5b below.
 See [U5a plan](2026-10-10-u5a-shared-review-context.md).
 
 U5a resolves the U3c/U3a documentation notes: README EN/KO now distinguish
@@ -579,9 +579,12 @@ skill references. Adopt payload bytes/digests consistently with the chosen revis
   wordsmithing when behavior is correct. Complete dedicated executor and formal
   gates required for source skill changes.
 
-Remaining U5 assessment: DL-39 standing review-web policy only. The clause/date
-implementation and its focused verification/review are complete; no wording
-scenario probe was needed because no unresolved contextual choice remained.
+U5b v2 standing-web candidate is now complete: 371 affected/2280 full passed,
+4 skipped, four validators and complete all-four SAFE review with matching
+integrity and cleanup. See [U5b plan](2026-10-10-u5b-standing-review-web.md).
+Legacy per-request authorization remains the recorded DL-59 difference, to be
+accounted for in U10; no legacy retirement decision is implied. Native model
+and effort remain host-owned. No wording scenario probe was needed.
 
 ## U6 — Cleanup as declared host code
 

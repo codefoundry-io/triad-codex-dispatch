@@ -1,4 +1,4 @@
-"""C31/C32: explicit web authorization stays invocation- and basis-scoped."""
+"""C31/C32: review authorization stays bound across routes and retries."""
 import json
 import sys
 from dataclasses import replace
@@ -166,6 +166,51 @@ def test_C32_v2_request_has_strict_transient_authorization(round_fixture, value)
     finish(fixture, first, failed=True)
     retry = mod.allocate_attempt(Path(basis["basis_file"]), "c", diagnosis="transient failure")
     assert "--web" in retry["invocation"]["argv"] and retry["binding"]["content_digest"] == first["binding"]["content_digest"]
+
+
+@pytest.mark.parametrize("caller", ["omitted", False, True])
+def test_C32_v2_standing_permission_binds_every_leg(round_fixture, caller):
+    fixture = round_fixture(request_changes={} if caller == "omitted" else {"review_web_authorized": caller})
+    _, basis, *_ = fixture
+    assert basis["request"]["review_web_authorized"] is True
+    for name in basis["enabled"]:
+        allocation = start(fixture, name)
+        assert allocation["adapter"]["review_web_authorized"] is True
+        assert shared_web_clause() in Path(allocation["prompt_file"]).read_text()
+        if allocation["binding"]["family"] != "codex":
+            assert "--web" in allocation["invocation"]["argv"]
+
+
+@pytest.mark.parametrize("standing", [False, True])
+def test_C32_v2_policy_change_affects_preparation_not_bound_retry(round_fixture, monkeypatch, standing):
+    mod, _, root, tree, request, calls = round_fixture(make_basis=False)
+    monkeypatch.setattr(mod, "REVIEW_WEB_STANDING_AUTHORIZATION", standing, raising=False)
+    request["review_web_authorized"] = not standing
+    basis = mod.create_basis(request, root=root)
+    fixture = (mod, basis, root, tree, request, calls)
+    assert basis["request"]["review_web_authorized"] is standing
+    first = start(fixture, "claude")
+    finish(fixture, first, failed=True)
+    # In-process policy simulation preserves source bytes/toolkit integrity.
+    monkeypatch.setattr(mod, "REVIEW_WEB_STANDING_AUTHORIZATION", not standing)
+    retry = mod.allocate_attempt(Path(basis["basis_file"]), "claude", diagnosis="transient failure")
+    assert retry["binding"]["content_digest"] == first["binding"]["content_digest"]
+    assert ("--web" in retry["invocation"]["argv"]) is standing
+    assert (shared_web_clause() in Path(retry["prompt_file"]).read_text()) is standing
+
+
+@pytest.mark.parametrize("capability", [None, False])
+def test_C32_v2_standing_permission_requires_native_web(round_fixture, monkeypatch, capability):
+    from review_adapters_v2 import prepare_adapters
+    mod, _, root, _, request, _ = round_fixture(make_basis=False, config_legs=[
+        {"name": "claude", "enabled": False}, {"name": "google", "enabled": False}])
+    monkeypatch.setattr(mod, "prepare_adapters", prepare_adapters)
+    request["native_capabilities"].pop("web_available")
+    if capability is not None:
+        request["native_capabilities"]["web_available"] = capability
+    with pytest.raises(ValueError, match="web"):
+        mod.create_basis(request, root=root)
+    assert not (root / "basis-v2.json").exists()
 
 
 @pytest.mark.parametrize("supported", [False, True])

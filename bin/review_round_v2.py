@@ -22,6 +22,9 @@ from verdict_v2 import bound_verdict
 
 
 TOOLKIT = Path(__file__).resolve().parents[1]
+# R-REVIEW-WEB / D-REVIEW-LEGS-20261003: only a recorded owner revocation
+# changes this policy. New preparations bind it; retries use their bound value.
+REVIEW_WEB_STANDING_AUTHORIZATION = True
 
 
 def prepare_adapters(*args, **kwargs) -> dict:
@@ -134,6 +137,7 @@ def create_basis(request: dict, *, root: Path) -> dict:
     request.setdefault("review_web_authorized", False)
     if type(request["review_web_authorized"]) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
+    request["review_web_authorized"] = REVIEW_WEB_STANDING_AUTHORIZATION
     request["review_kind"] = validate_review_kind(request.get("review_kind", "pre-merge"))
     lifecycle._validate_review_id(request["review_id"])
     root = lifecycle._canonical_directory(root, "v2 review root")

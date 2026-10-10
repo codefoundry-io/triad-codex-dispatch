@@ -11,8 +11,9 @@ Raw investigations retain the version-gated headless compatibility unless
 `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag.
 Formal calls use `--sandbox read-only`. Without an explicit project, the route uses
 native `--mode plan` with a transient global-settings transaction
-that unions the five raw read-only deny rules plus `read_url(*)` for default
-no-web review, then restores the original bytes. Explicitly requested review web
+that unions the five raw read-only deny rules plus `read_url(*)` when the bound
+web condition is false (the legacy default), then restores the original bytes.
+A true condition (public v2 standing authorization or a legacy direct request)
 uses the five raw denies and refuses an existing owner `read_url(*)` deny before
 inference without removing it. Identical formal leases may overlap; different
 raw/formal deny lists remain isolated. On AGY 1.1.20 or newer, the formal route passes a
@@ -25,7 +26,7 @@ schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, forbids command and
 other action tools plus experiments, and undecidable uncertainty goes to
 `open_questions`. MCP calls are unavailable for the formal Google leg.
-REVIEW defaults to no web; only a direct owner request enables
+Public v2 uses its bound standing authorization. Legacy REVIEW defaults to no web; only a direct owner request enables
 [the bound web option](../triad-cross-family-review/references/review-web.md).
 Use `grep_search`
 with the required `SearchPath` and `Query` arguments to search inside the review

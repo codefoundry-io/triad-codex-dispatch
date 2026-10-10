@@ -69,7 +69,8 @@ def round_fixture(tmp_path, monkeypatch, worktree):
                    "prepared_dir": str(shared), "worktree": str(worktree), "mode": "guarded-worktree",
                    "objective": "Check complete API", "criteria": ["contract", "correctness"],
                    "approved_boundary": ["local plugin"], "authentication_class": "personal-google",
-                   "native_capabilities": {"source": "native-spawn-tool", "models": {"gpt-5.6-terra": ["high", "xhigh"]}},
+                   "native_capabilities": {"source": "native-spawn-tool", "web_available": True,
+                                           "models": {"gpt-5.6-terra": ["high", "xhigh"]}},
                    "prior_residual": "Prior finding and rebuttal: no inherited approval."}
         request.update(request_changes or {})
         basis = mod.create_basis(request, root=root) if make_basis else None

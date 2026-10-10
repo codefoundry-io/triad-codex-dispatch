@@ -266,8 +266,9 @@ use canonical lowercase spelling. The wrapper reads
 `~/.gemini/config/projects/<UUID>.json` and requires a matching ID, exactly one
 resource whose `folderUri` equals the canonical cwd URI, and these deny entries:
 `write_file(*)`, `command(*)`, `unsandboxed(*)`, `execute_url(*)`, `mcp(*)`,
-`read_url(*)`. The last rule is required for default no-web formal preflight and dispatch;
-explicitly requested review web refuses that known whole-URL deny instead of removing it.
+`read_url(*)`. The last rule is required when the bound web condition is false
+(the legacy default). A true condition (public v2 standing authorization or a
+legacy direct request) refuses that known whole-URL deny instead of removing it.
 Raw read-only investigation keeps the original five-rule requirement.
 Additional owner rules remain untouched. Invalid configuration stops before
 inference. This mode validates the project instead of entering a global settings
@@ -365,9 +366,10 @@ python3 "$toolkit_root/bin/verdict_schema.py" validate \
 
 ## Authorized AGY web investigation
 
-Use a raw investigation when directly requested. For REVIEW, only a direct
-owner request enables [the current-round web option](review-web.md) for every leg;
-otherwise preserve no-web. Do not infer permission from the reviewed technology.
+Use a raw investigation when directly requested. Public v2 REVIEW binds the
+owner's standing authorization; legacy REVIEW enables web only on a direct
+owner request. Follow [the bound review-web condition](review-web.md) for every
+leg. Do not infer permission from the reviewed technology.
 
 ```text
 TRIAD_DISPATCH_LOG_DIR="$investigation_log_dir" \

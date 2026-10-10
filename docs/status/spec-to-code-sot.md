@@ -75,6 +75,24 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
+Latest check: PR13 remains885e52e0 with no A reply after6094085304; fetched
+main3afc4d7, PR12head507c64bb, read-only A25d6fd5a. DL-146/147 are A repair
+completion records corresponding to completed B U4b; no duplicate port.
+U5b plan: ../superpowers/plans/2026-10-10-u5b-standing-review-web.md.
+Candidate complete: production+4/-0; v2 binds standing authorization after strict
+type validation, with existing adapters and bound retry. Fresh exact-command
+GREEN-corrected 371 affected/2280 full passed,4 skipped, four validators,
+unchanged source/logs and exact cleanup. Complete independent web-enabled R3:
+all-four SAFE, ROUND_INTEGRITY_OK, adjudicated/exported/cleaned. Earlier workflow,
+fixture and invocation failures remain in the unit evidence; no reused approval.
+After R1 and R2, current documentation was corrected. GREEN-docs371/4 then
+focused GREEN-r3 distribution/migration checks and four validators pass.
+Full2280/4 predates only docs; recorded production/tests are unchanged. Shared evidence and authorized checkpoint publication follow. Whole-task hook
+stays. Native ownership, legacy DL-59 difference, installed revision and U7
+settings architecture are unchanged. No whole-task completion or release claim.
+Next after publication: U1T opaque model-value transport, starting with the
+already-agreed shared rule and existing parser evidence; no model-name grammar.
+
 PR13 new A reply6093708612 (2026-10-10T04:20:54Z) agrees with the current
 DL-101/102/103 dispositions and confirms CRLF fix4b07949a. Its ongoing DL-104
 cleanup is tracked against already-completed B U4b; A C43 evidence refresh stays
@@ -90,7 +108,7 @@ do not authorize B/native ports; classifier outcome wording is an existing U2
 reconciliation input. Remaining groups: U1T, U2, U5, U6, U7, U9, plus U10 final
 integration. Whole-task hook stays; no install/merge/release.
 
-**Active stage: 4 — U3 and U5a complete; remaining U5 policy and other groups open.**
+**Active stage: 4 — U5b complete; publication then U1T assessment.**
 
 U5a plan: ../superpowers/plans/2026-10-10-u5a-shared-review-context.md.
 Fresh RED9failed/288passed/4skipped reproduces absent prepared date/common
@@ -105,8 +123,7 @@ evidence published at 885e52e019bad28abef9edcaea1bce4d00f9dbab after authoring
 1/1 and 182 tests passed. B source checkpoint 7a082baabe64fce48671d1c37bda11cf7b120e30 is pushed and
 verified equal to origin/codex/opus-5-5-default. PR13 result:
 https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094085304.
-Next: assess DL-39 standing review-web policy against the common contract and
-current B/A behavior before dependent changes; preserve native ownership. Whole-task hook stays.
+Historical next action, now completed by U5b above. Whole-task hook stays.
 
 ### Earlier U3d checkpoints (historical; current position above)
 
@@ -1398,3 +1415,16 @@ of the handled exit2 diagnostic (no damaged-install runtime probe); the public
 mechanical-fields table omits the prepared-date explanation, while runtime/retry
 behavior is correct. Both reviewers and leader keep them nonblocking under the
 owner three-pass bound. No fourth prompt round or new required backlog is added.
+
+U5b R1: all-four SAFE, matching integrity; Claude identified stale legacy-only
+web-request wording and an ambiguous release attribution. Corrected three
+documentation files only. Production/tests remain identical to full GREEN2280/4.
+R1 adjudication/export/exact cleanup completed; fresh affected verification and
+complete R2 follow. Three equivalent code-refactor suggestions are nonblocking
+and add no required backlog.
+
+U5b R2 NOT_APPROVED with matching integrity: installation EN/KO still described
+v2 as no-web by default. Corrected that material omission and the same stale
+default in current AGY/project guidance. Historical release notes retained.
+No production/test edits; R2 adjudicated/exported/cleaned. Focused documentation
+and skill checks, then a complete fresh R3 follow; prior approval is not reused.

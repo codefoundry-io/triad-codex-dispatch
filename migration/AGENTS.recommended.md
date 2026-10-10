@@ -17,7 +17,7 @@ directly:
 
 - `$triad-claude-dispatch` for a single-shot Claude Code consult.
 - `$triad-antigravity-dispatch` for an authorized raw INVESTIGATION consult,
-  including web-grounded research and live URL checks. REVIEW defaults to no web; enable the bound all-leg option only on a direct owner request for that round.
+  including web-grounded research and live URL checks. Public v2 binds the owner's standing review-web authorization. Legacy REVIEW defaults to no web; enable its bound all-leg option only on a direct owner request for that round.
 - `$triad-gemini-dispatch` for a standalone authorized Gemini CLI compatibility
   consult; it does not choose or lead a formal Google-family review.
 - `$triad-cross-family-review` before risky merges.
@@ -120,9 +120,10 @@ authority over other user-global paths.
 
 An owner-provisioned dedicated AGY project can be selected with
 `--project <canonical-lowercase-UUID> --cwd <absolute-review-root> --sandbox read-only`.
-Follow the canonical leg contract's project record and default no-web formal deny
-prerequisites (the five raw read-only denies plus `read_url(*)`). Explicitly requested
-review web retains the five raw denies and refuses an existing `read_url(*)` deny
+Follow the canonical leg contract's project record and bound web condition.
+A false condition (the legacy default) requires the five raw read-only denies plus
+`read_url(*)`. A true condition (public v2 standing authorization or a legacy direct
+request) retains the five raw denies and refuses an existing `read_url(*)` deny
 before inference without removing it.
 The wrapper validates that record without a global settings lease or permission
 mutation; provisioning remains separately authorized owner work. Use the same

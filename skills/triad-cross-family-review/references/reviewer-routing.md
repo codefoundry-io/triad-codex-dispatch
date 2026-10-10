@@ -95,13 +95,15 @@ which does not by itself prove authentication, runtime model or policy enforceme
 
 ## Admission boundary
 
-Every REVIEW leg defaults to no web; a direct owner request selects
-[the common bound option](review-web.md). Default AGY formal preflight and
+Public v2 binds standing authorization through [the v2 web procedure](review-web.md).
+
+Legacy REVIEW defaults to no web; a direct owner request selects
+[the common bound option](review-web.md). Legacy no-web AGY formal preflight and
 dispatch require `read_url(*)` in addition to the five raw read-only denies and
 omit headless autoapproval. Identical formal leases remain concurrent; mixed raw
 and formal lists retain existing isolation. Explicit project validation checks
 the same formal rules without changing the project. Raw invocation behavior is
-preserved. Gemini's default packaged REVIEW policy explicitly denies its web read/search
+preserved. Gemini's packaged no-web REVIEW policy explicitly denies its web read/search
 tools and retains B's other deny rules. Byte/policy-engine checks remain distinct
 from unrun authenticated effective-policy checks.
 

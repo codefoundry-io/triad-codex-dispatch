@@ -160,8 +160,11 @@ permission rules and credentials. It does not sign in or install dependencies.
    the Legacy Gemini CLI authentication identifier remains `gemini-enterprise`.
    [Resolve the roster](../README.md#project-review-roster-check) before dispatch;
    a successful resolution is not proof of provider access. Gemini has no effort
-   flag. Default reviews do not use web; request web verification directly for
-   the specific round when needed.
+   flag. The public v2 source candidate binds the owner's standing web
+   authorization to every new round; omitted/false caller values do not revoke
+   it. An enabled native Codex leg must report `web_available: true`.
+   Legacy reviews remain no-web unless requested directly for that round.
+   This source change does not update an already installed revision.
 
 3. **Optional paths.** Default users do not need extra environment variables.
    If you choose `TRIAD_BOOTSTRAP_BIN_DIR` or `TRIAD_CLASSIFIER_EXTENSION`, use an

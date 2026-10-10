@@ -38,11 +38,11 @@ reaches out to the other families for you.
   selects the existing Gemini CLI wrapper immediately; later AGY failure never
   triggers that fallback. Without an explicit `--project`, `--sandbox read-only` brackets AGY in a transient
   global-settings transaction and restores the original bytes. Default formal AGY adds
-  `read_url(*)` to the five raw read-only denies and never uses the headless
+  `read_url(*)` to the five raw read-only denies on the legacy no-web path and never uses the headless
   autoapproval flag. Identical formal leases can overlap; raw/formal deny lists
   remain isolated. Raw investigations retain their web-compatible rules and
   version-gated headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-  REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
+  Public v2 binds standing review-web authorization. Legacy REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
   cache and removes competing API-key/ADC/Vertex selectors without reading
@@ -749,8 +749,9 @@ Honest boundaries, so you know where the toolkit stops:
   selected `--cwd` review root, digest and mutation checks, and your review before
   commit. Without `--project`, it also uses the transient deny lease; with
   `--project`, it validates the owner-provisioned project permission record.
-  Default no-web formal preflight and dispatch require the six review denies.
-  Explicitly requested review web retains the five raw denies and refuses an existing
+  A false bound web condition (the legacy default) requires the six review denies.
+  A true condition (public v2 standing authorization or a legacy direct request)
+  retains the five raw denies and refuses an existing
   owner `read_url(*)` deny before inference without removing it. Both formal modes
   never pass `--dangerously-skip-permissions`. Raw calls retain their existing version-gated
   headless compatibility. The sandbox
@@ -1097,9 +1098,10 @@ one resource whose `folderUri` matches the canonical cwd, and all five deny rule
 Additional owner-defined denies remain in place. The wrapper creates or edits no
 project record, global settings, or global lease artifact in this mode.
 
-For default no-web formal review, use the same project UUID for preflight and dispatch. The
-project must also contain `read_url(*)`; the wrapper refuses a missing rule
-without changing owner configuration. Explicitly requested review web instead refuses
+Use the same project UUID for formal preflight and dispatch. When the bound web
+condition is false (the legacy default), the project must also contain `read_url(*)`;
+the wrapper refuses a missing rule without changing owner configuration.
+A true condition (public v2 standing authorization or a legacy direct request) instead refuses
 that known whole-URL deny before inference and leaves it intact. The
 existing preflight `route_args` and receipt hash bind it to the rendered review;
 paired Pro/Flash preflights must select the same project. Keep the project
@@ -1307,16 +1309,21 @@ cleaner, permanent web logger or installed revision adoption.
 
 ## Owner-requested web
 
-[explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) is available for all participating legs only on a direct request for that round.
+[Review web](skills/triad-cross-family-review/references/review-web.md) is bound
+true for every new public v2 round under the owner's standing authorization.
+Omitted/false caller values cannot revoke it; invalid types and missing native web
+capability refuse. Retry retains the bound condition. Legacy keeps explicit
+per-round authorization; source candidates do not change installed revisions.
 Raw Claude `--web` adds native `WebSearch`/`WebFetch` permission and keeps the caller prompt.
-Release 0.2.556 includes this feature; authenticated web execution and shared
-revision adoption remain separate checks.
+Release 0.2.556 introduced per-request review web and raw Claude `--web`.
+The standing v2 binding is an unreleased source candidate; authenticated web
+execution and shared revision adoption remain separate checks.
 
 ## Authorized AGY web investigation
 
 For an explicitly requested standalone web investigation, run the authorized investigation with `antigravity_wrapper.py --web --sandbox
 read-only`. It accepts a caller prompt or prompt file and an optional custom
-schema. Review use follows [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) with matching bound preflight and metadata.
+schema. Review use follows [the bound review-web condition](skills/triad-cross-family-review/references/review-web.md): standing authorization for public v2, explicit per-round authorization for legacy, with matching preflight and metadata.
 The raw Gemini wrapper also accepts `--web`, substituting its native tool names
 in the same clause. This flag records web authorization and evidence procedure;
 native Gemini permissions and authentication remain authoritative. It neither

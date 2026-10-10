@@ -35,11 +35,11 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
   않습니다. 명시적 `--project`가 없는 AGY route는 `--sandbox read-only`
   호출 동안 일시적 global-settings transaction으로
-  원래 바이트를 복원합니다. 기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`를
+  원래 바이트를 복원합니다. Legacy 기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`를
   추가하고 headless 자동 승인 flag를 사용하지 않습니다. 동일한 formal deny
   lease는 동시 실행할 수 있고 raw/formal 목록은 격리됩니다. Raw 조사는 기존 웹
   기능과 버전별 headless 호환 처리를 유지하며 `AGY_NO_HEADLESS_AUTOAPPROVE=1`로
-  해당 처리를 끌 수 있습니다. REVIEW는 기본적으로 웹을 금지합니다. 사용자가 해당 리뷰에 직접 요청하면
+  해당 처리를 끌 수 있습니다. Public v2는 상시 웹 허용을 라운드에 고정합니다. Legacy REVIEW는 기본적으로 웹을 금지합니다. Legacy에서 사용자가 해당 리뷰에 직접 요청하면
   [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY의 MCP 호출도 차단합니다. Gemini 구버전 CLI
   경로는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
@@ -697,8 +697,8 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
   수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
   digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
   일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
-  기본 웹 비활성 Formal preflight와 dispatch는 여섯 review deny를 요구합니다.
-  웹 검증을 직접 요청한 review는 기존 다섯 raw deny를 유지하며, owner의
+  저장된 웹 허용 조건이 false인 경우(legacy 기본값) 여섯 review deny를 요구합니다.
+  true인 경우(v2 상시 허용 또는 legacy 직접 요청) 기존 다섯 raw deny를 유지하며, owner의
   `read_url(*)` 차단이 있으면 이를 제거하지 않고 실행 전에 거절합니다. 두 Formal
   모드 모두 `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
   headless 호환 처리를 유지합니다.
@@ -1021,9 +1021,10 @@ owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-low
 추가 owner deny rule은 보존하며, 이 모드에서는 프로젝트·전역 설정·전역 lease 파일을
 생성하거나 수정하지 않습니다.
 
-기본 웹 비활성 정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
-프로젝트 설정에 `read_url(*)`도 있어야 하며 누락되면 owner 설정을 바꾸지 않고
-거절합니다. 웹 검증을 직접 요청한 review는 이 전체 URL 차단이 남아 있으면 실행 전에
+정식 review의 preflight와 dispatch에는 같은 UUID를 사용합니다.
+저장된 웹 허용 조건이 false인 경우(legacy 기본값) 프로젝트 설정에 `read_url(*)`도
+있어야 하며 누락되면 owner 설정을 바꾸지 않고 거절합니다. true인 경우(v2 상시 허용
+또는 legacy 직접 요청) 이 전체 URL 차단이 남아 있으면 실행 전에
 거절하고 원래 규칙을 보존합니다. 기존 preflight의
 `route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
 프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
@@ -1215,10 +1216,14 @@ Codex는 native로 실행합니다. Google CLI의 인터페이스·실행 제한
 
 ## 직접 요청한 웹 검증
 
-사용자가 해당 리뷰에 직접 요청할 때만 모든 leg에 웹 검증을 허용합니다.
-신기술 여부로 자동 허용하지 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
+Public v2는 사용자의 상시 허용에 따라 새 라운드의 모든 leg에 웹을 허용합니다.
+요청값 생략·false는 이를 철회하지 않으며, 잘못된 타입이나 native 웹 도구 누락은
+준비 단계에서 거절합니다. 재시도는 저장된 조건을 사용합니다. Legacy는 리뷰별 직접
+요청 방식을 유지하며, 소스 후보 변경이 설치 revision을 바꾸지는 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
 Raw Claude `--web`은 `WebSearch`/`WebFetch`를 허용하고 호출자 프롬프트를 보존합니다.
-0.2.556 릴리스에 포함되며, 실계정 웹 실행 검증과 공유 revision 채택은 별도 단계입니다.
+0.2.556에는 리뷰별 직접 요청 방식과 raw Claude `--web`이 도입됐습니다.
+v2의 상시 허용 적용은 아직 출시되지 않은 소스 후보이며, 실계정 웹 실행 검증과
+공유 revision 채택은 별도 단계입니다.
 
 ## 승인된 AGY 웹 조사
 
