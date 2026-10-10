@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify one synthetic lifecycle; version/catalog probes only, never inference.
+"""Verify one synthetic lifecycle; version probes only, never inference.
 
 Run from a source checkout with the bootstrap prerequisites listed in README.
 The JSON report contains synthetic data and subprocess results, not a review verdict.
@@ -139,8 +139,19 @@ def verify_lifecycle():
             "--authentication-class", "personal-google", "--output", selector,
         ], neutral)
         preflight = base / "preflight.json"
+        # This synthetic verifier provisions only its owned fixture directory.
+        # Override lookup in this Python child, never HOME or a vendor setting;
+        # this tests wrapper lifecycle, not AGY's actual global discovery path.
+        profile_fixture_runner = (
+            "import runpy,sys; from pathlib import Path; "
+            "sys.path.insert(0,sys.argv.pop(1)); import _agy_agent; "
+            "directory=Path(sys.argv.pop(1)); _agy_agent.install(directory); "
+            "_agy_agent.agents_dir=lambda:directory; sys.argv=sys.argv[1:]; "
+            "runpy.run_path(sys.argv[0],run_name='__main__')"
+        )
         receipt = run("preflight", [
-            sys.executable, TOOLKIT / "bin/antigravity_wrapper.py",
+            sys.executable, "-c", profile_fixture_runner, TOOLKIT / "bin", base / "agents",
+            TOOLKIT / "bin/antigravity_wrapper.py",
             "--prompt-file", shared / "TASK.md", "--google-selector-receipt", selector,
             "--expected-review-id", review_id, "--cwd", shared, "--sandbox", "read-only",
             "--model", "gemini-3.1-pro-high", "--effort", "high", "--preflight-only",

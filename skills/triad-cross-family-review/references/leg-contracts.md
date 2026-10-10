@@ -41,7 +41,7 @@ TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
 python3 "$toolkit_root/bin/claude_wrapper.py" \
   --prompt-file "$review_prompt_file" \
   --cwd "$review_target_cwd" \
-  --model claude-opus-5-5 \
+  --model opus \
   --effort xhigh \
   --timeout 1200 \
   --pydantic verdict_schema:LegVerdict \
@@ -52,10 +52,15 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 ```
 
 The wrapper adds Claude's native `--permission-mode plan` and requires the exact
-`claude-opus-5-5`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
+`opus`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
 checks formal bindings and locally validates the terminal JSON. Read/search tools
 remain available inside the authorized boundary under existing user permissions.
 The result stays provisional until final integrity succeeds.
+
+`opus` is the CLI-resolved alias, not a fixed version or runtime identity
+attestation. Public v2 defaults to the same alias while retaining explicit
+model overrides and null selection; raw dispatch retains the caller's model.
+No agent selection is added by this default.
 
 Validate the Claude result with:
 
@@ -96,6 +101,14 @@ symlink refusal and final-integrity/cleanup checks remain unchanged. Reviewer
 no-follow instructions are prompt-controlled, not OS-level path confinement.
 
 ## Google family
+
+AGY legacy/v2 formal preflight requires the selected toolkit's installed
+`triad-codex-readonly-review` profile (`triad-codex-readonly-research` only for
+authorized `--web`). Follow the explicit [profile setup](../../../docs/installation.md#agy-review-profile-setup-pending-candidate)
+before preflight; do not install or replace it during a review. Its name, path
+and SHA-256 are bound by preflight; changed definitions require a fresh round.
+The wrapper passes `--agent` and retains model/effort arguments and containment.
+This is a primary AGY profile, not a Claude or Codex native subagent.
 
 For a prepared-directory round, bind the exact current-round task before selection:
 
@@ -178,9 +191,10 @@ For a prepared-directory round, pass the digest printed by `capture` to each
 render and bind `review_digest` to the renderer's route-bound
 `metadata.content_digest`. Every family uses that same value.
 
-For an AGY receipt, the wrapper proves `"$google_executable" --version` is at least 1.1.20 and parses
-only literal tab-separated rows from `"$google_executable" models`; the exact first-column slug must
-advertise `gemini-3.1-pro-high`. Run this provider-free wrapper preflight:
+For an AGY receipt, the wrapper proves `"$google_executable" --version` is at least
+1.1.20 and checks the required containment controls. Do not run a model-list or
+availability probe or reject a pin absent from a catalog. Run this provider-free
+wrapper preflight:
 
 ```text
 TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
@@ -198,7 +212,9 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
 
 The receipt must report `"provider_started": false`. A preflight failure stops
 the round before Claude, Google, or Codex starts. For a Gemini receipt, run the
-provider-free Gemini preflight instead:
+provider-free Gemini preflight instead. Gemini CLI must be at least 0.63.0;
+the floor is independent of model, and its prereleases are below the floor.
+Retain version, help, policy and receipt checks without a model-catalog gate:
 
 ```text
 TRIAD_DISPATCH_LOG_DIR="$review_log_dir" \
@@ -293,7 +309,7 @@ The wrappers own the mechanical formal contracts:
   `bin/policies/gemini-formal-readonly.toml`; it removes competing route
   selectors without reading them and records runtime identity and effective
   approval mode as `unexposed`. TRIAD never adds `--skip-trust`.
-- AGY validates the pinned version/model catalog, uses native Plan Mode and a
+- AGY validates the required CLI version, uses native Plan Mode and a
   review-bound JSON schema, validates the explicit project or applies and restores
   the transient deny transaction, and consumes terminal `structured_output`. A tool
   attempt in a named denied namespace is also blocked by its matching deny entry.

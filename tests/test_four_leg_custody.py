@@ -105,8 +105,9 @@ def test_dispatch_rejects_pair_or_selection_tamper(worktree, tamper):
 
 
 def test_flash_receipt_canonical_validation(tmp_path):
+    from conftest import profile_receipt
     pro = _google_selector_receipt("four-leg-r1")
-    record = {"executable": str(pro.executable), "google_selector_receipt_sha256": pro.receipt_sha256,
+    record = {**profile_receipt(), "executable": str(pro.executable), "google_selector_receipt_sha256": pro.receipt_sha256,
               "provider_started": False, "review_id": pro.review_id, "route": "agy",
               "agy_version": "1.1.20", "effort": "high", "model": FLASH,
               "route_args": ["--model", FLASH, "--effort", "high"]}

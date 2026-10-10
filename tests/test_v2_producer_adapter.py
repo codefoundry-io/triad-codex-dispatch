@@ -113,6 +113,32 @@ def test_binding_does_not_mutate_shared_schema_or_other_invocations():
     assert load_contracts()["leg-verdict.schema.json"] == original
 
 
+@pytest.mark.parametrize("family,route", [("google", "agy"), ("google", "gemini"), ("codex", None)])
+def test_bound_route_enum_intersection_preserves_canonical_and_sibling_schemas(family, route):
+    module = adapter()
+    original = load_contracts()["leg-verdict.schema.json"]
+    assert original["properties"]["route"]["enum"] == ["agy", "gemini", None]
+    bindings = [binding(verdict(family=f, route=r)) for f, r in
+                (("google", "agy"), ("google", "gemini"), ("codex", None))]
+    classes = [module.bound_verdict(expected) for expected in bindings]
+    selected = next(cls for cls, expected in zip(classes, bindings)
+                    if expected["family"] == family and expected["route"] == route)
+    expected_schema = json.loads(json.dumps(original))
+    for field, value in binding(verdict(family=family, route=route)).items():
+        expected_schema["properties"][field]["const"] = value
+    expected_schema["properties"]["route"]["enum"] = [route]
+    assert selected.model_json_schema() == expected_schema
+    # Mutating one emitted schema must not leak into later emissions or siblings.
+    emitted = selected.model_json_schema()
+    emitted["properties"]["route"]["enum"].append("mutated")
+    for cls, expected in zip(classes, bindings):
+        prop = cls.model_json_schema()["properties"]["route"]
+        assert prop["enum"] == [expected["route"]]
+        assert prop["const"] == expected["route"]
+    assert module.LegVerdict.model_json_schema() == original
+    assert load_contracts()["leg-verdict.schema.json"] == original
+
+
 def test_malformed_expected_binding_refuses_before_generation():
     module = adapter()
     for bad in ({}, {**binding(verdict()), "attempt": True},

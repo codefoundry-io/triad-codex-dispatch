@@ -42,9 +42,10 @@ terminal verdict. The prompt and native `--mode plan` define the static-review
 behavior. The explicit deny rules remain the action-namespace enforcement
 backstop. Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
-mutation detection is separate. The wrapper does not suppress installed tools
-before provider execution or reinterpret a completed review from the vendor's
-evolving telemetry schema.
+mutation detection is separate. Formal calls select the packaged primary AGY
+profile for tool discovery; its declarations are not a permission boundary.
+The wrapper does not reinterpret a completed review from the vendor's evolving
+telemetry schema.
 The route remains read-only by intent plus explicit deny, local result
 admission, and separate round-integrity checks.
 
@@ -62,21 +63,19 @@ The explicitly requested review-web option uses the five raw read-only denies;
 an existing project `read_url(*)` deny causes refusal before inference and remains
 unchanged. Other owner denies also remain authoritative.
 
-Before formal review, require authenticated output proving:
-
-```text
-agy --version  -> 1.1.20 or newer
-agy models     -> gemini-3.1-pro-high present
-```
-
-Catalog and argv evidence prove the requested route, not hidden backend
+Formal preflight verifies AGY >=1.1.20 and the required route controls. Pass the
+selected model unchanged; do not run a model-list probe or require catalog
+membership. A provider's model refusal terminates that attempt without fallback.
+Preflight and argv evidence prove the requested route, not hidden backend
 identity. Record runtime identity as `unexposed` when the provider does not
 expose it; an exposed conflict invalidates the leg.
 
 ## Formal Google leg
 
-Use `triad-cross-family-review` and its `references/leg-contracts.md`. The
-formal wrapper arguments are:
+Use `triad-cross-family-review` and its `references/leg-contracts.md`. Legacy/v2
+formal calls require the explicitly installed, byte-matching
+[AGY profiles](../../docs/installation.md#agy-review-profile-setup-pending-candidate);
+dispatch never installs or replaces them. The formal wrapper arguments are:
 
 ```text
   --sandbox read-only
@@ -110,10 +109,17 @@ candidate execution.
 
 A failure before provider submission stops the round with zero provider legs.
 A failure after submission invalidates the Google leg and round. Do not switch
-providers or authentication classes, drop `--sandbox read-only`, or substitute
-a provider-side command-specific allowlist or tool suppression.
+providers or authentication classes, drop `--sandbox read-only`, or replace
+containment checks with profile tool declarations.
 Keep formal permission checks enabled; if headless review is unavailable,
 report the blocker and diagnose the same route without enabling autoapproval.
 Clean the invalid round, correct the same route, and restart every required
 family under a fresh review ID. Return one validated result bound to one review
 ID and content digest.
+
+For terminal `unknown` or `extraction-error`, follow the
+[repair protocol](../../docs/references/repair-protocol.md) with the last emitted
+`run-log:` path as opaque data. Its fresh native child proposes; the owner applies
+and verifies against that stored record without another vendor call. A timeout
+is surfaced without phrase repair; `oauth-env` requires user authentication
+recovery. A repaired classifier does not make the failed review valid.

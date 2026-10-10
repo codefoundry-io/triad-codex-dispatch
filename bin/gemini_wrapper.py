@@ -40,6 +40,7 @@ from _common import (
 
 FORMAL_VERDICT_SPECS = _common.PACKAGED_VERDICT_SPECS
 FORMAL_GEMINI_TIMEOUT = 600
+# Compatibility subset; the shared builder owns the complete effective set.
 FORMAL_GEMINI_REMOVED_ENV = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -49,7 +50,6 @@ FORMAL_GEMINI_REMOVED_ENV = (
     "GOOGLE_VERTEX_BASE_URL",
     "CLOUD_SHELL",
     "GEMINI_CLI_USE_COMPUTE_ADC",
-    "GEMINI_MODEL",
 )
 FORMAL_READ_TOOLS = {
     "read_file",
@@ -163,6 +163,17 @@ def _supports_formal_help_contract(help_text: str) -> bool:
     return model is not None and approval_mode is not None and policy is not None
 
 
+def _probe_version(gemini_bin: str, cwd: str | None, timeout: int) -> str:
+    result = subprocess.run(
+        [gemini_bin, "--version"], cwd=cwd,
+        env=_common.scrubbed_child_env(cli="gemini", remove=FORMAL_GEMINI_REMOVED_ENV),
+        text=True, capture_output=True, check=False, timeout=min(timeout, 15),
+    )
+    if result.returncode != 0:
+        raise ValueError("Gemini --version probe failed")
+    return review_round.validate_formal_gemini_version(result.stdout.strip())
+
+
 def _run_preflight(
     gemini_bin: str,
     cwd: str | None,
@@ -175,27 +186,11 @@ def _run_preflight(
     policy = _formal_policy_path().with_name("gemini-formal-web.toml") if web else _formal_policy_path()
     try:
         policy_sha256 = _validate_formal_policy(policy, **({"web": True} if web else {}))
-        version_result = subprocess.run(
-            [gemini_bin, "--version"],
-            cwd=cwd,
-            env=_common.scrubbed_child_env(remove=FORMAL_GEMINI_REMOVED_ENV),
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=min(timeout, 15),
-        )
-        if version_result.returncode != 0:
-            raise ValueError("Gemini --version probe failed")
-        gemini_version = review_round.validate_formal_gemini_version(
-            version_result.stdout.strip()
-        )
-        if v2_fields is not None:
-            from google_preflight_v2 import gemini_model_support
-            gemini_model_support(v2_fields["model"], gemini_version)
+        gemini_version = _probe_version(gemini_bin, cwd, timeout)
         completed = subprocess.run(
             [gemini_bin, "--help"],
             cwd=cwd,
-            env=_common.scrubbed_child_env(remove=FORMAL_GEMINI_REMOVED_ENV),
+            env=_common.scrubbed_child_env(cli="gemini", remove=FORMAL_GEMINI_REMOVED_ENV),
             text=True,
             capture_output=True,
             check=False,
@@ -474,6 +469,12 @@ def main() -> int:
         return _run_preflight(gemini_bin, args.cwd, args.timeout, selector_receipt,
                               **({"v2_fields": v2_fields} if v2_verdict else {}),
                               **({"web": True} if args.web else {}))
+    if not formal_verdict:
+        try:
+            _probe_version(gemini_bin, args.cwd, args.timeout)
+        except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+            log(f"Gemini version check failed: {error}")
+            return EXIT_ARG_ERROR
 
     def build_cmd(effective_prompt: str) -> list[str]:
         cmd = [

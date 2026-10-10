@@ -467,8 +467,8 @@ def validate_formal_gemini_version(version: str) -> str:
     ):
         raise RoundIntegrityError("Gemini prerelease version has a leading zero")
     core = tuple(int(match[index]) for index in (1, 2, 3))
-    if core < (0, 34, 0) or (core == (0, 34, 0) and prerelease):
-        raise RoundIntegrityError("Gemini formal review requires CLI >=0.34.0")
+    if core < (0, 63, 0) or (core == (0, 63, 0) and prerelease):
+        raise RoundIntegrityError("Gemini requires CLI >=0.63.0")
     return version
 
 
@@ -493,7 +493,7 @@ def validate_google_preflight_receipt(
         "route",
     }
     route_keys = {
-        "agy": {"agy_version", "effort", "model", "route_args"},
+        "agy": {"agy_version", "effort", "model", "route_args", "agent", "agent_path", "agent_sha256"},
         "gemini": {
             "effective_approval_mode",
             "gemini_version",
@@ -543,6 +543,11 @@ def validate_google_preflight_receipt(
     ):
         raise RoundIntegrityError("Google preflight receipt selector mismatch")
     if route == "agy":
+        import _agy_agent
+        try:
+            _agy_agent.validate_binding(record, web, source_bin=selector_receipt.wrapper.parent)
+        except (ValueError, OSError) as exc:
+            raise RoundIntegrityError(str(exc)) from exc
         if (
             not all(
                 isinstance(record[key], str)

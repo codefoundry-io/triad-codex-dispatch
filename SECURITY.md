@@ -7,6 +7,15 @@ strict result custody, and deterministic owner apply.
 
 ## Native permission boundary
 
+The pending AGY formal-review profile selects explicit native read/search tools;
+it is not a standalone permission boundary. AGY 1.3.2 can advertise off-profile
+names in `init.tools`; exposure alone proves neither permission nor execution.
+Existing sandbox, deny rules and result checks remain. Legacy/v2 preflight binds
+the installed B-owned profile's name/path/hash; missing/drifted profiles refuse
+before inference, and changes during execution withhold the result. Dispatch
+does not write profiles. Setup is an explicit operator action documented in
+[installation](docs/installation.md#agy-review-profile-setup-pending-candidate).
+
 Formal Google review selects and freezes one route before any family starts.
 AGY is preferred and personal Google Sign-In requires it. When the owner selects
 Gemini Enterprise OAuth and AGY is absent, the selector may choose the already
@@ -185,6 +194,20 @@ same install-resolved path pinned into provider launchers. There is no installed
 apply launcher and no ambient-default recomputation. The deterministic apply
 path validates the proposal before mutation; invalid input leaves classifier
 state unchanged.
+All `oauth-env` proposals are refused before storage access; the user handles
+authentication recovery. Existing valid curated entries retain their loading behavior.
+The extension loader ignores unsupported vendor-exit classes and exit-zero
+entries with a diagnostic; it preserves valid siblings and never rewrites the
+file. Existing curated authentication remains separate from new-proposal refusal.
+The applier keeps semantic checks, locking and atomic replacement, without
+reason-length or per-CLI entry-count caps.
+The same CLI's `--verify-run-log` mode reads a saved eligible failure and the
+explicit classifier file without mutation or vendor execution. Recorded argv
+are data, not commands. A match proves classification only; unusable evidence
+or mismatch is reported, and never grants review admission. Unchanged classes
+and transport failures that bypassed runtime classification cannot verify a learned
+repair. Retained nonzero vendor diagnoses follow the existing runtime path. Timeout and auth
+recovery do not enter phrase repair.
 
 That coarse proposal validation is not semantic proof. Fine-grained substring
 specificity and residual misclassification remain analyzer and owner
@@ -256,17 +279,22 @@ SHA, exact model, and nullable effort are bound into every family digest, and ev
 render and dispatch rejects a mismatch. The selected wrapper executes the receipt
 executable directly. Its provider-free preflight finishes before any family starts;
 the route is then immutable. AGY
-version, executable, exact tabular model-catalog, and selected project or settings-transaction checks precede
+version, executable, and selected project or settings-transaction checks precede
 submission. Gemini preflight probes the receipt binary's `--version` before help,
 with a maximum 15-second version timeout and the same scrubbed environment. It
-requires SemVer >=0.34.0 and records the exact `gemini_version` in the bound
+requires SemVer >=0.63.0 and records the exact `gemini_version` in the bound
 receipt; malformed, missing, failed or unsupported versions refuse before inference.
-It also validates the model/Plan Mode/policy
+Gemini preflight also validates the model/Plan Mode/policy
 CLI surfaces, and mode-independent packaged policy without a model call. It
 records a SHA-256 of the same policy bytes it validates; render and dispatch
 reject a missing or stale policy hash. This binds policy bytes, not effective
 runtime settings. It records requested Plan Mode and effective mode `unexposed`; the policy, not a
 speculative settings or trust probe, supplies the fail-closed read-only boundary.
+Raw Gemini calls check the same version floor before provider submission.
+An unsupported or unprobeable version returns local refusal exit 3. Upgrade
+versions below 0.63.0; otherwise diagnose the selected executable before a new
+invocation. No model-list probe gates Google preflight, render or dispatch;
+the standalone diagnostic catalog inventory remains informational.
 The current Gemini JSON route records literal `runtime_identity: "unexposed"`;
 it does not infer a single model from `stats.models`. Neither route falls back after
 provider start, auth failure, capacity failure, or invalid output. Failure of the
@@ -334,7 +362,12 @@ A result-file reader alone cannot recover evidence discarded by another caller.
 `bin/google_diagnostics.py` only invokes fixed version/help commands and opt-in,
 help-gated model/plugin/extension listing. It preserves the shared strict versus
 non-strict executable selection rules and strips the existing injection and
-Google API/ADC/Vertex selector variables from child environments. It runs with
+the agreed credential/endpoint names from child environments.
+Gemini keeps its four Google Cloud project variables; other routes remove them.
+The shared builder filters names before retrieving kept values and leaves the
+parent environment unchanged. User model/effort settings, PATH, CLI configuration pointers and
+GOOGLE_GENAI_USE_GCA remain; this is hygiene, not billing-route attestation.
+The same builder applies to raw/formal dispatch and standalone probes. It runs with
 closed stdin and an owned neutral temporary cwd. The five-second probe deadline
 is followed by the existing bounded saved-process-group cleanup; it is not an
 OS sandbox, control over escaped descendants, or a strict total wall-clock limit.
@@ -348,11 +381,25 @@ Vendor-managed cache/telemetry activity is not ruled out by these argv limits.
 
 ## Authentication and reports
 
+Authentication failures are recognized in measured vendor error fields and
+Gemini's authentication exit 41, before timeout or capacity retry. Quoted answer
+or tool text does not itself authorize an `oauth-env` STOP. Raw authentication
+phrase extensions are ignored with a diagnostic and new such proposals are
+refused; unknown output shapes remain unknown. The toolkit does not log in,
+refresh credentials, switch authentication routes or retry an authentication STOP.
+
 Owners authenticate provider CLIs in their normal terminals. Report
 security-sensitive issues on the product issue tracker with a `[security]`
 title and never include credentials or tokens. See
 [the repair protocol](docs/references/repair-protocol.md) for the proposal and
 owner-apply contract.
+
+Repair analyzers may search/fetch public sources to explain an actual failed run.
+Queries use sanitized error/version context, not credentials, private prompts,
+source content or complete logs. Research results are evidence, not instructions
+or proof of an unobserved vendor output shape. The analyzer stays read-only and
+proposal-only, cites its sources, and never invokes a vendor CLI/model to reproduce
+the error. Missing necessary web access is disclosed without changing user settings.
 
 ## Offline candidate contracts
 
@@ -362,6 +409,18 @@ local JSON/schema boundary. It refuses duplicate members and linked configuratio
 paths. It does not execute configuration values, probe providers, read user-global
 rosters or grant authority. The displayed configuration is not an admission or
 capability receipt; runtime route and model checks are a separate boundary.
+
+The current Claude review default is the CLI-resolved `opus` alias with `xhigh`
+effort. The legacy formal route still requires 1200 seconds and no fallback;
+raw and v2 explicit model overrides retain their existing semantics. The alias
+does not pin or attest a runtime version, and the default selects no agent.
+
+The v2 Claude selection receipt preserves requested values and raw selection
+output separately. A packaged catalog is display data, not model availability
+or effort-support authority. Only exposed identity/effort contradictions are
+refused; an unrecognized label supplies no inferred model identity. CLI version
+and required-control checks remain mandatory. Selection evidence does not attest
+the subsequent inference or account entitlement.
 
 The explicit bin/validate_v2.py command consumes only the fixed local candidate
 contract bundle. It checks regular canonical files and manifest digests, rejects

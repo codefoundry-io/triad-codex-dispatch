@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import profile_receipt
 from pydantic import BaseModel, ConfigDict
 
 
@@ -127,6 +128,7 @@ def _google_selector_fixture(
     if route == "agy":
         preflight_record = {
             **preflight_common,
+            **profile_receipt(),
             "agy_version": "1.1.20",
             "effort": "high",
             "model": "gemini-3.1-pro-high",
@@ -143,7 +145,7 @@ def _google_selector_fixture(
             "effective_approval_mode": "unexposed",
             "model": "auto",
             "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
-            "gemini_version": "0.60.0",
+            "gemini_version": "0.63.0",
             "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "read_only_enforcement": "packaged-mode-independent-policy",
             "requested_approval_mode": "plan",
@@ -187,6 +189,7 @@ def _agy_preflight_fixture(
     review_id: str = "review-r1",
 ) -> Path:
     receipt = {
+        **profile_receipt(),
         "agy_version": "1.1.20",
         "effort": "high",
         "executable": str(executable),
@@ -944,7 +947,7 @@ def test_terminal_diagnostic_is_one_bounded_nonempty_line() -> None:
     )
 
 
-@pytest.mark.parametrize("error", ["rate limit exceeded", "invalid authentication credentials"])
+@pytest.mark.parametrize("error", ["rate limit exceeded"])
 def test_terminal_diagnostic_does_not_feed_nonzero_exit_classifier(error: str) -> None:
     payload = {"status": "ERROR"}
     baseline = wrapper._interpret_run(_run_result(_stream(payload), rc=1), None)
@@ -1258,13 +1261,11 @@ def test_preflight_proves_version_and_route_without_provider_submission(
 ) -> None:
     pruned: list[str] = []
     guarded: list[list[str]] = []
-    catalog_probes: list[str] = []
     selector_receipt, _prompt, selected = _google_selector_fixture(tmp_path)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(
-        wrapper,
-        "_probe_agy_models",
-        lambda binary: catalog_probes.append(binary) or {model},
+        wrapper.subprocess, "run",
+        lambda *a, **k: pytest.fail("unexpected model catalog subprocess"),
     )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
@@ -1304,6 +1305,7 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert wrapper.main() == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt == {
+        **profile_receipt(),
         "agy_version": "1.1.20",
         "effort": "high",
         "executable": str(selected),
@@ -1317,61 +1319,22 @@ def test_preflight_proves_version_and_route_without_provider_submission(
         "route_args": ["--model", model, "--effort", "high"],
     }
     assert pruned == ["antigravity"]
-    assert catalog_probes == [str(selected)]
     assert guarded == [wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]]
 
 
-def test_probe_agy_models_parses_the_advertised_catalog_and_scrubs_auth_env(
-    monkeypatch,
-) -> None:
-    observed: dict[str, object] = {}
-
-    def fake_run(command, **kwargs):
-        observed["command"] = command
-        observed["kwargs"] = kwargs
-        return wrapper.subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=(
-                "gemini-3.1-pro-high\tGemini 3.1 Pro (High)\n"
-                "gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n"
-            ),
-            stderr="Fetching available models...\n",
-        )
-
-    monkeypatch.setattr(wrapper.subprocess, "run", fake_run)
-
-    assert wrapper._probe_agy_models("/selected/agy") == {
-        "gemini-3.1-pro-high",
-        "gemini-3.1-pro-low",
-    }
-    assert observed["command"] == ["/selected/agy", "models"]
-    kwargs = observed["kwargs"]
-    assert kwargs["capture_output"] is True
-    assert kwargs["text"] is True
-    assert kwargs["check"] is False
-    assert kwargs["timeout"] == 30
-    assert "GOOGLE_API_KEY" not in kwargs["env"]
-
-
-def test_preflight_rejects_when_required_agy_model_is_not_advertised(
+def test_preflight_accepts_without_any_agy_catalog(
     monkeypatch, capsys, tmp_path
 ) -> None:
     selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
-    catalog_probes: list[str] = []
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
     monkeypatch.setattr(
-        wrapper,
-        "_probe_agy_models",
-        lambda binary: catalog_probes.append(binary) or {"gemini-3.1-pro-low"},
-        raising=False,
+        wrapper.subprocess, "run",
+        lambda *a, **k: pytest.fail("unexpected catalog subprocess"),
     )
     monkeypatch.setattr(
         wrapper._agy_settings,
         "agy_settings_guard",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("settings guard entered")
-        ),
+        lambda *_a, **_k: contextlib.nullcontext(),
     )
     monkeypatch.setattr(
         wrapper._common,
@@ -1399,11 +1362,10 @@ def test_preflight_rejects_when_required_agy_model_is_not_advertised(
         ],
     )
 
-    assert wrapper.main() == _common.EXIT_TERMINAL
-    assert catalog_probes == [str(_selected)]
-    assert "does not advertise required model gemini-3.1-pro-high" in (
-        capsys.readouterr().err
-    )
+    assert wrapper.main() == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["model"] == "gemini-3.1-pro-high"
+    assert receipt["provider_started"] is False
 
 
 def test_preflight_rejects_gemini_selector_receipt_before_binary_probe(
@@ -1752,9 +1714,6 @@ def test_preflight_settings_failure_stops_before_provider(
 ) -> None:
     selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
-    monkeypatch.setattr(
-        wrapper, "_probe_agy_models", lambda _bin: {"gemini-3.1-pro-high"}
-    )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
 
     @contextlib.contextmanager

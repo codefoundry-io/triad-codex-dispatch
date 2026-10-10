@@ -12,7 +12,6 @@ import tempfile
 
 import _common
 import review_round
-from antigravity_wrapper import FORMAL_AGY_ENV_REMOVE
 
 PROBE_TIMEOUT = 5
 
@@ -93,7 +92,7 @@ def collect_snapshot(cli: str, inventory: bool = False) -> dict:
         return {**snapshot, "status": "incomplete", "error": "selection_failed"}
     if binary is None:
         return {**snapshot, "status": "incomplete", "error": "binary_missing"}
-    env = _common.scrubbed_child_env(remove=FORMAL_AGY_ENV_REMOVE)
+    env = _common.scrubbed_child_env(cli=cli)
     try:
         if not os.path.isabs(binary):
             binary = os.path.join(os.getcwd(), binary)

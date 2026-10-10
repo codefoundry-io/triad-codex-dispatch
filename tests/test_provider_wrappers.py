@@ -110,7 +110,7 @@ def _google_selector_fixture(
                 (ROOT / "bin" / "policies" / "gemini-formal-readonly.toml").resolve()
             ),
             "read_only_enforcement": "packaged-mode-independent-policy",
-            "gemini_version": "0.60.0",
+            "gemini_version": "0.63.0",
             "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "requested_approval_mode": "plan",
         }
@@ -155,7 +155,7 @@ def _google_preflight_fixture(
         ),
         "provider_started": False,
         "read_only_enforcement": "packaged-mode-independent-policy",
-        "gemini_version": "0.60.0",
+        "gemini_version": "0.63.0",
         "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
         "requested_approval_mode": "plan",
         "review_id": review_id,
@@ -1023,7 +1023,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
             "--prompt",
             "review",
             "--model",
-            "claude-opus-5-5",
+            "opus",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1044,7 +1044,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
     assert len(calls) == 1
     for option in ("--model", "--effort", "--permission-mode", "--json-schema"):
         assert calls[0].count(option) == 1
-    assert calls[0][calls[0].index("--model") + 1] == "claude-opus-5-5"
+    assert calls[0][calls[0].index("--model") + 1] == "opus"
     assert calls[0][calls[0].index("--effort") + 1] == "xhigh"
     assert calls[0][calls[0].index("--permission-mode") + 1] == "plan"
     assert "--fallback-model" not in calls[0]
@@ -1096,7 +1096,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
             "--prompt",
             "review",
             "--model",
-            "claude-opus-5-5",
+            "opus",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1121,16 +1121,16 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
     (
         ("--effort", "xhigh", "--timeout", "1200"),
         ("--model", "sonnet", "--effort", "xhigh", "--timeout", "1200"),
-        ("--model", "opus", "--effort", "xhigh", "--timeout", "1200"),
+        ("--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1200"),
         ("--model", "claude-opus-5", "--effort", "xhigh", "--timeout", "1200"),
-        ("--model", "claude-opus-5-5", "--timeout", "1200"),
-        ("--model", "claude-opus-5-5", "--effort", "high", "--timeout", "1200"),
-        ("--model", "claude-opus-5-5", "--effort", "xhigh"),
-        ("--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1199"),
-        ("--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1201"),
+        ("--model", "opus", "--timeout", "1200"),
+        ("--model", "opus", "--effort", "high", "--timeout", "1200"),
+        ("--model", "opus", "--effort", "xhigh"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "1199"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "1201"),
         (
             "--model",
-            "claude-opus-5-5",
+            "opus",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1140,7 +1140,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
         ),
         (
             "--model",
-            "claude-opus-5-5",
+            "opus",
             "--effort",
             "xhigh",
             "--timeout",
@@ -1152,7 +1152,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
     ids=(
         "missing-model",
         "wrong-model",
-        "moving-opus-alias",
+        "superseded-fixed-id",
         "older-opus-pin",
         "missing-effort",
         "wrong-effort",
@@ -1163,7 +1163,7 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
         "empty-fallback-model",
     ),
 )
-def test_claude_formal_leg_rejects_unpinned_route_before_provider_resolution(
+def test_claude_formal_leg_rejects_nondefault_route_before_provider_resolution(
     monkeypatch, capsys, route_args
 ) -> None:
     monkeypatch.setattr(claude_wrapper, "load_pydantic_class", lambda _spec: LegVerdict)
@@ -1193,7 +1193,7 @@ def test_claude_formal_leg_rejects_unpinned_route_before_provider_resolution(
 
     assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
     assert (
-        "formal Claude route requires --model claude-opus-5-5 --effort xhigh --timeout 1200 "
+        "formal Claude route requires --model opus --effort xhigh --timeout 1200 "
         "and forbids --fallback-model" in capsys.readouterr().err
     )
 
@@ -1375,6 +1375,7 @@ def test_gemini_route_keeps_native_json_without_review_protocol(
     monkeypatch, capsys
 ) -> None:
     captured: dict[str, object] = {}
+    monkeypatch.setattr(gemini_wrapper, "_probe_version", lambda *a: "0.63.0")
     monkeypatch.setattr(
         gemini_wrapper, "require_binary", lambda _name: "/opt/bin/gemini"
     )
@@ -1488,7 +1489,6 @@ def test_gemini_formal_leg_uses_plan_policy_scrubbed_oauth_and_bound_result(
         "GOOGLE_VERTEX_BASE_URL",
         "CLOUD_SHELL",
         "GEMINI_CLI_USE_COMPUTE_ADC",
-        "GEMINI_MODEL",
     }
 
 
@@ -1786,7 +1786,6 @@ def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(
         "GOOGLE_VERTEX_BASE_URL",
         "CLOUD_SHELL",
         "GEMINI_CLI_USE_COMPUTE_ADC",
-        "GEMINI_MODEL",
     )
     for name in competing_auth:
         monkeypatch.setenv(name, "must-not-reach-child")
@@ -1802,7 +1801,7 @@ def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout="0.60.0\n" if cmd[-1] == "--version" else _formal_gemini_help(),
+            stdout="0.63.0\n" if cmd[-1] == "--version" else _formal_gemini_help(),
             stderr="",
         )
 
@@ -1842,7 +1841,7 @@ def test_gemini_formal_preflight_is_provider_free_and_scrubs_competing_auth(
     assert Path(receipt["policy"]) == (
         ROOT / "bin" / "policies" / "gemini-formal-readonly.toml"
     )
-    assert receipt["gemini_version"] == "0.60.0"
+    assert receipt["gemini_version"] == "0.63.0"
     assert [cmd for cmd, _ in calls] == [[str(selected), "--version"], [str(selected), "--help"]]
     for _, kwargs in calls:
         for name in competing_auth:
@@ -1858,7 +1857,7 @@ def test_gemini_formal_preflight_rejects_unbound_help_tokens(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout="0.60.0\n" if cmd[-1] == "--version" else (
+            stdout="0.63.0\n" if cmd[-1] == "--version" else (
                 "--approval-mode supports only default\n"
                 "plan is mentioned in unrelated prose\n"
                 "--policy was removed and accepts no path\n"
@@ -1897,7 +1896,7 @@ def test_gemini_formal_preflight_requires_explicit_auto_model_surface(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout="0.60.0\n" if cmd[-1] == "--version" else (
+            stdout="0.63.0\n" if cmd[-1] == "--version" else (
                 "  --approval-mode  Set the approval mode  [string] "
                 '[choices: "default", "auto_edit", "yolo", "plan"]\n'
                 "  --policy  Additional policy files or directories to load  [array]\n"
@@ -1943,7 +1942,7 @@ def test_gemini_formal_preflight_honors_required_receipt_pin_over_path(
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout="0.60.0\n" if cmd[-1] == "--version" else _formal_gemini_help(),
+            stdout="0.63.0\n" if cmd[-1] == "--version" else _formal_gemini_help(),
             stderr="",
         )
 
@@ -2348,6 +2347,7 @@ def test_gemini_custom_schema_keeps_existing_schema_repair_call(
     monkeypatch, capsys
 ) -> None:
     calls: list[list[str]] = []
+    monkeypatch.setattr(gemini_wrapper, "_probe_version", lambda *a: "0.63.0")
     monkeypatch.setattr(
         gemini_wrapper, "require_binary", lambda _name: "/opt/bin/gemini"
     )

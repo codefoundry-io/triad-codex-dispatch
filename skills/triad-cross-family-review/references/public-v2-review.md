@@ -97,7 +97,7 @@ packaged authentication-aware selection chain. No provider failure switches it.
 
 Claude preflight checks the installed session-only model interface and documented
 effort compatibility. Null Claude selection inspects `/model`, never resets it.
-Google uses its selected wrapper's version/catalog/policy preflight and its own
+Google uses its selected wrapper's version/containment preflight and its own
 per-CLI model block. Gemini has no effort flag; its supported Pro default is
 separately documented. These checks do not prove account entitlement, effective
 runtime model/effort or effective merged policy. Keep unexposed fields unexposed.

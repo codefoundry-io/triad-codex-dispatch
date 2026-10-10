@@ -42,9 +42,8 @@ def route(request, tmp_path, monkeypatch, capsys):
 
     monkeypatch.setattr(agy._agy_settings, "agy_settings_guard", guard)
     monkeypatch.setattr(agy, "_probe_agy_version", lambda _: (1, 2, 7))
-    monkeypatch.setattr(agy, "_probe_agy_models", lambda _: {model})
 
-    state = {"output": {}, "vendor_exit": 0, "gemini_version": "0.60.0"}
+    state = {"output": {}, "vendor_exit": 0, "gemini_version": "0.63.0"}
 
     def probe(cmd, **kwargs):
         assert cmd in ([str(executable), "--version"], [str(executable), "--help"])
@@ -134,12 +133,31 @@ def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settin
     assert record["transport"]["cli_version"] == ("1.2.7" if route["name"] == "agy" else None)
 
 
+@pytest.mark.parametrize("model", ["gemini-3.1-pro-high", "gemini-3.8-flash-high"])
+def test_agy_pro_and_flash_emit_singleton_bound_route_schema(route, model, monkeypatch):
+    if route["name"] != "agy":
+        pytest.skip("AGY JSON schema transport contract")
+    route["model"] = model
+    route["options"][route["options"].index("--model") + 1] = model
+    options, _ = ready(route)
+    rc, output, error = route["invoke"](base=options)
+    assert rc == 0, error
+    assert json.loads(output)["route"] == "agy"
+    assert len(route["calls"]) == 1
+    cmd = route["calls"][0][0]
+    assert cmd[cmd.index("--model") + 1] == model
+    emitted = json.loads(cmd[cmd.index("--json-schema") + 1])
+    assert emitted["properties"]["route"] == {
+        "enum": ["agy"], "const": "agy",
+    }
+
+
 def test_gemini_38_exact_model_reaches_actual_wrapper_dispatch(route):
     if route["name"] != "gemini":
         pytest.skip("Gemini CLI model contract")
     route["model"] = "gemini-3.8-flash"
     route["options"][route["options"].index("--model") + 1] = "gemini-3.8-flash"
-    route["state"]["gemini_version"] = "0.61.0"
+    route["state"]["gemini_version"] = "0.63.0"
     options, _ = ready(route)
     rc, output, error = route["invoke"](base=options)
     assert rc == 0, error
@@ -187,17 +205,40 @@ def test_v2_prompt_metadata_is_checked_before_inference(route):
     assert rc == _common.EXIT_ARG_ERROR and route["calls"] == []
 
 
+@pytest.mark.parametrize("route", ["gemini"], indirect=True)
+@pytest.mark.parametrize("version", ["0.60.0", "0.62.9", "0.63.0-preview.1"])
+def test_v2_consumption_refuses_stale_gemini_version(route, version):
+    from types import SimpleNamespace
+    import google_preflight_v2
+    import review_round
+
+    _, file = ready(route)
+    selector = review_round.load_google_selector_receipt(
+        route["selector"], expected_review_id="round-2", expected_route="gemini",
+        expected_wrapper=Path(gemini.__file__))
+    args = SimpleNamespace(expected_review_id="round-2", expected_leg_name="google-second",
+        expected_attempt=2, expected_route="gemini", timeout=610, model=route["model"])
+    original = google_preflight_v2.load_preflight(file, selector, args, str(route["home"]))
+    assert original["gemini_version"] == "0.63.0"
+    file.write_bytes(review_round._canonical_json_bytes({**original, "gemini_version": version}))
+    with pytest.raises(ValueError, match="CLI >=0.63.0"):
+        google_preflight_v2.load_preflight(file, selector, args, str(route["home"]))
+    assert route["calls"] == []
+
+
 def test_review_web_is_not_implied_by_v2_preflight(route):
     rc, output, _ = route["invoke"](["--preflight-only"])
     assert rc == 0 and route["calls"] == []
     assert json.loads(output).get("review_web_authorized", False) is False
 
 
-def test_v2_unknown_requested_model_refuses_before_inference(route):
+def test_v2_unknown_requested_model_preflight_preserves_pin(route):
     options = list(route["options"])
     options[options.index("--model") + 1] = "not-an-installed-model"
-    rc, _, _ = route["invoke"](["--preflight-only"], base=options)
-    assert rc != 0 and route["calls"] == []
+    rc, output, error = route["invoke"](["--preflight-only"], base=options)
+    assert rc == 0, error
+    assert json.loads(output)["model"] == "not-an-installed-model"
+    assert route["calls"] == []
 
 
 @pytest.mark.parametrize("phase", ["formal-plan", "pre-merge", "implementation-review"])

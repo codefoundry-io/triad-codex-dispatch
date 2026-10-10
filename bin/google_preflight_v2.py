@@ -9,19 +9,8 @@ from jsonschema import Draft202012Validator
 from referencing import Registry
 
 import review_round
+import _agy_agent
 from validate_v2 import _json, load_contracts, validate_review_kind
-
-
-def gemini_model_support(model: str, version: str) -> None:
-    """Check versioned CLI request support, never account or runtime identity."""
-    version = review_round.validate_formal_gemini_version(version)
-    data = _json(review_round._canonical_regular_file_bytes(
-        Path(__file__).resolve().parent / "data/gemini-models.json", "Gemini model support"))
-    support = data.get("model_overrides", {}).get(model, data)
-    minimum = tuple(map(int, support["minimum_version"].split(".")))
-    core = tuple(map(int, version.split("-", 1)[0].split("+", 1)[0].split(".")))
-    if core < minimum or (core == minimum and "-" in version) or model not in data["models"]:
-        raise ValueError("requested Gemini model lacks versioned CLI support evidence")
 
 
 def fields(args, cwd: str | None, selector) -> dict:
@@ -65,7 +54,7 @@ def load_preflight(path: Path, selector, args, cwd: str | None) -> dict:
         "google_selector_receipt_sha256": selector.receipt_sha256,
         "provider_started": False,
     }
-    extra = ({"agy_version"} if selector.route == "agy" else {
+    extra = ({"agy_version"} | _agy_agent.PROFILE_KEYS if selector.route == "agy" else {
         "gemini_version", "effective_approval_mode", "requested_approval_mode",
         "policy", "policy_sha256", "read_only_enforcement",
     })
@@ -75,12 +64,13 @@ def load_preflight(path: Path, selector, args, cwd: str | None) -> dict:
                    for key, value in expected.items())):
         raise ValueError("v2 Google preflight schema or invocation binding mismatch")
     if selector.route == "agy":
+        _agy_agent.validate_binding(record, getattr(args, "web", False), source_bin=selector.wrapper.parent)
         version = record["agy_version"]
         if (not isinstance(version, str) or re.fullmatch(r"\d+\.\d+\.\d+", version) is None
                 or tuple(map(int, version.split("."))) < (1, 1, 20)):
             raise ValueError("v2 AGY preflight version is invalid")
     else:
-        gemini_model_support(args.model, record["gemini_version"])
+        review_round.validate_formal_gemini_version(record["gemini_version"])
         policy = selector.wrapper.parent / "policies" / ("gemini-formal-web.toml" if getattr(args, "web", False) else "gemini-formal-readonly.toml")
         expected_policy = {
             "effective_approval_mode": "unexposed", "requested_approval_mode": "plan",

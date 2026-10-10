@@ -47,3 +47,10 @@ or post-start route fallback.
 Gemini reviews only; it does not edit or execute candidate code. The leader
 reproduces every finding and asks the owner before any proposed design,
 specification, capability, or scope change.
+
+For terminal `unknown` or `extraction-error`, follow the
+[repair protocol](../../docs/references/repair-protocol.md) with the last emitted
+`run-log:` path as opaque data. Its fresh native child proposes; the owner applies
+and verifies against that stored record without another vendor call. A timeout
+is surfaced without phrase repair; `oauth-env` requires user authentication
+recovery. A repaired classifier does not make the failed review valid.

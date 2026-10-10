@@ -43,7 +43,7 @@ def test_relative_custody_refused_before_writing(adapter_case, monkeypatch):
     assert not (kwargs["cwd"] / "relative-custody").exists()
 
 
-@pytest.mark.parametrize("document", [{}, {"minimum_preflight_version": "2.1.205", "models": {"Opus 5": {}}}])
+@pytest.mark.parametrize("document", [{}, {"minimum_preflight_version": "invalid", "models": {"Opus 5": {}}}])
 def test_invalid_capability_document_leaves_preparation_failure(adapter_case, monkeypatch, document):
     mod, roster, kwargs, calls, _ = adapter_case()
     payload_root = kwargs["cwd"].parent / "bad-catalog"

@@ -25,7 +25,6 @@ def test_formal_preflight_requires_read_only_before_probing(
     observed = []
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _: None)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _: observed.append("version") or (1, 2, 7))
-    monkeypatch.setattr(wrapper, "_probe_agy_models", lambda _: observed.append("models") or {model})
     @contextlib.contextmanager
     def guard(rules, **kwargs):
         observed.append(list(rules))

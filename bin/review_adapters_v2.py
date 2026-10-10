@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import _common
 import google_preflight_v2
 import review_round
+from claude_wrapper import EFFORT_CHOICES as CLAUDE_EFFORT_CHOICES
 from review_roster import DEFAULTS, _validate
 from validate_v2 import _json, load_contracts
 
@@ -33,11 +34,11 @@ def resolve_binary(name: str) -> str | None:
     return str(path)
 
 
-def probe(argv: list[str], *, cwd: Path, env: dict | None = None) -> str:
+def probe(argv: list[str], *, cwd: Path, env: dict | None = None, cli: str = "preflight") -> str:
     command = argv if not env else ["/usr/bin/env", *(f"{key}={value}" for key, value in env.items()), *argv]
     # Reuse signal, process-group, reader and terminal collection. No second
     # subprocess engine or global environment mutation for adapter probes.
-    result = _common._run_once("preflight", command, str(cwd), 60, classify_and_log=False)
+    result = _common._run_once(cli, command, str(cwd), 60, classify_and_log=False)
     if result.exit_code != 0 or result.vendor_exit_code != 0:
         raise ValueError("capability probe failed: " + (result.stderr or result.stdout)[-4000:])
     return result.stdout
@@ -75,23 +76,48 @@ def _native(block: dict, capabilities: dict, *, web: bool = False) -> dict:
             **({"native_web_available": True} if web else {})}
 
 
+def _claude_selection_conflicts(requested: str | None, selected: str) -> bool:
+    """Compare exposed identity components, without an availability catalog.
+
+    Display labels do not expose every full-ID suffix. Unknown labels/aliases
+    remain observations, not evidence from which to manufacture a model ID.
+    """
+    if requested is None:
+        return False
+    pin = requested.removesuffix("[1m]")
+    observed = selected.removesuffix("[1m]")
+    tokens = observed.split(maxsplit=1)
+    observed_token = tokens[0].removesuffix("[1m]") if tokens else ""
+    if pin.startswith("claude-") and observed_token.startswith("claude-"):
+        return pin != observed_token
+    id_pattern = r"claude-([a-z]+)-(\d{1,3}(?:-\d{1,3})*)(?:-\d{8})?"
+    full_id = re.fullmatch(id_pattern, pin)
+    selected_id = re.fullmatch(id_pattern, observed_token)
+    label = re.match(r"(?:Claude )?([A-Za-z]+) (\d+(?:\.\d+)*)(?=$|[ \t`])", observed)
+    if selected_id is not None:
+        family, version = selected_id[1], selected_id[2].replace("-", ".")
+    elif label is not None:
+        family, version = label[1].lower(), label[2]
+    else:
+        return False
+    if full_id is not None:
+        return (full_id[1], full_id[2].replace("-", ".")) != (family, version)
+    return pin in ("opus", "sonnet", "haiku", "fable") and pin != family
+
+
 def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
     agent, model, effort = (block.get(key) for key in ("agent", "model", "effort"))
     if agent is not None and (
             not agent.strip() or any(char in agent for char in ("\x00", "\r", "\n"))):
         raise ValueError("Claude agent must be a nonblank native name without control separators")
+    if effort is not None and effort not in CLAUDE_EFFORT_CHOICES:
+        raise ValueError("Claude wrapper does not support the requested effort")
     binary = resolve_binary("claude")
     if binary is None:
         raise ValueError("Claude reviewer executable is unavailable")
     data = _json(review_round._canonical_regular_file_bytes(ROOT / "bin/data/claude-capabilities.json", "Claude capabilities"))
     if (not isinstance(data, dict) or not isinstance(data.get("minimum_preflight_version"), str)
-            or re.fullmatch(r"\d+\.\d+\.\d+", data["minimum_preflight_version"]) is None
-            or not isinstance(data.get("models"), dict) or not data["models"]
-            or any(not isinstance(label, str) or not label.strip() or not isinstance(row, dict)
-                   or not isinstance(row.get("id"), str) or not row["id"].strip()
-                   or not isinstance(row.get("efforts"), list) or not row["efforts"]
-                   or any(level not in ("low", "medium", "high", "xhigh", "max") for level in row["efforts"])
-                   for label, row in data["models"].items())):
+            or re.fullmatch(r"\d+\.\d+\.\d+", data["minimum_preflight_version"]) is None):
         raise ValueError("invalid packaged Claude capability document")
     version_text = probe([binary, "--version"], cwd=cwd)
     found = re.search(r"\b(\d+\.\d+\.\d+)\b", version_text)
@@ -114,23 +140,38 @@ def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
     prefix = "Set model to " if model is not None else "Current model: "
     if not selection.startswith(prefix):
         raise ValueError("Claude refused or did not expose the requested model selection")
-    selected = selection[len(prefix):].lstrip("`")
+    selected = selection[len(prefix):].strip()
+    if not selected:
+        raise ValueError("Claude did not expose a model selection")
+    # Model and effort must come from the same selection line. Later prose is
+    # retained in selection_output, but cannot hide or replace these controls.
+    selected = selected.splitlines()[0].removesuffix(" for this session only")
+    observed_effort = re.search(r"\s+\(effort: ([a-z]+)\)\s*$", selected)
+    if observed_effort is not None:
+        selected = selected[:observed_effort.start()].rstrip()
+        if effort is not None and observed_effort[1] != effort:
+            raise ValueError("Claude substituted a different requested effort during preflight")
+    if selected.startswith("`"):
+        selected = selected[1:].split("`", 1)[0]
+    else:
+        selected = selected.removesuffix(" for this session only")
     if not selected.strip():
         raise ValueError("Claude did not expose a model selection")
-    matches = [label for label in data["models"] if selected.startswith(label)
-               and selected[len(label):len(label) + 1] in ("", " ", "`", "\n")]
-    support = data["models"][max(matches, key=len)] if matches else None
-    requested = model
-    explicit_support = next((row for row in sorted(data["models"].values(), key=lambda row: -len(row["id"]))
-                             if requested is not None and (requested == row["id"] or requested.startswith(row["id"] + "-"))), None)
-    if explicit_support is not None and support != explicit_support:
+    if _claude_selection_conflicts(model, selected):
         raise ValueError("Claude substituted a different requested model during preflight")
-    if effort is not None and (support is None or effort not in support["efforts"]):
-        raise ValueError("requested Claude effort lacks documented model capability")
+    # Optional catalog aliases retain existing receipt display compatibility.
+    # Membership and per-model effort lists never decide admission.
+    models = data.get("models")
+    models = models if isinstance(models, dict) else {}
+    matches = [label for label, row in models.items() if isinstance(label, str) and label
+               and isinstance(row, dict) and isinstance(row.get("id"), str) and row["id"]
+               and re.fullmatch(re.escape(label) + r"(?: \([^()]* context\))?", selected)]
+    support = models[max(matches, key=len)] if matches else None
+    requested = model
     capability = {"binary": binary, "cli_version": found[1], "model": requested,
                   "effort": effort, "agent": agent,
-                  "selected_model": support["id"] if support else selected.splitlines()[0],
-                  "capability_scope": "cli-selection-and-documented-effort", "provider_started": False}
+                  "selected_model": support["id"] if support else selected,
+                  "capability_scope": "cli-selection", "provider_started": False}
     path = folder / "claude-capability.json"
     _new(path, {**capability, "selection_output": selection})
     return {**capability, "transport_route": "claude", "capability_file": str(path)}
@@ -165,7 +206,7 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
     args = SimpleNamespace(expected_review_id=review_id, expected_leg_name=entry["name"],
                            expected_attempt=attempt, expected_route=route,
                            model=model, effort=effort, timeout=entry["timeout_s"], project=None, web=web)
-    # The wrapper's preflight is the source of route/version/catalog/policy
+    # The wrapper's preflight is the source of route/version/containment/policy
     # evidence. It receives no review content and performs no review inference.
     argv = [sys.executable, str(wrapper), "--preflight-only", "--prompt", "v2 capability check",
             "--cwd", str(cwd), "--pydantic", "verdict_v2:LegVerdict", "--model", model,
@@ -181,7 +222,8 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
         argv += ["--sandbox", "read-only"]
     env = {"TRIAD_REQUIRE_PINNED_VENDOR": "1", "TRIAD_" + route.upper() + "_BIN": binary,
            "TRIAD_DISPATCH_LOG_DIR": str(folder / "logs")}
-    raw = probe(argv, cwd=cwd, env=env).encode("utf-8")
+    raw = probe(argv, cwd=cwd, env=env,
+                cli="gemini" if route == "gemini" else "antigravity").encode("utf-8")
     preflight_file = folder / "preflight.json"
     review_round._write_new(preflight_file, raw)
     receipt = google_preflight_v2.load_preflight(preflight_file, selector, args, str(cwd))

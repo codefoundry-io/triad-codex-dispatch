@@ -44,6 +44,10 @@ Google dispatch; bind both receipt SHA values plus the selected model and effort
 the common review digest. Never
 switch after the selected provider starts or fails.
 
+AGY legacy/v2 formal review requires explicit profile setup from the selected
+toolkit's `docs/installation.md` before preflight, repeated after an upgrade
+changes the packaged profile bytes; dispatch never installs or replaces them.
+
 Once any provider leg has started, a later required-leg start or result failure invalidates
 admission but already-started sibling families finish. Strictly validate their
 available terminal results and run post-review integrity verification. Preserve
@@ -82,11 +86,27 @@ any TOML table header, and update existing keys rather than adding duplicates.
 Repair analysis uses a fresh native proposal-only child with prompt-controlled
 no-edit behavior. The child reads an untrusted absolute run-log path and the
 local classifier framework as needed, then returns a proposal or escalation.
+When needed, it may search/fetch public sources using sanitized error/version
+context and cite them in `reason`; it never sends private log content, reruns a
+vendor or derives entries from errors seen only in public sources, and escalates
+when necessary research is unavailable or inconclusive.
 The owner applies a validated proposal locally from the authenticated terminal
 with the printed absolute bootstrap command for `bin/apply_patch.py`, including
 the pinned absolute `--classifier-file`. Run logs remain available as untrusted
 evidence until the wrapper's age-floor cleanup; do not manually remove them
 after analysis.
+The applier refuses `oauth-env` proposals; authentication recovery remains with
+the user. Existing curated rules, semantic checks, locking and atomic writes stay;
+reason-length and entry-count caps are removed.
+When loading an extension, unsupported vendor-exit classes and exit-zero entries
+are ignored with a diagnostic. Valid siblings, curated authentication and source
+file bytes remain intact; this does not permit new authentication proposals.
+After apply, use the same command with `--verify-run-log <absolute-run-log-path>`
+to verify classification from the saved failure without another vendor call.
+Unchanged classes and transport failures that bypassed runtime classification are
+not verified repairs. Retained nonzero vendor diagnoses follow their runtime path.
+Report mismatches or unsupported records; do not admit a failed review from
+this check. Only unknown/extraction-error enter repair, not timeout or auth.
 
 The plugin-add step prints a safely quoted absolute bootstrap command from its
 returned `installedPath`. Run that printed absolute bootstrap command exactly

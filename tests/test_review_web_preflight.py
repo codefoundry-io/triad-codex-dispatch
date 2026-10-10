@@ -108,6 +108,8 @@ def test_legacy_cli_forwards_current_host_web_report(prepared, worktree, tmp_pat
     receipt = tmp_path / "preflight-native-web.json"
     data = json.loads(receipt.read_text())
     data["review_web_authorized"] = True
+    from conftest import profile_receipt
+    data.update(profile_receipt(True))
     receipt.write_bytes(review_round._canonical_json_bytes(data))
     args += ["--web-authorized"] + (["--native-web-available"] if available else [])
     assert review_round.main(args[2:]) == (0 if available else 2)

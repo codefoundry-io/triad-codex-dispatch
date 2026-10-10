@@ -139,7 +139,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     )
 
     for route_contract in (
-        "Claude | `claude-opus-5-5`, `xhigh`, 1,200-second wrapper deadline",
+        "Claude | `opus`, `xhigh`, 1,200-second wrapper deadline",
         "AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline",
         "Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline",
         'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits',
@@ -210,7 +210,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
         "claude_wrapper.py": (
             '--prompt-file "$review_prompt_file"',
             '--cwd "$review_target_cwd"',
-            "--model claude-opus-5-5",
+            "--model opus",
             "--effort xhigh",
             "--timeout 1200",
             "--pydantic verdict_schema:LegVerdict",
@@ -507,7 +507,7 @@ def test_standalone_skills_and_public_docs_keep_provider_read_contracts() -> Non
     for clause in (
         "Ordinary calls leave Claude permission selection native",
         "fully bound formal `LegVerdict` route adds native per-call Plan Mode",
-        "--model claude-opus-5-5 --effort xhigh --timeout 1200",
+        "--model opus --effort xhigh --timeout 1200",
         '--expected-review-id "$review_id" --expected-family claude',
     ):
         assert clause in claude
@@ -548,22 +548,22 @@ def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> N
     wrapper = _text(ROOT / "bin" / "claude_wrapper.py")
 
     assert (
-        "The fully bound formal route rejects any model other than `claude-opus-5-5`, any "
+        "The fully bound formal route rejects any model other than `opus`, any "
         "effort other than `xhigh`, any timeout other than `1200`, and every "
         "`--fallback-model` before provider resolution." in claude
     )
     assert (
         "A fully bound formal Claude route fails closed before provider resolution "
-        "unless it uses `--model claude-opus-5-5 --effort xhigh --timeout 1200` with no "
+        "unless it uses `--model opus --effort xhigh --timeout 1200` with no "
         "`--fallback-model`." in readme
     )
     assert (
-        "완전히 바인딩된 formal Claude route는 `--model claude-opus-5-5 --effort xhigh "
+        "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh "
         "--timeout 1200`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
         "provider resolution 전에 통과합니다." in readme_ko
     )
     assert "fail-closed formal Claude route pinning" in changelog
-    assert 'FORMAL_CLAUDE_MODEL = "claude-opus-5-5"' in wrapper
+    assert 'FORMAL_CLAUDE_MODEL = "opus"' in wrapper
     assert 'FORMAL_CLAUDE_EFFORT = "xhigh"' in wrapper
     assert "FORMAL_CLAUDE_TIMEOUT = 1200" in wrapper
 
@@ -1194,7 +1194,7 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
     ):
         assert stale not in current
     for name in ("README.md", "README.ko.md", "SECURITY.md"):
-        for stale in ("permission-unavailable", "truncated-answer"):
+        for stale in ("permission-unavailable",):
             assert stale not in public_docs[name], (name, stale)
     for name in ("README.md", "README.ko.md"):
         local_data = " ".join(public_docs[name].split())

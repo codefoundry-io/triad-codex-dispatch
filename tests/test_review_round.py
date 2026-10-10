@@ -130,8 +130,10 @@ def _write_google_preflight_receipt(
         "route": route,
     }
     if route == "agy":
+        from conftest import profile_receipt
         record = {
             **common,
+            **profile_receipt(),
             "agy_version": "1.1.20",
             "effort": "high",
             "model": "gemini-3.1-pro-high",
@@ -143,7 +145,7 @@ def _write_google_preflight_receipt(
             "effective_approval_mode": "unexposed",
             "model": "auto",
             "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
-            "gemini_version": "0.60.0",
+            "gemini_version": "0.63.0",
             "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "read_only_enforcement": "packaged-mode-independent-policy",
             "requested_approval_mode": "plan",
@@ -4371,7 +4373,7 @@ def test_google_gemini_preflight_receipt_requires_truthful_mode_fields(
         "executable": str(selected),
         "google_selector_receipt_sha256": selector.receipt_sha256,
         "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
-        "gemini_version": "0.60.0",
+        "gemini_version": "0.63.0",
         "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
         "provider_started": False,
         "review_id": "review-r1",

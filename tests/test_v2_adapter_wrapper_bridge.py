@@ -15,7 +15,8 @@ def test_real_google_wrapper_consumes_adapter_preflight_without_inference(route,
     monkeypatch.setattr(review_adapters_v2, "resolve_binary",
                         lambda name: str(route["home"] / name) if name == route["name"] else None)
 
-    def wrapper(argv, *, cwd, env=None):
+    def wrapper(argv, *, cwd, env=None, cli="preflight"):
+        assert cli == ("gemini" if route["name"] == "gemini" else "antigravity")
         assert "--preflight-only" in argv
         rc, output, error = route["invoke"](base=argv[2:])
         assert rc == 0, error
@@ -26,5 +27,5 @@ def test_real_google_wrapper_consumes_adapter_preflight_without_inference(route,
     result = review_adapters_v2.prepare_adapters(
         roster, review_id="round-2", cwd=route["home"], authentication_class="gemini-enterprise",
         native_capabilities={}, receipt_root=route["home"] / "bridge", attempt=2)
-    assert result["google-second"]["cli_version"] == ("1.2.7" if route["name"] == "agy" else "0.60.0")
+    assert result["google-second"]["cli_version"] == ("1.2.7" if route["name"] == "agy" else "0.63.0")
     assert route["calls"] == []

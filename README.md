@@ -45,7 +45,7 @@ reaches out to the other families for you.
   REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
-  cache and removes competing API-key/ADC/Vertex/model selectors without reading
+  cache and removes competing API-key/ADC/Vertex selectors without reading
   them. Effective mode and runtime model remain `unexposed`. This is not OS-level
   confinement; round-integrity mutation detection remains separate. Gemini's
   default selected B policy explicitly denies both web tools; effective enterprise
@@ -66,8 +66,9 @@ section is optional.
    - `codex` — install, then `codex login`.
    - `agy` — preferred Google-family worker and required for personal Google Sign-In.
    - `gemini` — required for Legacy Gemini CLI use: AGY absent, existing Gemini Enterprise OAuth sign-in.
-   - `claude` — Claude Code `>= 2.1.280` for the default Opus 5.5 route; bootstrap checks binary presence only
-     and does not run a version probe.
+   - `claude` — Claude Code; the review default is the CLI-resolved `opus` alias with `xhigh` effort.
+     V2 requires Claude Code >=2.1.205 and checks the required controls before selection; bootstrap checks binary presence only
+     and does not run a version probe. The alias does not attest a fixed runtime model version.
 
    You also need `git`, `python3 >= 3.12`, Pydantic 2 and `jsonschema>=4.26,<5`
    in that same Python runtime. The runtime dependencies are declared in the shipped
@@ -210,9 +211,9 @@ subsection only when its "do this ONLY if…" line applies to you.
 ### Legacy Gemini CLI
 
 This label means the `gemini` executable route, distinct from AGY; it does not
-recommend downgrading. Formal review requires CLI `>=0.34.0` plus a successful
-version/help/policy preflight. The v2 Pro model default has separate version
-support checks. The canonical authentication value remains `gemini-enterprise`.
+recommend downgrading. Gemini requires CLI `>=0.63.0`; formal review also needs a successful
+version/help/policy preflight. All models and raw, legacy and v2 routes share
+the same version floor. The canonical authentication value remains `gemini-enterprise`.
 
 *Do this only for an organization account already authenticated through Gemini
 CLI Sign in with Google.* If AGY is installed, the selector still prefers AGY.
@@ -254,6 +255,23 @@ enforces it (summarized under [Security](#security) below).
   session after install or update.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
+
+### Pending compatibility change (unreleased)
+
+AGY legacy/v2 formal review now requires explicitly installed read/search
+profiles. Follow [profile setup](docs/installation.md#agy-review-profile-setup-pending-candidate)
+and regenerate preflight receipts; dispatch rejects missing or changed profiles.
+
+The source candidate requires Gemini CLI >=0.63.0 for every model and for raw,
+legacy and v2 routes, replacing the older per-route/model floors. Upgrade the
+selected Gemini CLI and regenerate preflight receipts that record an older
+version. Raw calls with an unsupported or unprobeable version now refuse before
+submission with exit 3. Google preflight no longer probes model catalogs or
+rejects a pin absent from a packaged list; existing controls still apply.
+The legacy formal Claude route now requires `--model opus` and refuses the former
+`claude-opus-5-5` value before provider resolution. Raw/v2 explicit model IDs and
+v2 null selection retain their existing semantics.
+The versioned notes below describe already shipped releases.
 
 ### Upgrading to 0.2.558
 
@@ -464,6 +482,14 @@ operator opt-out, billed API/ADC/Vertex route-selector removal, local result
 binding, and completion of already-started siblings before failed-round
 diagnosis and a fresh complete round.
 
+At vendor exit 0, a plan-mode `ERROR` result can retain a corrected submission
+when an errored `finish` is followed by a successful `finish` in the same run.
+Recovery requires a successful allowed read and refuses other executed or
+unexplained tool work; a measured denial before execution does not count as
+execution. Web reads count only with the authorized web profile. The terminal
+`structured_output` still passes the existing schema, model and review-binding
+checks. This recovery check does not add an audit to ordinary `SUCCESS` results.
+
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]`, and retired apply/repair launchers whose markers
@@ -480,7 +506,12 @@ locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
-it uses `--model claude-opus-5-5 --effort xhigh --timeout 1200` with no `--fallback-model`.
+it uses `--model opus --effort xhigh --timeout 1200` with no `--fallback-model`.
+The current source defaults to the CLI-resolved `opus` alias on both legacy
+formal and public v2 reviews; this supersedes the fixed-ID default described
+in the historical 0.2.557 upgrade note. Explicit model IDs and null selection
+remain available on v2, and raw dispatch preserves the caller's selection.
+The default adds no `--agent` and does not attest a fixed runtime version.
 Current route timing is a 1,200-second Claude wrapper deadline, a 600-second AGY
 or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex observation
 waits. Terminal-outcome interpretation is owned by the cross-family
@@ -588,7 +619,7 @@ requires a new basis; family selection alone retains the common digest. Gemini
 preflight also pins the packaged policy bytes. Regenerate an older receipt that
 lacks `policy_sha256` or `gemini_version`, or any receipt whose policy file has changed.
 Formal Gemini preflight first requires a successful `--version` probe (at most
-15 seconds) proving SemVer >=0.34.0, then checks the existing help capabilities.
+15 seconds) proving SemVer >=0.63.0, then checks the existing help capabilities.
 It records the exact accepted version; the receipt hash binds it into the review basis.
 The leader separately captures the prepared-directory integrity digest and canonical-worktree fingerprint
 before dispatch, verifies both after every started leg terminates, and reproduces every
@@ -637,6 +668,18 @@ earlier timeout or provider failure remains the primary reported cause.
 
 ## Troubleshooting
 
+On a failed call, a measured vendor authentication error takes precedence over
+timeout and capacity retry (`oauth-env`, exit 65). Authentication text quoted in
+an answer is not an error carrier; a completed usable answer remains usable.
+Unknown output shapes are not guessed. Obsolete raw authentication phrase
+extensions are ignored with a diagnostic and cannot be added by repair proposals.
+
+All vendor children, including raw dispatch and version/help probes, remove the
+agreed credential and endpoint environment names without reading
+the omitted values. Gemini keeps its four Google Cloud project variables; other
+routes remove them. User model/effort settings, PATH, CLI config-directory pointers and
+GOOGLE_GENAI_USE_GCA are preserved. This does not attest the CLI billing route.
+
 | Symptom | Cause | Fix |
 |---|---|---|
 | Gemini rejects the project worktree as untrusted | Gemini owns workspace trust after removal of `--skip-trust` | Make the provider-native trust decision for that worktree, or stop. TRIAD has no trust bypass or speculative detector. |
@@ -651,12 +694,29 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | Exit | Meaning | What to do |
 |---|---|---|
 | `0` | Success — the answer follows | Nothing. |
+| `3` | Invalid wrapper arguments or a Gemini local preflight/version refusal | Inspect stderr. Upgrade Gemini CLI if below 0.63.0; otherwise repair the selected executable or invalid input before a new invocation. AGY version/settings preflight refusals use 65. |
 | `4` | The configured provider binary was missing or not executable before submission | Before dispatch, install AGY for personal Google, or AGY/Gemini for Enterprise OAuth. After route selection, repair that same executable; do not fallback after failure. |
 | `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
 | `65` | Authentication, configuration, quota, or another terminal provider failure (for example `oauth-env`, `cli-subscription-cap`, or `token-limit`) | Resolve the cited provider state, then make an explicit new invocation. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
+
+AGY's terminal `result.error` beginning `timeout waiting for response`, with
+status `ERROR`, an empty response and vendor exit `1`, is reported as
+`vendor-timeout` / `65` with no answer. A wrapper deadline remains `timeout` / `2`.
+
+AGY's recorded `network issue connecting to the server` sentence in string
+`result.error`, with `ERROR` status, empty response and vendor exit `1`, is
+`server-capacity` / `64`. Earlier authentication, timeout, transport, vendor-exit
+mapping and subscription-cap decisions retain their priority. This does not
+classify arbitrary terminal errors or infer the AGY credit message's carrier.
+
+An own-line `<truncated N bytes>` or `<truncated N lines>` marker in AGY's raw
+answer is `truncated-answer` / `65`, with no answer returned. An inline quotation
+does not count. Schema routes retain a valid `structured_output` when only the
+separate `response` contains a marker. Tool output, including web-search results,
+is outside this check; no answer-size cutoff or automatic retry is added.
 
 ## Scope & Limits — What This Does NOT Do
 
@@ -759,7 +819,7 @@ python3 -m pytest -q tests/ -p no:cacheprovider   # expect all tests to pass
 For an explicitly provider-free synthetic lifecycle check, run
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py` from the
 checkout. It reuses the packaged CLI and isolated bootstrap, probes AGY version
-and catalog without inference, and prints actual command outcomes, packaged-source
+without inference, and prints actual command outcomes, packaged-source
 hashes, export manifest, actual synthetic artifact bytes (base64), link records
 and cleanup evidence as JSON. If export fails, it retains the synthetic bytes in
 the report before disposing of its own fixtures; if retention fails, the fixture
@@ -797,6 +857,10 @@ Learned classifier patches are intentionally preserved; they are
 outside managed uninstall and should be deleted separately only when the owner
 intends to discard learned routing.
 
+The two AGY review profiles are outside bootstrap ownership. Follow
+[manual profile removal](docs/installation.md#agy-review-profile-setup-pending-candidate)
+after confirming they are no longer used.
+
 ## Custom Subagents
 
 Classifier repair uses a fresh native proposal-only child with prompt-controlled
@@ -808,6 +872,26 @@ renders the direct owner command from an argv list with Python `shlex.join`:
 
 Run the printed absolute command in the same authenticated login terminal. The
 run log remains until age-floor cleanup.
+The applier refuses every `oauth-env` proposal and leaves authentication recovery
+to the user. It keeps existing curated entries, validates proposal semantics and
+uses locked atomic writes, without a reason-length or entry-count cap.
+Loading a hand-edited extension ignores unsupported vendor-exit classes and
+exit-zero entries with a diagnostic, preserving valid siblings and file bytes.
+Existing curated authentication entries remain; new authentication proposals
+are still refused.
+After applying, append `--verify-run-log <absolute-run-log-path>` to the same
+command to check the stored failure without writing or invoking a vendor.
+Exit 0 confirms the proposed classification; exit 3 reports mismatch or unusable
+evidence, including an unchanged class or transport failure that bypassed runtime
+classification. A retained nonzero vendor diagnosis follows its existing route. Only
+`unknown`/`extraction-error` reach repair; timeout is surfaced and
+authentication remains user-owned. See the [repair protocol](docs/references/repair-protocol.md).
+
+When a failed run needs external explanation, the repair child may search the
+web and fetch public sources using sanitized error/version context. It cites
+sources in its existing `reason` field and keeps observed output separate from
+the documentation's explanation. It cannot run a vendor again or create entries
+from unrelated public errors; unavailable needed research ends in escalation.
 
 If you create your own Codex custom subagent that should call triad dispatch
 skills, opt in explicitly with Codex `skills.config` entries pointing at the
@@ -1151,10 +1235,22 @@ existing legacy gate. Use the explicit v2 procedure below for execution and coll
 The Gemini default requests `gemini-3.1-pro-preview`; HIGH is its CLI v0.60.0
 [source default](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77),
 not a Gemini effort flag or proof of account access/effective runtime identity.
-For optional `gemini-3.8-flash`, the catalog requires stable Gemini CLI 0.61.0
-or later compatible versions; earlier models retain their existing support floor.
+All Gemini CLI models require version 0.63.0 or later. Preflight checks the CLI
+interface and containment, never model-catalog membership. Raw calls also check
+this version floor; 0.63.0 prereleases are below it.
 See [Gemini 3.8 selection and HIGH settings](docs/installation.md#gemini-cli-38-high).
 This does not change the shipped roster or the separate AGY model slug.
+
+The v2 Claude adapter preserves the requested model and effort. Its CLI selection
+check refuses an exposed family/version mismatch or reported effort mismatch;
+the packaged model/effort table does not gate a pin. Known table labels retain
+their receipt display aliases; an unknown label is retained verbatim, without
+inventing an ID. `capability_scope: "cli-selection"` records selection evidence,
+not per-model effort support, account entitlement, or eventual runtime identity.
+When both the request and reported selection are full IDs, they must match
+exactly (apart from the documented `[1m]` context modifier); a display label
+cannot attest an unexposed snapshot suffix. The wrapper's effort vocabulary is
+checked before the selection probe.
 
 ## Offline v2 candidate validation
 
@@ -1203,7 +1299,7 @@ current residual with necessary evidence in current bound inputs. Historical
 paths alone are insufficient after cleanup. Continue verified progress; stop
 exhausted disputes without turning repetition or an owner exception into approval.
 
-Native Codex stays native. Installed interface/catalog checks prove supported
+Native Codex stays native. Google interface/containment checks prove supported
 requested controls, not authenticated service access or effective runtime
 identity. Unknown observations remain null/unexposed. Existing managed export
 and cleanup own these artifacts; this introduces no scheduler, background log

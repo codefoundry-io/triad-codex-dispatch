@@ -46,7 +46,7 @@ def test_c12_absent_uses_three_families_without_dispatch(tmp_path, capsys, monke
     for entry in result["legs"]:
         assert entry["enabled"] is True
         assert isinstance(entry["timeout_s"], int) and entry["timeout_s"] > 0
-    assert result["legs"][0]["claude"]["model"]
+    assert result["legs"][0]["claude"] == {"agent": None, "model": "opus", "effort": "xhigh"}
     assert result["legs"][1]["codex"]["model"]
     google = result["legs"][2]
     assert google["agy"]["model"] and google["gemini"]["model"]
@@ -149,3 +149,12 @@ def test_c12_second_project_cannot_inherit_first_project_overrides(tmp_path, cap
     code, stdout, stderr = resolve(second, capsys)
     assert code == 0, stderr
     assert json.loads(stdout)["enabled"] == ["claude", "codex", "google"]
+
+
+@pytest.mark.parametrize("model", ["claude-opus-5-5", "claude-opus-4-6", None])
+def test_c12_explicit_claude_selection_survives_alias_default(tmp_path, capsys, model):
+    write_config(tmp_path, [{"name": "claude", "claude": {"model": model}}])
+    code, stdout, stderr = resolve(tmp_path, capsys)
+    assert code == 0, stderr
+    assert json.loads(stdout)["legs"][0]["claude"] == {
+        "agent": None, "model": model, "effort": "xhigh"}

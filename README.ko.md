@@ -44,7 +44,7 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   경로는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
-  API-key/ADC/Vertex/model selector는 값을 읽지 않고 제거합니다. effective mode와
+  API-key/ADC/Vertex selector는 값을 읽지 않고 제거합니다. effective mode와
   runtime model은 `unexposed`입니다. 이는 OS 수준 confinement가 아니며
   round-integrity mutation detection은 별도 검사입니다. B 전용 기본 Gemini policy는 두 웹
   도구를 명시적으로 거부합니다. 조직 정책의 우선순위를 포함한 실제 적용 여부는
@@ -65,8 +65,9 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
    - `codex` — 설치 후 `codex login`.
    - `agy` — 우선 Google-family worker이며 개인 Google Sign-In에는 필수.
    - `gemini` — AGY가 없는 Gemini 구버전 CLI 경로에서만 필수. 기존 Gemini Enterprise OAuth 인증을 사용합니다.
-   - `claude` — 기본 Opus 5.5 경로는 Claude Code `>= 2.1.280`; bootstrap 은 binary 존재만 확인하며
-     version probe 를 실행하지 않습니다.
+   - `claude` — Claude Code; 리뷰 기본값은 CLI가 해석하는 `opus` 별칭과 `xhigh` effort입니다.
+     v2는 Claude Code >=2.1.205를 요구하고 선택 전에 필요한 옵션을 확인합니다. bootstrap은 실행 파일 존재만 확인하며
+     version probe를 실행하지 않습니다. 별칭은 실제 실행 모델의 고정 버전을 보증하지 않습니다.
 
    `git`, `python3 >= 3.12`, 그리고 그 동일 Python runtime의 Pydantic 2와 `jsonschema>=4.26,<5`도
    필요합니다. runtime 의존성은 배포되는 `requirements.txt`에 선언됩니다.
@@ -196,8 +197,8 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 ### Gemini 구버전 CLI 사용
 
 이 명칭은 AGY와 구분되는 `gemini` 실행 파일 경로를 뜻하며 다운그레이드를 권하지
-않습니다. 정식 리뷰에는 CLI `>=0.34.0`과 version/help/policy preflight 통과가
-필요합니다. v2 Pro 기본 모델에는 별도 버전 지원 검사가 적용됩니다.
+않습니다. Gemini CLI는 `>=0.63.0`부터 지원하며, 정식 리뷰에는 version/help/policy preflight 통과가
+필요합니다. 모든 모델과 raw·legacy·v2 경로에 같은 버전 하한을 적용합니다.
 인증 구분의 실제 식별자는 기존 `gemini-enterprise`를 유지합니다.
 
 *조직 계정으로 Gemini CLI Sign in with Google이 이미 완료된 경우에만.* AGY가
@@ -235,6 +236,23 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 예정된 호환성 변경 (미출시)
+
+AGY legacy/v2 정식 리뷰에는 읽기·검색 프로필의 명시적 설치가 필요합니다.
+[프로필 설정](docs/installation.ko.md#agy-리뷰-프로필-설정--반영-대기-후보) 후
+preflight receipt를 다시 생성하세요. 프로필이 없거나 변경되면 실행을 거부합니다.
+
+현재 소스 후보는 모든 모델과 raw·legacy·v2 경로에 Gemini CLI >=0.63.0을
+적용하며 기존 경로별·모델별 하한을 대체합니다. 선택된 Gemini CLI를
+업그레이드하고 이전 버전이 기록된 preflight receipt를 다시 생성하세요.
+raw 호출에서 지원하지 않거나 확인할 수 없는 버전은 제출 전에 종료 코드 3으로
+거부합니다. Google preflight는 모델 목록을 조회하거나 목록에 없는 pin을
+차단하지 않으며 기존 실행 조건 검사는 유지합니다.
+legacy 정식 Claude 경로는 이제 `--model opus`를 요구하며 이전
+`claude-opus-5-5` 값은 provider 확인 전에 거부합니다. raw·v2의 명시적 모델 ID와
+v2의 null 선택은 기존 의미를 유지합니다. 아래 버전별 설명은 이미
+출시된 버전의 동작을 기록한 것입니다.
 
 ### 0.2.558 업그레이드
 
@@ -432,6 +450,13 @@ verdict transport가 아니며,
 API/ADC/Vertex route-selector 제거, local 결과 binding, failed-round 진단 전에 이미
 시작된 sibling을 모두 완료하는 계약을 유지합니다.
 
+Vendor exit가 0인 plan-mode `ERROR` 결과에서, 실패한 `finish` 뒤에 같은 실행의
+정상 `finish`가 있으면 수정된 제출을 복구할 수 있습니다. 허용된 읽기의 성공이
+있어야 하며, 다른 도구 실행이나 원인 불명의 도구 작업이 있으면 복구하지 않습니다.
+실행 전에 거부됐음이 확인된 호출은 실행으로 보지 않습니다. 웹 읽기는 승인된 웹
+프로필에서만 인정합니다. Terminal `structured_output`은 기존 스키마·모델·review
+binding 검증을 거치며, 일반 `SUCCESS` 결과에는 이 복구용 감사를 추가하지 않습니다.
+
 일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
 plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
 `[shell_environment_policy]`, retired apply/repair launcher만 정리합니다. Foreign,
@@ -446,8 +471,12 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 
 `gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
-완전히 바인딩된 formal Claude route는 `--model claude-opus-5-5 --effort xhigh --timeout 1200`을
+완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1200`을
 사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
+현재 소스는 legacy formal과 public v2 리뷰의 기본 모델을 CLI가 해석하는 `opus`
+별칭으로 지정합니다. 이는 앞의 0.2.557 이력에 기록된 고정 ID 기본값을 대체합니다.
+v2의 명시적 모델 ID 및 null 선택, raw 호출의 사용자 모델 선택은 유지합니다.
+기본값 변경은 `--agent`를 추가하지 않으며 실제 실행 모델 버전을 보증하지 않습니다.
 현재 route timing은 Claude wrapper deadline 1,200초, AGY 또는 Gemini wrapper deadline
 600초, fresh Codex의 반복 가능한 1,200초 observation wait입니다. terminal outcome 해석은
 cross-family `references/convergence.md` 계약이 전담합니다.
@@ -552,7 +581,7 @@ directory에 준비합니다. 모든 required family는 그 동일한 complete d
 정확한 파일 bytes를 포함합니다. 조건·toolkit·receipt가 바뀌면 새 검토 기준을 만들며,
 family만 바꾸면 공통 digest를 유지합니다. Gemini preflight는 policy bytes도 고정합니다.
 `policy_sha256` 또는 `gemini_version`이 없는 receipt나 policy 파일이 바뀐 receipt는 다시 생성해야 합니다.
-Formal Gemini preflight는 최대 15초의 `--version` 검사로 SemVer >=0.34.0을 먼저
+Formal Gemini preflight는 최대 15초의 `--version` 검사로 SemVer >=0.63.0을 먼저
 확인한 뒤 기존 help 기능을 검사합니다. 실제 버전 문자열을 기록하며 receipt hash가
 그 버전을 검토 기준에 포함합니다.
 Leader는 dispatch 전에 prepared-directory integrity digest와 canonical-worktree fingerprint를
@@ -593,6 +622,17 @@ Provider 성공에는 오류 없는 UTF-8 출력 수집 완료도 필요합니�
 
 ## 문제 해결 (Troubleshooting)
 
+실패한 호출에서 확인된 vendor 인증 오류는 timeout과 capacity 재시도보다
+우선합니다(`oauth-env`, exit 65). 답변에 인용된 인증 문구는 오류 필드가 아니며,
+정상 완료된 유효한 답변은 유지합니다. 미확인 출력 형태는 추측하지 않습니다.
+기존 raw 인증 문구 extension은 진단을 남기고 무시하며 repair 제안으로 추가할 수 없습니다.
+
+일반 디스패치와 버전·도움말 확인을 포함한 모든 vendor 자식 프로세스는 공통
+인증·endpoint 환경변수를 제거하며, 제외할 값은 읽지 않습니다.
+Gemini는 Google Cloud 프로젝트 변수 4개를 유지하고 다른 경로는 제거합니다.
+사용자의 모델·effort 설정, PATH, CLI 설정 디렉터리 변수, GOOGLE_GENAI_USE_GCA는 유지합니다.
+이 처리가 CLI의 실제 과금 경로를 증명하지는 않습니다.
+
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | Gemini가 project worktree를 untrusted로 거부 | `--skip-trust` 제거 후 Gemini가 workspace trust를 소유 | 해당 worktree에 provider-native trust 결정을 하거나 중단하세요. TRIAD에는 trust bypass나 speculative detector가 없습니다. |
@@ -607,12 +647,29 @@ Provider 성공에는 오류 없는 UTF-8 출력 수집 완료도 필요합니�
 | Exit | 의미 | 조치 |
 |---|---|---|
 | `0` | 성공 — 이어서 답변 | 없음. |
+| `3` | 잘못된 wrapper 인자 또는 Gemini 로컬 preflight·버전 검사 거부 | stderr를 확인하세요. 0.63.0 미만이면 CLI를 업그레이드하고, 그 외에는 선택한 실행 파일이나 입력을 고친 뒤 새로 호출하세요. AGY 버전·설정 preflight 거부는 65를 사용합니다. |
 | `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | dispatch 전에는 개인 Google용 AGY 또는 Enterprise OAuth용 AGY/Gemini를 설치하세요. route 선택 뒤에는 같은 실행 파일을 고치고 사후 fallback하지 않습니다. |
 | `64` | 재시도 후에도 server capacity 소진 | 일시적 vendor 과부하; 기다렸다 재시도. |
 | `65` | 인증, config, quota 또는 다른 terminal provider failure(예: `oauth-env`, `cli-subscription-cap`, `token-limit`) | 표시된 provider state를 해결한 뒤 explicit new invocation을 만드세요. |
 | `66` | 구조화 출력(`--pydantic`) 스키마 검증 실패 | `schema-fail is terminal for that invocation`; leader가 판단한 뒤 explicit new invocation을 만들 수 있습니다. shared-directory formal path는 legacy packet-bound schema를 요구하지 않습니다. |
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |
 | `1` | Wrapper가 답변을 추출하지 못했거나(`extraction-error`) 분류가 `unknown`임 | 최종 wrapper 분류와 provider 진단을 확인한 뒤 적절히 재시도하거나 escalation하세요. |
+
+AGY의 최종 `result.error`가 `timeout waiting for response`로 시작하고,
+상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면 답변 없이
+`vendor-timeout` / `65`로 보고합니다. Wrapper 제한시간 초과는 `timeout` / `2`입니다.
+
+AGY의 문자열 `result.error`에 확인된 `network issue connecting to the server`
+문장이 있고 상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면
+`server-capacity` / `64`로 분류합니다. 기존 인증·시간초과·전송 실패·vendor
+종료코드 매핑·구독 한도 판정이 우선합니다. 다른 최종 오류를 일괄 분류하거나
+AGY 크레딧 문구의 출력 위치를 추정하지 않습니다.
+
+AGY 일반 답변에 `<truncated N bytes>` 또는 `<truncated N lines>`가 독립된
+줄로 있으면 답변을 반환하지 않고 `truncated-answer` / `65`로 보고합니다.
+문장 안의 인용은 해당하지 않습니다. 구조화 경로에서는 별도 `response`에만
+표시가 있어도 유효한 `structured_output`을 유지합니다. 웹 검색을 포함한 도구
+출력은 검사 대상이 아니며, 답변 크기 제한이나 자동 재시도를 추가하지 않습니다.
 
 ## 범위와 한계 — 이 도구가 하지 않는 것
 
@@ -699,7 +756,7 @@ python3 -m pytest -q tests/ -p no:cacheprovider   # 모든 테스트 PASS 기대
 
 provider-free 합성 lifecycle 검증을 명시적으로 요청한 경우 checkout에서
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py`를 실행합니다.
-기존 CLI와 격리 bootstrap을 재사용하며, 추론 없이 AGY 버전·모델 목록만 조회합니다.
+기존 CLI와 격리 bootstrap을 재사용하며, 추론이나 모델 목록 조회 없이 AGY 버전을 확인합니다.
 실제 명령 결과, 패키지 소스 해시, export manifest, 합성 artifact의 실제 bytes(base64),
 링크 문자열과 정리 증거를 JSON으로 출력합니다. Export 실패 시에도 합성 bytes를 보고서에
 보관한 뒤 자체 fixture를 정리하며, 보관에 실패하면 fixture를 남깁니다.
@@ -734,6 +791,9 @@ owner-authored 설정을 보존하며 `config.toml`, rule, permission profile, c
 uninstall 범위 밖이며, owner가 학습된 routing을 폐기하려는 경우에만 별도로
 삭제해야 합니다.
 
+AGY 리뷰 프로필 두 개는 bootstrap의 관리 대상이 아닙니다. 더 이상 사용하지
+않는지 확인한 뒤 [프로필 수동 제거 안내](docs/installation.ko.md#agy-리뷰-프로필-설정--반영-대기-후보)를 따릅니다.
+
 ## Custom Subagent
 
 classifier repair는 prompt-controlled no-edit 동작을 가진 fresh native proposal-only
@@ -745,6 +805,25 @@ child를 사용합니다. Child는 proposal 또는 escalation만 반환하고 pa
 
 동일한 인증된 로그인 터미널에서 출력된 절대 명령을 실행합니다. run log는 age-floor
 cleanup까지 남아 있습니다.
+적용기는 모든 `oauth-env` 제안을 거부하며 인증 복구는 사용자가 수행합니다.
+기존 사용자 규칙을 보존하고 제안의 의미를 검증하며 잠금과 원자적 쓰기를
+유지합니다. 사유 길이와 항목 수에는 별도 상한을 두지 않습니다.
+수동 편집한 규칙을 읽을 때 지원하지 않는 vendor 종료 분류와 종료 코드 0 항목은
+진단을 남기고 제외합니다. 유효한 다른 항목과 파일 내용은 보존하며, 기존 인증
+규칙은 유지합니다. 새로운 인증 제안은 계속 거부합니다.
+적용 후 같은 명령에 `--verify-run-log <절대-run-log-경로>`를 추가하면 기록이나
+규칙을 변경하거나 vendor를 호출하지 않고 저장된 실패를 확인합니다. 종료 0은
+제안한 분류와 일치, 종료 3은 불일치 또는 검증할 수 없는 기록을 뜻합니다.
+분류가 그대로이거나 래퍼가 분류 전에 전송 실패로 확정한 기록은 검증 성공으로 인정하지 않습니다.
+실행 시 유지한 nonzero vendor 진단은 기존 분류 경로대로 검증합니다.
+`unknown`·`extraction-error`만 repair로 보내고 timeout은 그대로 보고합니다.
+자세한 절차는 [repair protocol](docs/references/repair-protocol.md)을 따릅니다.
+
+실패 원인에 외부 근거가 필요하면 repair child는 민감정보를 제외한 오류·버전
+정보로 웹검색과 공개 페이지 조회를 할 수 있습니다. 기존 `reason`에 출처를
+남기고 실제 출력과 문서의 설명을 구분합니다. vendor를 다시 실행하거나 관련
+없는 공개 오류로 분류 항목을 만들 수 없으며, 필요한 조사가 불가능하면
+그 한계를 밝히고 escalation을 반환합니다.
 
 직접 만든 Codex custom subagent가 triad dispatch skill을 호출해야 한다면 Codex
 `skills.config`에 필요한 `SKILL.md` 경로를 명시하세요. 경로는 live
@@ -1070,10 +1149,20 @@ dispatch·round 승인이나 기존 legacy gate 변경을 뜻하지 않습니다
 HIGH는 CLI v0.60.0의
 [소스 기본값](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77)입니다.
 Gemini effort 플래그나 실제 계정 접근·실행 모델을 증명하는 값은 아닙니다.
-선택 모델 `gemini-3.8-flash`는 stable Gemini CLI 0.61.0부터 호환되는 후속 버전을
-지원하며, 기존 모델의 지원 최소 버전은 유지합니다.
+모든 Gemini CLI 모델과 raw 호출은 0.63.0부터 지원합니다. 모델 목록으로 요청을
+차단하지 않으며, 0.63.0 prerelease는 지원 하한보다 낮은 버전으로 처리합니다.
 [Gemini 3.8 선택 및 HIGH 설정](docs/installation.ko.md#gemini-cli-38-high)을 참고하세요.
 배포 기본 리뷰 구성과 별도 AGY 모델 slug는 바꾸지 않습니다.
+
+v2 Claude adapter는 요청한 model과 effort를 그대로 유지합니다. CLI가 보고한
+family/version 또는 effort가 요청과 다르면 거부하며, 배포된 모델·effort 목록으로
+요청을 차단하지 않습니다. 알려진 라벨은 기존 receipt 표시용 별칭을 유지하고,
+미확인 라벨은 ID를 추측하지 않고 원문으로 남깁니다.
+`capability_scope: "cli-selection"`은 선택 관측 기록이며, 모델별 effort 지원,
+계정 권한이나 실제 추론 모델을 증명하지 않습니다.
+요청과 보고된 선택이 모두 전체 ID이면 문서화된 `[1m]` context 표기를 제외하고
+정확히 일치해야 합니다. 표시 라벨만으로 미노출 snapshot suffix를 증명하지
+않습니다. wrapper가 지원하는 effort 값인지는 선택 probe 전에 확인합니다.
 
 ## 오프라인 v2 후보 검증
 
@@ -1119,7 +1208,7 @@ exact model ID와 위에서 설명한 기존 JSON 설정 방식을 유지합니�
 담습니다. 정리된 과거 경로만으로 근거를 대신할 수 없습니다. 확인 가능한 진전은
 계속하되, 반복이나 별도 예외를 승인으로 바꾸지 않고 소진된 논쟁을 종료합니다.
 
-Codex는 native로 실행합니다. 설치된 CLI·catalog 검사는 요청 설정 지원 여부이며
+Codex는 native로 실행합니다. Google CLI의 인터페이스·실행 제한 검사는 요청 설정 지원 여부이며
 계정 접근권이나 실제 실행 모델의 증명이 아닙니다. 노출되지 않은 값은 null/unexposed로
 남깁니다. 기존 export·cleanup을 사용하며 별도 스케줄러·주기적 정리기·영구 웹 로그나
 설치 revision 변경을 추가하지 않습니다.

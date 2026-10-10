@@ -11,7 +11,7 @@ named roster and per-CLI settings through [the v2 procedure](public-v2-review.md
 
 | Family | Formal route |
 |---|---|
-| Claude | `claude-opus-5-5`, `xhigh`, 1,200-second wrapper deadline |
+| Claude | `opus`, `xhigh`, 1,200-second wrapper deadline |
 | Google with `personal-google` | AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline |
 | Google with `gemini-enterprise` | Prefer the same AGY route; when AGY is absent, use Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline |
 | Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits |
@@ -65,8 +65,8 @@ own extra-leg admission and conditional native advice, not this public schema.
 
 ### Runtime identity
 
-AGY preflight proves the exact model from the selected executable's literal
-tabular catalog. A mismatched exposed model invalidates that leg.
+AGY preflight binds the requested model without a catalog probe. That request
+does not prove runtime identity. A mismatched exposed model invalidates that leg.
 
 Gemini Enterprise OAuth preserves the authenticated organization account and
 Cloud-project selection while removing competing API-key, ADC, Vertex, and
@@ -88,8 +88,8 @@ lacks the hash. This binds bytes; it does not attest to merged runtime settings.
 
 Gemini preflight first runs the selected executable's `--version` with a maximum
 15-second timeout and the formal scrubbed environment. It requires SemVer
->=0.34.0 before the existing help probe and records the exact `gemini_version`.
-Regenerate receipts missing this field. A prerelease of 0.34.0 is below the floor;
+>=0.63.0 before the existing help probe and records the exact `gemini_version`.
+Regenerate receipts missing this field. A prerelease of 0.63.0 is below the floor;
 build metadata does not affect precedence. The receipt hash binds the observation,
 which does not by itself prove authentication, runtime model or policy enforcement.
 

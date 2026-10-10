@@ -1,4 +1,6 @@
 {
+  "status": "historical-reference-only",
+  "scope": "Tagged vendor model facts, not a TRIAD support gate. TRIAD requires Gemini CLI >=0.63.0 for every model and route; minimum_version fields below describe historical vendor evidence only.",
   "source": "https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/models.ts",
   "minimum_version": "0.60.0",
   "models": [
