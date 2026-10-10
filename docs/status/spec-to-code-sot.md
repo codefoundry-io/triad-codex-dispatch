@@ -81,8 +81,8 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**Owner redirection2026-10-11: whole-feature vendor-responsibility audit;
-U6b/U9 implementation is on hold and must not resume automatically.**
+**Owner proceeded2026-10-11: bounded vendor-invocation simplification design;
+U6b/U9 expansion drafts remain on hold and must not resume automatically.**
 Read [the current audit](2026-10-11-vendor-responsibility-audit.md). The owner
 states vendor CLIs manage their execution/handles. Reassess code and shared
 rules from that boundary before adding wrapper mechanisms. A reproducible
@@ -93,10 +93,29 @@ Runtime HEAD remainsb6868d8. All previously started U9 diagnoses and the single
 RED ended; source fingerprint matcheda472f9172ced0ceca437398eb30398e35df12a2c69fca06300c0170b3e128238.
 RED17failed/3passed includes two mixed Gemini fixture failures. No product edit,
 GREEN or new formal review. Outside-source U6b/U9 drafts are evidence-only.
-Next: present bounded invocation/transport reductions and retained guarantees
-for the owner's substantial-design decision, then amend the shared spec before
-dependent implementation. Main merge needs scenario-based review and separate
-approval. The whole-task hook remains while work is unfinished.
+Current plan: [vendor invocation boundary](../superpowers/plans/2026-10-11-vendor-invocation-boundary.md).
+Fresh main remains3afc4d7; PR13 has no newer A reply after6100596687; read-only
+A remains1de943af. Google and fresh Astra/high diagnosis recommend owned stream
+files plus direct-child supervision; Claude/opus/xhigh is still running. Neither
+diagnosis nor a synthetic test is formal admission.
+
+Standard-library spike:2MB exact input succeeds; inherited-output fixture takes
+1.548s with communicate versus0.048s with files. Both accept early stdin close.
+Actual installed Claude file-stdin marker probe returns exact marker/exit0;
+no lifecycle, cancellation or effective model/effort identity claim. Evidence is
+workspace `_runs/infra/20261011-vendor-boundary/`.
+
+The owner was asked one concrete design choice: redefine stdin complete as
+exact full input made available, dropping the existing large-prompt early-close
+BrokenPipe detection, or preserve that monitoring. The overall reduction is
+authorized, but this newly identified observable difference is pending. No
+dependent normative or runtime edits before the answer. The shared decision is
+`decisions/2026-10-11-vendor-invocation-boundary.md`, published as7d731ef and
+shared in PR13comment6101372915 (read back); its authoring check passes1/1.
+Only design/progress documents changed. Complete every started diagnosis and
+record it; then settle the choice and amend shared rules/cases before RED/code.
+Main merge needs scenario-based review and separate approval. The whole-task
+hook remains while work is unfinished.
 
 ### Last completed implementation: U7
 
