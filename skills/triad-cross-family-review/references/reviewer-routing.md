@@ -12,7 +12,7 @@ named roster and per-CLI settings through [the v2 procedure](public-v2-review.md
 | Family | Formal route |
 |---|---|
 | Claude | `opus`, `xhigh`, 1,200-second wrapper deadline |
-| Google with `personal-google` | AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline |
+| Google with `personal-google` | AGY 1.2.1 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline |
 | Google with `gemini-enterprise` | Prefer the same AGY route; when AGY is absent, use Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline |
 | Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits |
 
@@ -98,12 +98,12 @@ which does not by itself prove authentication, runtime model or policy enforceme
 Public v2 binds standing authorization through [the v2 web procedure](review-web.md).
 
 Legacy REVIEW defaults to no web; a direct owner request selects
-[the common bound option](review-web.md). Legacy no-web AGY formal preflight and
-dispatch require `read_url(*)` in addition to the five raw read-only denies and
-omit headless autoapproval. Identical formal leases remain concurrent; mixed raw
-and formal lists retain existing isolation. Explicit project validation checks
-the same formal rules without changing the project. Raw invocation behavior is
-preserved. Gemini's packaged no-web REVIEW policy explicitly denies its web read/search
+[the common bound option](review-web.md). Legacy no-web AGY formal calls select the no-web
+native-tool profile; authorized web selects its research twin. Both exclude
+default components and omit headless autoapproval. No global settings writes,
+locks or restoration occur. Explicit project validation retains its deny-rule
+checks. Raw read-only uses the research profile; permissive raw remains separate.
+Gemini's packaged no-web REVIEW policy explicitly denies its web read/search
 tools and retains B's other deny rules. Byte/policy-engine checks remain distinct
 from unrun authenticated effective-policy checks.
 

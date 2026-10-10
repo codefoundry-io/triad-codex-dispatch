@@ -31,11 +31,10 @@ changing source bytes still requires a fresh basis. An absent condition in an ol
 bound record means false. A false condition uses the shared one-sentence
 no-web clause; necessary external-evidence gaps remain open_questions under
 the existing uncertainty instructions.
-Claude preapproves only `WebSearch`/`WebFetch`; AGY uses its web-compatible read-only
-deny set; Gemini selects the complete `gemini-formal-web.toml` profile. Existing
+Claude preapproves only `WebSearch`/`WebFetch`; AGY selects its native-tool research profile without global settings writes; Gemini selects the complete `gemini-formal-web.toml` profile. Existing
 owner/admin denies remain authoritative. AGY refuses a known `read_url(*)` deny
 from the selected project or active local settings before inference, preserving the
-rule and normal restoration. This does not attest to unobserved effective policy.
+rule without writing settings. This does not attest to unobserved effective policy.
 No permanent global permissions change.
 
 V2 Claude probes native `--allowedTools` support before sealing. Legacy/raw Claude

@@ -33,14 +33,13 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
   AGY를 우선하며 개인 Google Sign-In에는 AGY가 필요합니다. owner가 Gemini
   Enterprise OAuth를 선택했고 AGY 실행 파일이 없을 때만 기존 Gemini CLI wrapper로
   즉시 넘어갑니다. AGY를 선택하거나 시작한 뒤의 실패는 Gemini fallback을 일으키지
-  않습니다. 명시적 `--project`가 없는 AGY route는 `--sandbox read-only`
-  호출 동안 일시적 global-settings transaction으로
-  원래 바이트를 복원합니다. Legacy 기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`를
-  추가하고 headless 자동 승인 flag를 사용하지 않습니다. 동일한 formal deny
-  lease는 동시 실행할 수 있고 raw/formal 목록은 격리됩니다. Raw 조사는 기존 웹
-  기능과 버전별 headless 호환 처리를 유지하며 `AGY_NO_HEADLESS_AUTOAPPROVE=1`로
-  해당 처리를 끌 수 있습니다. Public v2는 상시 웹 허용을 라운드에 고정합니다. Legacy REVIEW는 기본적으로 웹을 금지합니다. Legacy에서 사용자가 해당 리뷰에 직접 요청하면
-  [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY의 MCP 호출도 차단합니다. Gemini 구버전 CLI
+  않습니다. 모든 AGY 호출은 전역 설정을 변경하지 않습니다. 읽기 전용 호출은
+  CLI 1.2.1 이상에서 기존 프로필의 `excludeDefaultComponents: true`와 명시적
+  읽기·검색 도구를 사용하고 plan/sandbox를 유지하며 자동 승인을 사용하지 않습니다.
+  이전 backup/lock/lease 파일은 자동 복원·삭제하지 않습니다. Raw 읽기 전용 조사는
+  research 프로필을 사용합니다. 일반 raw 호출만 기존 headless 호환 처리와
+  `AGY_NO_HEADLESS_AUTOAPPROVE=1` opt-out을 유지합니다. Public v2는 상시 웹 허용을 라운드에 고정합니다. Legacy REVIEW는 기본적으로 웹을 금지합니다. Legacy에서 사용자가 해당 리뷰에 직접 요청하면
+  [모든 leg에 웹 검증을 허용](skills/triad-cross-family-review/references/review-web.md)합니다. AGY 리뷰 프롬프트는 MCP 호출을 금지하며, 이는 기계적 차단의 증거가 아닙니다. Gemini 구버전 CLI
   경로는 explicit CLI Auto와 native Plan Mode를 요청하고,
   mode-independent packaged read/search-only user policy를 fail-closed enforcement
   boundary로 사용합니다. 기존 조직 OAuth cache를 사용하며 경쟁
@@ -170,9 +169,9 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 
    일반 `codex`는 동일한 인증된 로그인 터미널의 실제 project/worktree root에서
    시작하세요. 기존 AGY 로그인 또는 AGY가 없을 때 기존 Gemini Enterprise OAuth
-   로그인을 사용합니다. 정식 AGY review는 기본적으로 일시적 settings lease 아래
-   `--sandbox read-only`로 실행합니다. 전용 프로젝트를 명시하면 미리 설정된 프로젝트
-   권한을 사용해 이 lease를 생략합니다. 정식 Gemini review는 native Plan Mode를 요청하며
+   로그인을 사용합니다. 정식 AGY review는 명시적 native-tool 프로필과
+   `--sandbox read-only`를 사용하며 전역 설정을 변경하지 않습니다.
+정식 Gemini review는 native Plan Mode를 요청하며
    mode-independent packaged per-call policy가 read/search-only behavior를 enforce합니다. Trusted
    Python과 `PATH`가 prerequisite이며 trusted launcher와 interpreter가 시작된 뒤
    wrapper child-process scrubbing은 유지됩니다.
@@ -324,7 +323,7 @@ raw verdict-file의 중복 member 거부를 추가합니다. review 구성, 공�
 
 선택적이며 receipt에 바인딩되는 AGY `--project` 모드는 소유자가 미리 준비한 project의
 정확한 `--cwd`와 필수 읽기 전용 deny 규칙을 `--sandbox read-only`와 함께 검증합니다.
-이 모드에서는 global settings transaction 대신 해당 project를 검증하며 project나
+이 모드에서는 해당 project를 읽기 전용으로 검증하며 project나
 권한을 생성·수정하지 않습니다. provider-free 스킬 동작 검증은 패키지의 고정 lifecycle
 verifier를 사용하며, 이는 리뷰 라운드나 admission 결과가 아닙니다.
 
@@ -426,6 +425,8 @@ slash, backslash, empty 또는 exact dot/dotdot component, ASCII control, DEL을
 거부하면서 일반 path, space, `.gitignore`, `..hidden`은 유지합니다. provider
 선택, retry 동작, 정적 리뷰 capability는 변경하지 않습니다.
 
+아래 0.2.544 설명은 U7 전역 설정 변경 제거 이전의 기록입니다.
+현재 AGY 프로필·설정 동작은 위 설치 설명을 따릅니다.
 0.2.544는 완료 후 AGY `step_update` telemetry를 diagnostic으로 유지하고
 verdict-admission schema로 취급하지 않습니다. 새 metadata field, 변경된 optional tool argument, 차단된 시도, 상충하는
 duplicate progress event가 유효한 terminal review를 사후에 무효화하지 않습니다.
@@ -616,7 +617,7 @@ provider의 `--cwd`를 prompt 파일의 기준 경로로 사용하지 않습니�
 
 Provider 성공에는 오류 없는 UTF-8 출력 수집 완료도 필요합니다. Wrapper는 정상
 종료 후에도 저장된 process group을 정리하며 reader/writer 시작 도중 실패해도
-정리합니다. AGY 설정 복구가 실패하면 답변을 출력하지 않고 수집한 원본을 기존
+정리합니다. AGY 실행 도중 프로필이 바뀌면 답변을 출력하지 않고 수집한 원본을 기존
 실패 기록에 보존합니다. 먼저 발생한 시간 초과나 provider 오류는 주된 실패
 원인으로 유지합니다.
 
@@ -695,13 +696,12 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 - **wrapper containment은 프로세스 수준이지 OS 수준 confinement이 아닙니다.**
   wrapper-containment env는 wrapper 프로세스의 path/pydantic 처리를 gate할 뿐, OS
   수준 격리 주장이 아닙니다. 정식 AGY는 `--sandbox`, 선택한 `--cwd` review root,
-  digest/mutation check, 커밋 전 사용자 검토를 결합합니다. `--project`가 없으면
-  일시적 deny lease를 사용하고, 지정하면 사용자가 준비한 프로젝트 권한 레코드를 검증합니다.
-  저장된 웹 허용 조건이 false인 경우(legacy 기본값) 여섯 review deny를 요구합니다.
-  true인 경우(v2 상시 허용 또는 legacy 직접 요청) 기존 다섯 raw deny를 유지하며, owner의
-  `read_url(*)` 차단이 있으면 이를 제거하지 않고 실행 전에 거절합니다. 두 Formal
-  모드 모두 `--dangerously-skip-permissions`를 전달하지 않습니다. Raw 호출은 기존 버전별
-  headless 호환 처리를 유지합니다.
+  digest/mutation check, 커밋 전 사용자 검토를 결합합니다. 모든 읽기 전용 호출은
+  바인딩된 native-tool exclusion 프로필을 선택하며 자동 승인 플래그를 전달하지 않습니다.
+  어떤 경로도 전역 설정을 변경하거나 lease를 취하지 않습니다. 선택적 `--project`는
+  사용자 프로젝트의 다섯 읽기 전용 deny를 검증하며 웹 허용 조건이 false이면
+  `read_url(*)`도 요구합니다. 웹 요청 시 프로젝트나 기존 로컬 설정의 전체 URL 차단을
+  발견하면 제거하지 않고 거절합니다. 일반 raw 호출만 기존 버전별 headless 호환 처리를 유지합니다.
   sandbox는 OS 수준 confinement가 아닌 provider 관리 경계이며, round-integrity
   mutation detection은 별도의 fail-closed 검사입니다.
   Prepared-directory review의 wrapper `--cwd`와 `--prompt-file`은 예약된 `triad-review-`
@@ -761,8 +761,8 @@ provider-free 합성 lifecycle 검증을 명시적으로 요청한 경우 checko
 링크 문자열과 정리 증거를 JSON으로 출력합니다. Export 실패 시에도 합성 bytes를 보고서에
 보관한 뒤 자체 fixture를 정리하며, 보관에 실패하면 fixture를 남깁니다.
 PATH에 Git과 Codex, Claude, AGY CLI가, Python 3.12+ 환경에 배포된 requirements의 Pydantic 2와 jsonschema가 필요합니다.
-임시 `AGY_SETTINGS_PATH`는 wrapper
-트랜잭션만 격리하며 vendor 설정 격리를 증명하지 않습니다. 성공은 리뷰 판정이나
+임시 `AGY_SETTINGS_PATH`는 wrapper의 설정 확인 경로만 바꾸며
+vendor 설정 격리를 증명하지 않습니다. 성공은 리뷰 판정이나
 릴리스 인증이 아닙니다.
 
 ## 삭제
@@ -1036,7 +1036,7 @@ owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-low
 `route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
 프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
 native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙니다. `--project`를
-생략하면 기존 전역 transaction을 사용합니다. 정확한 명령은
+생략하면 프로젝트 설정 검증을 생략하며 전역 설정은 변경하지 않습니다. 정확한 명령은
 [호출 계약](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project)을 따릅니다.
 
 ## 선택적 AGY 훅 도구 (비활성)
@@ -1122,12 +1122,12 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
 
 ## 참고
 
-- 위에서 공개한 승인된 내부 AGY flag, 일시적 AGY global-settings transaction,
+- 일반 raw 호출에만 사용하는 승인된 내부 AGY flag,
   사용자가 준비한 프로젝트를 선택하는 `--project`, wrapper 내부 formal Gemini
   model/Plan 요청 및 policy flag 외에는
   TRIAD가 caller-supplied yolo, bypass, skip-trust, accept-edits 또는 동등한 permission
-  control을 받지 않습니다. transaction은 lease 동안만 AGY setting을 변경하고 원래
-  바이트를 복원하며, hard crash가 남긴 deny residue는 다음 guarded call이 복구합니다.
+  control을 받지 않습니다. AGY 설정과 이전 backup/lock/lease 파일은 변경하지 않고
+  자동 복원·복구·삭제하지 않습니다.
 - Native permission decision은 commit, push, install, release, publication에 대한 owner workflow
   authorization을 제공하지 않습니다.
 - Fresh repair child는 proposal 또는 escalation만 반환하고 classifier change를

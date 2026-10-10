@@ -60,10 +60,11 @@ Select provider permissions and project trust in that authenticated developer
 environment before dispatch. TRIAD does not install a separate Codex profile,
 rule, permission mode, or pre-spawn `shell_environment_policy`.
 Formal AGY preflight and dispatch never pass `--dangerously-skip-permissions`.
-Only raw investigations retain the version-gated headless adaptation, unless
-`AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag. Calls
-without a project use the transient settings lease and restore its original
-bytes; explicit projects are validated without permission-file writes.
+Only permissive raw investigations retain version-gated headless adaptation,
+unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Read-only calls select explicitly
+provisioned native-tool profiles with component exclusion and require AGY>=1.2.1.
+No call writes/locks/restores global settings. Legacy backup/lease residue is
+preserved; explicit projects are validated without permission-file writes.
 Trusted Python and `PATH` values are prerequisites. After trusted launcher and
 interpreter startup, wrapper descendants remain scrubbed of loader and
 interpreter injection variables.
@@ -129,7 +130,8 @@ The wrapper validates that record without a global settings lease or permission
 mutation; provisioning remains separately authorized owner work. Use the same
 project for preflight and dispatch, and both Pro/Flash preflights when paired.
 The existing receipt hash binds its route arguments. Keep the project record
-stable during the call; omission preserves the legacy global transaction.
+stable during the call; omission skips project-record validation. Global settings
+remain untouched on either route.
 
 Claude, AGY, and organization Gemini Enterprise OAuth are managed independently
 from Codex auth. Auth failures should be surfaced to the user, not repaired by

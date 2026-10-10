@@ -1,6 +1,6 @@
 # TRIAD Codex spec-to-code — execution SoT
 
-Last updated: 2026-10-10 (Asia/Seoul).
+Last updated: 2026-10-11 (Asia/Seoul).
 Applies to the Codex host's shared-spec conformance work in this repository.
 This is the single live progress record. The shared specification remains the
 behavioral authority; this document does not override it or authorize publication.
@@ -32,6 +32,12 @@ dependent behavior, so both hosts can implement the same clarified contract.
 - Read Claude source as evidence, not as the answer. If Claude's claim is weak,
   request exact commits, code and tests through the shared spec. If both hosts
   are deficient or the contract is ambiguous, resolve the shared spec first.
+- Owner 2026-10-11: do not wait for Claude maintainer replies. Verify claims
+  independently from the current shared specification, relevant source, primary
+  documentation and bounded execution evidence; continue authorized work and
+  share established differences asynchronously. A missing reply is not a gate
+  or agreement. An actual unresolved design decision still goes to the owner.
+  This does not waive required independent review or external setup approval.
 - Both hosts are implementing concurrently. A spec-only or unimplemented item
   is pending work until evidence establishes a defect; pin each observation to
   current commits and relevant dirty files rather than treating old OPEN rows
@@ -75,9 +81,63 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**Active stage: U6a completed and pushed. U6b reply received for source/spec
-comparison; U7 has a newer profile candidate to verify before a design choice.
-U9 has one measured terminal-output gap.**
+**Active stage: U7 implementation and approved two-profile setup complete.
+Final dedicated GREEN:304affected/2364full passed,4skipped. Fresh R3 all four
+SAFE with ROUND_INTEGRITY_OK; custody exported and exact stages removed.
+Source/spec publication follows this completion record. Next: U6b comparison,
+then U9 measured terminal-output gap, U2 evidence mapping and U10 integration.**
+
+Owner2026-10-11 explicitly proceeded after the exclusion-profile live results and
+the proposed global-settings removal. The current unit plan is
+[U7 profile/settings](../superpowers/plans/2026-10-11-u7-profile-settings.md).
+New shared R-CONTAIN/R-REVIEW-WEB and C6/C68/C72 are07ee684; authoring1/1 and182
+tests pass, remote matched. PR13comment6099196142 requests A review; no newer A
+reply at the start, and no reply is required to continue B verification. Main
+remains3afc4d7; read-only A1de943af has no transaction.
+
+Fresh dedicated RED-valid16failed/2passed reproduced settings mutation during
+provider entry; later concurrent-writer checks were unreached. Initial RED was
+confounded by a deliberately invalid legacy lock-timeout setting; preserved and
+not treated as mutation proof. Candidate removes global transaction/lock/restore/
+heal code, adds exclusion to existing profiles, applies them to raw read-only
+without autoapproval, and requires CLI>=1.2.1 on read-only calls. Permissive raw
+and optional project semantics remain separate. Requested web only checks known
+existing denies/malformed settings; old residue stays. The two source profiles
+are installed after explicit approval. Production shrinks by roughly500lines; no new hook/audit.
+Leader diagnostics324passed/4skipped; documentation assertions corrected,
+42distribution tests pass. First dedicated GREEN:366focused passed/4skipped;
+full2354passed/4skipped and3failed. All three were stale test expectations of
+removed guard data/restore guidance. Two test modules are corrected, runtime
+unchanged. Final fresh dedicated GREEN:413focused and2357full passed,4skipped;
+bootstrap syntax, all four skill validators and diff check passed. Source/log
+integrity and exact temp cleanup passed. Host macOS26.6.2/arm64/Python3.12.13;
+Ubuntu not run. Failed evidence is retained. No unit admission.
+Owner2026-10-11 authorized the proposed two-file update. Both profiles now match
+source bytes with `excludeDefaultComponents: true`; known permission-setting
+hashes are unchanged. Receipt: `profile-install-receipt.json` in the evidence root.
+R1 completed with valid four-leg results and matching integrity: Pro/Flash SAFE,
+Opus/Astra NOT-SAFE. Current documents and rendered prompt overstated removed
+global denies/MCP enforcement. These claims are corrected, the v2 receipt floor
+is aligned to1.2.1, and timeout/profile-drift evidence coverage is restored.
+Dedicated correction RED:5failed/3passed; both timeout controls already passed,
+so no timeout runtime defect is claimed. Shared0d7073d clarifies MCP prohibition
+versus an unproved mechanical guarantee; PR13comment6099813534 shares it.
+R1 custody exported and exact stages removed. Fresh correction GREEN passed:
+584focused/2362full,4skipped; bootstrap, four validators, diff check, source/log
+integrity and exact cleanup passed. R2 then returned all four SAFE with integrity matched. Its fixture-isolation
+Minor was reproduced: web tests read ambient settings and failed on a synthetic
+URL deny or malformed JSON. The fixture now pins its invocation-owned settings
+path; product code stays unchanged. Existing success/profile-drift coverage now
+asserts stored classification and stdout. Fresh GREEN/R3 supersede R2 admission. The installed profiles need no further change.
+Evidence: workspace `_runs/infra/20261010-spec-to-code/u7-current-research/`.
+Final fixture GREEN:304affected/2364full passed,4skipped; bootstrap syntax/four
+validators/diff check and source/log integrity pass. Fresh R3 all four SAFE,
+ALL_SELECTED_APPROVED/ROUND_INTEGRITY_OK. Six nonblocking suggestions have
+recorded dispositions; no further wording/import/helper cleanup backlog.
+Runtime/tests/product docs remain the verified R3 bytes. No full plugin install,
+revision adoption, merge or release. Profile setup was separately approved and
+completed. U7 is complete; whole-task startup hook remains until U10 cleanup.
+
 
 Source `a4fd93c6283349df67bdb5c4d718a52144ac4547` is pushed and remote-matched.
 Shared completion `c55dca6` records C4/C5 fallback evidence separately from
@@ -118,25 +178,13 @@ Remaining actions, in dependency order:
    PR12 d805b50 adds DL-152 and its R-CLEANUP clarification. Compare that text
    and current source before declaration/migration code; it is no longer an
    unanswered A request. No per-file-marker or public deletion API is implied.
-2. U7: owner-requested fresh Opus/xhigh and Astra/xhigh web research completed.
-   Local/GitHub CLI1.3.3 confirms the docs release page lags at1.3.1. First test
-   the documented excludeDefaultComponents candidate; assess inheritCustomizations
-   separately because disabling it also drops rules. Issue1015 does not prove
-   current exclusion failure or success. The previous two-option owner question
-   is deferred until this narrower candidate is assessed; no implementation or
-   acceptance of reduced protection is inferred. A's formal route has an active
-   hook beyond its standalone wrapper/profile/census. Detailed evidence and
-   original independent results: workspace
-   `_runs/infra/20261010-spec-to-code/u7-current-research/` and shared decision
-   `decisions/2026-10-10-b-agy-current-capabilities.md`. No new AGY inference,
-   profile installation, settings change or hook activation was performed.
-3. U9: independent diagnosis and bounded correction planning for DL-88. Actual
+2. U9: independent diagnosis and bounded correction planning for DL-88. Actual
    shared-driver fixture returns the answer in the control; a BrokenPipeError
    on its terminal diagnostic instead raises without a RunResult. No provider
    or real stderr was changed. Current A already drops failed diagnostic writes;
    it was read, not executed or copied. Shared `c55dca6` records the evidence.
    Other old lifecycle claims remain classified individually, not assumed bugs.
-4. U2 evidence reconciliation and U10 final integration remain. U1T and U6a are
+3. U2 evidence reconciliation and U10 final integration remain. U1T and U6a are
    complete; U8 and unused Claude-agent work remain withdrawn. Keep the task hook
    until whole-task completion and its explicit cleanup checklist.
 
@@ -1265,7 +1313,7 @@ expanding the row into a plan; this queue is not a claim of exhaustive coverage.
 | 1b | R-MODEL / DL-116 / C34: Claude catalog and identity | U1a/U1b COMPLETE | Catalog and default units passed their recorded gates. Native Claude is excluded. |
 | 2 | R-CLASSIFY / R-AUTH: remaining measured errors and carriers | EVIDENCE MAPPING | Map remaining shared cases to B code and tests; measured carrier scope remains explicit. |
 | 3 | R-CLEANUP / DL-77: declarative roots and deletion ownership | QUEUED | Preserve custody, exports and floor protections through a separately reviewed migration. |
-| 4 | DL-107: AGY shared settings interaction (U7) | QUEUED | Verify actual runtime shared-state interactions. U8 installation coexistence, including B's DL-108/109 investigations, is WITHDRAWN by D-U8-WITHDRAWN-20261010; do not reinstate it here. |
+| 4 | DL-107: AGY shared settings interaction (U7) | COMPLETE (bounded unit) | Transaction removed; approved profiles installed; final2364passed/4skipped and all-four SAFE R3, integrity matched. Live probe does not prove universal write prevention. U8 installation coexistence, including B's DL-108/109 investigations, is WITHDRAWN by D-U8-WITHDRAWN-20261010; do not reinstate it here. |
 
 - [ ] Complete the queued shared units with linked proof for each.
 - [ ] Reconcile remaining shared-log B rows and disclose any unassessed scope.

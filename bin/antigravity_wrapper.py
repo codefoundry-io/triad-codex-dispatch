@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Single-shot AGY wrapper using the 1.1.20 headless plan-mode contract.
+"""AGY dispatch with explicit native-tool profiles for read-only calls.
 
-The wrapper forwards one prompt through ``stream-json``, admits only the
-terminal ``result`` event, and validates contracted output locally. Formal
-plan-mode calls pass the review-bound native finish schema, admit terminal
-``structured_output``, and repeat local verdict binding. Explicit project calls
-validate owner-provisioned read-only permissions without a global lease. Other
-calls retain the transient global-settings transaction. Formal preflight and
-dispatch default to six denies and omit headless adaptation; raw calls retain the
-version-gated adaptation.
+No path writes or locks machine settings. Optional project permissions and
+requested-web conflicts are checked read-only; formal results retain bindings.
+Formal plan-mode calls pass the review-bound native finish schema, admit terminal
+structured_output, and repeat strict local verdict validation.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -30,6 +27,7 @@ from _common import load_pydantic_class, validate_response
 
 
 AGY_VERSION_FLOOR = (1, 1, 20)
+READONLY_AGY_VERSION_FLOOR = (1, 2, 1)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
@@ -656,9 +654,11 @@ def main() -> int:
     selector_receipt = None
     v2_fields = None
     agent_control = {}
-    if selected_context:
+    readonly = args.sandbox == "read-only"
+    profile_web = args.web if selected_context else True
+    if readonly:
         try:
-            agent_control = _agy_agent.controls(args.web)
+            agent_control = _agy_agent.controls(profile_web)
         except (ValueError, OSError) as exc:
             _common.log(f"AGY config-conflict: {exc}")
             return _common.EXIT_TERMINAL
@@ -724,35 +724,30 @@ def main() -> int:
         else _common.require_binary("agy")
     )
     version = _probe_agy_version(agy_bin)
-    if version is None or version < AGY_VERSION_FLOOR:
+    floor = READONLY_AGY_VERSION_FLOOR if readonly else AGY_VERSION_FLOOR
+    if version is None or version < floor:
         found = _version_text(version) if version is not None else "unprobeable"
-        _common.log(f"agy {found} is below required {_version_text(AGY_VERSION_FLOOR)}")
+        _common.log(f"agy {found} is below required {_version_text(floor)}")
         return _common.EXIT_TERMINAL
 
-    deny_rules = (
-        _agy_settings.build_deny_rules(args.sandbox, formal_review=selected_context and not args.web)
-        if args.sandbox is not None else []
-    )
     if args.project is not None:
         settings_guard = _agy_settings.agy_project_guard(
             args.project, cwd, formal_review=selected_context and not args.web,
-            **({"require_web": True} if selected_context and args.web else {}),
+            require_web=args.web,
         )
     else:
-        try:
-            lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
-        except ValueError:
-            _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
-            return _common.EXIT_ARG_ERROR
-        settings_guard = _agy_settings.agy_settings_guard(
-            deny_rules, lock_timeout=lock_timeout,
-            **({"require_web": True} if selected_context and args.web else {}),
-        )
+        settings_guard = contextlib.nullcontext()
+    try:
+        if args.web:
+            _agy_settings.check_web_settings()
+    except (ValueError, OSError) as exc:
+        _common.log(f"AGY settings/config conflict: {exc}")
+        return _common.EXIT_TERMINAL
 
     if args.preflight_only:
         try:
             with settings_guard:
-                if _agy_agent.controls(args.web) != agent_control:
+                if _agy_agent.controls(profile_web) != agent_control:
                     raise ValueError("AGY profile changed during preflight")
         except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
             _common.log(f"AGY settings/config conflict: {exc}")
@@ -810,7 +805,7 @@ def main() -> int:
         timeout=args.timeout,
         json_schema=schema,
         sandbox=args.sandbox == "read-only",
-        skip_permissions=not selected_context and _agy_needs_skip_permissions(version),
+        skip_permissions=not readonly and _agy_needs_skip_permissions(version),
         project=args.project,
         add_dirs=tuple(args.add_dir),
         agent=agent_control.get("agent"),
@@ -822,7 +817,7 @@ def main() -> int:
     configuration_error = None
     try:
         with settings_guard:
-            if selected_context and _agy_agent.controls(args.web) != agent_control:
+            if readonly and _agy_agent.controls(profile_web) != agent_control:
                 raise ValueError("AGY profile changed before dispatch")
             raw = _common._run_once(
                 "antigravity",
@@ -831,7 +826,7 @@ def main() -> int:
                 args.timeout,
                 **run_options,
             )
-            if selected_context and _agy_agent.controls(args.web) != agent_control:
+            if readonly and _agy_agent.controls(profile_web) != agent_control:
                 raise ValueError("AGY profile changed during dispatch")
     except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         _common.log(f"AGY settings/config conflict: {exc}")

@@ -140,7 +140,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
 
     for route_contract in (
         "Claude | `opus`, `xhigh`, 1,200-second wrapper deadline",
-        "AGY 1.1.20 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline",
+        "AGY 1.2.1 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline",
         "Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline",
         'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits',
     ):
@@ -513,14 +513,14 @@ def test_standalone_skills_and_public_docs_keep_provider_read_contracts() -> Non
         assert clause in claude
 
     for clause in (
-        "AGY 1.1.20 or newer",
+        "AGY 1.2.1 or newer",
         "`AGY_NO_HEADLESS_AUTOAPPROVE=1`",
-        "uses native `--mode plan`",
+        "Native `--mode plan --sandbox` remains",
         "review-bound native `--json-schema` in plan mode",
         "consumes the terminal `structured_output`",
         "strict local `LegVerdict` validation",
         "no schema-repair provider call",
-        "MCP calls are unavailable for the formal Google leg",
+        "MCP calls are prohibited by the formal Google prompt",
         "undecidable uncertainty goes to `open_questions`",
         "Round-integrity mutation detection is separate",
     ):
@@ -536,8 +536,8 @@ def test_standalone_skills_and_public_docs_keep_provider_read_contracts() -> Non
             assert tool_argument in public_doc
     assert "uses native `grep_search`" in readme
     assert "native `grep_search`를 사용합니다" in readme_ko
-    assert "AGY also denies MCP calls" in readme
-    assert "AGY의 MCP 호출도 차단" in readme_ko
+    assert "AGY review prompts prohibit MCP calls" in readme
+    assert "AGY 리뷰 프롬프트는 MCP 호출을 금지" in readme_ko
 
 
 def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> None:
@@ -586,15 +586,15 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
 
     assert "makes no user-setting change" not in readme
     assert "user setting을 변경하지 않습니다" not in readme_ko
-    assert "transient AGY global-settings transaction" in readme
-    assert "일시적 AGY global-settings transaction" in readme_ko
-    assert "Default formal AGY adds `read_url(*)`" in readme
-    assert "기본 Formal AGY는 기존 다섯 deny에 `read_url(*)`" in readme_ko
-    assert "formal dispatch never supplies `--dangerously-skip-permissions`" in security
+    assert "All AGY calls leave global settings untouched" in readme
+    assert "모든 AGY 호출은 전역 설정을 변경하지 않습니다" in readme_ko
+    assert "`excludeDefaultComponents: true`" in readme
+    assert "`excludeDefaultComponents: true`" in readme_ko
+    assert "All read-only calls omit headless autoapproval" in security
     assert "REVIEW defaults to no web" in readme
     assert "REVIEW는 기본적으로 웹을 금지" in readme_ko
     assert "직접 요청" in readme_ko and "review-web.md" in readme
-    assert "MCP calls are also denied" in security
+    assert "AGY profiles/prompts prohibit MCP calls" in security
     assert "selected B Gemini profile explicitly denies `google_web_search` and `web_fetch`" in security
     assert "do not infer complete mechanical web denial" in security
     for document, stale_claim in (
@@ -609,16 +609,16 @@ def test_public_agy_permission_and_formal_route_claims_are_consistent() -> None:
     assert "standalone compatibility consult only" in gemini
     assert "Personal Google Sign-In requires AGY" in routing
     assert "Gemini Enterprise OAuth" in routing
-    assert "transient deny transaction" in leg_contracts
+    assert "No global settings transaction remains" in leg_contracts
 
 
 def test_standalone_agy_separates_formal_review_and_raw_investigation() -> None:
     agy = " ".join(_text(SKILLS / "triad-antigravity-dispatch" / "SKILL.md").split())
 
     for clause in (
-        "Formal preflight and dispatch never use `--dangerously-skip-permissions`",
-        "five raw read-only deny rules plus `read_url(*)`",
-        "Raw investigations retain the version-gated headless compatibility",
+        "read-only calls never use headless autoapproval",
+        "No call writes, locks, restores or heals global AGY settings",
+        "Permissive raw calls retain version-gated headless compatibility",
         "REVIEW defaults to no web",
         "only a direct owner request enables",
         "same six formal deny entries",
@@ -818,8 +818,7 @@ def test_leg_contract_scopes_mechanical_denial_to_named_namespaces() -> None:
     leg_contracts = active_contracts[1]
 
     assert (
-        "A tool attempt in a named denied namespace is also blocked by its matching "
-        "deny entry" in leg_contracts
+        "do not establish universal pre-execution prevention" in leg_contracts
     )
     assert (
         "Other prompt-forbidden actions remain contract obligations"
@@ -1205,22 +1204,22 @@ def test_current_public_docs_do_not_advertise_retired_batch_or_packet_modes() ->
         "README.md": (
             "native AGY CLI sign-in",
             "`--sandbox read-only`",
-            "transient global-settings transaction",
-            "restores the original bytes",
+            "global settings",
+            "untouched",
             "formally bound Claude leg adds native `--permission-mode plan`",
         ),
         "README.ko.md": (
             "native AGY CLI 로그인",
             "`--sandbox read-only`",
-            "일시적 global-settings transaction",
-            "원래 바이트를 복원",
+            "전역 설정을 변경하지 않습니다",
+            "자동 복원·삭제하지 않습니다",
             "formal binding이 완료된 Claude leg는 native `--permission-mode plan`을 추가",
         ),
         "SECURITY.md": (
             "native AGY CLI sign-in",
             "`--sandbox read-only`",
-            "transient global-settings transaction",
-            "restores the original bytes",
+            "global settings",
+            "untouched",
         ),
     }
     for name, phrases in permission_contracts.items():

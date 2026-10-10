@@ -9,6 +9,7 @@ tools:
   - read_url_content
   - search_web
   - finish
+excludeDefaultComponents: true
 mainAgent: true
 subagent: false
 model: inherit

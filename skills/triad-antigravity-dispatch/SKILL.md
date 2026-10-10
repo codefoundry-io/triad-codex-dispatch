@@ -6,17 +6,18 @@ description: Use when a bounded task needs one authorized AGY Google-family answ
 # Antigravity Dispatch
 
 Use the packaged `bin/antigravity_wrapper.py`.
-Formal preflight and dispatch never use `--dangerously-skip-permissions`.
-Raw investigations retain the version-gated headless compatibility unless
+All read-only calls require AGY >=1.2.1 and select an explicitly provisioned
+native-tool profile with `excludeDefaultComponents: true`. Formal review selects
+the no-web/research twin from its bound web value; raw read-only investigations
+use the research twin, retaining their separate prompt authorization. Native
+`--mode plan --sandbox` remains; read-only calls never use headless autoapproval.
+Permissive raw calls retain version-gated headless compatibility unless
 `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag.
-Formal calls use `--sandbox read-only`. Without an explicit project, the route uses
-native `--mode plan` with a transient global-settings transaction
-that unions the five raw read-only deny rules plus `read_url(*)` when the bound
-web condition is false (the legacy default), then restores the original bytes.
-A true condition (public v2 standing authorization or a legacy direct request)
-uses the five raw denies and refuses an existing owner `read_url(*)` deny before
-inference without removing it. Identical formal leases may overlap; different
-raw/formal deny lists remain isolated. On AGY 1.1.20 or newer, the formal route passes a
+No call writes, locks, restores or heals global AGY settings or legacy backup/
+lease files. Requested web only reads existing settings to reject a known
+`read_url(*)` deny or malformed existing JSON. Absence is not permission proof.
+Old residue is preserved; no automatic recovery/deletion is performed.
+On AGY 1.2.1 or newer, the formal route passes a
 review-bound native `--json-schema` in plan mode and consumes the terminal
 `structured_output`. It then repeats strict local `LegVerdict` validation and
 exact review-binding checks. Human-readable response text and diagnostic finish
@@ -25,7 +26,7 @@ A missing, malformed, or schema-invalid structured output terminates the leg wit
 schema-repair provider call. The formal Google prompt authorizes only
 AGY native file-read/search tools for local inspection, forbids command and
 other action tools plus experiments, and undecidable uncertainty goes to
-`open_questions`. MCP calls are unavailable for the formal Google leg.
+`open_questions`. MCP calls are prohibited by the formal Google prompt; tool absence is not attested.
 Public v2 uses its bound standing authorization. Legacy REVIEW defaults to no web; only a direct owner request enables
 [the bound web option](../triad-cross-family-review/references/review-web.md).
 Use `grep_search`
@@ -40,8 +41,10 @@ another-page continuation. If native reads and searches are insufficient, report
 not an admission schema: added fields, changed optional tool arguments, denied
 attempts, and duplicate progress events do not invalidate an otherwise valid
 terminal verdict. The prompt and native `--mode plan` define the static-review
-behavior. The explicit deny rules remain the action-namespace enforcement
-backstop. Local verdict and review-binding checks plus
+behavior. The profile explicitly declares native tools and excludes default components.
+The current1.3.3 probe proved useful read/search/web and no file after a direct
+write request, not provider denial of an attempted write or universal prevention.
+Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. Formal calls select the packaged primary AGY
 profile for tool discovery; its declarations are not a permission boundary.
@@ -49,7 +52,7 @@ The wrapper does not reinterpret a completed review from the vendor's evolving
 telemetry schema. The measured ERROR-only finish-resubmission exception uses
 structured step type, state, error and ordering fields; an earlier failed finish
 can be rescued by a later successful finish under the wrapper's existing checks.
-The route remains read-only by intent plus explicit deny, local result
+The route remains read-only by intent plus selected profile, local result
 admission, and separate round-integrity checks.
 
 ## Route proof
@@ -66,7 +69,7 @@ The explicitly requested review-web option uses the five raw read-only denies;
 an existing project `read_url(*)` deny causes refusal before inference and remains
 unchanged. Other owner denies also remain authoritative.
 
-Formal preflight verifies AGY >=1.1.20 and the required route controls. Pass the
+Formal preflight verifies AGY >=1.2.1 and the required route controls. Pass the
 selected model unchanged; do not run a model-list probe or require catalog
 membership. A provider's model refusal terminates that attempt without fallback.
 Preflight and argv evidence prove the requested route, not hidden backend
@@ -101,8 +104,7 @@ an explicit 600-second wrapper provider-process deadline, and the AGY child gets
 `--print-timeout 590s`. Apply [convergence](../triad-cross-family-review/references/convergence.md)
 to observation waits and terminal outcomes. The formal Google prompt
 authorizes only AGY native file-read/search tools for local inspection.
-Web research is prohibited by default; MCP calls are always denied by the
-formal read-only permission rules. It forbids command, shell, terminal,
+Web research is prohibited by default; MCP calls are forbidden by the profile and formal prompt. It forbids command, shell, terminal,
 file-write/edit, notebook-execution, subagent, browser-actuation, and
 scratch-space tools plus experiments; undecidable uncertainty goes to
 `open_questions`. AGY reviews only and makes no external-state changes or
@@ -112,8 +114,8 @@ candidate execution.
 
 A failure before provider submission stops the round with zero provider legs.
 A failure after submission invalidates the Google leg and round. Do not switch
-providers or authentication classes, drop `--sandbox read-only`, or replace
-containment checks with profile tool declarations.
+providers or authentication classes, drop `--sandbox read-only`, or claim
+unmeasured permission guarantees from profile declarations.
 Keep formal permission checks enabled; if headless review is unavailable,
 report the blocker and diagnose the same route without enabling autoapproval.
 Clean the invalid round, correct the same route, and restart every required

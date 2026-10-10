@@ -253,8 +253,12 @@ def test_C32_google_preflight_permission_binds_dispatch_and_policy(route, dispat
     assert rc == (0 if dispatch_web else _common.EXIT_ARG_ERROR), error
     assert len(route["calls"]) == int(dispatch_web)
     if route["name"] == "agy":
-        assert route["guards"] and all("read_url(*)" not in rules for rules in route["guards"])
-        assert all("write_file(*)" in rules and "command(*)" in rules for rules in route["guards"])
+        assert receipt["agent"] == "triad-codex-readonly-research"
+        profile = Path(receipt["agent_path"]).read_bytes()
+        assert hashlib.sha256(profile).hexdigest() == receipt["agent_sha256"]
+        for cmd, *_ in route["calls"]:
+            assert cmd[cmd.index("--agent") + 1] == receipt["agent"]
+            assert "--dangerously-skip-permissions" not in cmd
     else:
         policy = tomllib.loads(Path(receipt["policy"]).read_text())
         allow = next(rule["toolName"] for rule in policy["rule"] if rule["decision"] == "allow")

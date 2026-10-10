@@ -35,11 +35,11 @@ def test_current_migration_guidance_discloses_child_permission_selection_without
     assert "same authenticated login terminal" in guidance
     assert "repository worktree used for development" in guidance
     assert "Formal AGY preflight and dispatch never pass `--dangerously-skip-permissions`" in guidance
-    assert "Only raw investigations retain the version-gated headless adaptation" in guidance
+    assert "Only permissive raw investigations retain version-gated headless adaptation" in guidance
     assert "REVIEW defaults to no web" in guidance
     assert "only on a direct owner request for that round" in guidance
     assert "deliberately selects AGY native headless `always-proceed`" not in guidance
-    assert "transient settings lease and restore its original bytes" in guidance
+    assert "No call writes/locks/restores global settings" in guidance
     assert "explicit projects are validated without permission-file writes" in guidance
     assert "does not install a separate Codex profile, rule, permission" in guidance
     assert "pre-spawn `shell_environment_policy`" in guidance

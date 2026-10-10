@@ -5,7 +5,7 @@ Run from a source checkout with the bootstrap prerequisites listed in README.
 The JSON report contains synthetic data and subprocess results, not a review verdict.
 Fixture, stage and review writes use newly allocated temporary roots; bootstrap
 and Python may also create ignored toolkit logs and bytecode. AGY_SETTINGS_PATH
-isolates the Python guard only; this is not a vendor-settings isolation test.
+redirects only the wrapper's requested-web settings check, not vendor settings.
 """
 from __future__ import annotations
 

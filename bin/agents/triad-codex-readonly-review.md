@@ -7,6 +7,7 @@ tools:
   - list_dir
   - find_by_name
   - finish
+excludeDefaultComponents: true
 mainAgent: true
 subagent: false
 model: inherit

@@ -68,7 +68,7 @@ def load_preflight(path: Path, selector, args, cwd: str | None) -> dict:
         _agy_agent.validate_binding(record, getattr(args, "web", False), source_bin=selector.wrapper.parent)
         version = record["agy_version"]
         if (not isinstance(version, str) or re.fullmatch(r"\d+\.\d+\.\d+", version) is None
-                or tuple(map(int, version.split("."))) < (1, 1, 20)):
+                or tuple(map(int, version.split("."))) < (1, 2, 1)):
             raise ValueError("v2 AGY preflight version is invalid")
     else:
         review_round.validate_formal_gemini_version(record["gemini_version"])

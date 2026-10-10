@@ -47,10 +47,7 @@ def project_case(tmp_path, monkeypatch):
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _: None)
     monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *a, **k: None)
 
-    def no_lease(*a, **k):
-        pytest.fail("project route entered global settings transaction")
 
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", no_lease)
     selector_path, _, _ = _google_selector_fixture(tmp_path)
     args = ["antigravity_wrapper.py", "--prompt", "inspect approved source",
             "--cwd", str(cwd), "--sandbox", "read-only", "--project", PROJECT,

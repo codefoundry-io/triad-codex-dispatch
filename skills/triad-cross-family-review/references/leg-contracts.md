@@ -192,7 +192,7 @@ render and bind `review_digest` to the renderer's route-bound
 `metadata.content_digest`. Every family uses that same value.
 
 For an AGY receipt, the wrapper proves `"$google_executable" --version` is at least
-1.1.20 and checks the required containment controls. Do not run a model-list or
+1.2.1 and checks the required containment controls. Do not run a model-list or
 availability probe or reject a pin absent from a catalog. Run this provider-free
 wrapper preflight:
 
@@ -271,8 +271,8 @@ resource whose `folderUri` equals the canonical cwd URI, and these deny entries:
 legacy direct request) refuses that known whole-URL deny instead of removing it.
 Raw read-only investigation keeps the original five-rule requirement.
 Additional owner rules remain untouched. Invalid configuration stops before
-inference. This mode validates the project instead of entering a global settings
-transaction; it never creates or edits a project or permission record.
+inference. This mode adds read-only project validation; no route creates or edits
+a project or global permission record.
 
 The sole `folderUri` must name the exact current `review_target_cwd`. A fixed
 project fits a stable worktree-first root. Prepared-directory rounds need a
@@ -283,8 +283,8 @@ The existing preflight `route_args` ends with `--project <UUID>` and is bound by
 the receipt hash. Pass the identical UUID at dispatch; keep the project record
 stable for the full call. In a paired Pro/Flash review, both preflights use the
 same project UUID. Each family render still receives the unchanged receipts;
-do not add metadata fields or rewrite rendered prompts. Omit `--project` to use
-the existing global transaction. Project provisioning requires owner authority
+do not add metadata fields or rewrite rendered prompts. Omitting `--project`
+skips project-record validation. Project provisioning requires owner authority
 for that exact external configuration; the wrapper does not provision it.
 
 For a Gemini receipt, dispatch the same rendered Google prompt and bindings with:
@@ -310,10 +310,12 @@ The wrappers own the mechanical formal contracts:
   `bin/policies/gemini-formal-readonly.toml`; it removes competing route
   selectors without reading them and records runtime identity and effective
   approval mode as `unexposed`. TRIAD never adds `--skip-trust`.
-- AGY validates the required CLI version, uses native Plan Mode and a
-  review-bound JSON schema, validates the explicit project or applies and restores
-  the transient deny transaction, and consumes terminal `structured_output`. A tool
-  attempt in a named denied namespace is also blocked by its matching deny entry.
+- AGY validates CLI>=1.2.1, selects the bound native-tool exclusion profile,
+  uses native Plan Mode and a review-bound JSON schema, validates an optional
+  explicit project without writes, and consumes terminal `structured_output`.
+  No global settings transaction remains. Requested web checks known existing
+  URL denies without editing them. Profile declarations and the no-write probe
+  do not establish universal pre-execution prevention.
   Formal dispatch omits `--dangerously-skip-permissions` regardless of the
   operator's `AGY_NO_HEADLESS_AUTOAPPROVE` setting; do not enable it to bypass a
   formal permission failure.

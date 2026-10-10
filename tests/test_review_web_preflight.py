@@ -13,7 +13,7 @@ from test_agy_project_boundary import project_case, _canonical, wrapper
 from test_v2_google_wrappers import route
 import _agy_settings
 
-REAL_GLOBAL_GUARD = _agy_settings.agy_settings_guard
+
 
 
 @pytest.mark.parametrize("available", ["missing", False, None, 1, "true"])
@@ -84,15 +84,15 @@ def test_project_whole_url_deny_refuses_requested_review_web(project_case, monke
 
 
 @pytest.mark.parametrize("blocked", [False, True])
-def test_active_local_web_guard_preserves_owner_rules_and_restores(tmp_path, monkeypatch, blocked):
+def test_local_web_check_preserves_owner_rules(tmp_path, monkeypatch, blocked):
     path = tmp_path / "settings.json"
     original = json.dumps({"permissions": {"deny": ["read_url(*)"] if blocked else ["read_file(/private)"]}}).encode()
     path.write_bytes(original)
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(path))
     entered = False
     try:
-        with _agy_settings.agy_settings_guard(_agy_settings.build_deny_rules("read-only"), require_web=True):
-            entered = True
+        _agy_settings.check_web_settings()
+        entered = True
     except ValueError as error:
         assert blocked and "web" in str(error)
     assert entered is not blocked
@@ -127,7 +127,6 @@ def test_global_web_preflight_uses_the_real_known_deny_check(route, tmp_path, mo
     original = b'{"permissions":{"deny":["read_url(*)"]}}\n'
     settings.write_bytes(original)
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(settings))
-    monkeypatch.setattr(_agy_settings, "agy_settings_guard", REAL_GLOBAL_GUARD)
     rc, output, error = route["invoke"](["--preflight-only", "--web"])
     assert rc == wrapper._common.EXIT_TERMINAL and output == "" and "web" in error
     assert route["calls"] == [] and settings.read_bytes() == original

@@ -500,8 +500,8 @@ def test_bootstrap_help_describes_claude_parity_and_google_route_selection() -> 
     assert "personal Google Sign-In requires agy" in help_text
     assert "Gemini Enterprise OAuth may use gemini when agy is absent" in help_text
     assert "same authenticated login terminal" in help_text
-    assert "transient global-settings transaction" in help_text
-    assert "restores the original bytes" in help_text
+    assert "native-tool exclusion profiles" in help_text
+    assert "All calls leave global settings untouched" in help_text
     assert "Gemini Enterprise OAuth sign-in" in help_text
     assert "--dangerously-skip-permissions" in help_text
     assert "does not install persistent global AGY permission policy" in help_text

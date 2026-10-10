@@ -41,12 +41,12 @@ Install targets must resolve outside the project worktree. Run TRIAD from the
 same authenticated login terminal and worktree used for development. TRIAD
 does not install or inject a separate Codex profile, command rule, shell
 environment policy, shell entry, or persistent global permission requirement.
-The default AGY route (without --project) uses --sandbox read-only plus a transient global-settings
-transaction that restores the original bytes. With --project, the wrapper validates
-owner-provisioned project permissions and leaves global settings unchanged. Unless the
-operator sets AGY_NO_HEADLESS_AUTOAPPROVE=1, AGY 1.1.3+ receives the
+AGY read-only calls use native-tool exclusion profiles (CLI>=1.2.1), plan/sandbox,
+and no autoapproval. All calls leave global settings untouched. With --project, the wrapper validates
+owner-provisioned project permissions and leaves global settings unchanged. On
+permissive raw calls only, unless the operator sets AGY_NO_HEADLESS_AUTOAPPROVE=1, AGY receives the
 wrapper-owned --dangerously-skip-permissions headless adaptation,
-matching the deployed Claude-led TRIAD. An existing Gemini Enterprise OAuth
+preserving the existing compatibility path. An existing Gemini Enterprise OAuth
 sign-in may be retained through the Legacy Gemini CLI route. Wrapper descendants remain
 scrubbed after trusted launcher and interpreter startup. Bootstrap does not
 install persistent global AGY permission policy.
@@ -1443,7 +1443,7 @@ fi
 if [ "$errors" -eq 0 ]; then
   warn "launcher Python is installer-selected: credential-compatible user-site mode requires a trusted HOME because sitecustomize/usercustomize can run before launcher scrubbing; alternatively select a trusted isolated Python only if it preserves provider login."
   if [ "$GOOGLE_ROUTE" = "agy" ]; then
-    printf 'native permissions: use the existing AGY sign-in. Personal Google Sign-In and Gemini Enterprise authentication remain provider-owned. Without --project, AGY uses --sandbox read-only plus the transient Claude-parity settings transaction and restores original bytes; with --project, it validates owner-provisioned project permissions without a global transaction. Bootstrap installs no persistent global AGY policy and never switches accounts.\n'
+    printf 'native permissions: use the existing AGY sign-in. Personal Google Sign-In and Gemini Enterprise authentication remain provider-owned. AGY read-only calls require CLI>=1.2.1, native-tool exclusion profiles and --sandbox read-only without autoapproval. All calls leave global settings untouched; --project validates existing project permissions. Old backup/lock/lease residue is preserved without healing or deletion. Bootstrap installs no persistent global AGY policy and never switches accounts.\n'
   else
     printf 'native permissions: use the existing Gemini Enterprise OAuth sign-in. Formal dispatch uses Gemini CLI Auto plus the packaged per-call Plan Mode policy; bootstrap does not change accounts or persistent Gemini configuration.\n'
   fi

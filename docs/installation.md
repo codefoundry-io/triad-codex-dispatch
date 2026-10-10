@@ -12,6 +12,20 @@ The current source candidate requires two explicitly provisioned AGY profiles
 for legacy/v2 formal review. After reviewing the packaged `bin/agents/` files,
 run from the selected toolkit root:
 
+
+U7 adds `excludeDefaultComponents: true` to both profiles and requires AGY>=1.2.1
+for read-only calls, including raw investigations (which use the research twin).
+Updating an older profile requires reviewing the two-file delta and explicitly
+running the same installer with `--replace`; dispatch never updates it.
+Global settings and legacy `.agybak`, lock and lease files are preserved without
+automatic healing/deletion. Requested web refuses a known URL-wide deny or
+malformed existing settings; it never edits them. Live1.3.3 evidence proves useful
+read/search/web and no file after a write request, not provider-denied execution.
+A pre-U7 crash may have left TRIAD deny entries in `settings.json` itself. Compare
+any leftover `.agybak` snapshot with current settings and manually reconcile only
+confirmed TRIAD residue, preserving later operator edits; do not blindly restore
+the whole backup. TRIAD performs no automatic recovery.
+
 ```sh
 python3 bin/_agy_agent.py --install
 ```
@@ -28,7 +42,7 @@ Preflight binds name/path/SHA-256; missing or changed definitions refuse the
 review before inference. The no-web profile supplies native reads/searches;
 the authorized `--web` route selects the research twin. Model and effort remain
 CLI arguments. Profiles select tools but are not a sufficient permission
-boundary; existing plan/sandbox and deny rules remain. Version/preflight success
+boundary; existing plan/sandbox and result checks remain. Version/preflight success
 does not prove search capability; that requires a successful native search and
 read under the selected profile.
 

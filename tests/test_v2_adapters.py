@@ -279,11 +279,9 @@ def test_C65_google_later_versions_keep_actual_preflight_controls(route, monkeyp
         if case == "missing-capability":
             monkeypatch.setattr(agy, "_probe_agy_version", lambda _: None)
         if case == "missing-control":
-            @contextlib.contextmanager
             def unavailable_guard(*args, **kwargs):
-                raise ValueError("required read-only settings control unavailable")
-                yield
-            monkeypatch.setattr(agy._agy_settings, "agy_settings_guard", unavailable_guard)
+                raise ValueError("required read-only profile unavailable")
+            monkeypatch.setattr(agy._agy_agent, "controls", unavailable_guard)
     else:
         original = gemini.subprocess.run
         def probe(argv, **kw):

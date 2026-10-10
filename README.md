@@ -36,13 +36,13 @@ reaches out to the other families for you.
   AGY is preferred and is required for personal Google Sign-In. For an
   owner-selected Gemini Enterprise OAuth account, an absent AGY executable
   selects the existing Gemini CLI wrapper immediately; later AGY failure never
-  triggers that fallback. Without an explicit `--project`, `--sandbox read-only` brackets AGY in a transient
-  global-settings transaction and restores the original bytes. Default formal AGY adds
-  `read_url(*)` to the five raw read-only denies on the legacy no-web path and never uses the headless
-  autoapproval flag. Identical formal leases can overlap; raw/formal deny lists
-  remain isolated. Raw investigations retain their web-compatible rules and
-  version-gated headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-  Public v2 binds standing review-web authorization. Legacy REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
+  triggers that fallback. All AGY calls leave global settings untouched.
+  Read-only calls require CLI >=1.2.1 and select the existing native-tool profile
+  with `excludeDefaultComponents: true`, keeping plan/sandbox and no autoapproval.
+  Legacy backup/lock/lease files are preserved without healing or deletion.
+  Raw read-only investigations use the research profile; permissive raw retains
+  version-gated headless adaptation with `AGY_NO_HEADLESS_AUTOAPPROVE=1` opt-out.
+  Public v2 binds standing review-web authorization. Legacy REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY review prompts prohibit MCP calls; this is not proof of mechanical denial. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
   cache and removes competing API-key/ADC/Vertex selectors without reading
@@ -182,8 +182,8 @@ section is optional.
    Start ordinary `codex` from the same authenticated login terminal and actual
    project worktree. Use the existing AGY sign-in, or the existing Gemini
    Enterprise OAuth sign-in when AGY is not installed. Formal AGY review uses
-   `--sandbox read-only` under the transient settings lease by default; an explicit
-   dedicated project can use its preconfigured permissions without that lease.
+   `--sandbox read-only` with the explicit native-tool profile and no global
+   settings writes. An optional dedicated project retains read-only validation.
    Formal Gemini review
    requests native Plan Mode while its mode-independent packaged per-call policy
    enforces read/search-only behavior. Trusted Python and `PATH` are prerequisites;
@@ -345,7 +345,7 @@ admission or coverage credit.
 
 The opt-in, receipt-bound AGY `--project` mode validates an existing
 owner-provisioned project for the exact `--cwd` and required read-only deny rules
-with `--sandbox read-only`, instead of entering the global settings transaction.
+with `--sandbox read-only`; the wrapper validates the project without settings writes.
 It provisions or edits no project or permissions. Provider-free skill
 characterization now uses the packaged fixed lifecycle verifier; it is not a
 review round or admission result.
@@ -456,6 +456,8 @@ controls, and DEL while preserving ordinary paths, spaces, `.gitignore`, and
 `..hidden`. Provider selection, retry behavior, and static-review capability do
 not change.
 
+Historical 0.2.544 behavior below predates U7's removal of global settings writes.
+Current AGY profiles/settings behavior is described in Installation above.
 0.2.544 keeps post-completion AGY `step_update` telemetry diagnostic rather
 than part of the verdict-admission schema. Added metadata fields, changed optional tool
 arguments, denied attempts, and conflicting duplicate progress events cannot
@@ -662,7 +664,7 @@ The local Claude wrapper sends the effective prompt as UTF-8 text on the provide
 
 Provider success also requires complete, error-free UTF-8 output collection.
 The wrapper reconciles its saved process group after normal exit and cleans up
-partial reader/writer startup. An AGY settings-release failure suppresses the
+partial reader/writer startup. An AGY profile change during dispatch suppresses the
 answer while retaining captured output in the existing failure artifacts; an
 earlier timeout or provider failure remains the primary reported cause.
 
@@ -747,14 +749,13 @@ Honest boundaries, so you know where the toolkit stops:
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
   they are not a claim of OS-level isolation. Formal AGY uses `--sandbox`, the
   selected `--cwd` review root, digest and mutation checks, and your review before
-  commit. Without `--project`, it also uses the transient deny lease; with
-  `--project`, it validates the owner-provisioned project permission record.
-  A false bound web condition (the legacy default) requires the six review denies.
-  A true condition (public v2 standing authorization or a legacy direct request)
-  retains the five raw denies and refuses an existing
-  owner `read_url(*)` deny before inference without removing it. Both formal modes
-  never pass `--dangerously-skip-permissions`. Raw calls retain their existing version-gated
-  headless compatibility. The sandbox
+  commit. All read-only calls select the bound native-tool exclusion profile and
+  omit `--dangerously-skip-permissions`. No route writes or leases global settings.
+  An optional `--project` adds validation of its owner-provisioned record: five
+  read-only denies, plus `read_url(*)` for a false bound web condition. Requested
+  web refuses a known URL-wide deny in the project or existing local settings
+  without removing it. Only permissive raw calls retain version-gated headless
+  adaptation. The sandbox
   remains provider-managed rather than OS-level confinement; round-integrity
   mutation detection is a separate fail-closed check.
   Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
@@ -826,8 +827,8 @@ and cleanup evidence as JSON. If export fails, it retains the synthetic bytes in
 the report before disposing of its own fixtures; if retention fails, the fixture
 is preserved. It needs Git and the Codex, Claude and AGY
 CLIs on PATH, plus Python 3.12+ with Pydantic 2 and jsonschema from the shipped requirements.
-Temporary `AGY_SETTINGS_PATH` isolates only the wrapper transaction, not vendor
-configuration. Success is neither a review verdict nor release certification.
+Temporary `AGY_SETTINGS_PATH` redirects only the wrapper's settings check, not
+vendor configuration. Success is neither a review verdict nor release certification.
 
 ## Remove
 
@@ -1115,7 +1116,7 @@ existing preflight `route_args` and receipt hash bind it to the rendered review;
 paired Pro/Flash preflights must select the same project. Keep the project
 configuration stable throughout the call. This is a configured native permission
 boundary, not OS confinement or runtime policy attestation. Omitting `--project`
-preserves the existing global transaction. See the
+skips project-record validation; global settings remain untouched. See the
 [invocation contract](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project).
 
 ## Optional AGY hook artifact (disabled)
@@ -1209,13 +1210,12 @@ availability; synthetic tests verify this helper's behavior without real inferen
 
 ## Notes
 
-- Apart from the approved internal AGY flag, the disclosed transient AGY
-  global-settings transaction, the owner-provisioned `--project` selector,
+- Apart from the approved internal AGY flag on permissive raw calls,
+  the owner-provisioned `--project` selector,
   and wrapper-internal formal Gemini model/Plan
   request and policy flags, TRIAD accepts no caller-supplied yolo, bypass,
-  skip-trust, accept-edits, or equivalent permission controls. The transaction
-  changes AGY settings only for its lease and restores the original bytes; a
-  hard crash can leave deny residue for the next guarded call to heal.
+  skip-trust, accept-edits, or equivalent permission controls. AGY settings and
+  old backup/lock/lease residue remain untouched; no automatic healing occurs.
 - Native permission decisions never supply owner workflow authorization for commit,
   push, install, release, or publication.
 - The fresh repair child returns a proposal or escalation and never applies a

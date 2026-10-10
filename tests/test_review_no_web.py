@@ -7,7 +7,7 @@ import sys
 import pytest
 
 from test_agy_project_boundary import project_case, _canonical, wrapper, PRO, FLASH
-from test_agy_settings import settings, BASELINE, _bind
+from test_agy_settings import settings
 from test_antigravity_stream_json import _run_result, _stream, _google_selector_fixture
 from test_four_leg_custody import _brief
 from test_review_conditions import _prepared_brief
@@ -25,11 +25,6 @@ def test_formal_preflight_requires_read_only_before_probing(
     observed = []
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _: None)
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _: observed.append("version") or (1, 2, 7))
-    @contextlib.contextmanager
-    def guard(rules, **kwargs):
-        observed.append(list(rules))
-        yield
-    monkeypatch.setattr(settings, "agy_settings_guard", guard)
     monkeypatch.setattr(wrapper._common, "_run_once", lambda *a, **k: pytest.fail("provider started"))
     monkeypatch.setattr(sys, "argv", [
         "antigravity_wrapper.py", "--prompt", "formal route proof",
@@ -64,34 +59,8 @@ def test_all_review_prompts_forbid_web(prepared, worktree, mode, family, route):
         assert "Do not call " + prohibited in prompt
 
 
-def test_identical_formal_leases_overlap_and_restore(tmp_path, monkeypatch):
-    target, backup = _bind(tmp_path, monkeypatch)
-    target.write_bytes(BASELINE)
-    state_path = target.with_name(".agy_settings.shared.json")
-    with settings.agy_settings_guard(FORMAL, lock_timeout=0):
-        with settings.agy_settings_guard(FORMAL, lock_timeout=0):
-            state = json.loads(state_path.read_text())
-            assert len(state["holders"]) == 2
-            assert set(json.loads(target.read_text())["permissions"]["deny"]) == set(FORMAL + ["command(sudo)"])
-        assert len(json.loads(state_path.read_text())["holders"]) == 1
-        assert backup.exists()
-    assert target.read_bytes() == BASELINE
-    assert not backup.exists() and not state_path.exists()
-    assert not target.with_name(".agy_settings.holders").exists()
 
 
-@pytest.mark.parametrize("held,other", [(RAW, FORMAL), (FORMAL, RAW)])
-def test_raw_and_formal_leases_do_not_mix(tmp_path, monkeypatch, held, other):
-    target, backup = _bind(tmp_path, monkeypatch)
-    target.write_bytes(BASELINE)
-    with settings.agy_settings_guard(held, lock_timeout=0):
-        active = target.read_bytes()
-        with pytest.raises(TimeoutError):
-            with settings.agy_settings_guard(other, lock_timeout=0):
-                pytest.fail("different deny lists shared a lease")
-        assert target.read_bytes() == active
-    assert target.read_bytes() == BASELINE
-    assert not backup.exists()
 
 
 @pytest.mark.parametrize("model", [PRO, FLASH])
@@ -123,12 +92,7 @@ def test_raw_invocation_keeps_web_compatible_rules_and_headless_behavior(
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _: (1, 2, 7))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _: None)
     monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *a, **k: None)
-    rules, calls = [], []
-    @contextlib.contextmanager
-    def guard(deny_rules, **kwargs):
-        rules.append(deny_rules)
-        yield
-    monkeypatch.setattr(settings, "agy_settings_guard", guard)
+    calls = []
     def native(_cli, cmd, *a, **k):
         calls.append(cmd)
         return _run_result(_stream({"status": "SUCCESS", "response": "raw answer"}))
@@ -139,5 +103,6 @@ def test_raw_invocation_keeps_web_compatible_rules_and_headless_behavior(
     monkeypatch.setattr(sys, "argv", args)
     assert wrapper.main() == 0
     assert capsys.readouterr().out.strip() == "raw answer"
-    assert "--dangerously-skip-permissions" in calls[0]
-    assert rules == [RAW if sandbox else []]
+    assert ("--dangerously-skip-permissions" in calls[0]) is (not sandbox)
+    if sandbox:
+        assert calls[0][calls[0].index("--agent") + 1] == "triad-codex-readonly-research"

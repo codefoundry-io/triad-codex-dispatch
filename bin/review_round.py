@@ -70,7 +70,7 @@ _AGY_GOOGLE_TOOL_CONTRACT = (
     "the limit in open_questions. "
     "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
     "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-    "The formal read-only permission rules deny all MCP calls. Do not call search_web or read_url_content. "
+    "Do not invoke MCP tools. Do not call search_web or read_url_content. "
     "Do not create or execute an experiment to resolve uncertainty. If static inspection "
     "cannot decide current correctness, report the uncertainty in open_questions. "
 )

@@ -23,6 +23,7 @@ def route(request, tmp_path, monkeypatch, capsys):
     name = request.param
     wrapper = agy if name == "agy" else gemini
     home = tmp_path.resolve()
+    monkeypatch.setenv("AGY_SETTINGS_PATH", str(home / "agy-settings.json"))
     executable = home / name
     _fake_executable(executable)
     selector = home / "selector.json"
@@ -34,13 +35,9 @@ def route(request, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("TRIAD_WRAPPER_ALLOWED_ROOTS", str(home))
     monkeypatch.setenv("TRIAD_WRAPPER_HARDENED", "1")
     model = "gemini-3.1-pro-high" if name == "agy" else "gemini-3.1-pro-preview"
-    calls, guards = [], []
+    calls = []
 
-    def guard(rules, **kwargs):
-        guards.append(rules)
-        return contextlib.nullcontext()
 
-    monkeypatch.setattr(agy._agy_settings, "agy_settings_guard", guard)
     monkeypatch.setattr(agy, "_probe_agy_version", lambda _: (1, 2, 7))
 
     state = {"output": {}, "vendor_exit": 0, "gemini_version": "0.63.0"}
@@ -82,7 +79,7 @@ def route(request, tmp_path, monkeypatch, capsys):
         output = capsys.readouterr()
         return rc, output.out, output.err
 
-    return dict(name=name, home=home, model=model, calls=calls, guards=guards,
+    return dict(name=name, home=home, model=model, calls=calls,
                 state=state, options=options, invoke=invoke, selector=selector)
 
 
@@ -111,6 +108,19 @@ def ready(route, *, web=False):
     return options, file
 
 
+@pytest.mark.parametrize("route", ["agy"], indirect=True)
+@pytest.mark.parametrize("ambient", ['{"permissions":{"deny":["read_url(*)"]}}', 'malformed'])
+def test_web_fixture_is_independent_of_ambient_settings(route, monkeypatch, ambient):
+    owner_settings = route["home"] / "owner-settings.json"
+    owner_settings.write_text(ambient)
+    monkeypatch.setattr(agy._agy_settings, "_DEFAULT_PATH", owner_settings)
+    options, _ = ready(route, web=True)
+    rc, _, error = route["invoke"](base=options)
+    assert rc == 0, error
+    assert len(route["calls"]) == 1
+    assert owner_settings.read_text() == ambient
+
+
 def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settings(route):
     options, _ = ready(route)
     rc, output, error = route["invoke"](base=options)
@@ -128,7 +138,8 @@ def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settin
         assert "--policy" in cmd and cmd[cmd.index("--approval-mode") + 1] == "plan"
     else:
         assert "--skip-permissions" not in cmd
-        assert route["guards"]
+        assert cmd[cmd.index("--agent") + 1] == "triad-codex-readonly-review"
+        assert "--dangerously-skip-permissions" not in cmd
     cli = "antigravity" if route["name"] == "agy" else "gemini"
     record = json.loads((route["home"] / "logs" / cli / "audit.jsonl").read_text())
     assert record["transport"]["attempt"] == 2
@@ -225,6 +236,30 @@ def test_v2_consumption_refuses_stale_gemini_version(route, version):
     file.write_bytes(review_round._canonical_json_bytes({**original, "gemini_version": version}))
     with pytest.raises(ValueError, match="CLI >=0.63.0"):
         google_preflight_v2.load_preflight(file, selector, args, str(route["home"]))
+    assert route["calls"] == []
+
+
+@pytest.mark.parametrize("route", ["agy"], indirect=True)
+@pytest.mark.parametrize("version,accepted", [("1.1.20", False), ("1.2.0", False), ("1.2.1", True)])
+def test_v2_agy_receipt_uses_readonly_version_floor(route, version, accepted):
+    from types import SimpleNamespace
+    import google_preflight_v2
+    import review_round
+
+    _, file = ready(route)
+    selector = review_round.load_google_selector_receipt(
+        route["selector"], expected_review_id="round-2", expected_route="agy",
+        expected_wrapper=Path(agy.__file__))
+    args = SimpleNamespace(expected_review_id="round-2", expected_leg_name="google-second",
+        expected_attempt=2, expected_route="agy", timeout=610, model=route["model"], effort="high")
+    record = json.loads(file.read_text())
+    record["agy_version"] = version
+    file.write_bytes(review_round._canonical_json_bytes(record))
+    if accepted:
+        assert google_preflight_v2.load_preflight(file, selector, args, str(route["home"]))["agy_version"] == version
+    else:
+        with pytest.raises(ValueError, match="version"):
+            google_preflight_v2.load_preflight(file, selector, args, str(route["home"]))
     assert route["calls"] == []
 
 
