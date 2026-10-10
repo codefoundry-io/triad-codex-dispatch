@@ -58,6 +58,9 @@ def adapter_case(tmp_path, monkeypatch):
             if "--preflight-only" in argv:
                 assert "--pydantic" in argv and argv[argv.index("--pydantic") + 1] == "verdict_v2:LegVerdict"
                 def value(flag):
+                    for item in argv:
+                        if item.startswith(flag + "="):
+                            return item.split("=", 1)[1]
                     return argv[argv.index(flag) + 1]
                 route = value("--expected-route")
                 assert cli == ("gemini" if route == "gemini" else "antigravity")
@@ -70,7 +73,7 @@ def adapter_case(tmp_path, monkeypatch):
                     "google_selector_receipt_sha256": hashlib.sha256(selector_file.read_bytes()).hexdigest(),
                     "model": value("--model"), "effort": value("--effort") if route == "agy" else None,
                     "route_args": ["--model", value("--model"), "--effort", value("--effort")] if route == "agy"
-                                  else ["-m", value("--model")]}
+                                  else ["--model=" + value("--model")]}
                 if "--web" in argv:
                     record["review_web_authorized"] = True
                 if route == "agy":
@@ -129,7 +132,7 @@ def test_C18_unlisted_google_pin_survives_roster_resolution_and_preparation(adap
     assert output["google"]["model"] == model
     assert output["google"]["route"] == route
     assert len(calls) == 1 and "--preflight-only" in calls[0]
-    assert calls[0][calls[0].index("--model") + 1] == model
+    assert "--model=" + model in calls[0]
     receipt = json.loads(Path(output["google"]["preflight_file"]).read_text())
     assert receipt["model"] == model and receipt["provider_started"] is False
 

@@ -1402,8 +1402,7 @@ def test_gemini_route_keeps_native_json_without_review_protocol(
         "review",
         "--output-format",
         "json",
-        "-m",
-        "gemini-enterprise",
+        "--model=gemini-enterprise",
     ]
 
 

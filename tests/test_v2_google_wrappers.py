@@ -118,8 +118,10 @@ def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settin
     assert json.loads(output)["attempt"] == 2
     assert len(route["calls"]) == 1
     cmd, cwd, timeout, kwargs = route["calls"][0]
-    model_flag = "--model" if route["name"] == "agy" else "-m"
-    assert cmd[cmd.index(model_flag) + 1] == route["model"]
+    if route["name"] == "agy":
+        assert cmd[cmd.index("--model") + 1] == route["model"]
+    else:
+        assert "--model=" + route["model"] in cmd
     assert cwd == str(route["home"]) and timeout == 610
     assert kwargs["remove_env"]
     if route["name"] == "gemini":
@@ -164,7 +166,7 @@ def test_gemini_38_exact_model_reaches_actual_wrapper_dispatch(route):
     assert json.loads(output)["attempt"] == 2
     assert len(route["calls"]) == 1
     cmd = route["calls"][0][0]
-    assert cmd[cmd.index("-m") + 1] == "gemini-3.8-flash"
+    assert "--model=gemini-3.8-flash" in cmd
     assert "--effort" not in cmd
 
 

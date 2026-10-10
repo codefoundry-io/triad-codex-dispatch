@@ -86,7 +86,7 @@ def _route_args(
 ) -> list[str]:
     args: list[str] = []
     if model:
-        args += ["--model", model]
+        args += ["--model=" + model] if model.startswith("-") else ["--model", model]
     if effort:
         args += ["--effort", effort]
     if project is not None:
@@ -522,6 +522,9 @@ def main() -> int:
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+    if args.model is not None and not isinstance(args.model, str):
+        _common.log("model argument was not preserved as a string; refusing dispatch")
+        return _common.EXIT_ARG_ERROR
 
     process_cwd = None
     try:

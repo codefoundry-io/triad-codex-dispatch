@@ -69,5 +69,7 @@ def test_C18_v2_unlisted_pin_is_not_a_catalog_gate(route):
     assert json.loads(output)["attempt"] == 2
     assert len(route["calls"]) == 1
     cmd = route["calls"][0][0]
-    flag = "--model" if route["name"] == "agy" else "-m"
-    assert cmd[cmd.index(flag) + 1] == route["model"]
+    if route["name"] == "agy":
+        assert cmd[cmd.index("--model") + 1] == route["model"]
+    else:
+        assert "--model=" + route["model"] in cmd

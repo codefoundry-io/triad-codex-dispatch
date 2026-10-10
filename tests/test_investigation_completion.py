@@ -168,7 +168,7 @@ def test_c29_gemini_custom_schema_keeps_web_clause_last_through_native_call(
         sent = command[command.index('-p') + 1]
         assert 'Research primary API' in sent
         assert sent.endswith(clause) and sent.count(clause) == 1
-    assert commands[0][commands[0].index('-m') + 1] == 'selected-model'
+        assert '--model=selected-model' in command
     assert json.loads(capsys.readouterr().out) == {'ok': True}
 
 

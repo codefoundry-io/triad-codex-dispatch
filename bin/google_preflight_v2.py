@@ -32,13 +32,14 @@ def fields(args, cwd: str | None, selector) -> dict:
     if selector.route == "agy":
         if effort not in ("low", "medium", "high"):
             raise ValueError("v2 AGY review requires an explicit supported effort")
-        route_args = ["--model", args.model, "--effort", effort]
+        route_args = (["--model=" + args.model] if args.model.startswith("-") else ["--model", args.model])
+        route_args += ["--effort", effort]
         if getattr(args, "project", None) is not None:
             route_args += ["--project", args.project]
     else:
         if effort is not None:
             raise ValueError("Gemini has no supported effort flag")
-        route_args = ["-m", args.model]
+        route_args = ["--model=" + args.model]
     return {**({"review_web_authorized": True} if getattr(args, "web", False) else {}), "schema_version": 2, "leg_name": args.expected_leg_name,
             "attempt": args.expected_attempt, "cwd": cwd, "timeout_s": args.timeout,
             "model": args.model, "effort": effort, "route_args": route_args}

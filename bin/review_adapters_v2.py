@@ -209,7 +209,7 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
     # The wrapper's preflight is the source of route/version/containment/policy
     # evidence. It receives no review content and performs no review inference.
     argv = [sys.executable, str(wrapper), "--preflight-only", "--prompt", "v2 capability check",
-            "--cwd", str(cwd), "--pydantic", "verdict_v2:LegVerdict", "--model", model,
+            "--cwd", str(cwd), "--pydantic", "verdict_v2:LegVerdict", "--model=" + model,
             "--timeout", str(entry["timeout_s"]), "--expected-review-id", review_id,
             "--expected-leg-name", entry["name"],
             "--expected-attempt", str(attempt), "--expected-route", route,

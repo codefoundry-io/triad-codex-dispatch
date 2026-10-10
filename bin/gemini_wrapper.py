@@ -281,6 +281,9 @@ def main() -> int:
         "_debug/<UTC-YYYY-MM-DD>/gemini.md (per-call summary)",
     )
     args = p.parse_args()
+    if args.model is not None and not isinstance(args.model, str):
+        log("model argument was not preserved as a string; refusing dispatch")
+        return EXIT_ARG_ERROR
 
     process_cwd = None
     try:
@@ -485,16 +488,14 @@ def main() -> int:
             "json",
         ]
         if formal_verdict:
-            cmd += [
-                "-m",
-                args.model if v2_verdict else "auto",
+            cmd += (["--model=" + args.model] if v2_verdict else ["-m", "auto"]) + [
                 "--approval-mode",
                 "plan",
                 "--policy",
                 str(policy),
             ]
         elif args.model:
-            cmd += ["-m", args.model]
+            cmd += ["--model=" + args.model]
         for directory in args.add_dir:
             cmd += ["--include-directories", directory]
         return cmd

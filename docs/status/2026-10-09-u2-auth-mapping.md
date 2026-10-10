@@ -24,4 +24,4 @@ Next: write a bounded U2 carrier manifest with exact source/capture provenance,
 then RED cases for demonstrated gaps. Estimate code scope after mapping the
 existing extractors and callers; preserve result types, terminal records, no
 automatic authentication retry, and signal cleanup. No AGY quota carrier fixture
-may be invented. Optional U1c stays deferred under R-AGENT-ROLES/C73.
+may be invented. This carrier record creates no Claude agent research backlog.

@@ -220,7 +220,7 @@ def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict
     if adapter.get("review_web_authorized", False):
         argv += ["--web"]
     if adapter["model"] is not None:
-        argv += ["--model", adapter["model"]]
+        argv += ["--model=" + adapter["model"]]
     if adapter["effort"] is not None:
         argv += ["--effort", adapter["effort"]]
     if route == "agy":

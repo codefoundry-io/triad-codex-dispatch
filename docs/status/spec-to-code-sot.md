@@ -75,57 +75,57 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-Latest publication: PR13 head7fb5bb2f, B reply6094950337; no A reply
-after6093708612 at the latest check. Fetched
-main3afc4d7, PR12head507c64bb, read-only A25d6fd5a. DL-146/147 are A repair
-completion records corresponding to completed B U4b; no duplicate port.
-U5b plan: ../superpowers/plans/2026-10-10-u5b-standing-review-web.md.
-Candidate complete: production+4/-0; v2 binds standing authorization after strict
-type validation, with existing adapters and bound retry. Fresh exact-command
-GREEN-corrected 371 affected/2280 full passed,4 skipped, four validators,
-unchanged source/logs and exact cleanup. Complete independent web-enabled R3:
-all-four SAFE, ROUND_INTEGRITY_OK, adjudicated/exported/cleaned. Earlier workflow,
-fixture and invocation failures remain in the unit evidence; no reused approval.
-After R1 and R2, current documentation was corrected. GREEN-docs371/4 then
-focused GREEN-r3:46 distribution/migration checks and four validators pass.
-Full2280/4 predates only docs; recorded production/tests are unchanged. Shared7fb5bb2f and sourceb6680818 are pushed;
-PR13 result: https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094950337. Whole-task hook
-stays. Native ownership, legacy DL-59 difference, installed revision and U7
-settings architecture are unchanged. No whole-task completion or release claim.
-Next: U1T opaque model-value transport, starting with the
-already-agreed shared rule and existing parser evidence; no model-name grammar.
+**U1T implementation and unit review complete; publication and U6a next.**
 
-PR13 new A reply6093708612 (2026-10-10T04:20:54Z) agrees with the current
-DL-101/102/103 dispositions and confirms CRLF fix4b07949a. Its ongoing DL-104
-cleanup is tracked against already-completed B U4b; A C43 evidence refresh stays
-A-owned. No U5 design change or new B port follows.
+At B5f5dda5b plus the reviewed candidate, model values remain one opaque option
+value through the Python-wrapper and affected Google parsers. AGY changes only
+option-shaped pins; ordinary/legacy spelling remains. Both v2 receipt builders
+match. Three wrappers refuse non-None non-string parsed models before I/O,
+covering the reproduced old-CPython loss of literal `--`. Production delta:
++17/-9, net8, six files. Native model/effort/spawning and user settings unchanged.
+Unit plan: ../superpowers/plans/2026-10-10-u1t-model-transport.md.
 
-U3e: actual AGY1.3.3 Pro/high normal v2 wrapper passed in13.8s with full local
-validation and all six bindings; no projection or runtime change needed. Exact
-launcher stage/cwd removed, source fingerprint unchanged. Evidence:
-[DL-103 assessment](2026-10-10-agy-v2-schema.md). PR13 had no newer comments or
-inline reviews when checked. A CRLF fix4b07949a and PR12DL-145 are now recorded;
-A tests are reported by A, not rerun by B. PR12fc7cd4a's A-specific simplifications
-do not authorize B/native ports; classifier outcome wording is an existing U2
-reconciliation input. Remaining groups: U1T, U2, U5, U6, U7, U9, plus U10 final
-integration. Whole-task hook stays; no install/merge/release.
+Final dedicated GREEN-compat:82 affected current-parser tests and46 official
+CPython3.12.1 argparse-module tests passed onPython3.12.13; four validators pass.
+The full2326passed/4skipped run is on identical production, before the final
+test-only correction. Source/log fingerprints matched and exact fixture cleanup
+completed. Do not call the module probe a full old-interpreter run. Ubuntu NOT
+RUN; hidden runtime settings UNEXPOSED.
 
-**Active stage: 4 — U5b complete and published; U1T assessment next.**
+Fresh complete `triad-model-transport-20261010-r3`: all four SAFE,
+ALL_SELECTED_APPROVED / ROUND_INTEGRITY_OK. One future encoder-drift suggestion
+is nonblocking: current code and both-route transport tests agree, so no new
+abstraction or required backlog. R1/R2 findings, failures and custody remain;
+their approvals were not reused. R3 adjudication/export/exact stage cleanup
+complete. Evidence: workspace `_runs/reviews/triad-model-transport-20261010-r3`.
 
-U5a plan: ../superpowers/plans/2026-10-10-u5a-shared-review-context.md.
-Fresh RED9failed/288passed/4skipped reproduces absent prepared date/common
-context and name-based A-only selection. Minimal candidate now vendors the exact
-ca3d990 four-clause bundle, binds UTC date once, reuses it on render/retry and
-reads no-web/A-only metadata from the source clauses. Native controls and web
-authorization unchanged. Fresh GREEN-r3: 297 affected passed, 4 skipped; prior full R2: 2273 passed,
-4 skipped on identical production/docs;
-four validators, source/log integrity and exact fixture cleanup pass. All-four
-SAFE/matching integrity, adjudication and exact review cleanup complete. Shared
-evidence published at 885e52e019bad28abef9edcaea1bce4d00f9dbab after authoring
-1/1 and 182 tests passed. B source checkpoint 7a082baabe64fce48671d1c37bda11cf7b120e30 is pushed and
-verified equal to origin/codex/opus-5-5-default. PR13 result:
-https://github.com/codefoundry-io/triad-dispatch-spec/pull/13#issuecomment-6094085304.
-Historical next action, now completed by U5b above. Whole-task hook stays.
+Shared R-MODEL/C18/C34 clarification is d082a60. PR13 was refreshed through
+6095707704, with no newer A reply. Remote main3afc4d7 and PR12 11934f11 were
+fetched again; current read-only A0be173bf is clean and its intervening commits
+change documentation/comments, not relevant model or cleanup runtime behavior.
+A's old-parser handling remains its own follow-up, not a B blocker or native port.
+
+U6 research is complete: the existing fallback sweep deletes an unproven old
+prefix-matching directory in an isolated synthetic fixture. Three independent
+diagnoses confirm the path. Shared ba04c60 adds the C4 boundary and aligns C69
+and schema age descriptions with R-CLEANUP's existing named-close/resumption
+exception; authoring1/1 and182tests passed, pushed and verified. PR13 comment
+6095933437 shares exact evidence/sequence and was read back. No real system-temp
+sweep or actual user-data-loss incident is claimed.
+
+Next: finish U1T source/shared publication, then U6a's existing fallback
+allocation/sweep ownership correction. U6b separately owns declared roots/floors
+and normal sweep/cap/archive migration. Use the bounded research/design record
+at workspace `_runs/infra/20261010-spec-to-code/u6/disposition.md`; no new generic
+deletion service/API or A-native port. Keep proven review export/identity/subset
+cleanup. Source tests must isolate their temporary base. U6 production untouched.
+
+Other remaining groups: U2 evidence reconciliation, U7 measured settings
+isolation, U9 remaining-case mapping and U10 integration/final reconciliation.
+U8 is withdrawn. Unused Claude agent research is removed, not deferred.
+Completed U5a/U5b/U3e evidence remains in their linked plans and historical
+checkpoints below. Whole-task hook stays until all work and its final cleanup
+finish. No installation, adopted revision, merge, release or whole-task claim.
 
 ### Earlier U3d checkpoints (historical; current position above)
 

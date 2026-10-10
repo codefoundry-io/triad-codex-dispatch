@@ -1254,6 +1254,13 @@ exactly (apart from the documented `[1m]` context modifier); a display label
 cannot attest an unexposed snapshot suffix. The wrapper's effort vocabulary is
 checked before the selection probe.
 
+Model pins are values, including pins resembling options. Generated v2 wrapper
+commands preserve them as one model-option value; Google dispatch and its
+preflight record use matching transport. For a direct wrapper call with an
+option-shaped pin, use `--model=VALUE`. This adds no model availability check;
+the vendor can still reject the requested model. Prepare fresh receipts after
+upgrading the toolkit; do not rewrite an earlier round's bound commands.
+
 ## Offline v2 candidate validation
 
 The [candidate contract bundle](contracts/README.md) comes from shared commit

@@ -205,23 +205,27 @@ clarification in `decisions/2026-10-09-execution-planning.md`.
 **Interface:** a model is one opaque option value at every parser boundary.
 Do not create a shared model-name grammar or claim a shell-injection defect.
 
-- [ ] Review the existing Gemini 0.63.0 and 24-case B Python-wrapper evidence;
+- [x] Review the existing Gemini 0.63.0 and 24-case B Python-wrapper evidence;
   reproduce only missing cases. Use A's DL-132 agreement and census to finalize
   R-MODEL/C18/C34 before dependent code.
-- [ ] Obtain independent Claude, Google and fresh Codex diagnosis for any
+- [x] Obtain independent Claude, Google and fresh Codex diagnosis for any
   confirmed existing-design omission before implementing its remedy. Return a
   substantial design choice to the owner; do not treat a routine argv encoding
   correction as permission for a new model grammar or containment change.
-- [ ] RED: `--help` as a model value does not activate help, `--yolo` does not
+- [x] RED: `--help` as a model value does not activate help, `--yolo` does not
   activate a permission flag, ordinary unknown pins and spaces remain exact.
   Label these parser/transport tests, not vendor model availability fixtures.
-- [ ] Test candidate equals-form encoding on each affected real parser before
+- [x] Test candidate equals-form encoding on each affected real parser before
   adopting it. A help-only result from AGY/Claude is insufficient proof of value
   interpretation; retain the gap or find stronger parser evidence.
-- [ ] Apply only compatible value-preserving transport, keep required runtime
+- [x] Apply only compatible value-preserving transport, keep required runtime
   controls and one terminal vendor rejection, run affected bridges and wrappers,
   and obtain a fresh bounded formal gate. The completed Google unit's earlier
   approval is not approval for these new bytes.
+
+Completed 2026-10-10; exact scope, parser limits, RED/GREEN and fresh R3
+evidence: [U1T unit plan](2026-10-10-u1t-model-transport.md). Final production
++17/-9 across six files; no native or model-grammar change. Shared d082a60.
 
 ## U1 — Claude selection without a catalog gate
 

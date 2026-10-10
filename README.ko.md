@@ -1165,6 +1165,12 @@ family/version 또는 effort가 요청과 다르면 거부하며, 배포된 모�
 정확히 일치해야 합니다. 표시 라벨만으로 미노출 snapshot suffix를 증명하지
 않습니다. wrapper가 지원하는 effort 값인지는 선택 probe 전에 확인합니다.
 
+모델 pin은 옵션처럼 보이더라도 하나의 모델 값으로 전달합니다. 생성된 v2
+wrapper 명령과 Google dispatch·preflight 기록은 이 전달 형식을 일치시킵니다.
+wrapper를 직접 호출할 때 옵션처럼 시작하는 pin은 `--model=VALUE`로 지정하세요.
+모델 가용성 검사를 추가하는 것은 아니며 vendor는 해당 모델을 거부할 수 있습니다.
+toolkit을 업데이트하면 새 receipt를 준비하고 이전 라운드의 bound 명령은 고치지 마세요.
+
 ## 오프라인 v2 후보 검증
 
 [공통 계약 후보](contracts/README.md)는 공유 커밋
