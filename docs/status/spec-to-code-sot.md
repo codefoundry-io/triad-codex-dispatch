@@ -91,8 +91,12 @@ answer check implemented; valid schema and tool/web channels unchanged. Fresh
 GREEN564affected/2264full passed,4skipped; four validators, source/log integrity
 and exact fixture cleanup passed. Review triad-agy-answer-truncation-20261010-r2
 all-four SAFE (1 nonblocking findings), matching integrity; custody exported,
-exact stage/cwd removed. Shared evidence publication and owner-authorized WIP
-checkpoint push follow. Whole-task hook stays.
+exact stage/cwd removed. Owner-authorized accumulated WIP implementation checkpoint 060edf183cc2d400ade6c86ec386313ed7043e05
+was pushed and matched origin/codex/opus-5-5-default. Shared completion is
+published on PR13; see its latest comment. Whole-task hook stays. Remaining:
+U1T, U2 evidence mapping, U3 schema assessment, U5, U6, U7 and U9; U10 is the
+final reconciliation/integration gate. These are work groups, not seven
+demonstrated bugs. U8 remains withdrawn. No install/merge/release.
 
 U3d first GREEN:518affected pass; full2259passed/4skipped/1failed because a stale
 distribution-doc assertion forbids truncated-answer, now an active shared token.

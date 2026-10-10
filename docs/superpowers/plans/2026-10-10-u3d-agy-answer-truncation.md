@@ -31,7 +31,7 @@ constructed contract cases, not new vendor captures.
   retain exact commands, runtime, source/log integrity and fixture cleanup.
 - [x] Required independent four-family review, findings adjudication, integrity,
   exact review-stage cleanup and shared completion evidence.
-- [ ] Owner-authorized WIP checkpoint commit/push of current spec-to-code work;
+- [x] Owner-authorized WIP checkpoint commit/push of current spec-to-code work;
   preserve unrelated files. Report remaining work; no install/merge/release.
 
 All Python/tests/provider and Git mutations use literal /bin/zsh -lic,
@@ -91,3 +91,5 @@ claim. DL-102 turn-timeout and truncation are now implemented B candidates;
 DL-103 current-route schema assessment remains separate.
 
 Actual delta: {"bin/_common.py": {"added": 1, "deleted": 1}, "bin/antigravity_wrapper.py": {"added": 6, "deleted": 0}, "README.md": {"added": 6, "deleted": 0}, "README.ko.md": {"added": 6, "deleted": 0}, "tests/test_agy_answer_truncation.py": {"added": 120, "deleted": 0}, "tests/test_distribution_contract.py": {"added": 1, "deleted": 1}}
+
+Owner-authorized accumulated implementation checkpoint pushed: 060edf183cc2d400ade6c86ec386313ed7043e05.
