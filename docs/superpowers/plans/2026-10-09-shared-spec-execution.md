@@ -400,16 +400,21 @@ capture. Do not port A's full census or add a routine successful-run read audit.
 **Interface:** terminal result admission yields the existing answer/token/exit;
 canonical full verdict validation remains mandatory after any producer projection.
 
-- [ ] Reuse measured network-error, turn-timeout, truncation and finish-resubmit
+- [x] Reuse measured network-error, turn-timeout, truncation and finish-resubmit
   evidence; record source/version and actual structured fields first.
-- [ ] RED: own-line truncation withholds answer; terminal timeout uses the
+- [x] RED: own-line truncation withholds answer; terminal timeout uses the
   specified token/65; later successful finish rescues only the earlier failed
   finish, not another executed forbidden/errored step or a read-blind run.
-- [ ] Verify actual AGY schema: current route enum is already `['agy']`; do not
+- [x] Verify actual AGY schema: current route enum is already `['agy']`; do not
   reimplement a null-enum fix. Execute a bounded live manifest when needed to
   decide remaining keyword compatibility. Auth/capacity failure is inconclusive.
-- [ ] Add projection only if current-route vendor evidence requires it; keep
+- [x] Add projection only if current-route vendor evidence requires it; keep
   post-output full-contract validation. Complete relevant modules and review.
+
+U3e assessment complete: actual AGY1.3.3 Pro/high normal v2 wrapper exit0,
+full local binding/schema validation passed; no new projection justified.
+Production/test delta zero. Evidence: ../../status/2026-10-10-agy-v2-schema.md.
+Next: U5 shared-clause/current-context assessment; U2 retains evidence mapping.
 
 ## U4 — Repair boundary and obsolete helpers
 

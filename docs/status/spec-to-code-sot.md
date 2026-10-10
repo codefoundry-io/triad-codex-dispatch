@@ -75,7 +75,17 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
-**Active stage: 4 — U3a–U3d complete; next DL-103 schema assessment.**
+U3e: actual AGY1.3.3 Pro/high normal v2 wrapper passed in13.8s with full local
+validation and all six bindings; no projection or runtime change needed. Exact
+launcher stage/cwd removed, source fingerprint unchanged. Evidence:
+[DL-103 assessment](2026-10-10-agy-v2-schema.md). PR13 had no newer comments or
+inline reviews when checked. A CRLF fix4b07949a and PR12DL-145 are now recorded;
+A tests are reported by A, not rerun by B. PR12fc7cd4a's A-specific simplifications
+do not authorize B/native ports; classifier outcome wording is an existing U2
+reconciliation input. Remaining groups: U1T, U2, U5, U6, U7, U9, plus U10 final
+integration. Whole-task hook stays; no install/merge/release.
+
+**Active stage: 4 — U3 complete; U5 shared-clause/current-context assessment.**
 
 PR13 was checked again through comment6093171510; no new A reply. U3d completion
 is published at shared73e6613 / PR13comment6093314527 after authoring1/1 and
