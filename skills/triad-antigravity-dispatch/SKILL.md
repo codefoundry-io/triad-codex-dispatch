@@ -35,7 +35,7 @@ larger than one native view, request explicit positive-integer `StartLine` and
 `EndLine` ranges.
 Never request `ContentOffset` or `IsSkillFile`, and do not rely on implicit
 another-page continuation. If native reads and searches are insufficient, report the limit in
-`open_questions`. Formal `step_update` telemetry is diagnostic vendor output,
+`open_questions`. For ordinary SUCCESS results, formal `step_update` telemetry is diagnostic vendor output,
 not an admission schema: added fields, changed optional tool arguments, denied
 attempts, and duplicate progress events do not invalidate an otherwise valid
 terminal verdict. The prompt and native `--mode plan` define the static-review
@@ -45,7 +45,9 @@ round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. Formal calls select the packaged primary AGY
 profile for tool discovery; its declarations are not a permission boundary.
 The wrapper does not reinterpret a completed review from the vendor's evolving
-telemetry schema.
+telemetry schema. The measured ERROR-only finish-resubmission exception uses
+structured step type, state, error and ordering fields; an earlier failed finish
+can be rescued by a later successful finish under the wrapper's existing checks.
 The route remains read-only by intent plus explicit deny, local result
 admission, and separate round-integrity checks.
 

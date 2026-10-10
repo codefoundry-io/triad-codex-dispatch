@@ -649,7 +649,7 @@ Gemini는 Google Cloud 프로젝트 변수 4개를 유지하고 다른 경로는
 | `0` | 성공 — 이어서 답변 | 없음. |
 | `3` | 잘못된 wrapper 인자 또는 Gemini 로컬 preflight·버전 검사 거부 | stderr를 확인하세요. 0.63.0 미만이면 CLI를 업그레이드하고, 그 외에는 선택한 실행 파일이나 입력을 고친 뒤 새로 호출하세요. AGY 버전·설정 preflight 거부는 65를 사용합니다. |
 | `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | dispatch 전에는 개인 Google용 AGY 또는 Enterprise OAuth용 AGY/Gemini를 설치하세요. route 선택 뒤에는 같은 실행 파일을 고치고 사후 fallback하지 않습니다. |
-| `64` | 재시도 후에도 server capacity 소진 | 일시적 vendor 과부하; 기다렸다 재시도. |
+| `64` | Server capacity 소진 (경로별 재시도 적용; AGY는 단일 호출) | 일시적 vendor 과부하; 기다렸다 재시도. |
 | `65` | 인증, config, quota 또는 다른 terminal provider failure(예: `oauth-env`, `cli-subscription-cap`, `token-limit`) | 표시된 provider state를 해결한 뒤 explicit new invocation을 만드세요. |
 | `66` | 구조화 출력(`--pydantic`) 스키마 검증 실패 | `schema-fail is terminal for that invocation`; leader가 판단한 뒤 explicit new invocation을 만들 수 있습니다. shared-directory formal path는 legacy packet-bound schema를 요구하지 않습니다. |
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |

@@ -60,11 +60,6 @@ _RESULT_METADATA_COPY_CONTRACT = (
     "directly from the single Review metadata JSON record. Before returning, compare each "
     "copied value character-for-character with that record; the three pairs must be identical."
 )
-_REVIEW_NO_WEB_CONTRACT = (
-    "Do not use web search, URL fetching, or other network research in REVIEW. "
-    "If external evidence is required, report the gap in open_questions for a "
-    "separate leader-authorized INVESTIGATION. "
-)
 _AGY_GOOGLE_TOOL_CONTRACT = (
     "For this Google leg, use only AGY native file-read and search tools for local inspection. "
     "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "

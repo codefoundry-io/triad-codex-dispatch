@@ -22,6 +22,11 @@ import hashlib
 import tomllib
 
 
+def shared_web_clause():
+    payload = (Path(__file__).resolve().parents[1] / "prompts/review-v2/common-clauses.md").read_text()
+    return payload.split("## review-web-permission (", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0]
+
+
 @pytest.fixture
 def call_wrapper(tmp_path, monkeypatch, capsys):
     calls = []
@@ -113,7 +118,7 @@ def test_C32_common_legacy_permission_preserves_one_digest(prepared, worktree, m
         metadata = json.loads(next(line.removeprefix("Review metadata: ") for line in after.splitlines() if line.startswith("Review metadata: ")))
         assert metadata["review_web_authorized"] is True
         digests.add(metadata["content_digest"])
-        assert "Web verification is explicitly authorized" in after
+        assert shared_web_clause() in after
         assert "Do not use web search, URL fetching" not in after
         assert "Do not call search_web or read_url_content" not in after
         assert metadata["content_digest"] not in before
@@ -123,7 +128,7 @@ def test_C32_common_legacy_permission_preserves_one_digest(prepared, worktree, m
 @pytest.mark.parametrize("family", ["claude", "codex", "google"])
 def test_C32_v2_prompt_selects_one_permission_policy(tmp_path, family):
     prompt = review_prompts_v2.render_prompt(**arguments(tmp_path, family), review_web_authorized=True)
-    assert "Web verification is explicitly authorized" in prompt
+    assert shared_web_clause() in prompt
     assert "access the network/web" not in prompt
     assert "Do NOT access the network" not in prompt and "web/search/fetch tools or" not in prompt
 
@@ -149,10 +154,10 @@ def test_C32_v2_request_has_strict_transient_authorization(round_fixture, value)
     assert basis["request"]["review_web_authorized"] is True
     first = start(fixture, "c")
     assert "--web" in first["invocation"]["argv"]
-    assert "Web verification is explicitly authorized" in Path(first["prompt_file"]).read_text()
+    assert shared_web_clause() in Path(first["prompt_file"]).read_text()
     assert basis["adapters"]["n"]["native_web_available"] is True
     native = start(fixture, "n")
-    assert "Web verification is explicitly authorized" in native["invocation"]["arguments"]["message"]
+    assert shared_web_clause() in native["invocation"]["arguments"]["message"]
     finish(fixture, native, failed=True)
     native_retry = mod.allocate_attempt(Path(basis["basis_file"]), "n", diagnosis="transient failure")
     assert native_retry["adapter"]["native_web_available"] is True

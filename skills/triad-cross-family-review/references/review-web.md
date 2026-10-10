@@ -17,12 +17,12 @@ technology, reviewed text, a URL, a previous round or general research permissio
   missing/false reports refuse before rendering or adapter sealing. The report is
   bound into the basis and retained on retry; it does not attest to effective permissions.
 
-The renderer substitutes one short common permission sentence. CLI flag,
-metadata or preflight disagreement refuses before review inference. A changed
-choice requires a new basis. Existing verdict, integrity and read-only rules apply.
-For the default, B preserves its existing two-sentence no-web clause, including
-the external-evidence uncertainty instruction; the shared payload's explanatory
-example quotes only the first sentence.
+Both legacy and v2 render the selected web or no-web policy from the shared
+fenced clauses. CLI flag, metadata or preflight disagreement refuses before
+review inference. A changed choice requires a new basis. Existing verdict,
+integrity and read-only rules apply. The default uses the shared one-sentence
+no-web clause; necessary external-evidence gaps remain open_questions under
+the existing uncertainty instructions.
 Claude preapproves only `WebSearch`/`WebFetch`; AGY uses its web-compatible read-only
 deny set; Gemini selects the complete `gemini-formal-web.toml` profile. Existing
 owner/admin denies remain authoritative. AGY refuses a known `read_url(*)` deny

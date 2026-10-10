@@ -75,6 +75,11 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
+PR13 new A reply6093708612 (2026-10-10T04:20:54Z) agrees with the current
+DL-101/102/103 dispositions and confirms CRLF fix4b07949a. Its ongoing DL-104
+cleanup is tracked against already-completed B U4b; A C43 evidence refresh stays
+A-owned. No U5 design change or new B port follows.
+
 U3e: actual AGY1.3.3 Pro/high normal v2 wrapper passed in13.8s with full local
 validation and all six bindings; no projection or runtime change needed. Exact
 launcher stage/cwd removed, source fingerprint unchanged. Evidence:
@@ -85,7 +90,21 @@ do not authorize B/native ports; classifier outcome wording is an existing U2
 reconciliation input. Remaining groups: U1T, U2, U5, U6, U7, U9, plus U10 final
 integration. Whole-task hook stays; no install/merge/release.
 
-**Active stage: 4 — U3 complete; U5 shared-clause/current-context assessment.**
+**Active stage: 4 — U3 and U5a complete; remaining U5 policy and other groups open.**
+
+U5a plan: ../superpowers/plans/2026-10-10-u5a-shared-review-context.md.
+Fresh RED9failed/288passed/4skipped reproduces absent prepared date/common
+context and name-based A-only selection. Minimal candidate now vendors the exact
+ca3d990 four-clause bundle, binds UTC date once, reuses it on render/retry and
+reads no-web/A-only metadata from the source clauses. Native controls and web
+authorization unchanged. Fresh GREEN-r3: 297 affected passed, 4 skipped; prior full R2: 2273 passed,
+4 skipped on identical production/docs;
+four validators, source/log integrity and exact fixture cleanup pass. All-four
+SAFE/matching integrity, adjudication and exact review cleanup complete. Shared
+evidence published at 885e52e019bad28abef9edcaea1bce4d00f9dbab after authoring
+1/1 and 182 tests passed. Authorized B checkpoint push follows. Whole-task hook stays.
+
+### Earlier U3d checkpoints (historical; current position above)
 
 PR13 was checked again through comment6093171510; no new A reply. U3d completion
 is published at shared73e6613 / PR13comment6093314527 after authoring1/1 and
@@ -1347,3 +1366,31 @@ the AGENTS entry requires reading this full file before work.
 PR12head8ec55d3 was inspected in this continuation: R-PREPARE/DL-53 now
 describe A current link disclosure rather than its stale lexical-walk work.
 This is an A factual correction; no U3d runtime change or automatic B port.
+
+Initial GREEN:6failed/291passed/4skipped. Six existing authorization cases pinned
+the previous web-permission sentence; shared exact clause wording changed.
+The legacy renderer also uses the common helper, so this wording reaches both
+legacy and v2 authorized paths. Updated expectations independently extract the
+shared fenced payload; all argv, authorization, digest and retry checks remain.
+No production change for this failure. Fresh GREEN follows with fifteen hashes.
+
+U5a R1 NOT_APPROVED, integrity matched: one verified stale no-web reference,
+one unused constant and missing upstream-hash evidence in the review packet.
+Updated reference, removed dead constant/test-only replacement, and computed
+exact upstream git-show hashes for R2. Default authorization stays false; both
+legacy and v2 use the shared no-web wording. R1 evidence exported/cleaned.
+Fresh GREEN-r2 and complete R2 follow; no new shared design.
+
+U5a R2 NOT_APPROVED, integrity matched: simulated UTC2026-10-11 reproduced
+a wall-clock-dependent test (1failed). Fixed only the test using its existing
+PreparationClock and a changed-value assertion; same probe now1passed.
+Production/docs unchanged from full GREEN-r2(2273/4). Fresh dedicated affected
+GREEN-r3 and four validators follow, then complete R3. R2 optional parser
+refactor is nonblocking and not added; no new design or runtime change.
+
+R3 retained two nonblocking source-supported observations: a damaged prompt
+bundle on legacy default rendering may fail closed with traceback/exit1 instead
+of the handled exit2 diagnostic (no damaged-install runtime probe); the public
+mechanical-fields table omits the prepared-date explanation, while runtime/retry
+behavior is correct. Both reviewers and leader keep them nonblocking under the
+owner three-pass bound. No fourth prompt round or new required backlog is added.

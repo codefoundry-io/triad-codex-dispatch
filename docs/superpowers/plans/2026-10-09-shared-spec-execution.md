@@ -434,7 +434,16 @@ DL-97 and DL-106 zero-key loading are implemented. U4d below completes the
 remaining DL-106 disposition, preserving direct-call AGY compatibility.
 Shared d1b9bcc/PR13comment6085594103 records completion and verification limits.
 
-### PR13 follow-up6088729953 — 2026-10-10
+### PR13 follow-up6093708612 — 2026-10-10
+
+A agrees with the DL-101/102/103 dispositions and confirms CRLF fix4b07949a.
+A C43 tests.A evidence refresh remains A-owned. A reports DL-104 timeout
+exclusion and applier-cap removal implemented; read-only A7dbba148 _common.py
+confirms timeout exclusion. Its analyzer consolidation/stored-record verifier
+work is ongoing, not a new B backlog. Preserve B U4b1/U4b2 completed evidence.
+No U5 change or A-native port follows.
+
+### Earlier PR13 follow-up6088729953 — 2026-10-10
 
 A agrees with the C76 clarification and reports a revised F3-c plan; Phase7
 implementation remains pending. Preserve B's completed stored-record verifier;
@@ -516,8 +525,9 @@ dispatch skill repair references and existing classifier/repair tests.
 **Interface:** proposal-only child -> existing proposal schema -> host applier;
 verification consumes the stored run record, not another vendor invocation.
 
-- [x] Source assessment: B lacks stored-record verification and the handoff;
-  A d075a879 still routes timeout and verifies with a vendor rerun (read-only).
+- [x] Historical pre-implementation assessment: B lacked stored-record verification
+  and the handoff; A d075a879 then routed timeout and used vendor reruns.
+  Superseded by completed B U4b and the A follow-up6093708612 above.
 - [x] Restore the existing missing dispatch-skill-to-protocol pointer for
   unknown/extraction-error; verify handoff without vendor replay.
 - [x] RED: timeout is not sent for phrase repair; an `oauth-env` proposal is
@@ -539,19 +549,16 @@ verification consumes the stored run record, not another vendor invocation.
 
 ## U5 — Shared prompts and bound review context
 
-U3c R1 nonblocking documentation note: README EN/KO's existing exit64 legend
-says "after retries", but AGY makes one provider call and its formal contract
-explicitly has no capacity retry. Qualify the legend in this existing documentation
-alignment; no runtime retry change or new unit. The other U3c Minor hypothesizes
-a raw1/empty-response reflected permission command; that combination is unmeasured,
-so no speculative predicate or fixture is added. Preserve the DL-101 substring
-boundary unless relevant evidence or an explicit contract decision changes it.
+U5a candidate complete: exact sharedca3d990 clauses, bound preparation date,
+A-only header selection and late-answer recollection guidance. Fresh GREEN
+297 affected fresh; 2273 full prior R2 passed, 4 skipped, four validators; all-four SAFE
+with matching integrity and cleanup. DL-39 standing-web policy remains separate.
+See [U5a plan](2026-10-10-u5a-shared-review-context.md).
 
-U3a R1 nonblocking wording note: skills/triad-antigravity-dispatch/SKILL.md:38-48
-describes ordinary terminal telemetry but omits the new ERROR-only finish
-recovery exception. EN/KO README already qualify it. Add the factual qualifier
-within this existing prompt pass if needed; no new feature or wording-only
-re-review of the completed U3a runtime. See its retained R1 adjudication.
+U5a resolves the U3c/U3a documentation notes: README EN/KO now distinguish
+AGY single-shot capacity behavior, and the AGY skill names the measured
+ERROR-only finish recovery. No runtime retry change or repeated U3 review.
+The unmeasured reflected-command suggestion remains nonblocking.
 
 **Rules:** R-CONTEXT/R-PREPARE/R-REVIEW-WEB/R-AGREE; C19/C32/C60/C67/C68;
 DL-39/45/46/49/56/61/93. Native model choice remains host-owned.
@@ -560,17 +567,21 @@ DL-39/45/46/49/56/61/93. Native model choice remains host-owned.
 `tests/test_v2_review_prompts.py`, `tests/test_v2_round_custody.py` and source
 skill references. Adopt payload bytes/digests consistently with the chosen revision.
 
-- [ ] Identify the exact shared clauses to adopt; do not mix unmerged PR prose
+- [x] Identify the exact shared clauses to adopt; do not mix unmerged PR prose
   into a claimed frozen revision. Record latest concurrency and measured-shape
   wording plus the bound preparation-date rule.
-- [ ] RED: rendered date comes from the frozen basis, not render time; all
+- [x] RED: rendered date comes from the frozen basis, not render time; all
   applicable legs receive the same common clause; web authorization matches
   execution; changed bound inputs fail integrity; no host-native clause leaks.
-- [ ] Reuse clause files instead of duplicate constants. Add only needed
+- [x] Reuse clause files instead of duplicate constants. Add only needed
   invocation/pointer guidance and the late-answer recollection instruction.
-- [ ] If nuance repeats, run fresh Luna/high decision/control scenarios; stop
+- [x] If nuance repeats, run fresh Luna/high decision/control scenarios; stop
   wordsmithing when behavior is correct. Complete dedicated executor and formal
   gates required for source skill changes.
+
+Remaining U5 assessment: DL-39 standing review-web policy only. The clause/date
+implementation and its focused verification/review are complete; no wording
+scenario probe was needed because no unresolved contextual choice remained.
 
 ## U6 — Cleanup as declared host code
 

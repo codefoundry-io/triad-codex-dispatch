@@ -1,6 +1,7 @@
 """Render the four exact shared clause files for B's explicit v2 review route."""
 from __future__ import annotations
 
+from datetime import date
 import hashlib
 import json
 import re
@@ -11,9 +12,8 @@ from validate_v2 import _json, validate_review_kind
 from verdict_v2 import bound_verdict
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1] / "prompts/review-v2"
-SOURCE_COMMIT = "04245c740afc9be36ad7702a134f71aec8ff0b7f"
+SOURCE_COMMIT = "ca3d990a107b24644fddcf6978a9655f8e106d4f"
 PAYLOADS = ("common-clauses.md", "leg-claude.md", "leg-codex.md", "leg-google.md")
-_A_ONLY = {"claude-output-shape-notice", "claude-output-integrity", "google-a-hook-audit"}
 
 
 def load_bundle() -> dict[str, str]:
@@ -60,17 +60,19 @@ def _data_fence(value: str) -> str:
 def review_web_clause(authorized: bool) -> str:
     if type(authorized) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
-    if not authorized:
-        return review_round._REVIEW_NO_WEB_CONTRACT
-    return _clauses(load_bundle()["common-clauses.md"])["review-web-permission"]
+    name = "review-web-permission" if authorized else "review-no-web"
+    return _clauses(load_bundle()["common-clauses.md"])[name]
 
 
 def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
                   packet_files: list[Path], diff_file: Path, objective: str,
-                  criteria: list[str], approved_boundary: list[str], residual: str = "",
+                  criteria: list[str], approved_boundary: list[str], review_date: str, residual: str = "",
                   google_preflight_sha256: str | None = None, review_web_authorized: bool = False,
                   review_kind: str = "pre-merge") -> str:
     review_kind = validate_review_kind(review_kind)
+    if (not isinstance(review_date, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", review_date) is None):
+        raise ValueError("review_date must be the bound UTC preparation date")
+    date.fromisoformat(review_date)
     model = bound_verdict(expected)
     bundle = load_bundle()
     root = review_round._canonical_directory(worktree, "v2 review worktree")
@@ -100,16 +102,20 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
         "common:<review-purpose>", "common:" + purpose)
     leg = _clauses(leg_text)
     order = re.findall(r"^\d+\. ([\w:-]+)", leg_text, re.MULTILINE)
+    a_only = {section.split(None, 1)[0]
+              for payload in (bundle["common-clauses.md"], leg_text)
+              for section in re.split(r"^## ", payload, flags=re.MULTILINE)[1:]
+              if re.search(r"\bA-only\b", section.split("\n", 1)[0])}
     pieces = []
     for name in order:
-        if name in _A_ONLY:
+        if name.removeprefix("common:") in a_only:
             continue
         try:
             pieces.append(common[name.removeprefix("common:")] if name.startswith("common:") else leg[name])
         except KeyError as error:
             raise ValueError("missing ordered shared clause") from error
     replacements = {
-        "review-web-policy": web_clause, "review-kind": review_kind,
+        "review-web-policy": web_clause, "review-kind": review_kind, "review-date": review_date,
         "worktree": str(root), "brief-file": str(brief_file),
         "gated-patch-file": str(diff_file), "packet-files": json.dumps([str(path) for path in packet_files]),
         "review-id": expected["review_id"], "content-digest": expected["content_digest"],

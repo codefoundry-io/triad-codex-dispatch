@@ -1,11 +1,11 @@
 {
   "source_repository": "https://github.com/codefoundry-io/triad-dispatch-spec",
-  "source_commit": "04245c740afc9be36ad7702a134f71aec8ff0b7f",
+  "source_commit": "ca3d990a107b24644fddcf6978a9655f8e106d4f",
   "status": "candidate",
   "sha256": {
-    "common-clauses.md": "28e51784ea25a4d81da0730ff006fe6c6399de6d3db0d3a7b097357204548766",
-    "leg-claude.md": "9706c39ab94649b79dae317f5fa9d52a808ccc4541f1e9ee86b158f91d87679d",
-    "leg-codex.md": "a63edd6ab94291e0dc233f6c0d407735be0ca388aafe4b9f2dd0718e41f61689",
-    "leg-google.md": "98be1c68af7f50c992f99f2d0f482765e361c439eb63c011249118834861d91f"
+    "common-clauses.md": "07249974fa9fa6ce9f24ae7b79074b815031358a4e5155920695ac05eddf173f",
+    "leg-claude.md": "ba6383a1a7e991165d1ca8df08f629446e5d83cf114ebab86e94a508ae7219d5",
+    "leg-codex.md": "d7e0e5017f54542e2be4b95f9c3a0f4e867096d432e7bee832ea0f03d80548df",
+    "leg-google.md": "e17eb874bf6ff023a5ee79bfffb4cca9970c35135d60d3354a8f9593bc0a6415"
   }
 }

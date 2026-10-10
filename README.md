@@ -696,7 +696,7 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `0` | Success — the answer follows | Nothing. |
 | `3` | Invalid wrapper arguments or a Gemini local preflight/version refusal | Inspect stderr. Upgrade Gemini CLI if below 0.63.0; otherwise repair the selected executable or invalid input before a new invocation. AGY version/settings preflight refusals use 65. |
 | `4` | The configured provider binary was missing or not executable before submission | Before dispatch, install AGY for personal Google, or AGY/Gemini for Enterprise OAuth. After route selection, repair that same executable; do not fallback after failure. |
-| `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
+| `64` | Server capacity exhausted (route-specific retries; AGY is single-shot) | Transient vendor overload; wait and retry. |
 | `65` | Authentication, configuration, quota, or another terminal provider failure (for example `oauth-env`, `cli-subscription-cap`, or `token-limit`) | Resolve the cited provider state, then make an explicit new invocation. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |

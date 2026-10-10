@@ -202,6 +202,10 @@ Command exit 0 means collection ran; use its structured status for the outcome:
 | `BLOCKED` | A complete entry has a blocker/open question or any verdict other than `SAFE TO MERGE` |
 | `AGREED` | Every selected enabled entry completed and explicitly returned `SAFE TO MERGE`, without blockers/open questions |
 
+If a retried leg may still be running, collect once more before relying on an
+AGREED result. A late answer can arrive after the previous custody check; the
+existing collector must assess the current records.
+
 Missing/failed/invalid results take precedence over `BLOCKED`. Any nonempty
 selected roster is valid; entry count and family count add no veto. Every
 acceptance label participates, including `informational`. A Minor-only negative

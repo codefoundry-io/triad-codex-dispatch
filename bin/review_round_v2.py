@@ -6,6 +6,7 @@ still starts and waits for native tools and CLI wrappers; this is not a schedule
 from __future__ import annotations
 
 import dataclasses
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -164,6 +165,7 @@ def create_basis(request: dict, *, root: Path) -> dict:
         packet.append(prepared / "EVIDENCE.md")
     basis = {"schema": "triad-round-basis.v2", "root": str(root),
              "basis_file": str(root / "basis-v2.json"), "request": request,
+             "review_date": datetime.now(timezone.utc).date().isoformat(),
              "preparation_root": str(preparation),
              "roster": roster, "enabled": roster["enabled"], "adapters": adapters,
              "adapter_files": _adapter_files(adapters), "snapshot": dataclasses.asdict(snapshot),
@@ -197,7 +199,7 @@ def _prompt(basis: dict, binding: dict, adapter: dict) -> str:
         approved_boundary=request["approved_boundary"], residual=request.get("prior_residual", ""),
         google_preflight_sha256=adapter["preflight_sha256"],
         review_web_authorized=request.get("review_web_authorized", False),
-        review_kind=request["review_kind"])
+        review_kind=request["review_kind"], review_date=basis["review_date"])
 
 
 def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict:
