@@ -660,11 +660,16 @@ inside one directory name is refused because the native option splits commas).
 These options preserve native permission controls; adding an input directory is
 not an OS read-only sandbox. Formal REVIEW refuses this unbound expansion.
 
-The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
+The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. The wrapper prepares the full UTF-8 input in an anonymous temporary file before launch. Preparation failure prevents launch; `stdin_delivery=complete` means availability to the CLI, not consumption. Early stdin closure alone is not a delivery failure. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
 
-Provider success also requires complete, error-free UTF-8 output collection.
-The wrapper reconciles its saved process group after normal exit and cleans up
-partial reader/writer startup. An AGY profile change during dispatch suppresses the
+Provider success also requires error-free UTF-8 output capture and a complete,
+valid result. Separate anonymous files capture stdout/stderr without live mirroring.
+After the direct child finishes, the wrapper reads a finite snapshot without
+changing shared output offsets. It does not await descendant EOF or stop vendor
+descendants. Best-effort display failures cannot replace the result.
+Vendor descendants retaining output descriptors can keep writing to an unlinked
+temporary file until those descriptors close; these later bytes are not wrapper
+evidence, and their resource lifetime remains vendor-owned. An AGY profile change during dispatch suppresses the
 answer while retaining captured output in the existing failure artifacts; an
 earlier timeout or provider failure remains the primary reported cause.
 
@@ -761,13 +766,11 @@ Honest boundaries, so you know where the toolkit stops:
   Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.
-- **Timeout cleanup is best effort, not containment.** On POSIX, a wrapper only
-  records a provider group when it is the new child's group and differs from the
-  wrapper's group. Timeout or interruption sends TERM, reaps the direct child,
-  then probes that saved group and sends KILL to surviving members. Unsupported
-  or unsafe group identity uses direct-process cleanup. A child that leaves the
-  captured group, including by starting a new session, is outside this guarantee;
-  OS identifier reuse remains a residual race, and this is not an OS sandbox.
+- **Timeout cleanup covers the direct CLI invocation.** Timeout or interruption
+  terminates the direct child, waits, then kills and waits again if necessary.
+  Each wait is bounded. Vendor descendants and remote execution remain vendor-owned;
+  there is no process-group sweep or universal no-orphan guarantee. This is not
+  an OS sandbox.
 
 ## Update
 
@@ -989,9 +992,9 @@ Implementation and regression sources: [log helpers](bin/_common.py),
 Audit rows and failure run logs carry the same `transport` object from the
 [candidate shared receipt schema](contracts/receipt-fields.json): actual
 execution route, attempted executable, observed CLI version (or `null`), attempt
-and stdin delivery state. Encoding/spawn refusals are `not-started`; incomplete
-delivery is `failed`, including when timeout or a vendor error remains the
-primary outcome. Unobserved custom transports stay `unexposed`. Existing AGY
+and stdin availability state. Encoding/preparation/spawn refusals are `not-started`;
+`complete` means exact full input was made available, even if the vendor leaves it
+unread, closes stdin early, fails or times out. It does not prove consumption. Unobserved custom transports stay `unexposed`. Existing AGY
 version probes and validated Gemini preflight versions are reused; no additional
 provider call is made. This legacy invocation records `attempt=1`; existing
 capacity/schema-repair counters retain their separate meanings. The explicit
@@ -999,11 +1002,13 @@ v2 path binds the allocated leg/attempt and collects actual native host or CLI
 observations; preflight versions never replace an unexposed runtime version.
 
 On the wrapper's main thread, SIGTERM/SIGHUP during provider collection enters
-bounded owned-group and reader/writer cleanup, then records a terminal failure
+bounded direct-child termination/reaping, then records a terminal failure
 through the existing audit/run-log path. A captured success response cannot
 override cancellation or trigger another provider attempt. Previous signal
 handlers are restored; KeyboardInterrupt keeps its existing cleanup-and-rethrow
-behavior. This does not cover SIGKILL or host failure.
+behavior. Vendor descendants remain vendor-owned; there is no no-orphan or remote
+cancellation guarantee, nor an identical-record guarantee across every signal
+window. This does not cover SIGKILL or host failure.
 
 After a provider child starts, the audit may include `effective_cwd`: the
 host-resolved launch directory captured before dispatch. Redacted/hardened modes
@@ -1197,7 +1202,7 @@ non-strict missing or invalid pins may fall back to PATH, while strict mode
 refuses that fallback. Relative PATH results retain their selection-cwd meaning
 when launched from the neutral directory. Probes use closed stdin, an owned neutral temporary cwd,
 and the existing injection/Google-selector environment scrubbers. Each probe has
-a five-second deadline plus bounded process cleanup grace; it is not a strict
+a five-second deadline plus bounded direct-child termination grace; it is not a strict
 five-second total wall-clock promise. Failures stop the sequence. The command
 keeps no baseline/history and therefore supplies no automatic drift verdict.
 Vendor CLIs may still maintain their own caches or telemetry; this is not an OS

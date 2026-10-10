@@ -16,6 +16,8 @@ import antigravity_wrapper
 import claude_wrapper
 from verdict_schema import LegVerdict
 
+_POPEN = subprocess.Popen
+
 
 PAYLOAD = {
     "review_id": "terminal-r1", "family": "claude", "content_digest": "a" * 64,
@@ -159,51 +161,46 @@ def test_c1_reader_error_preserves_genuine_capacity_retry(tmp_path, owned_childr
 
 
 @pytest.mark.parametrize("position", [1, 2, 3])
-def test_c2_thread_start_failure_reaps_spawned_child(
+def test_c2_partial_file_preparation_failure_never_spawns(
     position, monkeypatch, tmp_path, owned_children,
 ):
-    real_start = threading.Thread.start
-    starts = 0
-    threads = []
+    original = _common.tempfile.TemporaryFile
+    files = []
 
-    def fail_at_position(thread):
-        nonlocal starts
-        starts += 1
-        threads.append(thread)
-        if starts == position:
-            raise RuntimeError("PRIVATE THREAD START DETAIL")
-        return real_start(thread)
+    def allocate(*args, **kwargs):
+        if len(files) + 1 == position:
+            raise OSError("PRIVATE PREPARATION DETAIL")
+        stream = original(*args, **kwargs)
+        files.append(stream)
+        return stream
 
-    monkeypatch.setattr(threading.Thread, "start", fail_at_position)
-    try:
-        result = _common._run_once(
-            "claude", [sys.executable, "-c", "import time; time.sleep(30)"],
-            str(tmp_path), 3, stdin_text="input",
-        )
-        assert result.exit_code == _common.EXIT_CLI_FAIL
-        assert result.classification == "unknown"
-        assert result.final_answer == "" and result.validated is None
-        assert "PRIVATE THREAD START DETAIL" not in result.extraction_error
-        assert len(owned_children) == 1 and owned_children[0].poll() is not None
-        assert all(not thread.is_alive() for thread in threads)
-    finally:
-        # A failing RED must also release its already-started pipe reader.
-        for child in owned_children:
-            if child.poll() is None:
-                child.terminate()
-                child.wait(timeout=3)
-        for thread in threads:
-            if thread.ident is not None:
-                thread.join(timeout=3)
+    monkeypatch.setattr(_common.tempfile, "TemporaryFile", allocate)
+    result = _common._run_once(
+        "claude", [sys.executable, "-c", "raise SystemExit(99)"],
+        str(tmp_path), 3, stdin_text="input",
+    )
+    assert result.exit_code == _common.EXIT_CLI_FAIL
+    assert result.transport["stdin_delivery"] == "not-started"
+    assert result._effective_cwd is None and not owned_children
+    assert "PRIVATE" not in result.extraction_error
+    assert all(stream.closed for stream in files)
 
 
-def test_c2_start_interrupt_preserves_identity_after_cleanup(
+def test_c2_wait_interrupt_preserves_identity_after_cleanup(
     monkeypatch, tmp_path, owned_children,
 ):
-    interruption = KeyboardInterrupt("synthetic start interruption")
-    monkeypatch.setattr(
-        threading.Thread, "start", lambda _thread: (_ for _ in ()).throw(interruption)
-    )
+    interruption = KeyboardInterrupt("synthetic wait interruption")
+    original = _POPEN.wait
+    interrupted = False
+
+    def wait(proc, timeout=None):
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise interruption
+        return original(proc, timeout=timeout)
+
+    monkeypatch.setattr(_POPEN, "wait", wait)
     with pytest.raises(KeyboardInterrupt) as caught:
         _common._run_once(
             "claude", [sys.executable, "-c", "import time; time.sleep(30)"],

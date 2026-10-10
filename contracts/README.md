@@ -1,10 +1,10 @@
 # Shared contract candidate
 
 These four JSON Schema Draft 2020-12 payloads are byte-identical to
-[shared commit 04245c7](https://github.com/codefoundry-io/triad-dispatch-spec/commit/04245c740afc9be36ad7702a134f71aec8ff0b7f).
+[shared commit fb7c962](https://github.com/codefoundry-io/triad-dispatch-spec/commit/fb7c962c83273c8b9c48fd11c482d1f5d50ef24d).
 The scalar `review-kind.schema.json` selects plan or code purpose. The host applies
 the omission default; JSON Schema's `default` annotation does not mutate input.
-The canonical verdict, roster and receipt schemas retain their existing bytes.
+The receipt description now defines complete input availability rather than vendor consumption. Schema fields and constraints, canonical verdict and roster remain unchanged.
 `source-manifest.json` is host-owned provenance: source repository, exact commit,
 candidate status and per-file SHA-256. It is neither a revision tag nor a signature.
 Changes to shared semantics must first be published and reviewed in the shared repo.

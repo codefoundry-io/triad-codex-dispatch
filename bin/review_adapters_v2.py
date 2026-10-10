@@ -36,7 +36,7 @@ def resolve_binary(name: str) -> str | None:
 
 def probe(argv: list[str], *, cwd: Path, env: dict | None = None, cli: str = "preflight") -> str:
     command = argv if not env else ["/usr/bin/env", *(f"{key}={value}" for key, value in env.items()), *argv]
-    # Reuse signal, process-group, reader and terminal collection. No second
+    # Reuse signal handling, direct-child termination and finite output capture. No second
     # subprocess engine or global environment mutation for adapter probes.
     result = _common._run_once(cli, command, str(cwd), 60, classify_and_log=False)
     if result.exit_code != 0 or result.vendor_exit_code != 0:

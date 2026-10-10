@@ -613,11 +613,16 @@ provider의 `--cwd`를 prompt 파일의 기준 경로로 사용하지 않습니�
 파일을 찾기 전에 적용됩니다. 정식 리뷰 산출물 경로는 계속 절대 경로이며 audit
 마스킹도 유지됩니다.
 
-로컬 Claude wrapper는 실제 전달할 prompt를 UTF-8 text stdin으로 provider에 보내며 JSON 및 native-schema 출력을 유지합니다. 바깥쪽 wrapper 명령줄에서도 prompt를 제외하려면 `--prompt-file`을 사용하세요. Claude 문서는 stdin의 [10MB 한도](https://code.claude.com/docs/en/headless#pipe-data-through-claude)를 명시하며 이 한도는 vendor가 적용합니다. 모델의 context/token 한도도 그대로 적용됩니다. Wrapper는 한도를 피하려고 prompt를 자르거나 나누거나 요청을 추가하지 않습니다. Stdin 전달 실패를 성공으로 받아들이지 않습니다. Stdin은 안쪽 provider argv에서 prompt를 제외합니다. 기존 argv 배열도 shell expansion을 방지합니다. 민감한 prompt/transcript 로그는 그대로 남으며 stdin이 입력 암호화, prompt injection 방지, token 사용량 감소를 제공하지는 않습니다.
+로컬 Claude wrapper는 실제 전달할 prompt를 UTF-8 text stdin으로 provider에 보내며 JSON 및 native-schema 출력을 유지합니다. 바깥쪽 wrapper 명령줄에서도 prompt를 제외하려면 `--prompt-file`을 사용하세요. Claude 문서는 stdin의 [10MB 한도](https://code.claude.com/docs/en/headless#pipe-data-through-claude)를 명시하며 이 한도는 vendor가 적용합니다. 모델의 context/token 한도도 그대로 적용됩니다. Wrapper는 한도를 피하려고 prompt를 자르거나 나누거나 요청을 추가하지 않습니다. 전체 UTF-8 입력을 익명 임시 파일에 준비한 뒤 CLI를 시작하며 준비 실패 시 실행하지 않습니다. `stdin_delivery=complete`는 전체 입력을 읽을 수 있게 제공했다는 뜻이며 소비 여부를 증명하지 않습니다. CLI가 stdin을 일찍 닫았다는 이유만으로 전달 실패로 판정하지 않습니다. Stdin은 안쪽 provider argv에서 prompt를 제외합니다. 기존 argv 배열도 shell expansion을 방지합니다. 민감한 prompt/transcript 로그는 그대로 남으며 stdin이 입력 암호화, prompt injection 방지, token 사용량 감소를 제공하지는 않습니다.
 
-Provider 성공에는 오류 없는 UTF-8 출력 수집 완료도 필요합니다. Wrapper는 정상
-종료 후에도 저장된 process group을 정리하며 reader/writer 시작 도중 실패해도
-정리합니다. AGY 실행 도중 프로필이 바뀌면 답변을 출력하지 않고 수집한 원본을 기존
+Provider 성공에는 오류 없는 UTF-8 출력 수집과 완전하고 유효한 결과도 필요합니다.
+stdout/stderr를 각각 익명 임시 파일에 수집하고 직접 실행한 CLI의 종료 후 유한한
+스냅샷을 읽습니다. 공유된 출력 위치를 바꾸거나 하위 프로세스의 EOF를 기다리지
+않으며 vendor 하위 프로세스를 종료하지 않습니다. stderr를 실시간 복사 출력하지
+않으며 wrapper의 진단 출력 실패가 결과를 대체하지 않습니다.
+Vendor 하위 프로세스가 출력 descriptor를 유지하면 이를 닫을 때까지 이름 없는
+임시 파일에 계속 쓸 수 있습니다. 이후 출력은 wrapper 증거가 아니며 이 자원의
+수명은 vendor가 관리합니다. AGY 실행 도중 프로필이 바뀌면 답변을 출력하지 않고 수집한 원본을 기존
 실패 기록에 보존합니다. 먼저 발생한 시간 초과나 provider 오류는 주된 실패
 원인으로 유지합니다.
 
@@ -913,18 +918,21 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실제 실행 route,
 시도한 실행 파일, 관측한 CLI 버전(미관측 시 `null`), attempt와 stdin 전달 상태를
 [공통 후보 계약](contracts/receipt-fields.json)에 맞춰 보존합니다. 인코딩·spawn
-실패는 `not-started`, 불완전한 전달은 `failed`이며 기존 timeout·vendor 오류를
-덮어쓰지 않습니다. 관측하지 못한 별도 transport는 `unexposed`입니다. AGY의 기존
+및 파일 준비 실패는 `not-started`입니다. `complete`는 전체 입력을 제공했다는
+의미이며 CLI가 읽지 않거나 일찍 닫아도 유지됩니다. 소비 여부를 증명하지 않으며
+기존 timeout·vendor 오류를 덮어쓰지 않습니다. 관측하지 못한 별도 transport는 `unexposed`입니다. AGY의 기존
 버전 검사와 검증된 Gemini preflight 버전을 재사용하며 추가 provider 호출은 없습니다.
 현재 legacy 호출은 `attempt=1`을 기록하며 capacity/schema-repair 횟수는 기존
 별도 필드 의미를 유지합니다. 명시적 v2 경로는 할당한 leg·attempt에 실제 native
 호스트 또는 CLI 관측을 결합합니다. preflight 버전으로 미노출 실행 버전을 채우지 않습니다.
 
 Wrapper main thread가 provider 결과를 수집하는 동안 SIGTERM/SIGHUP을 받으면
-소유한 프로세스 그룹과 reader/writer를 수거하고 기존 audit/run-log에 실패를
+직접 실행한 CLI만 제한된 시간 안에 종료·수거하고 기존 audit/run-log에 실패를
 기록합니다. 이미 출력한 성공 응답은 취소를 덮어쓰거나 재호출을 유발하지 못합니다.
 이전 signal handler는 복원하며 KeyboardInterrupt의 기존 수거 후 재발생 동작은
-유지합니다. SIGKILL이나 호스트 장애까지 수거한다고 보장하지 않습니다.
+유지합니다. 하위 프로세스는 vendor가 관리하며 모든 고아 프로세스 제거, 원격
+작업 취소, 모든 signal 시점의 동일 기록은 보장하지 않습니다. SIGKILL이나
+호스트 장애까지 수거한다고 보장하지 않습니다.
 
 Provider child가 시작된 경우 audit에 `effective_cwd`가 남을 수 있습니다.
 Dispatch 전에 host가 해석한 실행 디렉터리이며 redacted/hardened mode에서는
@@ -996,12 +1004,10 @@ Dispatch driver에 도달한 모든 일반 non-`--repair-mode` wrapper invocatio
 cleanup합니다. Antigravity는 `--preflight-only` 전에도 cleanup합니다. Cleanup error는
 dispatch를 막지 않으며 perfect garbage collector를 주장하지 않습니다.
 
-- **Timeout cleanup은 best effort이며 containment가 아닙니다.** POSIX에서 wrapper는
-  새 child의 group이고 wrapper group과 다른 경우에만 provider group을 기록합니다.
-  Timeout 또는 interruption은 TERM을 보내고 direct child를 reap한 뒤, 저장한 group을
-  probe하여 살아 있는 member에게 KILL을 보냅니다. 지원하지 않거나 안전하지 않은 group
-  identity에서는 direct-process cleanup을 사용합니다. captured group을 벗어난 child
-  (새 session 시작 포함)는 이 보장의 범위 밖이며 OS identifier reuse race도 남습니다.
+- **Timeout 정리는 직접 실행한 CLI만 대상으로 합니다.** Timeout이나 취소 시
+  직접 실행한 CLI에 종료를 요청하고 기다린 뒤, 필요하면 강제 종료하고 다시 기다립니다.
+  각 대기는 시간 제한이 있습니다. 하위 프로세스와 원격 실행은 vendor가 관리하며,
+  프로세스 그룹 전체 정리나 모든 고아 프로세스 제거를 보장하지 않습니다.
   이것은 OS sandbox가 아닙니다.
 
 ## 보안 (Security)
@@ -1110,7 +1116,7 @@ wrapper나 리뷰 승인에 영향을 주지 않습니다.
 아니면 누락·무효 고정 경로에서 PATH로 대체할 수 있습니다. 엄격 모드는 대체를
 거부합니다. 상대 PATH의 선택 결과는 선택 시점 cwd를 기준으로 고정해 중립 디렉터리에서도
 같은 실행 파일을 사용합니다. stdin을 닫고 도구 소유의 중립 임시 cwd 및 기존 주입·Google 환경 선택자
-제거 함수를 사용합니다. 각 조회는 5초 기한과 제한된 프로세스 정리 유예를 가지므로
+제거 함수를 사용합니다. 각 조회는 5초 기한과 직접 실행한 CLI의 제한된 종료 유예를 가지므로
 전체 실행이 정확히 5초 안에 끝난다는 보장은 아닙니다. 실패하면 후속 조회를 멈춥니다.
 기준선·이력을 저장하지 않아 자동 변경 판정을 제공하지 않습니다. Vendor CLI 자체의
 캐시·텔레메트리는 발생할 수 있으며, OS 격리나 실제 설치 환경의 부작용 검증은 아닙니다.

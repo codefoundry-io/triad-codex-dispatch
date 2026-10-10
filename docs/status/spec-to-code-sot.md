@@ -89,7 +89,7 @@ rules from that boundary before adding wrapper mechanisms. A reproducible
 failure in wrapper-added machinery is not proof that the machinery is needed.
 Retain TRIAD's review inputs, result identity, agreement and exact own cleanup.
 
-Runtime HEAD remainsb6868d8. All previously started U9 diagnoses and the single
+Before this unit, runtime basis was47a1503 (b6868d8 and959d828 carry documentation). All previously started U9 diagnoses and the single
 RED ended; source fingerprint matcheda472f9172ced0ceca437398eb30398e35df12a2c69fca06300c0170b3e128238.
 RED17failed/3passed includes two mixed Gemini fixture failures. No product edit,
 GREEN or new formal review. Outside-source U6b/U9 drafts are evidence-only.
@@ -108,19 +108,48 @@ Actual installed Claude file-stdin marker probe returns exact marker/exit0;
 no lifecycle, cancellation or effective model/effort identity claim. Evidence is
 workspace `_runs/infra/20261011-vendor-boundary/`.
 
-The owner was asked one concrete design choice: redefine stdin complete as
-exact full input made available, dropping the existing large-prompt early-close
-BrokenPipe detection, or preserve that monitoring. The overall reduction is
-authorized, but this newly identified observable difference is pending. No
-dependent normative or runtime edits before the answer. The shared decision is
-`decisions/2026-10-11-vendor-invocation-boundary.md`, published as7d731ef and
-shared in PR13comment6101372915 (read back); its authoring check passes1/1.
-Only design/progress documents changed; every started provider/probe is terminal.
-Settle the choice and amend shared rules/cases before RED/code. The diagnosis
-fingerprint was after dispatch; subsequent leader changes were excluded design
-documents only. No formal integrity or whole-worktree-equality claim is made.
-Main merge needs scenario-based review and separate approval. The whole-task
-hook remains while work is unfinished.
+Owner2026-10-11 approved the recommended input-delivery meaning and implementation,
+requesting a replacement specification/common guidance rather than a host correction
+request. R-TERMINAL/C1/C2/C9/receipt meaning/unit links are shared877621c; DL-70/87's
+obsolete whole-dispatch/group-cleanup queues are superseded atfb7c962. Both pushed;
+authoring1/1 and182tests pass. PR13comment6101448927 shares the replacement.
+
+Fresh dedicated RED4failed/6passed; standalone mirror assertion corrected and a
+second fresh executor reproduced1failed. Source/status integrity and exact fixture
+cleanup complete. Evidence: workspace `_runs/infra/20261011-vendor-boundary/`.
+Candidate now uses anonymous stream files, finite offset-independent output capture,
+direct-child termination and best-effort diagnostics; the existing metadata probe
+uses the same primitives. No retry/parser/native-leg/global-setting changes.
+Leader diagnostics168passed/1test expectation corrected: single-call native parser
+still performs one invocation. Fresh dedicated GREEN238affected/2362full passed,
+4skipped; four validators and diff check passed. Source manifests matched and exact
+owned temp cleanup passed. Native macOS/arm64/Python3.12.13; Ubuntu not run.
+Evidence: workspace `_runs/infra/20261011-vendor-boundary/green/report.md`.
+R1 completed NOT_APPROVED despite matching integrity: Claude found stale shipped
+process-group/all-writer instructions; the other three entries were SAFE.
+Fresh dedicated instruction RED chose to wait for a vendor-only stream holder,
+while correctly waiting for the TRIAD-owned result-writer control. Sharedc8812a5
+now states the replacement completion guidance, independently of host status.
+The bounded correction aligns the skill/references, documents anonymous-file
+lifetime, fixes one comment/typo and consolidates duplicate descendant tests.
+Fresh instruction GREEN chose both expected actions. Correction tests236focused
+passed; full2359passed/4skipped with one obsolete distribution text assertion.
+That assertion now names direct invocations and TRIAD-owned writers; runtime and
+skill bytes are unchanged. Fresh complete distribution42passed, four validators
+and diff check passed. R2 had a leader script NameError before provider start;
+exact setup cleanup completed. Fresh R3 all four SAFE/ALL_SELECTED_APPROVED with
+ROUND_INTEGRITY_OK; all terminal handles consumed, evidence exported and exact
+stages cleaned. Two nonblocking Minor limits remain disclosed: absent stderr
+at interpreter startup fails before provider launch; README cleanup wording
+retains generic "all writers" while the operational skill is explicit. Both
+verified; no further wording round or automatic backlog. Evidence includes
+`r3-adjudication.md` under the current workspace investigation root.
+This unit is complete; commit/push and shared C1/C2/C9/DL-88 evidence follow.
+The next outer capacity/schema restart removal proposal awaits the owner's
+choice. Do not interpret input-availability approval as approval of that policy.
+Prior runtime basis47a1503; current branch HEAD959d828 with bounded dirty candidate.
+Neither RED nor leader checks are formal admission. Main merge needs scenario-based
+review and separate approval. The whole-task hook remains while work is unfinished.
 
 ### Last completed implementation: U7
 

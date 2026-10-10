@@ -111,7 +111,7 @@ zero-start, partial-start, finding, and rerun handling.
     adjudicates conflicting verified claims or oscillation on unchanged bytes.
 
 11. **Clean the exact round.** After integrity verification and adjudication,
-    finish all writers. Run packaged `export --review-id ID --expected-root ROOT
+    finish all TRIAD-owned writers. Run packaged `export --review-id ID --expected-root ROOT
     --output DESTINATION` to a new approved durable directory, then `cleanup`
     with the same ID/root, one cleanup at a time. Worktree-first artifacts use the project's exact export/cleanup.
     Preserve refused residue; follow [recovery](../../README.md#review-evidence-cleanup).

@@ -108,23 +108,26 @@ Wrappers build argv arrays, validate prompt and result paths, and pin the
 install-resolved provider executable and classifier paths. These are data and
 executable-custody controls, not provider or OS sandbox enforcement.
 
-The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
+The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. The wrapper prepares the full UTF-8 input in an anonymous temporary file before launch. Preparation failure prevents launch; `stdin_delivery=complete` means availability to the CLI, not consumption. Early stdin closure alone is not a delivery failure. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
 
-A zero provider exit is insufficient if an output reader fails or remains
-incomplete. Reader diagnostics identify only the stream and exception class.
-Cleanup uses the saved owned process group, including after normal exit. AGY
-profile drift cannot admit a completed answer; raw capture remains
-subject to the existing failure-artifact confidentiality rules, and earlier
-timeout/provider failures retain priority. This does not add path containment
-or a stronger provider permission boundary.
+A zero provider exit is insufficient if output capture fails, contains invalid
+UTF-8, or lacks a complete valid result. Capture diagnostics identify only the
+stream and exception class. Separate anonymous output files are read as finite
+snapshots after direct-child completion without changing shared offsets or
+waiting for descendant EOF. Captured stderr remains confidential under existing
+failure-artifact rules; it is not mirrored live. Best-effort wrapper display
+failures cannot replace the result or replay a failed line.
+Vendor descendants retaining output descriptors can keep writing to an unlinked
+temporary file until those descriptors close; these later bytes are not wrapper
+evidence, and their resource lifetime remains vendor-owned.
 
-Provider timeout cleanup is best-effort POSIX lifecycle hygiene, not OS
-containment. A wrapper targets a saved group only when it belonged to the new
-provider child and differed from the wrapper group; otherwise it terminates the
-direct process. After TERM and bounded direct-child reaping, it probes the saved
-group and sends KILL to surviving members. A child that leaves the captured
-group, including by starting a new session, is outside this guarantee, and OS
-identifier reuse remains a residual race.
+The wrapper terminates/reaps only its direct child on timeout/cancellation using
+bounded waits. Vendor descendants and remote work remain vendor-owned. There is
+no process-group sweep after normal exit, universal no-orphan guarantee, remote
+cancellation guarantee or identical record across every signal window. This is
+not OS containment. Cancellation cannot admit an answer even if the child exits with status 0.
+AGY profile drift still withholds the answer; earlier timeout/provider failures
+retain priority. No stronger provider permission boundary is introduced.
 
 ## Guarded symlink review boundary
 
@@ -370,8 +373,8 @@ parent environment unchanged. User model/effort settings, PATH, CLI configuratio
 GOOGLE_GENAI_USE_GCA remain; this is hygiene, not billing-route attestation.
 The same builder applies to raw/formal dispatch and standalone probes. It runs with
 closed stdin and an owned neutral temporary cwd. The five-second probe deadline
-is followed by the existing bounded saved-process-group cleanup; it is not an
-OS sandbox, control over escaped descendants, or a strict total wall-clock limit.
+is followed by bounded direct-child termination; it is not an OS sandbox,
+control over vendor descendants, or a strict total wall-clock limit.
 
 Snapshots retain stdout byte hashes/counts, fixed status fields, a bounded version
 and recognized model slugs; they do not forward raw vendor stdout/stderr, private

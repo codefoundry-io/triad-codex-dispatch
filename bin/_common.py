@@ -24,6 +24,7 @@ from __future__ import annotations
 import fcntl
 import errno
 import importlib
+import io
 import importlib.util
 import json
 import os
@@ -38,6 +39,7 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,7 +268,16 @@ class RunResult:
 
 def log(msg: str) -> None:
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
-    print(f"[{ts}] {msg}", file=sys.stderr)
+    line = f"[{ts}] {msg}\n"
+    try:
+        try:
+            fd = sys.stderr.fileno()
+        except (AttributeError, io.UnsupportedOperation):
+            sys.stderr.write(line)  # In-memory display/test sinks have no fd.
+        else:
+            os.write(fd, line.encode("utf-8", errors="replace"))
+    except (OSError, ValueError):
+        pass  # Best effort: never buffer/replay a failed line or replace a result.
 
 
 def transport_receipt(cli: str, result: RunResult) -> dict:
@@ -1269,81 +1280,38 @@ def scrubbed_child_env(base=None, *, cli=None, remove=()) -> dict:
     return {key: src[key] for key in src if key not in omitted}
 
 
-def _drain(stream, accum: list[str], passthrough, outcome: dict) -> None:
-    """Reader thread — line iter, accumulate, optional mirror to passthrough."""
-    try:
-        for line in iter(stream.readline, ""):
-            accum.append(line)
-            if passthrough is not None:
-                try:
-                    passthrough.write(line)
-                    passthrough.flush()
-                except Exception:
-                    pass
-    except Exception as e:
-        outcome["error"] = type(e).__name__
-    finally:
+def _read_capture(stream, size: int) -> bytes:
+    """Read a finite snapshot without moving a vendor's shared file offset."""
+    chunks = []
+    offset = 0
+    while offset < size:
+        chunk = os.pread(stream.fileno(), min(size - offset, 1024 * 1024), offset)
+        if not chunk:
+            raise OSError("capture ended before its snapshot length")
+        chunks.append(chunk)
+        offset += len(chunk)
+    return b"".join(chunks)
+
+
+def _terminate_provider_process(proc, reason: str) -> bool:
+    """Bounded direct-child termination/reaping; descendants are vendor-owned."""
+    log(f"{reason}; terminating direct child")
+    for action in (proc.terminate, proc.kill):
         try:
-            stream.close()
-        except Exception as e:
-            outcome["error"] = type(e).__name__
-        outcome["done"] = True
-
-
-def _terminate_provider_process_group(
-    proc, reason: str, provider_pgid: Optional[int] = None
-) -> bool:
-    """Signal the saved group and reap the direct child.
-
-    The result reports signaling/reaping errors, not descendant zombie removal.
-    """
-    log(f"{reason}; sending SIGTERM")
-    completed = True
-    try:
-        if provider_pgid is not None:
-            os.killpg(provider_pgid, signal.SIGTERM)
-        else:
-            proc.terminate()
-    except (ProcessLookupError, PermissionError) as error:
-        log(f"SIGTERM failed: {error}")
-        if isinstance(error, PermissionError):
-            completed = False
-    direct_child_unreaped = False
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        direct_child_unreaped = True
-
-    group_survives = False
-    if provider_pgid is not None:
-        try:
-            os.killpg(provider_pgid, 0)
-            group_survives = True
+            action()
         except ProcessLookupError:
             pass
-        except PermissionError as error:
-            log(f"process-group liveness check failed: {error}")
-            completed = False
-            group_survives = True
-
-    if group_survives or (provider_pgid is None and direct_child_unreaped):
-        log("SIGTERM ignored; sending SIGKILL")
+        except OSError as error:
+            log(f"direct-child termination failed ({type(error).__name__})")
         try:
-            if group_survives:
-                os.killpg(provider_pgid, signal.SIGKILL)
-            else:
-                proc.kill()
-        except ProcessLookupError:
+            proc.wait(timeout=5)
+            return True
+        except subprocess.TimeoutExpired:
             pass
-        except PermissionError:
-            completed = False
-
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        log("zombie: SIGKILL also unresponsive")
-        completed = False
-    return completed
+        except OSError as error:
+            log(f"direct-child wait failed ({type(error).__name__})")
+    log("direct child did not complete within termination deadline")
+    return False
 
 
 def _run_once(
@@ -1359,7 +1327,7 @@ def _run_once(
 
     The handler only records state: raising between Popen and its assignment
     could lose the child handle. The engine observes cancellation in its wait
-    loop and uses the same bounded group/reader cleanup as other terminal paths.
+    loop and terminates/reaps only the direct child with bounded waits.
     Library calls from non-main threads retain their caller's signal policy.
     """
     received: list[int] = []
@@ -1403,15 +1371,10 @@ def _run_once_owned(
     stdin_text: Optional[str], classify_and_log: bool, remove_env,
     received: list[int],
 ) -> RunResult:
-    """One Popen invocation.
+    """Capture one direct invocation through owned anonymous stream files.
 
-    stdout = capture-only (structured JSON/JSONL — not for human stream).
-    stderr = mirror to parent stderr (human progress visibility).
-    stdin_text: when provided, strictly encode UTF-8 and feed those bytes via
-    a daemon writer thread so a large prompt cannot deadlock against a full OS
-    pipe before the child starts reading. The writer must complete its write,
-    flush, and close phases within bounded reconciliation joins. When None
-    (default), stdin is DEVNULL (gemini/claude behavior unchanged).
+    Input completion means availability, not vendor consumption. Output is a
+    finite snapshot after direct-child completion; no descendant EOF or mirror.
     """
     effective_cwd = os.path.realpath(cwd or os.getcwd())
     log(
@@ -1441,194 +1404,105 @@ def _run_once_owned(
                 _stdin_delivery_failed=True,
             ), "not-started")
 
-    # Scrub loader/interpreter injection vars so a poisoned parent env cannot
-    # reach the vendor child (I-2/I-3). Explicit env= replaces the implicit
-    # full-os.environ inheritance. scrubbed_child_env() is the shared
-    # single-source scrub (the agy pty transport applies the same one).
-    child_env = scrubbed_child_env(cli=cli, remove=remove_env)
-
-    popen_kwargs: dict = dict(
-        cwd=cwd,
-        env=child_env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=(subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL),
-        text=True,
-        encoding="utf-8",
-        bufsize=1,
-    )
-    if hasattr(os, "setsid"):
-        popen_kwargs["preexec_fn"] = os.setsid
-
-    try:
-        proc = subprocess.Popen(cmd, **popen_kwargs)
-    except OSError as e:
-        elapsed = time.monotonic() - start
-        log(f"OSError on spawn: {e}")
-        return observed(RunResult(
-            EXIT_ARG_ERROR, "", f"spawn failed: {e}\n", elapsed,
-            classification="unknown",
-        ), "not-started")
-
-    provider_pgid: Optional[int] = None
-    if all(hasattr(os, name) for name in ("killpg", "getpgid", "getpgrp")):
-        try:
-            candidate_pgid = os.getpgid(proc.pid)
-            if candidate_pgid == proc.pid and candidate_pgid != os.getpgrp():
-                provider_pgid = candidate_pgid
-        except (AttributeError, OSError):
-            pass
-
-    stdin_done = threading.Event()
-    stdin_errors: list[str] = []
-    t_in = None
-    threads: list = []
-    stdout_buf: list[str] = []
-    stderr_buf: list[str] = []
-    out_state: dict = {}
-    err_state: dict = {}
     transport_error = None
-    setup_failed = False
-
-    def _feed_stdin() -> None:
+    timed_out = setup_failed = False
+    captured = {"stdout": "", "stderr": ""}
+    with ExitStack() as resources:
         try:
-            written = proc.stdin.buffer.write(stdin_bytes)
-            if written != len(stdin_bytes):
-                stdin_errors.append("write")
-            proc.stdin.buffer.flush()
-        except Exception:
-            stdin_errors.append("write")
-        finally:
-            try:
-                proc.stdin.close()
-            except Exception:
-                stdin_errors.append("close")
-            finally:
-                stdin_done.set()
-
-    def _finish_stdin() -> None:
-        if t_in is None:
-            return
-        t_in.join(timeout=2)
-        if not stdin_done.is_set():
-            _terminate_provider_process_group(
-                proc, "stdin writer incomplete", provider_pgid
+            streams = {name: resources.enter_context(tempfile.TemporaryFile(mode="w+b", buffering=0))
+                       for name in ("stdout", "stderr")}
+            input_stream = subprocess.DEVNULL
+            if stdin_bytes is not None:
+                input_stream = resources.enter_context(tempfile.TemporaryFile(mode="w+b", buffering=0))
+                if input_stream.write(stdin_bytes) != len(stdin_bytes):
+                    raise OSError("incomplete input preparation")
+                input_stream.flush()
+                input_stream.seek(0)
+        except OSError as error:
+            diagnostic = f"stream preparation failed ({type(error).__name__})"
+            log(diagnostic)
+            return observed(RunResult(
+                EXIT_CLI_FAIL, "", "", time.monotonic() - start,
+                classification="unknown", extraction_error=diagnostic,
+                _output_transport_failed=True,
+            ), "not-started")
+        try:
+            proc = subprocess.Popen(
+                cmd, cwd=cwd, env=scrubbed_child_env(cli=cli, remove=remove_env),
+                stdin=input_stream, stdout=streams["stdout"], stderr=streams["stderr"],
+                start_new_session=os.name == "posix",
             )
-            t_in.join(timeout=2)
-
-    timed_out = False
-    try:
-        # Construction/start belongs inside the same cleanup boundary as wait.
-        if stdin_bytes is not None and proc.stdin is not None:
-            t_in = threading.Thread(target=_feed_stdin, daemon=True)
-            threads.append(t_in)
-            t_in.start()
-        for stream, buf, mirror, state in (
-            (proc.stdout, stdout_buf, None, out_state),
-            (proc.stderr, stderr_buf, sys.stderr, err_state),
-        ):
-            thread = threading.Thread(
-                target=_drain, args=(stream, buf, mirror, state), daemon=True
-            )
-            threads.append(thread)
-            thread.start()
-        deadline = time.monotonic() + timeout
-        while not received:
-            try:
-                proc.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
-                break
-            except subprocess.TimeoutExpired:
-                if time.monotonic() >= deadline:
-                    timed_out = True
+        except OSError as error:
+            log(f"OSError on spawn: {error}")
+            return observed(RunResult(
+                EXIT_ARG_ERROR, "", f"spawn failed: {error}\n", time.monotonic() - start,
+                classification="unknown",
+            ), "not-started")
+        try:
+            deadline = time.monotonic() + timeout
+            while not received:
+                try:
+                    proc.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
                     break
-        if timed_out or received:
-            _terminate_provider_process_group(
-                proc, f"timeout after {timeout}s" if timed_out else
-                "wrapper termination requested", provider_pgid
-            )
-        _finish_stdin()
-        # A reaped leader may still own descendants, even with closed pipes.
-        if not timed_out and provider_pgid is not None:
-            try:
-                os.killpg(provider_pgid, 0)
-            except ProcessLookupError:
-                pass
-            else:
-                if not _terminate_provider_process_group(
-                    proc, "provider descendant remained after exit", provider_pgid
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+            if timed_out or received:
+                if not _terminate_provider_process(
+                    proc, f"timeout after {timeout}s" if timed_out else "wrapper termination requested",
                 ):
-                    transport_error = "process-group cleanup incomplete"
-    except BaseException as exc:
-        try:
-            _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
-        except Exception as cleanup_error:
-            log(f"provider cleanup failed ({type(cleanup_error).__name__})")
-        for thread in threads:
-            try:
-                thread.join(timeout=2)
-            except RuntimeError:  # A constructed thread may not have started.
-                pass
-        # Close unclaimed pipes only; closing a pipe owned by a blocked reader
-        # on this thread would turn bounded cleanup into an unbounded wait.
-        if not any(thread.is_alive() for thread in threads):
-            for stream in (proc.stdin, proc.stdout, proc.stderr):
-                if stream is not None:
-                    try:
-                        stream.close()
-                    except Exception:
-                        pass
-        if not isinstance(exc, Exception):
-            raise
-        setup_failed = True
-        transport_error = f"transport setup/wait failed ({type(exc).__name__})"
-    else:
-        for thread in threads:
-            if thread is not t_in:
-                thread.join(timeout=2)
+                    transport_error = "direct-child termination incomplete"
+        except BaseException as error:
+            _terminate_provider_process(proc, "wrapper interrupted")
+            if not isinstance(error, Exception):
+                raise
+            setup_failed = True
+            transport_error = f"transport setup/wait failed ({type(error).__name__})"
 
-    for name, state in (("stdout", out_state), ("stderr", err_state)):
-        if not state.get("done") or state.get("error"):
-            detail = state.get("error", "incomplete")
-            transport_error = transport_error or f"{name} collection failed ({detail})"
+        # Freeze lengths before reading. Descendant writes cannot extend the
+        # collection or be overwritten by a seek on the inherited offset.
+        sizes = {}
+        for name, stream in streams.items():
+            try:
+                sizes[name] = os.fstat(stream.fileno()).st_size
+            except OSError as error:
+                transport_error = transport_error or f"{name} collection failed ({type(error).__name__})"
+        for name, size in sizes.items():
+            try:
+                data = _read_capture(streams[name], size)
+                try:
+                    captured[name] = data.decode("utf-8")
+                except UnicodeDecodeError as error:
+                    captured[name] = data[:error.start].decode("utf-8")
+                    raise
+                finally:
+                    captured[name] = captured[name].replace("\r\n", "\n").replace("\r", "\n")
+            except (OSError, UnicodeError) as error:
+                transport_error = transport_error or f"{name} collection failed ({type(error).__name__})"
+
     if transport_error:
         log(transport_error)
-
     elapsed = time.monotonic() - start
-    stdout = "".join(stdout_buf)
-    stderr = "".join(stderr_buf)
+    stdout, stderr = captured["stdout"], captured["stderr"]
     rc = proc.returncode if proc.returncode is not None else -1
-
-    delivery_failed = stdin_bytes is not None and (
-        not stdin_done.is_set() or bool(stdin_errors)
-    )
     if timed_out:
         log(f"timed out elapsed={elapsed:.1f}s")
         result = RunResult(EXIT_TIMEOUT, stdout, stderr, elapsed)
     else:
         log(f"exit={rc} elapsed={elapsed:.1f}s")
-        ec = EXIT_OK if rc == 0 else EXIT_CLI_FAIL
-        result = RunResult(ec, stdout, stderr, elapsed)
-        if rc == 0 and delivery_failed:
-            phase = stdin_errors[0] if stdin_errors else "incomplete"
-            result.exit_code = EXIT_CLI_FAIL
-            result.classification = "unknown"
-            result.extraction_error = f"stdin delivery failed ({phase})"
-            result._stdin_delivery_failed = True
-            log(result.extraction_error)
-        elif transport_error and (rc == 0 or setup_failed):
+        result = RunResult(EXIT_OK if rc == 0 else EXIT_CLI_FAIL, stdout, stderr, elapsed)
+        if transport_error and (rc == 0 or setup_failed):
             result.exit_code = EXIT_CLI_FAIL
             result.classification = "unknown"
             result.extraction_error = transport_error
             result._output_transport_failed = True
-
     result._effective_cwd = effective_cwd
     result.vendor_exit_code = rc
     if received and not timed_out:
         _mark_signal_failure(result, received[0], cli)
     if (result.exit_code != EXIT_OK and
             _auth_carrier_stop(cli, stderr, stdout, rc)):
-        # Preserve an observed authentication failure even if collection timed
-        # out or was interrupted. Transport flags still withhold every answer.
         result.classification = "oauth-env"
         result.exit_code = EXIT_TERMINAL
     elif classify_and_log:
@@ -1639,13 +1513,9 @@ def _run_once_owned(
     elif not (result._stdin_delivery_failed or result._output_transport_failed):
         result.classification = "unclassified"
     if classify_and_log:
-        log(
-            f"[wrapper] {cli} {result.classification} "
-            f"exit={result.exit_code} vendor={result.vendor_exit_code} "
-            f"elapsed={elapsed:.1f}s"
-        )
-    return observed(result, "not-used" if stdin_bytes is None else
-                    "failed" if delivery_failed else "complete")
+        log(f"[wrapper] {cli} {result.classification} exit={result.exit_code} "
+            f"vendor={result.vendor_exit_code} elapsed={elapsed:.1f}s")
+    return observed(result, "not-used" if stdin_bytes is None else "complete")
 
 
 def run_cli_with_retry(

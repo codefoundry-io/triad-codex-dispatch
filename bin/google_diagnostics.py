@@ -20,39 +20,28 @@ def _run_probe(binary: str, args: list[str], cwd: str, env: dict) -> tuple[dict,
     record = {"args": args, "status": "launch_failed", "exit_code": None}
     stdout = b""
     try:
-        proc = subprocess.Popen(
-            [binary, *args], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            start_new_session=os.name == "posix",
-        )
-    except OSError:
-        pass
-    else:
-        pgid = None
-        if os.name == "posix":
+        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+            proc = subprocess.Popen(
+                [binary, *args], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                stdout=output, stderr=errors, start_new_session=os.name == "posix",
+            )
             try:
-                candidate = os.getpgid(proc.pid)
-                if candidate == proc.pid and candidate != os.getpgrp():
-                    pgid = candidate
+                proc.wait(timeout=PROBE_TIMEOUT)
+                record.update(status="ok" if proc.returncode == 0 else "failed",
+                              exit_code=proc.returncode)
+            except subprocess.TimeoutExpired:
+                _common._terminate_provider_process(proc, "diagnostic probe timeout")
+                record.update(status="timeout", exit_code=proc.returncode)
             except OSError:
-                pass
-        try:
-            stdout, _ = proc.communicate(timeout=PROBE_TIMEOUT)
-            record.update(status="ok" if proc.returncode == 0 else "failed",
-                          exit_code=proc.returncode)
-        except subprocess.TimeoutExpired as error:
-            stdout = error.stdout or b""
-            _common._terminate_provider_process_group(proc, "diagnostic probe timeout", pgid)
-            record.update(status="timeout", exit_code=proc.returncode)
-        except OSError:
-            _common._terminate_provider_process_group(proc, "diagnostic probe I/O failure", pgid)
-            record.update(status="io_failed", exit_code=proc.returncode)
-        except BaseException:
-            _common._terminate_provider_process_group(proc, "diagnostic probe interrupted", pgid)
-            raise
-        finally:
-            proc.stdout.close()
-            proc.stderr.close()
+                _common._terminate_provider_process(proc, "diagnostic probe I/O failure")
+                record.update(status="io_failed", exit_code=proc.returncode)
+            except BaseException:
+                _common._terminate_provider_process(proc, "diagnostic probe interrupted")
+                raise
+            stdout = _common._read_capture(output, os.fstat(output.fileno()).st_size)
+    except OSError:
+        if record["status"] != "launch_failed":
+            record["status"] = "io_failed"
     record.update(stdout_bytes=len(stdout), stdout_sha256=hashlib.sha256(stdout).hexdigest())
     return record, stdout
 

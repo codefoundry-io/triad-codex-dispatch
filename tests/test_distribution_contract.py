@@ -889,7 +889,7 @@ def test_cross_family_skill_has_one_partial_start_contract_owner() -> None:
         "correct and verify every reproduced in-scope defect",
         "correct the classified leg failure",
         "diagnose and correct the integrity mismatch before a fresh round",
-        "after every started leg terminates",
+        "started direct invocation and TRIAD-owned custody/result writer is terminal before integrity verification",
     ):
         assert contract_clause in convergence
 

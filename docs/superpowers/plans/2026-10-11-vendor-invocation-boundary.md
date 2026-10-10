@@ -1,20 +1,18 @@
 # Vendor invocation boundary implementation plan
 
-> **For agentic workers:** Use `superpowers:executing-plans` for this one coherent unit. Do not execute the implementation steps before the input-delivery decision below is settled.
+> **For agentic workers:** Use `superpowers:executing-plans` for this one coherent unit. The input-delivery decision below is approved; proceed within this unit.
 
 **Goal:** Collect a completed vendor CLI review without implementing its descendant lifecycle or custom pipe transport.
 
 **Architecture:** Keep the current CLI arguments, cwd, environment policy and result parsers. Use invocation-owned temporary stream files and ordinary direct-child supervision; retain terminal result validation and review binding. Vendor descendants and remote execution remain vendor-owned.
 
-**Spec:** Shared `reference/review-rules.md#R-TERMINAL`, C1/C2/C9, and the pending shared decision `decisions/2026-10-11-vendor-invocation-boundary.md`. Current rules still describe the older mechanism until the decision is adopted into the draft.
+**Spec:** Shared `reference/review-rules.md#R-TERMINAL`, C1/C2/C9 and `decisions/2026-10-11-vendor-invocation-boundary.md` at877621c; superseded DL-70/DL-87 queues retired atfb7c962. Both commits are pushed to PR13. Authoring1/1 and182tests pass.
 
-**Status:** Approved simplification direction; implementation paused on the concrete input-delivery trade-off. This plan supersedes neither completed work nor the other responsibility-audit units.
+**Status:** Implementation and required verification/review complete. Fresh R3 all four SAFE with matching integrity after the bounded R1 corrections. Publication of source and shared evidence follows; no merge/install/release or whole-task completion.
 
-## Decision before implementation
+## Approved input-delivery decision
 
-Recommend defining `stdin_delivery=complete` as exact UTF-8 input prepared and made available to the launched CLI, not proof that it consumed the input. File-backed stdin removes the existing large-prompt BrokenPipe detection when a CLI closes stdin early. Standard `communicate()` also suppresses BrokenPipe; it is not an equivalent drop-in replacement.
-
-The owner approved proceeding with the audit's simplification direction, but did not explicitly select this observable behavior change. Present the real scenario and choices before changing the common rule or code. Do not add file-offset consumption surveillance merely to preserve the old mechanism.
+`stdin_delivery=complete` means exact full UTF-8 input prepared and made available to the launched CLI, not proof of consumption. File-backed stdin removes large-prompt BrokenPipe detection when a CLI closes stdin early. No file-offset consumption surveillance. Existing CLI failure, complete-result validation and authentication STOP remain.
 
 ## Global constraints
 
@@ -48,14 +46,48 @@ The diagnostic helper is an existing consumer: adapt it to the same direct-child
 
 - [x] Refresh main/PR13 and compare A/B source; independently diagnose with Claude, Google and fresh Codex. All three completed. They recommend file capture; Claude additionally proposes retaining timeout group kill, which lacks a measured vendor requirement and is not selected under the approved vendor-owned descendant boundary. Invalid UTF-8 rejection stays, so it needs no new decision.
 - [x] Compare standard-library transports in an isolated, provider-free spike. Do not treat it as vendor lifecycle conformance.
-- [ ] Settle the input-delivery decision and amend the shared rule/cases/unit/decision; validate and publish the same commit to PR13.
-- [ ] Leader writes bounded behavior fixtures against canonical source. Fresh dedicated `triad-skill-executor` observes RED for descendant preservation/final capture and diagnostic independence; preserve success/timeout/auth/binding controls.
-- [ ] Replace PIPE reader/writer threads, mirror and group sweep with owned stream files, final snapshot and ordinary direct-child supervision. Preserve public parsers/callers and failure precedence.
-- [ ] Replace obsolete thread-phase/group-prescription tests with the five observable scenarios above; retain applicable current regressions.
-- [ ] Fresh dedicated GREEN: affected tests, full tests, skill validators and applicable distribution checks. Record exact cleanup and unavailable OS coverage.
-- [ ] Complete required independent multi-family unit review, reproduce substantive findings, and follow existing convergence rules. No admission from diagnosis or static checks.
-- [ ] Commit/push, update shared evidence and SoT; only then start the retry/evidence reduction units.
+- [x] Settle the input-delivery decision and amend the shared rule/cases/unit/decision; validate and publish the same commit to PR13.
+- [x] Leader writes bounded behavior fixtures against canonical source. Fresh dedicated `triad-skill-executor` observes RED for descendant preservation/final capture and diagnostic independence; preserve success/timeout/auth/binding controls.
+- [x] Replace PIPE reader/writer threads, mirror and group sweep with owned stream files, final snapshot and ordinary direct-child supervision. Preserve public parsers/callers and failure precedence.
+- [x] Replace obsolete thread-phase/group-prescription tests with the five observable scenarios above; retain applicable current regressions.
+- [x] Fresh dedicated GREEN:238affected/2362full passed,4skipped; four validators and diff check passed. Exact cleanup/source integrity passed; Ubuntu not run. Full suite includes distribution contracts; no release archive requested.
+- [x] Complete required independent multi-family unit review: R3 all four SAFE/ALL_SELECTED_APPROVED/ROUND_INTEGRITY_OK; exact cleanup complete. R2 failed before start due to a leader script quoting error, not source behavior.
+- [ ] Commit/push, update shared evidence and SoT. The next retry-policy unit additionally requires the pending owner choice.
 
 ## Remaining audit units
 
 After this unit's gate, evaluate outer CLI capacity/schema restarts separately; then consolidate evidence/repeated validation according to actual consumers; finally simplify exact owned-artifact cleanup. U6b/U9's old expansion drafts do not resume automatically. Final integration review and whole-task hook removal remain at completion.
+
+## Current verification evidence
+
+Fresh dedicated RED:4failed/6passed; corrected standalone stderr-line assertion then reproduced independently (1failed). Source hashes/status stayed unchanged during each run; owned fixture cleanup complete. Evidence: workspace `_runs/infra/20261011-vendor-boundary/{red,mirror-red}/report.md`. The first substring assertion was contaminated by logged argv; the second removes that ambiguity. Broken-display RED occurred on initial logging, not after a completed result.
+
+Candidate removes custom PIPE threads/mirror/group sweep, shares direct-child termination and finite byte snapshot with diagnostics, and drops failed diagnostic lines without buffering them. Initial leader check19passed/4obsolete thread tests failed; those fixtures were replaced with partial file-preparation and actual wait-interrupt behavior. Broader check168passed/1failed: a test incorrectly expected retries from the existing single-call native parser; corrected to one invocation without changing parser/retry behavior.
+
+Current production delta: approximately+140/-281 (net-141), novel core below120lines; tests approximately+180/-344 including new scenarios. English/Korean/security/candidate receipt docs updated. No release, install, adoption or admission claim. Next: correction GREEN and complete fresh four-entry R2.
+
+R1 returned Claude NOT-SAFE and three SAFE with ROUND_INTEGRITY_OK. Its source
+instructions retained process-group cleanup and unqualified writer termination.
+A fresh dedicated instruction RED selected unnecessary waiting for a vendor-only
+stream holder; the TRIAD-owned result-writer control correctly waited. Shared
+c8812a5 now clarifies the replacement completion guidance. The correction aligns
+the skill/public-v2/convergence references and adapter comment, documents anonymous
+file lifetime, fixes a typo, and consolidates duplicate descendant tests. No new
+runtime algorithm or lifecycle manager is added. Prior R1 evidence is retained;
+its exact stage/cwd cleanup is complete. Fresh instruction GREEN selected both
+expected actions;236focused passed. Full2359passed/4skipped and one obsolete
+distribution assertion failed on the former completion sentence. Only that
+expectation is updated; runtime and skill bytes are unchanged. A fresh executor
+will run the full distribution module and four validators. The completed full
+run supplies the unchanged remainder's evidence; do not rerun it solely for an
+assertion text update.
+
+Final complete distribution module42passed, all four validators and diff check
+passed. R3 all four SAFE with matching integrity and exact cleanup. Two verified
+nonblocking Minors are deferred: missing sys.stderr at interpreter startup fails
+before provider launch; README cleanup prose retains generic writer wording while
+the operational instructions explicitly name TRIAD-owned writers. Source/runtime
+and skill bytes remain the reviewed bytes. No further prompt iteration or automatic
+backlog; see workspace investigation `r3-adjudication.md` for evidence and impact.
+
+Necessary dependency discovered before dedicated GREEN: the candidate receipt description is hash-pinned. Synchronize its exact shared bytes, source manifest, `validate_v2.py` commit constant and existing provenance test/README to sharedfb7c962. The other three schema payloads are byte-identical; no wire constraint, validation algorithm or deployed revision changes. This adds one production constant line to the coherent unit. GREEN had not begun snapshots/tests when this was corrected.

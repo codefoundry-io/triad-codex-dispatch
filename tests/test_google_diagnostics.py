@@ -230,7 +230,7 @@ def test_launch_failure_is_fixed_incomplete_json(tmp_path, monkeypatch):
     assert "PRIVATE_" not in json.dumps(snapshot)
 
 
-def test_timeout_cleans_same_group_descendant_without_forwarding_stderr(tmp_path, monkeypatch, capsys):
+def test_timeout_leaves_vendor_descendant_without_forwarding_stderr(tmp_path, monkeypatch, capsys):
     module = _load()
     pid_file = tmp_path / "descendant.pid"
     binary = tmp_path / "agy-timeout"
@@ -249,12 +249,8 @@ def test_timeout_cleans_same_group_descendant_without_forwarding_stderr(tmp_path
         probe = snapshot["probes"][0]
         assert probe["status"] == "timeout"
         assert probe["stdout_sha256"] == hashlib.sha256(b"metadata\n").hexdigest()
-        for _ in range(100):
-            state = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True).stdout.strip()
-            if not state or state.startswith("Z"):
-                break
-            time.sleep(0.02)
-        assert not state or state.startswith("Z")
+        state = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True).stdout.strip()
+        assert state and not state.startswith("Z")
         output = capsys.readouterr()
         assert "PRIVATE_STDERR" not in output.out + output.err + json.dumps(snapshot)
     finally:

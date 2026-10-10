@@ -132,14 +132,19 @@ exact pinned shared clauses and authoritative v2 schema. Never edit its output.
   cwd. Redirect wrapper stdout/stderr to the returned exclusive `stdout_file`
   and `stderr_file`. Do not interpolate argv values into an unquoted shell
   string. Keep the session/process handle until its actual terminal exit.
-  Existing wrappers own stdin, process-group cleanup, reader collection and
-  provider deadlines; this procedure is not another scheduler.
+  Existing wrappers provide complete input, capture finite output after direct
+  CLI completion, and terminate/reap that direct child with bounded waits on
+  timeout/cancellation. Vendor descendants and remote work remain vendor-owned;
+  no process-group sweep or no-orphan guarantee is implied. This procedure is
+  not another scheduler.
 
 Start all selected entries before consuming healthy-path verdicts. If a launch
 fails, stop later starts, resolve every possibly started process, and wait for
 all started siblings. Preserve their findings and diagnose the failure; a failed
 entry does not make completed findings disappear. A missing handle is not proof
-that nothing started. Keep all writers terminal before cleanup or admission.
+that nothing started. Keep all TRIAD-owned producers and custody/result writers terminal before cleanup
+or admission; a vendor descendant retaining only CLI stream handles is not an
+additional completion gate.
 
 ## Record actual host observations
 
@@ -257,7 +262,8 @@ structural compliance checks, use a dedicated fresh executor on the canonical
 source skill; it must not dispatch providers or conduct an operational review.
 Those checks are not defect-recall measurements.
 
-After all writers terminate and findings are adjudicated, use the existing
+After all TRIAD-owned producers and custody/result writers terminate and findings
+are adjudicated, use the existing
 managed `export --review-id ID --expected-root ROOT --output DESTINATION`, then
 `cleanup` with the same ID/root. Export includes v2 custody and preparation
 evidence. Preserve unexported/refused residue. Audit/run-log age and size limits
