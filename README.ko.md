@@ -1264,10 +1264,10 @@ Codex는 native로 실행합니다. Google CLI의 인터페이스·실행 제한
 Public v2는 사용자의 상시 허용에 따라 새 라운드의 모든 leg에 웹을 허용합니다.
 요청값 생략·false는 이를 철회하지 않으며, 잘못된 타입이나 native 웹 도구 누락은
 준비 단계에서 거절합니다. 재시도는 저장된 조건을 사용합니다. Legacy는 리뷰별 직접
-요청 방식을 유지하며, 소스 후보 변경이 설치 revision을 바꾸지는 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
+요청 방식을 유지하며, 기존 설치는 업데이트한 뒤 변경됩니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
 Raw Claude `--web`은 `WebSearch`/`WebFetch`를 허용하고 호출자 프롬프트를 보존합니다.
 0.2.556에는 리뷰별 직접 요청 방식과 raw Claude `--web`이 도입됐습니다.
-v2의 상시 허용 적용은 아직 출시되지 않은 소스 후보이며, 실계정 웹 실행 검증과
+0.2.559는 v2의 상시 허용을 포함하며, 실계정 웹 실행 검증과
 공유 revision 채택은 별도 단계입니다.
 
 ## 승인된 AGY 웹 조사

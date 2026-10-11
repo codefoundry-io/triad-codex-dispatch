@@ -170,10 +170,10 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
    사용에 필요한 실제 인증 식별자는 `gemini-enterprise`입니다.
    실행 전에 [구성 확인](../README.ko.md#프로젝트-리뷰어-설정-확인)을 수행합니다.
    구성 확인 성공은 provider 접근권 증명이 아닙니다. Gemini에는 effort flag가
-   없습니다. Public v2 소스 후보는 사용자의 상시 웹 허용을 새 라운드에 고정하며,
+   없습니다. 0.2.559의 Public v2는 사용자의 상시 웹 허용을 새 라운드에 고정하며,
    요청값 생략·false로 이를 철회하지 않습니다. 활성 native Codex leg는
    `web_available: true`를 보고해야 합니다. Legacy는 해당 라운드에 직접 요청한
-   경우에만 웹을 허용합니다. 이 소스 변경이 기존 설치 revision을 바꾸지는 않습니다.
+   경우에만 웹을 허용합니다. 기존 설치에 적용하려면 플러그인을 업데이트하세요.
 
 3. **선택 경로.** 기본 설치에는 추가 환경변수가 필요하지 않습니다.
    `TRIAD_BOOTSTRAP_BIN_DIR` 또는 `TRIAD_CLASSIFIER_EXTENSION`을 바꾼다면

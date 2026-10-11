@@ -1359,10 +1359,10 @@ cleaner, permanent web logger or installed revision adoption.
 true for every new public v2 round under the owner's standing authorization.
 Omitted/false caller values cannot revoke it; invalid types and missing native web
 capability refuse. Retry retains the bound condition. Legacy keeps explicit
-per-round authorization; source candidates do not change installed revisions.
+per-round authorization; an existing installation changes only after an update.
 Raw Claude `--web` adds native `WebSearch`/`WebFetch` permission and keeps the caller prompt.
 Release 0.2.556 introduced per-request review web and raw Claude `--web`.
-The standing v2 binding is an unreleased source candidate; authenticated web
+Release 0.2.559 ships the standing v2 binding; authenticated web
 execution and shared revision adoption remain separate checks.
 
 ## Authorized AGY web investigation
