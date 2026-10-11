@@ -1,9 +1,10 @@
 # Shared contract fixture
 
 Exact contracts/exit-tokens.json bytes from
-[triad-dispatch-spec 055204c83e57bf87eeac5b2422f2b17340f7c53b](https://github.com/codefoundry-io/triad-dispatch-spec/blob/055204c83e57bf87eeac5b2422f2b17340f7c53b/contracts/exit-tokens.json).
+[triad-dispatch-spec 3afc4d7e931e55d601dd74877bdbe65e610a8e59](https://github.com/codefoundry-io/triad-dispatch-spec/blob/3afc4d7e931e55d601dd74877bdbe65e610a8e59/contracts/exit-tokens.json).
 
-SHA-256: 0e27186c915d0bc4f26246830daabed2dd1f737c491dbdf5144afcd5bd943bfd.
+SHA-256: 200e199293060c726563d882deb52361bc01e205f7d9fae3686e5cedc9758519.
 
-This fixture checks host table/direct-exit/alias membership. It does not adopt a
-revision tag or change transport phases. Keep the original bytes unchanged.
+Updated for DL-91 retired task tokens/exits. Original fixture bytes are retained
+in the U4e pre-unit evidence. This fixture checks table/direct-exit/alias membership;
+it does not adopt a revision tag or change transport phases. Keep these bytes exact.

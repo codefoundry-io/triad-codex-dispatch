@@ -40,6 +40,8 @@ def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, 
 
     def actual_preflight(adapters):
         options = list(route["options"])
+        if adapters["google"]["review_web_authorized"]:
+            options.append("--web")
         for flag, value in (("--cwd", str(worktree)), ("--expected-review-id", "v2-fixture"),
                             ("--expected-leg-name", "google"), ("--expected-attempt", "1"),
                             ("--google-selector-receipt", str(selector))):
@@ -49,7 +51,7 @@ def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, 
         preflight = route["home"] / "collector-preflight.json"
         preflight.write_text(output)
         adapters["google"].update(route=name, transport_route=name, binary=str(binary),
-            cli_version="1.2.7" if name == "agy" else "0.60.0", model=route["model"],
+            cli_version="1.2.7" if name == "agy" else "0.63.0", model=route["model"],
             effort="high" if name == "agy" else None, timeout_s=610,
             selector_file=str(selector), preflight_file=str(preflight),
             preflight_sha256=hashlib.sha256(preflight.read_bytes()).hexdigest())
@@ -87,7 +89,7 @@ def test_google_actual_argv_wrapper_log_reaches_terminal_custody(round_fixture, 
     assert Path(item["result_file"]).read_bytes() == output.encode()
     if name == "gemini":
         assert observed["transport"]["cli_version"] is None
-        assert json.loads(Path(item["adapter"]["preflight_file"]).read_text())["gemini_version"] == "0.60.0"
+        assert json.loads(Path(item["adapter"]["preflight_file"]).read_text())["gemini_version"] == "0.63.0"
 
 
 def test_google_preflight_remains_separate_from_unexposed_gemini_runtime_version(route):
@@ -99,7 +101,7 @@ def test_google_preflight_remains_separate_from_unexposed_gemini_runtime_version
     observed = json.loads(logs[0].read_text())
     if route["name"] == "gemini":
         assert observed["transport"]["cli_version"] is None
-        assert json.loads(preflight.read_text())["gemini_version"] == "0.60.0"
+        assert json.loads(preflight.read_text())["gemini_version"] == "0.63.0"
     else:
         assert observed["transport"]["cli_version"] == "1.2.7"
 

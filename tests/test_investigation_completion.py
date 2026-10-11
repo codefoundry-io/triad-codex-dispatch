@@ -146,14 +146,14 @@ def test_c29_web_cannot_enter_gemini_review(paths, fake_provider, monkeypatch, e
     assert fake_provider == ([], [])
 
 
-@pytest.mark.parametrize('repair', [False, True])
+@pytest.mark.parametrize('invalid', [False, True])
 def test_c29_gemini_custom_schema_keeps_web_clause_last_through_native_call(
-    repair, paths, fake_provider, monkeypatch, capsys,
+    invalid, paths, fake_provider, monkeypatch, capsys,
 ):
     commands = []
     def once(cli, cmd, cwd, timeout, **kwargs):
         commands.append(cmd)
-        answer = {} if repair and len(commands) == 1 else {'ok': True}
+        answer = {} if invalid else {'ok': True}
         return _common.RunResult(exit_code=0, vendor_exit_code=0,
             stdout=json.dumps({'response': json.dumps(answer)}), stderr='',
             elapsed_s=0, classification='ok')
@@ -161,15 +161,16 @@ def test_c29_gemini_custom_schema_keeps_web_clause_last_through_native_call(
     monkeypatch.setattr(gemini, 'run_cli_with_retry', _common.run_cli_with_retry)
     monkeypatch.setattr(sys, 'argv', [gemini.__file__, '--prompt', 'Research primary API',
         '--web', '--pydantic', 'test_antigravity_stream_json:_Answer', '--model', 'selected-model'])
-    assert gemini.main() == 0
-    assert len(commands) == (2 if repair else 1)
+    assert gemini.main() == (66 if invalid else 0)
+    assert len(commands) == 1
     clause = agy._load_web_evidence_clause().replace('search_web', 'google_web_search').replace('read_url_content', 'web_fetch')
     for command in commands:
         sent = command[command.index('-p') + 1]
         assert 'Research primary API' in sent
         assert sent.endswith(clause) and sent.count(clause) == 1
-    assert commands[0][commands[0].index('-m') + 1] == 'selected-model'
-    assert json.loads(capsys.readouterr().out) == {'ok': True}
+        assert '--model=selected-model' in command
+    output = capsys.readouterr().out
+    assert output == '' if invalid else json.loads(output) == {'ok': True}
 
 
 def test_c29_missing_gemini_clause_refuses_without_provider(

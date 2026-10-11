@@ -36,16 +36,16 @@ reaches out to the other families for you.
   AGY is preferred and is required for personal Google Sign-In. For an
   owner-selected Gemini Enterprise OAuth account, an absent AGY executable
   selects the existing Gemini CLI wrapper immediately; later AGY failure never
-  triggers that fallback. Without an explicit `--project`, `--sandbox read-only` brackets AGY in a transient
-  global-settings transaction and restores the original bytes. Default formal AGY adds
-  `read_url(*)` to the five raw read-only denies and never uses the headless
-  autoapproval flag. Identical formal leases can overlap; raw/formal deny lists
-  remain isolated. Raw investigations retain their web-compatible rules and
-  version-gated headless adaptation unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out.
-  REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY also denies MCP calls. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
+  triggers that fallback. All AGY calls leave global settings untouched.
+  Read-only calls require CLI >=1.2.1 and select the existing native-tool profile
+  with `excludeDefaultComponents: true`, keeping plan/sandbox and no autoapproval.
+  Legacy backup/lock/lease files are preserved without healing or deletion.
+  Raw read-only investigations use the research profile; permissive raw retains
+  version-gated headless adaptation with `AGY_NO_HEADLESS_AUTOAPPROVE=1` opt-out.
+  Public v2 binds standing review-web authorization. Legacy REVIEW defaults to no web; [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) binds permission to every leg in that round. AGY review prompts prohibit MCP calls; this is not proof of mechanical denial. The Legacy Gemini CLI route requests explicit CLI Auto and native Plan
   Mode while a mode-independent packaged read/search-only user policy supplies
   the fail-closed enforcement boundary. It uses the existing organization OAuth
-  cache and removes competing API-key/ADC/Vertex/model selectors without reading
+  cache and removes competing API-key/ADC/Vertex selectors without reading
   them. Effective mode and runtime model remain `unexposed`. This is not OS-level
   confinement; round-integrity mutation detection remains separate. Gemini's
   default selected B policy explicitly denies both web tools; effective enterprise
@@ -66,8 +66,9 @@ section is optional.
    - `codex` — install, then `codex login`.
    - `agy` — preferred Google-family worker and required for personal Google Sign-In.
    - `gemini` — required for Legacy Gemini CLI use: AGY absent, existing Gemini Enterprise OAuth sign-in.
-   - `claude` — Claude Code `>= 2.1.280` for the default Opus 5.5 route; bootstrap checks binary presence only
-     and does not run a version probe.
+   - `claude` — Claude Code; the review default is the CLI-resolved `opus` alias with `xhigh` effort.
+     V2 requires Claude Code >=2.1.205 and checks the required controls before selection; bootstrap checks binary presence only
+     and does not run a version probe. The alias does not attest a fixed runtime model version.
 
    You also need `git`, `python3 >= 3.12`, Pydantic 2 and `jsonschema>=4.26,<5`
    in that same Python runtime. The runtime dependencies are declared in the shipped
@@ -181,8 +182,8 @@ section is optional.
    Start ordinary `codex` from the same authenticated login terminal and actual
    project worktree. Use the existing AGY sign-in, or the existing Gemini
    Enterprise OAuth sign-in when AGY is not installed. Formal AGY review uses
-   `--sandbox read-only` under the transient settings lease by default; an explicit
-   dedicated project can use its preconfigured permissions without that lease.
+   `--sandbox read-only` with the explicit native-tool profile and no global
+   settings writes. An optional dedicated project retains read-only validation.
    Formal Gemini review
    requests native Plan Mode while its mode-independent packaged per-call policy
    enforces read/search-only behavior. Trusted Python and `PATH` are prerequisites;
@@ -210,9 +211,9 @@ subsection only when its "do this ONLY if…" line applies to you.
 ### Legacy Gemini CLI
 
 This label means the `gemini` executable route, distinct from AGY; it does not
-recommend downgrading. Formal review requires CLI `>=0.34.0` plus a successful
-version/help/policy preflight. The v2 Pro model default has separate version
-support checks. The canonical authentication value remains `gemini-enterprise`.
+recommend downgrading. Gemini requires CLI `>=0.63.0`; formal review also needs a successful
+version/help/policy preflight. All models and raw, legacy and v2 routes share
+the same version floor. The canonical authentication value remains `gemini-enterprise`.
 
 *Do this only for an organization account already authenticated through Gemini
 CLI Sign in with Google.* If AGY is installed, the selector still prefers AGY.
@@ -254,6 +255,23 @@ enforces it (summarized under [Security](#security) below).
   session after install or update.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
+
+### Pending compatibility change (unreleased)
+
+AGY legacy/v2 formal review now requires explicitly installed read/search
+profiles. Follow [profile setup](docs/installation.md#agy-review-profile-setup-pending-candidate)
+and regenerate preflight receipts; dispatch rejects missing or changed profiles.
+
+The source candidate requires Gemini CLI >=0.63.0 for every model and for raw,
+legacy and v2 routes, replacing the older per-route/model floors. Upgrade the
+selected Gemini CLI and regenerate preflight receipts that record an older
+version. Raw calls with an unsupported or unprobeable version now refuse before
+submission with exit 3. Google preflight no longer probes model catalogs or
+rejects a pin absent from a packaged list; existing controls still apply.
+The legacy formal Claude route now requires `--model opus` and refuses the former
+`claude-opus-5-5` value before provider resolution. Raw/v2 explicit model IDs and
+v2 null selection retain their existing semantics.
+The versioned notes below describe already shipped releases.
 
 ### Upgrading to 0.2.558
 
@@ -327,7 +345,7 @@ admission or coverage credit.
 
 The opt-in, receipt-bound AGY `--project` mode validates an existing
 owner-provisioned project for the exact `--cwd` and required read-only deny rules
-with `--sandbox read-only`, instead of entering the global settings transaction.
+with `--sandbox read-only`; the wrapper validates the project without settings writes.
 It provisions or edits no project or permissions. Provider-free skill
 characterization now uses the packaged fixed lifecycle verifier; it is not a
 review round or admission result.
@@ -438,6 +456,8 @@ controls, and DEL while preserving ordinary paths, spaces, `.gitignore`, and
 `..hidden`. Provider selection, retry behavior, and static-review capability do
 not change.
 
+Historical 0.2.544 behavior below predates U7's removal of global settings writes.
+Current AGY profiles/settings behavior is described in Installation above.
 0.2.544 keeps post-completion AGY `step_update` telemetry diagnostic rather
 than part of the verdict-admission schema. Added metadata fields, changed optional tool
 arguments, denied attempts, and conflicting duplicate progress events cannot
@@ -464,12 +484,22 @@ operator opt-out, billed API/ADC/Vertex route-selector removal, local result
 binding, and completion of already-started siblings before failed-round
 diagnosis and a fresh complete round.
 
+At vendor exit 0, a plan-mode `ERROR` result can retain a corrected submission
+when an errored `finish` is followed by a successful `finish` in the same run.
+Recovery requires a successful allowed read and refuses other executed or
+unexplained tool work; a measured denial before execution does not count as
+execution. Web reads count only with the authorized web profile. The terminal
+`structured_output` still passes the existing schema, model and review-binding
+checks. This recovery check does not add an audit to ordinary `SUCCESS` results.
+
 Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
 profiles, launcher rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]`, and retired apply/repair launchers whose markers
 and expected bytes match. Foreign, edited, linked, or non-regular targets are
 preserved and reported. This cleanup preserves owner-authored settings, rules,
 permission profiles, and credentials; unrelated files remain untouched.
+Legacy agent TOMLs qualify only when their complete bytes match a known original.
+Unknown or machine-rendered variants are preserved with the unmanaged-file warning.
 
 The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
@@ -480,7 +510,12 @@ locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
-it uses `--model claude-opus-5-5 --effort xhigh --timeout 1200` with no `--fallback-model`.
+it uses `--model opus --effort xhigh --timeout 1200` with no `--fallback-model`.
+The current source defaults to the CLI-resolved `opus` alias on both legacy
+formal and public v2 reviews; this supersedes the fixed-ID default described
+in the historical 0.2.557 upgrade note. Explicit model IDs and null selection
+remain available on v2, and raw dispatch preserves the caller's selection.
+The default adds no `--agent` and does not attest a fixed runtime version.
 Current route timing is a 1,200-second Claude wrapper deadline, a 600-second AGY
 or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex observation
 waits. Terminal-outcome interpretation is owned by the cross-family
@@ -588,7 +623,7 @@ requires a new basis; family selection alone retains the common digest. Gemini
 preflight also pins the packaged policy bytes. Regenerate an older receipt that
 lacks `policy_sha256` or `gemini_version`, or any receipt whose policy file has changed.
 Formal Gemini preflight first requires a successful `--version` probe (at most
-15 seconds) proving SemVer >=0.34.0, then checks the existing help capabilities.
+15 seconds) proving SemVer >=0.63.0, then checks the existing help capabilities.
 It records the exact accepted version; the receipt hash binds it into the review basis.
 The leader separately captures the prepared-directory integrity digest and canonical-worktree fingerprint
 before dispatch, verifies both after every started leg terminates, and reproduces every
@@ -627,15 +662,32 @@ inside one directory name is refused because the native option splits commas).
 These options preserve native permission controls; adding an input directory is
 not an OS read-only sandbox. Formal REVIEW refuses this unbound expansion.
 
-The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. Failed stdin delivery cannot be accepted as success. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
+The local Claude wrapper sends the effective prompt as UTF-8 text on the provider's stdin, preserving JSON and native-schema output. Use `--prompt-file` to keep the prompt out of the outer wrapper command line too. Claude documents a [10MB stdin cap](https://code.claude.com/docs/en/headless#pipe-data-through-claude); the vendor enforces that cap and model context/token limits still apply. The wrapper does not truncate, split, or add requests to bypass these limits. The wrapper prepares the full UTF-8 input in an anonymous temporary file before launch. Preparation failure prevents launch; `stdin_delivery=complete` means availability to the CLI, not consumption. Early stdin closure alone is not a delivery failure. Stdin removes prompt text from the inner provider argv; argv lists already prevent shell expansion. Existing sensitive prompt and transcript logs remain, and stdin does not encrypt input, prevent prompt injection, or reduce token usage.
 
-Provider success also requires complete, error-free UTF-8 output collection.
-The wrapper reconciles its saved process group after normal exit and cleans up
-partial reader/writer startup. An AGY settings-release failure suppresses the
+Provider success also requires error-free UTF-8 output capture and a complete,
+valid result. Separate anonymous files capture stdout/stderr without live mirroring.
+After the direct child finishes, the wrapper reads a finite snapshot without
+changing shared output offsets. It does not await descendant EOF or stop vendor
+descendants. Best-effort display failures cannot replace the result.
+Vendor descendants retaining output descriptors can keep writing to an unlinked
+temporary file until those descriptors close; these later bytes are not wrapper
+evidence, and their resource lifetime remains vendor-owned. An AGY profile change during dispatch suppresses the
 answer while retaining captured output in the existing failure artifacts; an
 earlier timeout or provider failure remains the primary reported cause.
 
 ## Troubleshooting
+
+On a failed call, a measured vendor authentication error takes precedence over
+timeout and capacity retry (`oauth-env`, exit 65). Authentication text quoted in
+an answer is not an error carrier; a completed usable answer remains usable.
+Unknown output shapes are not guessed. Obsolete raw authentication phrase
+extensions are ignored with a diagnostic and cannot be added by repair proposals.
+
+All vendor children, including raw dispatch and version/help probes, remove the
+agreed credential and endpoint environment names without reading
+the omitted values. Gemini keeps its four Google Cloud project variables; other
+routes remove them. User model/effort settings, PATH, CLI config-directory pointers and
+GOOGLE_GENAI_USE_GCA are preserved. This does not attest the CLI billing route.
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -651,12 +703,33 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | Exit | Meaning | What to do |
 |---|---|---|
 | `0` | Success — the answer follows | Nothing. |
+| `3` | Invalid wrapper arguments or a Gemini local preflight/version refusal | Inspect stderr. Upgrade Gemini CLI if below 0.63.0; otherwise repair the selected executable or invalid input before a new invocation. AGY version/settings preflight refusals use 65. |
 | `4` | The configured provider binary was missing or not executable before submission | Before dispatch, install AGY for personal Google, or AGY/Gemini for Enterprise OAuth. After route selection, repair that same executable; do not fallback after failure. |
-| `64` | Server capacity exhausted after retries | Transient vendor overload; wait and retry. |
+| `64` | Server capacity failure (one CLI inference invocation) | Transient vendor overload; wait and retry. |
 | `65` | Authentication, configuration, quota, or another terminal provider failure (for example `oauth-env`, `cli-subscription-cap`, or `token-limit`) | Resolve the cited provider state, then make an explicit new invocation. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
+
+AGY's terminal `result.error` beginning `timeout waiting for response`, with
+status `ERROR`, an empty response and vendor exit `1`, is reported as
+`vendor-timeout` / `65` with no answer. A wrapper deadline remains `timeout` / `2`.
+The measured whole stderr line `[agy] print timeout after <duration> with turn in
+progress; returning partial output` also returns `timeout` / `2` at any vendor
+exit, withholding raw and structured partial answers. Authentication STOP and
+transport failures retain precedence; quoted or non-stderr text does not match.
+
+AGY's recorded `network issue connecting to the server` sentence in string
+`result.error`, with `ERROR` status, empty response and vendor exit `1`, is
+`server-capacity` / `64`. Earlier authentication, timeout, transport, vendor-exit
+mapping and subscription-cap decisions retain their priority. This does not
+classify arbitrary terminal errors or infer the AGY credit message's carrier.
+
+An own-line `<truncated N bytes>` or `<truncated N lines>` marker in AGY's raw
+answer is `truncated-answer` / `65`, with no answer returned. An inline quotation
+does not count. Schema routes retain a valid `structured_output` when only the
+separate `response` contains a marker. Tool output, including web-search results,
+is outside this check; no answer-size cutoff or automatic retry is added.
 
 ## Scope & Limits — What This Does NOT Do
 
@@ -687,25 +760,23 @@ Honest boundaries, so you know where the toolkit stops:
   The wrapper-containment envs gate path/pydantic handling in the wrapper process;
   they are not a claim of OS-level isolation. Formal AGY uses `--sandbox`, the
   selected `--cwd` review root, digest and mutation checks, and your review before
-  commit. Without `--project`, it also uses the transient deny lease; with
-  `--project`, it validates the owner-provisioned project permission record.
-  Default no-web formal preflight and dispatch require the six review denies.
-  Explicitly requested review web retains the five raw denies and refuses an existing
-  owner `read_url(*)` deny before inference without removing it. Both formal modes
-  never pass `--dangerously-skip-permissions`. Raw calls retain their existing version-gated
-  headless compatibility. The sandbox
+  commit. All read-only calls select the bound native-tool exclusion profile and
+  omit `--dangerously-skip-permissions`. No route writes or leases global settings.
+  An optional `--project` adds validation of its owner-provisioned record: five
+  read-only denies, plus `read_url(*)` for a false bound web condition. Requested
+  web refuses a known URL-wide deny in the project or existing local settings
+  without removing it. Only permissive raw calls retain version-gated headless
+  adaptation. The sandbox
   remains provider-managed rather than OS-level confinement; round-integrity
   mutation detection is a separate fail-closed check.
   Prepared-directory review places wrapper `--cwd` and `--prompt-file` paths under the reserved
   `triad-review-` system-temp root. When `TRIAD_WRAPPER_ALLOWED_ROOTS` is configured,
   it must include the canonical system temp base, including in hardened mode.
-- **Timeout cleanup is best effort, not containment.** On POSIX, a wrapper only
-  records a provider group when it is the new child's group and differs from the
-  wrapper's group. Timeout or interruption sends TERM, reaps the direct child,
-  then probes that saved group and sends KILL to surviving members. Unsupported
-  or unsafe group identity uses direct-process cleanup. A child that leaves the
-  captured group, including by starting a new session, is outside this guarantee;
-  OS identifier reuse remains a residual race, and this is not an OS sandbox.
+- **Timeout cleanup covers the direct CLI invocation.** Timeout or interruption
+  terminates the direct child, waits, then kills and waits again if necessary.
+  Each wait is bounded. Vendor descendants and remote execution remain vendor-owned;
+  there is no process-group sweep or universal no-orphan guarantee. This is not
+  an OS sandbox.
 
 ## Update
 
@@ -759,14 +830,14 @@ python3 -m pytest -q tests/ -p no:cacheprovider   # expect all tests to pass
 For an explicitly provider-free synthetic lifecycle check, run
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py` from the
 checkout. It reuses the packaged CLI and isolated bootstrap, probes AGY version
-and catalog without inference, and prints actual command outcomes, packaged-source
+without inference, and prints actual command outcomes, packaged-source
 hashes, export manifest, actual synthetic artifact bytes (base64), link records
 and cleanup evidence as JSON. If export fails, it retains the synthetic bytes in
 the report before disposing of its own fixtures; if retention fails, the fixture
 is preserved. It needs Git and the Codex, Claude and AGY
 CLIs on PATH, plus Python 3.12+ with Pydantic 2 and jsonschema from the shipped requirements.
-Temporary `AGY_SETTINGS_PATH` isolates only the wrapper transaction, not vendor
-configuration. Success is neither a review verdict nor release certification.
+Temporary `AGY_SETTINGS_PATH` redirects only the wrapper's settings check, not
+vendor configuration. Success is neither a review verdict nor release certification.
 
 ## Remove
 
@@ -788,7 +859,9 @@ codex plugin marketplace remove triad-codex-dispatch
 `--remove` deletes the three provider wrapper launchers, the review-round selector launcher, and exact plugin-owned
 legacy launchers, profiles, command rules, repair-agent registration, and
 `[shell_environment_policy]` fragments only when their markers and expected
-bytes match. It also removes exact legacy three-agent TOMLs. Foreign, edited,
+bytes match. It also removes legacy three-agent TOMLs whose complete bytes match
+a known original; unknown or machine-rendered variants are preserved and reported.
+Foreign, edited,
 linked, and non-regular targets are preserved and reported. Owner-authored
 `config.toml` settings, rules, permission profiles, credentials, and unrelated
 files are preserved; an owner file is never removed merely because no managed
@@ -796,6 +869,10 @@ bytes remain.
 Learned classifier patches are intentionally preserved; they are
 outside managed uninstall and should be deleted separately only when the owner
 intends to discard learned routing.
+
+The two AGY review profiles are outside bootstrap ownership. Follow
+[manual profile removal](docs/installation.md#agy-review-profile-setup-pending-candidate)
+after confirming they are no longer used.
 
 ## Custom Subagents
 
@@ -808,6 +885,26 @@ renders the direct owner command from an argv list with Python `shlex.join`:
 
 Run the printed absolute command in the same authenticated login terminal. The
 run log remains until age-floor cleanup.
+The applier refuses every `oauth-env` proposal and leaves authentication recovery
+to the user. It keeps existing curated entries, validates proposal semantics and
+uses locked atomic writes, without a reason-length or entry-count cap.
+Loading a hand-edited extension ignores unsupported vendor-exit classes and
+exit-zero entries with a diagnostic, preserving valid siblings and file bytes.
+Existing curated authentication entries remain; new authentication proposals
+are still refused.
+After applying, append `--verify-run-log <absolute-run-log-path>` to the same
+command to check the stored failure without writing or invoking a vendor.
+Exit 0 confirms the proposed classification; exit 3 reports mismatch or unusable
+evidence, including an unchanged class or transport failure that bypassed runtime
+classification. A retained nonzero vendor diagnosis follows its existing route. Only
+`unknown`/`extraction-error` reach repair; timeout is surfaced and
+authentication remains user-owned. See the [repair protocol](docs/references/repair-protocol.md).
+
+When a failed run needs external explanation, the repair child may search the
+web and fetch public sources using sanitized error/version context. It cites
+sources in its existing `reason` field and keeps observed output separate from
+the documentation's explanation. It cannot run a vendor again or create entries
+from unrelated public errors; unavailable needed research ends in escalation.
 
 If you create your own Codex custom subagent that should call triad dispatch
 skills, opt in explicitly with Codex `skills.config` entries pointing at the
@@ -840,10 +937,11 @@ After preparing custody, capture the normal review fingerprint again and follow
 the existing render and post-review integrity steps. This setup check grants no
 admission and is not a substitute for them. Git-ignored files are outside its
 clean-state claim and must remain outside reviewer inputs; shared Git metadata
-and subsequent mutation are not isolated. An AGY reviewer still needs an already
-provisioned UUID bound to exactly this cwd and the existing read-only guard.
-Do not rebind another project's UUID or use global-settings fallback to make a
-new checkout work. Repository rules may continue to require the original
+and subsequent mutation are not isolated. An AGY reviewer needs the provisioned
+matching read/search profile. Only when selecting `--project` must its UUID be
+bound to exactly this cwd and pass the existing read-only project guard. Do not
+rebind another project's UUID or use global-settings fallback to make a new
+checkout work. Repository rules may continue to require the original
 guarded worktree, including its intentional dirty changes.
 
 For guarded review, the leader records approved symlinks' exact text and
@@ -883,33 +981,48 @@ defaults. There is no scheduled background cleaner.
 
 `TRIAD_DISPATCH_LOG_DIR` changes the audit/failure-log root, not the debug root.
 Default-root failure IPC may use an owned temporary fallback; a later eligible
-dispatch applies its age-floor sweep there too. An explicitly configured root
-does not fall back. Cleanup is best effort: stale file identity, link checks or
+dispatch applies its age-floor sweep there too. New fallback folders carry an
+allocation record beside the folder. The sweep checks that record and preserves
+old unmarked folders, invalid proof and unexpected contents. Such residue under
+the system temp root (`triad-<cli>-run-log-*`) needs operator review; later
+automatic sweeps do not adopt it. It keeps the proof
+through interruption and removes it last; resumed deletion accepts only the
+unchanged remaining log/repair files. Failure to store cleanup proof does not
+hide an already-written failure log. An explicitly configured root does not
+fall back. Cleanup is best effort: stale file identity, link checks or
 I/O refusal can leave residue. No later invocation means no next-run cleanup.
 Implementation and regression sources: [log helpers](bin/_common.py),
-[log cleanup tests](tests/test_log_cleanup.py), and
+[log cleanup tests](tests/test_log_cleanup.py),
+[fallback ownership tests](tests/test_fallback_cleanup_ownership.py), and
 [review custody tests](tests/test_review_cleanup_custody.py).
+
+Each wrapper dispatch makes one CLI inference invocation. Capacity failure returns
+`64`; local schema failure returns `66` without an automatic whole-CLI restart or
+correction prompt. Vendor-internal retries remain native. Diagnose failures before
+an explicit later invocation; same-basis review-entry retry retains its own rules.
 
 ### Transport and diagnostic records
 
 Audit rows and failure run logs carry the same `transport` object from the
 [candidate shared receipt schema](contracts/receipt-fields.json): actual
 execution route, attempted executable, observed CLI version (or `null`), attempt
-and stdin delivery state. Encoding/spawn refusals are `not-started`; incomplete
-delivery is `failed`, including when timeout or a vendor error remains the
-primary outcome. Unobserved custom transports stay `unexposed`. Existing AGY
+and stdin availability state. Encoding/preparation/spawn refusals are `not-started`;
+`complete` means exact full input was made available, even if the vendor leaves it
+unread, closes stdin early, fails or times out. It does not prove consumption. Unobserved custom transports stay `unexposed`. Existing AGY
 version probes and validated Gemini preflight versions are reused; no additional
 provider call is made. This legacy invocation records `attempt=1`; existing
-capacity/schema-repair counters retain their separate meanings. The explicit
+capacity/schema-repair compatibility counters remain zero; explicit review attempts are separate. The explicit
 v2 path binds the allocated leg/attempt and collects actual native host or CLI
 observations; preflight versions never replace an unexposed runtime version.
 
 On the wrapper's main thread, SIGTERM/SIGHUP during provider collection enters
-bounded owned-group and reader/writer cleanup, then records a terminal failure
+bounded direct-child termination/reaping, then records a terminal failure
 through the existing audit/run-log path. A captured success response cannot
 override cancellation or trigger another provider attempt. Previous signal
 handlers are restored; KeyboardInterrupt keeps its existing cleanup-and-rethrow
-behavior. This does not cover SIGKILL or host failure.
+behavior. Vendor descendants remain vendor-owned; there is no no-orphan or remote
+cancellation guarantee, nor an identical-record guarantee across every signal
+window. This does not cover SIGKILL or host failure.
 
 After a provider child starts, the audit may include `effective_cwd`: the
 host-resolved launch directory captured before dispatch. Redacted/hardened modes
@@ -1013,15 +1126,16 @@ one resource whose `folderUri` matches the canonical cwd, and all five deny rule
 Additional owner-defined denies remain in place. The wrapper creates or edits no
 project record, global settings, or global lease artifact in this mode.
 
-For default no-web formal review, use the same project UUID for preflight and dispatch. The
-project must also contain `read_url(*)`; the wrapper refuses a missing rule
-without changing owner configuration. Explicitly requested review web instead refuses
+Use the same project UUID for formal preflight and dispatch. When the bound web
+condition is false (the legacy default), the project must also contain `read_url(*)`;
+the wrapper refuses a missing rule without changing owner configuration.
+A true condition (public v2 standing authorization or a legacy direct request) instead refuses
 that known whole-URL deny before inference and leaves it intact. The
 existing preflight `route_args` and receipt hash bind it to the rendered review;
 paired Pro/Flash preflights must select the same project. Keep the project
 configuration stable throughout the call. This is a configured native permission
 boundary, not OS confinement or runtime policy attestation. Omitting `--project`
-preserves the existing global transaction. See the
+skips project-record validation; global settings remain untouched. See the
 [invocation contract](skills/triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project).
 
 ## Optional AGY hook artifact (disabled)
@@ -1102,7 +1216,7 @@ non-strict missing or invalid pins may fall back to PATH, while strict mode
 refuses that fallback. Relative PATH results retain their selection-cwd meaning
 when launched from the neutral directory. Probes use closed stdin, an owned neutral temporary cwd,
 and the existing injection/Google-selector environment scrubbers. Each probe has
-a five-second deadline plus bounded process cleanup grace; it is not a strict
+a five-second deadline plus bounded direct-child termination grace; it is not a strict
 five-second total wall-clock promise. Failures stop the sequence. The command
 keeps no baseline/history and therefore supplies no automatic drift verdict.
 Vendor CLIs may still maintain their own caches or telemetry; this is not an OS
@@ -1115,13 +1229,12 @@ availability; synthetic tests verify this helper's behavior without real inferen
 
 ## Notes
 
-- Apart from the approved internal AGY flag, the disclosed transient AGY
-  global-settings transaction, the owner-provisioned `--project` selector,
+- Apart from the approved internal AGY flag on permissive raw calls,
+  the owner-provisioned `--project` selector,
   and wrapper-internal formal Gemini model/Plan
   request and policy flags, TRIAD accepts no caller-supplied yolo, bypass,
-  skip-trust, accept-edits, or equivalent permission controls. The transaction
-  changes AGY settings only for its lease and restores the original bytes; a
-  hard crash can leave deny residue for the next guarded call to heal.
+  skip-trust, accept-edits, or equivalent permission controls. AGY settings and
+  old backup/lock/lease residue remain untouched; no automatic healing occurs.
 - Native permission decisions never supply owner workflow authorization for commit,
   push, install, release, or publication.
 - The fresh repair child returns a proposal or escalation and never applies a
@@ -1151,16 +1264,36 @@ existing legacy gate. Use the explicit v2 procedure below for execution and coll
 The Gemini default requests `gemini-3.1-pro-preview`; HIGH is its CLI v0.60.0
 [source default](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/defaultModelConfigs.ts#L45-L77),
 not a Gemini effort flag or proof of account access/effective runtime identity.
-For optional `gemini-3.8-flash`, the catalog requires stable Gemini CLI 0.61.0
-or later compatible versions; earlier models retain their existing support floor.
+All Gemini CLI models require version 0.63.0 or later. Preflight checks the CLI
+interface and containment, never model-catalog membership. Raw calls also check
+this version floor; 0.63.0 prereleases are below it.
 See [Gemini 3.8 selection and HIGH settings](docs/installation.md#gemini-cli-38-high).
 This does not change the shipped roster or the separate AGY model slug.
 
+The v2 Claude adapter preserves the requested model and effort. Its CLI selection
+check refuses an exposed family/version mismatch or reported effort mismatch;
+the packaged model/effort table does not gate a pin. Known table labels retain
+their receipt display aliases; an unknown label is retained verbatim, without
+inventing an ID. `capability_scope: "cli-selection"` records selection evidence,
+not per-model effort support, account entitlement, or eventual runtime identity.
+When both the request and reported selection are full IDs, they must match
+exactly (apart from the documented `[1m]` context modifier); a display label
+cannot attest an unexposed snapshot suffix. The wrapper's effort vocabulary is
+checked before the selection probe.
+
+Model pins are values, including pins resembling options. Generated v2 wrapper
+commands preserve them as one model-option value; Google dispatch and its
+preflight record use matching transport. For a direct wrapper call with an
+option-shaped pin, use `--model=VALUE`. This adds no model availability check;
+the vendor can still reject the requested model. Prepare fresh receipts after
+upgrading the toolkit; do not rewrite an earlier round's bound commands.
+
 ## Offline v2 candidate validation
 
-The [candidate contract bundle](contracts/README.md) comes from shared commit
-04245c740afc9be36ad7702a134f71aec8ff0b7f. Use this explicit source CLI with an
-absolute canonical regular result file and all six expected binding values:
+The [candidate contract bundle](contracts/README.md) records its source repository,
+exact shared commit and per-file SHA-256 in [the provenance manifest](contracts/source-manifest.json).
+Use this explicit source CLI with an absolute canonical regular result file and
+all six expected binding values:
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
 
@@ -1176,6 +1309,9 @@ Existing legacy routes and custom-schema investigations retain their interfaces.
 
 Select v2 explicitly under the current owner/project instruction and follow the
 [source-skill procedure](skills/triad-cross-family-review/references/public-v2-review.md).
+The Claude clause permits host-provided read/search tools, including read-only
+shell inspection when available. Candidate code/tests/builds and writes remain
+prohibited; this changes no tool inventory or provider permission.
 The operational commands are `v2-create`, `v2-allocate`, `v2-record-cli`,
 `v2-record-native`, `v2-record-start-failure` and `v2-collect` on
 `bin/review_round.py`. They connect the resolved roster, exact shared prompt
@@ -1203,7 +1339,7 @@ current residual with necessary evidence in current bound inputs. Historical
 paths alone are insufficient after cleanup. Continue verified progress; stop
 exhausted disputes without turning repetition or an owner exception into approval.
 
-Native Codex stays native. Installed interface/catalog checks prove supported
+Native Codex stays native. Google interface/containment checks prove supported
 requested controls, not authenticated service access or effective runtime
 identity. Unknown observations remain null/unexposed. Existing managed export
 and cleanup own these artifacts; this introduces no scheduler, background log
@@ -1211,16 +1347,21 @@ cleaner, permanent web logger or installed revision adoption.
 
 ## Owner-requested web
 
-[explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) is available for all participating legs only on a direct request for that round.
+[Review web](skills/triad-cross-family-review/references/review-web.md) is bound
+true for every new public v2 round under the owner's standing authorization.
+Omitted/false caller values cannot revoke it; invalid types and missing native web
+capability refuse. Retry retains the bound condition. Legacy keeps explicit
+per-round authorization; source candidates do not change installed revisions.
 Raw Claude `--web` adds native `WebSearch`/`WebFetch` permission and keeps the caller prompt.
-Release 0.2.556 includes this feature; authenticated web execution and shared
-revision adoption remain separate checks.
+Release 0.2.556 introduced per-request review web and raw Claude `--web`.
+The standing v2 binding is an unreleased source candidate; authenticated web
+execution and shared revision adoption remain separate checks.
 
 ## Authorized AGY web investigation
 
 For an explicitly requested standalone web investigation, run the authorized investigation with `antigravity_wrapper.py --web --sandbox
 read-only`. It accepts a caller prompt or prompt file and an optional custom
-schema. Review use follows [explicitly requested review web](skills/triad-cross-family-review/references/review-web.md) with matching bound preflight and metadata.
+schema. Review use follows [the bound review-web condition](skills/triad-cross-family-review/references/review-web.md): standing authorization for public v2, explicit per-round authorization for legacy, with matching preflight and metadata.
 The raw Gemini wrapper also accepts `--web`, substituting its native tool names
 in the same clause. This flag records web authorization and evidence procedure;
 native Gemini permissions and authentication remain authoritative. It neither

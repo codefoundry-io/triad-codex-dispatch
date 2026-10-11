@@ -823,7 +823,5 @@ lifecycle):
   sealed prompt's own-line instruction); a truncated run whose only
   marker is an early echo fails closed instead of returning a partial
   answer as ok.
-- Relative `--prompt-file` stays fail-loud; the error now shows the
-  caller cwd and a cwd-derived absolute candidate.
 
 Built from the Triad source of truth. Full history: https://github.com/codefoundry-io/triad-codex-dispatch/commits/main (each release commit summarizes its delta).

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import profile_receipt
 
 from test_antigravity_stream_json import (
     _google_selector_fixture, _formal_payload, _run_result, _stream, wrapper,
@@ -43,14 +44,10 @@ def project_case(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(global_path))
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _: (1, 2, 2))
-    monkeypatch.setattr(wrapper, "_probe_agy_models", lambda _: {PRO, FLASH})
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _: None)
     monkeypatch.setattr(wrapper._common, "persist_result_artifacts", lambda *a, **k: None)
 
-    def no_lease(*a, **k):
-        pytest.fail("project route entered global settings transaction")
 
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", no_lease)
     selector_path, _, _ = _google_selector_fixture(tmp_path)
     args = ["antigravity_wrapper.py", "--prompt", "inspect approved source",
             "--cwd", str(cwd), "--sandbox", "read-only", "--project", PROJECT,
@@ -209,7 +206,7 @@ def test_project_pair_rejects_different_permission_boundaries(worktree, flash_su
 def test_project_receipt_accepts_only_canonical_suffix(project_case, tmp_path, suffix):
     _, _, _, _, selector_path, _ = project_case
     selector = review_round.load_google_selector_receipt(selector_path, expected_review_id="review-r1")
-    record = {"agy_version": "1.2.2", "effort": "high", "model": PRO, "provider_started": False,
+    record = {**profile_receipt(), "agy_version": "1.2.2", "effort": "high", "model": PRO, "provider_started": False,
               "review_id": "review-r1", "route": "agy", "executable": str(selector.executable),
               "google_selector_receipt_sha256": selector.receipt_sha256,
               "route_args": ["--model", PRO, "--effort", "high", *suffix]}

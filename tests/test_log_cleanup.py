@@ -40,6 +40,13 @@ _IMPORTED_ATTRS = {attr: getattr(_common, attr) for attr in _PATCHED_ATTRS}
 _PYTEST_ATTR_SNAPSHOT: dict[str, object] | None = None
 
 
+@pytest.fixture(autouse=True)
+def isolated_system_temp(tmp_path, monkeypatch):
+    # Pytest owns this fixture tree; failure injection is undone before its
+    # eventual removal. The standalone runner supplies the same isolation below.
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path.resolve()))
+
+
 def setup_function(_function: object) -> None:
     global _PYTEST_ATTR_SNAPSHOT
     _PYTEST_ATTR_SNAPSHOT = {
@@ -748,7 +755,7 @@ def test_run_log_prune_failure_does_not_hide_written_ipc(
     assert path.is_file()
 
 
-def test_next_run_prunes_stale_fallback_ipc_directory(tmp_path: Path) -> None:
+def test_C4_next_run_preserves_unproven_fallback_ipc_directory(tmp_path: Path) -> None:
     prefix = "triad-gemini-run-log-"
     fallback = tmp_path / f"{prefix}old"
     fallback.mkdir()
@@ -763,7 +770,7 @@ def test_next_run_prunes_stale_fallback_ipc_directory(tmp_path: Path) -> None:
     finally:
         tempfile.gettempdir = original_gettempdir
 
-    assert not fallback.exists()
+    assert (fallback / "run.json").read_text(encoding="utf-8") == "{}"
 
 
 def test_stale_run_log_prune_removes_repair_json_pair(tmp_path: Path) -> None:
@@ -1125,7 +1132,7 @@ TESTS = [
     test_run_log_cap_prune_skips_symlinked_runs_directory,
     test_run_log_cap_prune_skips_symlink_and_hardlink_leaves,
     test_run_log_prune_failure_does_not_hide_written_ipc,
-    test_next_run_prunes_stale_fallback_ipc_directory,
+    test_C4_next_run_preserves_unproven_fallback_ipc_directory,
     test_stale_run_log_prune_removes_repair_json_pair,
     test_run_log_count_cap_prunes_only_stale_files_and_allows_fresh_overflow,
     test_run_log_byte_cap_prunes_only_stale_files_and_allows_fresh_overflow,
@@ -1153,6 +1160,8 @@ def main() -> int:
     for fn in TESTS:
         snapshot = {a: getattr(_common, a) for a in _PATCHED_ATTRS}
         with tempfile.TemporaryDirectory() as td:
+            saved_tempdir = tempfile.tempdir
+            tempfile.tempdir = str(Path(td).resolve())
             try:
                 fn(Path(td).resolve())
                 print(f"  PASS  {fn.__name__}")
@@ -1161,6 +1170,7 @@ def main() -> int:
                 print(f"  FAIL  {fn.__name__}")
                 traceback.print_exc()
             finally:
+                tempfile.tempdir = saved_tempdir
                 for a, v in snapshot.items():
                     setattr(_common, a, v)
     print(f"{len(TESTS) - failed}/{len(TESTS)} passed")

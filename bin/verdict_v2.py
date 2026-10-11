@@ -42,6 +42,8 @@ class LegVerdict(RootModel[dict[str, Any]]):
         if cls._binding is not None:
             for field, value in cls._binding.items():
                 schema["properties"][field]["const"] = value
+                if field == "route":
+                    schema["properties"][field]["enum"] = [value]
         return schema
 
 

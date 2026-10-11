@@ -50,7 +50,7 @@ fresh Codex, repeat observation waits until its terminal result arrives.
 
 ## Failure before any provider starts
 
-Before any cleanup in this protocol, finish all writers, export and verify the
+Before any cleanup in this protocol, finish all TRIAD-owned writers, export and verify the
 round's evidence at its approved durable destination. Managed prepared roots use
 packaged `export` then `cleanup`; unproven or unexported residue is preserved and
 reported. This also applies to failed and stopped rounds.
@@ -73,9 +73,10 @@ The partial-start contract applies once any provider leg has started. A later le
 start or result failure that is missing, refused, malformed, route-mismatched, or
 incomplete invalidates admission. Close further launch, record each required leg
 that did not start, and wait for every already-started sibling to terminate.
-Strictly validate every structurally available terminal result and confirm the
-exact provider process trees are gone; run integrity verification only after every
-started leg terminates.
+Strictly validate every structurally available terminal result. Confirm every
+started direct invocation and TRIAD-owned custody/result writer is terminal before
+integrity verification. Vendor descendants and remote work remain vendor-owned;
+do not require their termination or add a process-tree sweep.
 
 Structurally valid results remain provisional until post-review integrity succeeds.
 After a matching integrity check, preserve and reproduce every valid sibling

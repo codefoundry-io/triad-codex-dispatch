@@ -30,7 +30,9 @@ def invocation(tmp_path, monkeypatch):
 
     def provider(_cli, cmd, *args, **kwargs):
         commands.append(cmd)
-        assert set(json.loads(settings.read_text())["permissions"]["deny"]) == RAW_DENIES | {"command(sudo)"}
+        assert settings.read_bytes() == BASELINE
+        assert cmd[cmd.index("--agent") + 1] == "triad-codex-readonly-research"
+        assert "--dangerously-skip-permissions" not in cmd
         response = {"status": "SUCCESS", "response": "research answer"}
         if "--json-schema" in cmd:
             response = {"status": "SUCCESS", "structured_output": {"ok": True}}

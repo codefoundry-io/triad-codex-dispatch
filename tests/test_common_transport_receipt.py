@@ -79,17 +79,17 @@ def test_c9_encoding_failure_and_spawn_failure_never_claim_started(logs, tmp_pat
     assert receipt["binary"] == missing
 
 
-def test_c9_broken_stdin_is_failed_without_overwriting_vendor_exit(logs):
+def test_c9_closed_stdin_is_available_without_overwriting_vendor_exit(logs):
     result = run("import os; os.close(0); raise SystemExit(7)", stdin="x" * 2_000_000)
     assert result.vendor_exit_code == 7
     assert result.exit_code == _common.EXIT_CLI_FAIL
-    assert persisted(logs, result)["stdin_delivery"] == "failed"
+    assert persisted(logs, result)["stdin_delivery"] == "complete"
 
 
-def test_c9_timeout_with_incomplete_stdin_preserves_timeout(logs):
+def test_c9_timeout_with_unread_stdin_preserves_timeout(logs):
     result = run("import time; time.sleep(30)", stdin="x" * 2_000_000, timeout=1)
     assert result.exit_code == _common.EXIT_TIMEOUT
-    assert persisted(logs, result)["stdin_delivery"] == "failed"
+    assert persisted(logs, result)["stdin_delivery"] == "complete"
 
 
 def test_c10_unobserved_custom_transport_is_not_guessed(logs):

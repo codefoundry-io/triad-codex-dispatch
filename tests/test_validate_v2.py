@@ -17,7 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "bin/validate_v2.py"
-SHARED_COMMIT = "04245c740afc9be36ad7702a134f71aec8ff0b7f"
+SHARED_COMMIT = "fb7c962c83273c8b9c48fd11c482d1f5d50ef24d"
 PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-fields.json", "review-kind.schema.json")
 BINDING = dict(review_id="review-v2", family="codex", content_digest="a" * 64,
                leg_name="codex-main", attempt=1, route=None)

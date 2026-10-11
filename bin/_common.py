@@ -1,7 +1,7 @@
 """Shared helpers for codex/gemini subprocess wrappers.
 
 Framework — vendor-JSON IO + 5-class classification + noise-tag extraction
-+ pydantic schema validation (optional) with 1 schema-repair retry.
++ optional local pydantic validation after one CLI inference invocation.
 
 Per-CLI vendor JSON modes (always on):
 - Codex: `codex exec --json -o <last_msg> --ephemeral`
@@ -24,6 +24,7 @@ from __future__ import annotations
 import fcntl
 import errno
 import importlib
+import io
 import importlib.util
 import json
 import os
@@ -38,6 +39,7 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,12 +60,10 @@ EXIT_CLI_FAIL = 1
 EXIT_TIMEOUT = 2
 EXIT_ARG_ERROR = 3
 EXIT_BINARY_MISSING = 4
-EXIT_RATE_GIVE_UP = 64   # transient retry exhausted → repair-routed classification
+EXIT_RATE_GIVE_UP = 64   # capacity failure; historical constant name retained
 EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env → user escalate
-EXIT_SCHEMA_FAIL = 66    # pydantic validation failed even after 1 retry
+EXIT_SCHEMA_FAIL = 66    # local pydantic validation failed
 EXIT_SCHEMA_REJECTED = 67  # codex refused --output-schema at submit (massage/strict-rule drift)
-EXIT_FANOUT_PARTIAL = 68   # --task fan-out incomplete (partial / zero / fewer-than-requested subagents) — surfaced, never silent
-EXIT_TASK_BLOCKED = 69   # --task code: codex self-reported BLOCKED / NEEDS_CONTEXT (no edit to commit)
 
 
 def map_classification_to_exit(cls: str) -> int:
@@ -78,14 +78,13 @@ def map_classification_to_exit(cls: str) -> int:
         "extraction-error": EXIT_CLI_FAIL,
         "schema-fail": EXIT_SCHEMA_FAIL,
         "schema-rejected": EXIT_SCHEMA_REJECTED,
-        "fanout-spawn-error": EXIT_TERMINAL,
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # current AGY stream driver emission; surface, never classifier-patched
         "admission-refused": EXIT_TERMINAL,  # shared table parity; not currently emitted by this host
-        "vendor-timeout": EXIT_TERMINAL,  # shared table parity; not currently emitted by this host
+        "vendor-timeout": EXIT_TERMINAL,  # AGY typed terminal turn-timeout; not a wrapper deadline
         "input-delivery-failed": EXIT_TERMINAL,  # shared table parity; retain existing stdin phase handling
-        "truncated-answer": EXIT_TERMINAL,  # inert legacy exit-map compatibility alias; current stream driver never emits it
+        "truncated-answer": EXIT_TERMINAL,  # AGY own-line marker in the emitted raw answer
         "permission-unavailable": EXIT_TERMINAL,  # inert legacy exit-map compatibility alias; current stream driver never emits it
         "unknown": EXIT_CLI_FAIL,
     }.get(cls, EXIT_CLI_FAIL)
@@ -101,7 +100,7 @@ SERVER_CAPACITY_PATTERNS: tuple[str, ...] = (
     "model overloaded",
     "overloaded_error",  # 2026-07-05: Anthropic 529 overload api_error_status enum,
     # surfaced by extract_claude_answer into the claude is_error ext_err blob
-    # (`is_error=true (api_error_status=overloaded_error): ...`). Retry-eligible.
+    # (`is_error=true (api_error_status=overloaded_error): ...`). Capacity outcome.
     # Specific vendor enum token — passes the false-positive guard (unlike bare
     # `"529"`). `rate_limit_error` (429) deliberately NOT added: it is ambiguous
     # between a transient rate limit (retry) and a subscription cap (terminal),
@@ -130,6 +129,18 @@ CLI_SUB_CAP_PATTERNS: tuple[str, ...] = (
     "ineligibletiererror",  # 2026-06-30: IneligibleTierError — Gemini Code Assist individuals tier discontinued 2026-06-18; user must migrate to Antigravity. github.com/google-gemini/gemini-cli/discussions/28017
 )
 
+# Documented vendor sentences apply only to their emitting CLI (C43 / DL-117,
+# triad-dispatch-spec 3afc4d7, contracts/vendor-failure-lines.json).
+# The AGY credits wording is vendor-sourced; its runtime carrier is unmeasured.
+CLI_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
+    "codex": {
+        "CLI_SUB_CAP_PATTERNS": ("you've hit your usage limit",),
+    },
+    "antigravity": {
+        "CLI_SUB_CAP_PATTERNS": ("your ai credits balance is too low to continue",),
+    },
+}
+
 TOKEN_LIMIT_PATTERNS: tuple[str, ...] = (
     "payload size exceeds",
     "token count exceeds",
@@ -154,15 +165,6 @@ SCHEMA_REJECTED_PATTERNS: tuple[str, ...] = (
     # Only schema-REJECTION phrases (submit-time refusal) belong here.
 )
 
-# Fan-out: terminal spawn_agent failure (NOT the self-corrected full-history
-# fork error, which the model recovers from). Phrases are specific to a
-# terminal quota/parameter rejection.
-FANOUT_SPAWN_PATTERNS: tuple[str, ...] = (
-    "spawn_agent failed",
-    "agent quota exceeded",
-    "could not spawn subagent",
-)
-
 # Config-alive: an inherited ~/.codex config that breaks the call.
 # Phrases are anchored to "config.toml" to avoid false positives on
 # natural answer text (bare "invalid profile" / "unknown config key"
@@ -173,36 +175,6 @@ CONFIG_CONFLICT_PATTERNS: tuple[str, ...] = (
     "invalid config.toml",
 )
 
-OAUTH_ENV_PATTERNS: tuple[str, ...] = (
-    # `"401"` (bare) removed 2026-05-03 (later-2): standalone numeric matched
-    # natural occurrences (line numbers, status code arrays, etc.). Replaced
-    # with the phrase form. Same fix family as `"503"`/`"429"` in
-    # SERVER_CAPACITY_PATTERNS and `"oauth"`/`"unauthorized"` in this list.
-    "401 unauthorized",
-    "http 401",
-    # 2026-07-01 (twin, L9 port 2026-07-05): real claude `is_error=true /
-    # api_error_status=401` capture. Phrase is distinctive and FP-safe: it
-    # appears exclusively in the claude vendor envelope's `result` field on an
-    # auth-401 failure. Never add bare "401" / "oauth" (removed above for FP).
-    "invalid authentication credentials",
-    # `"unauthorized"` removed 2026-05-03: matched `[LocalAgentExecutor]
-    # Blocked call: Unauthorized tool call: ...` (1/152 false positive in
-    # 200-verify batch — misled user toward "re-login" when the actual
-    # cause was tool-block). HTTP-form 401 errors are still caught above.
-    # `"oauth"` removed 2026-05-03 (later): matched `_OAuth2Client.requestAsync`
-    # google-auth-library stack trace (always present in Gemini capacity-
-    # exhausted stderr — github.com/google-gemini/gemini-cli/issues/24159).
-    # 100% false positive on the capacity-exhausted code path because L2
-    # checked OAUTH_ENV before SERVER_CAPACITY. Replaced with the standalone
-    # `"oauth error"` form which doesn't match library identifiers.
-    "oauth error",
-    "token refresh failed",
-    "openai_api_key",
-    "auth error",
-    "please log in",
-    "please authenticate",
-)
-
 # SEMANTIC classification of stderr (tool-not-installed / vendor warning /
 # normal chatter) is the LEADER's job (the AI that receives the mirrored
 # stderr via its shell tool). The wrapper only records raw stderr into the
@@ -210,33 +182,9 @@ OAUTH_ENV_PATTERNS: tuple[str, ...] = (
 # carry the stderr-interpretation guidance.
 
 
-# ─── Vendor exit code maps (EMPIRICAL ONLY) ───────────────────────────────
-# ONLY empirically observed exit codes are entered. An unobserved code =>
-# "unknown" => repair-routed classification; a fresh native proposal-only child
-# may propose a validated entry for the owner to apply deterministically.
-# Tier 1 docs (Gemini PR #13728: 41/42/52/53/130, Codex mintlify: 2/3/4/130)
-# never triggered in this environment, so NOT entered — add after observing.
-
-GEMINI_VENDOR_EXIT_MAP: dict[int, str] = {
-    0: "ok",
-    # 41/42/52/53/130 = docs-only so far (anthropics/claude-code#13728 /
-    # headless docs) — add after empirical observation.
-}
-
-CODEX_VENDOR_EXIT_MAP: dict[int, str] = {
-    0: "ok",
-    # 130 = possibly anthropics/claude-code#4721 (unresolved) — add after observing.
-    # 2/3/4 = third-party (mintlify) sources only, not officially confirmed —
-    # add after empirical observation.
-}
-
-CLAUDE_VENDOR_EXIT_MAP: dict[int, str] = {
-    0: "ok",
-    # Further claude `--print` vendor exit codes: add after observing.
-    # An ENV/AUTH failure carrying `is_error: true` still exits rc=0
-    # (envelope-only signal); extract_claude_answer analyzes the envelope
-    # and propagates extraction-error.
-}
+# ─── Vendor exit code maps (measured captures or official vendor source) ───
+# Unknown codes remain repair-routed. Gemini authentication code 41 is a
+# source-confirmed carrier handled before timeout and every map/phrase rung.
 
 ANTIGRAVITY_VENDOR_EXIT_MAP: dict[int, str] = {
     0: "extraction-error",  # 2026-06-25: agy rc=0 + no-sentinel (answer present, sentinel not emitted);
@@ -247,14 +195,8 @@ ANTIGRAVITY_VENDOR_EXIT_MAP: dict[int, str] = {
 }
 # Populated only from empirically observed Antigravity behavior.
 
-# Matched ONLY in the antigravity classify arm, only on the no-answer path;
-# NOT added to shared OAUTH_ENV_PATTERNS (FP-safe).
+# AGY own-line banner carrier; never a whole-output substring match.
 AGY_AUTH_BANNER_PATTERNS = ("authentication required. please visit the url",)
-
-
-# ─── Retry policy ─────────────────────────────────────────────────────────
-SERVER_CAP_BACKOFF_S: tuple[int, ...] = (15, 45)
-SERVER_CAP_MAX_RETRIES = len(SERVER_CAP_BACKOFF_S)
 
 
 # ─── Audit rotation policy ────────────────────────────────────────────────
@@ -321,7 +263,16 @@ class RunResult:
 
 def log(msg: str) -> None:
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
-    print(f"[{ts}] {msg}", file=sys.stderr)
+    line = f"[{ts}] {msg}\n"
+    try:
+        try:
+            fd = sys.stderr.fileno()
+        except (AttributeError, io.UnsupportedOperation):
+            sys.stderr.write(line)  # In-memory display/test sinks have no fd.
+        else:
+            os.write(fd, line.encode("utf-8", errors="replace"))
+    except (OSError, ValueError):
+        pass  # Best effort: never buffer/replay a failed line or replace a result.
 
 
 def transport_receipt(cli: str, result: RunResult) -> dict:
@@ -414,16 +365,30 @@ def _load_classifier_extension() -> dict:
         cleaned: dict = {}
         vmap = entry.get("vendor_exit_map")
         if isinstance(vmap, dict):
-            cleaned["vendor_exit_map"] = {
-                k: v for k, v in vmap.items() if isinstance(v, str)
-            }
+            cleaned["vendor_exit_map"] = {}
+            for k, v in vmap.items():
+                if not isinstance(v, str):
+                    continue
+                if v not in VENDOR_EXIT_PROPOSAL_CLASSES:
+                    log(f"ignored {cli} extension exit {k!r}: unsupported class {v!r}")
+                    continue
+                try:
+                    zero = int(k) == 0
+                except (TypeError, ValueError):
+                    zero = False
+                if zero:
+                    log(f"ignored {cli} extension exit {k!r}: zero is not a failure")
+                    continue
+                cleaned["vendor_exit_map"][k] = v
         pats = entry.get("patterns")
         if isinstance(pats, dict):
             cleaned["patterns"] = {
                 name: [s for s in lst if isinstance(s, str)]
                 for name, lst in pats.items()
-                if isinstance(lst, list)
+                if isinstance(lst, list) and name != "OAUTH_ENV_PATTERNS"
             }
+            if "OAUTH_ENV_PATTERNS" in pats:
+                log("ignored raw authentication extension OAUTH_ENV_PATTERNS")
         if cleaned:
             clean[cli] = cleaned
     return clean
@@ -658,13 +623,147 @@ def _redact_prompt_args(cmd: list[str]) -> list[str]:
 
 
 
-def _json_len(value: Any) -> int:
-    if value is None:
-        return 0
+def _authentication_exit(cli: str, vendor_exit_code: int | None) -> bool:
+    """Measured code carrier; no text or other CLI borrows Gemini's code."""
+    return cli == "gemini" and vendor_exit_code == 41
+
+
+# R-CLASSIFY/C37: vocabulary applies only inside measured vendor error carriers.
+# Shapes and captures: shared contracts/vendor-failure-lines.json and review-rules.
+_AUTH_VOCABULARY = re.compile(
+    r"(?<![a-z])api[ _-]?key"
+    r"|\b(?:unauthori[sz]ed|unauthenticated|401|not logged in"
+    r"|log ?in|sign ?in|log ?out|authenticat\w*|credentials?"
+    r"|(?:auth|access|refresh|session|bearer|oauth) token|token data"
+    r"|token (?:is |has |has been )?expired|expired (?:token|session)"
+    r"|session (?:has )?expired|could not be refreshed|credit balance)\b", re.I)
+_AGY_SCHEMA_REPORT_RE = re.compile(r"^(?=.*\bschema\b)(?=.*\bvalidat)", re.I)
+_AGY_PRINT_TIMEOUT_RE = re.compile(
+    r"^\[agy\] print timeout after \S+ with turn in progress; "
+    r"returning partial output[ \t\r]*$", re.I | re.M)
+
+
+def agy_print_timed_out(stderr: str) -> bool:
+    """C43/DL-62: the measured own stderr line marks an incomplete answer."""
+    return bool(_AGY_PRINT_TIMEOUT_RE.search(stderr))
+
+
+def _error_document(text: str) -> dict:
     try:
-        return len(json.dumps(value, ensure_ascii=False))
-    except (TypeError, ValueError):
-        return len(str(value))
+        obj = json.loads(text)
+    except (ValueError, TypeError, RecursionError):
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def _error_events(text: str) -> list[dict]:
+    # JSON strings may contain raw Unicode line separators: split only on LF.
+    return [obj for line in text.split("\n") if (obj := _error_document(line))]
+
+
+def _gemini_error_envelope(stderr: str) -> dict:
+    # Gemini errors.ts/nonInteractiveCli.ts: [ERROR] {json} or a pretty object
+    # at the end of stderr. Do not discover objects embedded in other prose.
+    starts = list(re.finditer(r"(?m)^[ \t]*(?:\[ERROR\][ \t]*)?(?=\{)", stderr))
+    for match in reversed(starts):
+        obj = _error_document(stderr[match.end():])
+        if obj:
+            return obj
+    return {}
+
+
+def _auth_carrier_stop(cli: str, stderr: str, stdout: str,
+                       vendor_exit_code: int | None = None) -> bool:
+    """Read original streams of a failed/no-answer call, never flattened text."""
+    def said(text):
+        return isinstance(text, str) and bool(_AUTH_VOCABULARY.search(text))
+
+    # Text-mode pipes normalize CR on stderr. JSON message strings keep CR.
+    lines = (stderr or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if _authentication_exit(cli, vendor_exit_code):
+        return True
+    if cli == "claude":
+        obj = _error_document(stdout)
+        if obj.get("structured_output") is not None or obj.get("is_error") is not True:
+            return False
+        return obj.get("api_error_status") == 401 or said(obj.get("result"))
+    if cli == "codex":
+        events = _error_events(stdout)
+        completed = any(e.get("type") == "turn.completed" for e in events)
+        failed = any(e.get("type") == "turn.failed" for e in events)
+        answered = any(e.get("type") == "item.completed" and
+                       isinstance(item := e.get("item"), dict) and
+                       item.get("type") == "agent_message" and
+                       isinstance(item.get("text"), str) and item["text"].strip()
+                       for e in events)
+        if vendor_exit_code == 0 and completed and answered and not failed:
+            return False
+        if any(line.lower().startswith("error loading configuration:") and said(line)
+               for line in lines):
+            return True
+        for event in events:
+            if event.get("type") == "error" and said(event.get("message")):
+                return True
+            error = event.get("error")
+            if (event.get("type") == "turn.failed" and isinstance(error, dict)
+                    and said(error.get("message"))):
+                return True
+    elif cli == "gemini":
+        if any(line.lower().startswith("cached credentials are not valid:") for line in lines):
+            return True
+        for obj in (_error_document(stdout), _gemini_error_envelope(stderr)):
+            error = obj.get("error")
+            if "type" in obj or not isinstance(error, dict):
+                continue
+            code = error.get("code")
+            if type(code) is int and code in (41, 401):
+                return True
+            message = error.get("message")
+            if isinstance(message, str) and message.lower().startswith("error executing tool "):
+                continue
+            if said(message):
+                return True
+    elif cli == "antigravity":
+        events = _error_events(stdout)
+        results = [e["result"] for e in events if e.get("event") == "result"
+                   and isinstance(e.get("result"), dict)]
+        # A completed usable answer is not stopped by a sign-in banner.
+        if (vendor_exit_code == 0 and results and results[-1].get("status") == "SUCCESS"
+                and not agy_print_timed_out(stderr)
+                and (results[-1].get("structured_output") is not None or
+                     isinstance(results[-1].get("response"), str) and results[-1]["response"].strip())):
+            return False
+        extra = _load_classifier_extension().get(cli, {}).get("patterns", {})
+        banners = AGY_AUTH_BANNER_PATTERNS + tuple(extra.get("AGY_AUTH_BANNER_PATTERNS", ()))
+
+        def banner(text):
+            return any(line.lower().startswith(banners) for line in text.split("\n"))
+
+        if banner("\n".join(lines)):
+            return True
+        for result in results:
+            error = result.get("error")
+            if isinstance(error, dict):
+                error = error.get("message")
+            if not isinstance(error, str):
+                continue
+            first = next((line for line in error.split("\n") if line.strip()), "")
+            if first.startswith("permission check failed for command "):
+                continue  # C74: the entire denied command is reflected model text.
+            if _AGY_SCHEMA_REPORT_RE.match(first):
+                if banner(error):
+                    return True
+            elif said(error):
+                return True
+    return False
+
+
+def classify_extraction(cli: str, result: RunResult, error: str) -> str:
+    """Select auth from captured carriers; keep other classes on extracted error."""
+    if _auth_carrier_stop(cli, result.stderr, result.stdout, result.vendor_exit_code):
+        return "oauth-env"
+    return classify(cli, error, "", EXIT_CLI_FAIL, vendor_exit_code=result.vendor_exit_code)
+
 
 def classify(
     cli: str,
@@ -672,23 +771,23 @@ def classify(
     stdout: str,
     exit_code: int,
     vendor_exit_code: Optional[int] = None,
+    *,
+    agy_result: Optional[dict] = None,
 ) -> str:
-    """Failure classes + ok. Layer order:
-      L1 — vendor exit code map (empirically observed raw codes only)
-      L2 — substring fallback (the per-class pattern lists)
+    """Success, authentication carrier STOP, timeout, then other failures.
+      L1 — measured vendor exit code map
+      L2 — non-authentication substring fallback
       L3 — "unknown" (repair-routed classification signal)
 
     `vendor_exit_code` is the raw CLI subprocess exit (e.g. 7, 130). When
-    omitted, falls back to `exit_code` for legacy callers, but L1 is
-    effectively dead in that case because `exit_code` is the wrapper's own
-    {EXIT_OK, EXIT_CLI_FAIL, ...} code, not the vendor's. Pass
-    `vendor_exit_code` explicitly to make the vendor exit map functional
-    (2026-05-03 fix: prior to this, both CODEX_VENDOR_EXIT_MAP and
-    GEMINI_VENDOR_EXIT_MAP were decoration; future owner-applied validated
-    proposals can now route vendor-specific exit codes correctly).
+    omitted, falls back to `exit_code` for legacy callers. Pass the raw exit
+    explicitly for measured vendor-code mappings in the classifier extension.
     """
     if exit_code == 0:
         return "ok"
+    raw = vendor_exit_code if vendor_exit_code is not None else exit_code
+    if _auth_carrier_stop(cli, stderr, stdout, raw):
+        return "oauth-env"
     # Wrapper-level timeout: do NOT fall through to L2 substring matching.
     # Partial stderr captured before SIGTERM often contains capacity-class
     # phrases (Gemini "_OAuth2Client.requestAsync" + retry chatter, Codex
@@ -701,7 +800,6 @@ def classify(
         return "timeout"
     # L1 — vendor exit code map (empirical only). Use vendor_exit_code when
     # available; legacy callers fall back to exit_code (dead-code path).
-    raw = vendor_exit_code if vendor_exit_code is not None else exit_code
     _ext = _load_classifier_extension().get(cli, {})
     _ext_vmap = {}
     for _k, _v in _ext.get("vendor_exit_map", {}).items():
@@ -712,22 +810,16 @@ def classify(
     _ext_pat = _ext.get("patterns", {})
 
     def _p(name, builtin):
-        """built-in patterns + per-cli extension patterns for that list."""
+        """Shared patterns, CLI-specific built-ins, then CLI extensions."""
+        own = CLI_PATTERNS.get(cli, {}).get(name, ())
         extra = _ext_pat.get(name, ())
-        return tuple(builtin) + tuple(extra)
+        return tuple(builtin) + tuple(own) + tuple(extra)
 
-    if cli == "gemini":
-        vmap = GEMINI_VENDOR_EXIT_MAP
-    elif cli == "claude":
-        vmap = CLAUDE_VENDOR_EXIT_MAP
-    elif cli == "antigravity":
-        vmap = ANTIGRAVITY_VENDOR_EXIT_MAP
-    else:
-        vmap = CODEX_VENDOR_EXIT_MAP
+    vmap = ANTIGRAVITY_VENDOR_EXIT_MAP if cli == "antigravity" else {}
     vmap = {**_ext_vmap, **vmap}
     # A vmap entry of "extraction-error" is a WEAK no-answer fallback (e.g.
     # ANTIGRAVITY_VENDOR_EXIT_MAP[0], 2026-06-25 repair patch): the specific
-    # L2 classes (agy auth banner / capacity / sub-cap / token-limit / oauth)
+    # carrier STOP and remaining capacity / sub-cap / token-limit classes
     # must keep winning — an early return here swallowed ALL of them on the
     # agy no-answer path (t14/t15/f9 regression found on the 2026-07-04
     # backport pass). The weak entry replaces only the terminal "unknown", so
@@ -739,38 +831,28 @@ def classify(
             _weak_fallback = "extraction-error"
         else:
             return vmap[raw]
-    # L2 — substring fallback
-    # Order rationale: terminal user-action class (cli-sub-cap) first (most
-    # specific phrases, near-zero false positive). Then transient
-    # SERVER_CAPACITY (most-frequent failure mode for Gemini Pro, retry
-    # eligible). Then TOKEN_LIMIT (terminal but rarer). Then OAUTH_ENV
-    # (terminal, lowest natural-occurrence risk). The 2026-05-03 (later)
-    # reorder moves SERVER_CAPACITY before OAUTH_ENV because Gemini's
-    # capacity-exhausted stderr ALWAYS includes the Google
-    # `OAuth2Client.requestAsync` library stack trace. The 2026-05-03
-    # (later-2) further moves SERVER_CAPACITY before TOKEN_LIMIT for
-    # transient-first routing (capacity is far more frequent than token
-    # limit; mis-classifying a capacity event as terminal token-limit costs
-    # a wasted retry-give-up cycle).
+    # Remaining non-authentication classes retain their existing priority.
     blob = ((stderr or "") + "\n" + (stdout or "")).lower()
     stderr_blob = (stderr or "").lower()
-    if cli == "antigravity" and any(p in blob for p in _p("AGY_AUTH_BANNER_PATTERNS", AGY_AUTH_BANNER_PATTERNS)):
-        return "oauth-env"
     if any(p in blob for p in _p("CLI_SUB_CAP_PATTERNS", CLI_SUB_CAP_PATTERNS)):
         return "cli-subscription-cap"
-    if any(p in blob for p in _p("SERVER_CAPACITY_PATTERNS", SERVER_CAPACITY_PATTERNS)):
+    # C43/DL-101: only the measured typed AGY network carrier joins this rung.
+    # Do not concatenate arbitrary result errors (including unmeasured quotas).
+    agy_network = (
+        cli == "antigravity" and raw == 1 and isinstance(agy_result, dict)
+        and agy_result.get("status") == "ERROR" and agy_result.get("response") == ""
+        and isinstance(agy_result.get("error"), str)
+        and "network issue connecting to the server" in agy_result["error"].lower()
+    )
+    if agy_network or any(p in blob for p in _p("SERVER_CAPACITY_PATTERNS", SERVER_CAPACITY_PATTERNS)):
         return "server-capacity"
     if any(p in blob for p in _p("TOKEN_LIMIT_PATTERNS", TOKEN_LIMIT_PATTERNS)):
         return "token-limit"
-    if any(p in blob for p in _p("OAUTH_ENV_PATTERNS", OAUTH_ENV_PATTERNS)):
-        return "oauth-env"
     # schema-rejected checked LAST in L2 — capacity/terminal classes win.
     # submit-time --output-schema refusal: surfaced to caller as terminal-like,
     # not mapped to a repair-routed classification.
     if any(p in blob for p in _p("SCHEMA_REJECTED_PATTERNS", SCHEMA_REJECTED_PATTERNS)):
         return "schema-rejected"
-    if any(p in stderr_blob for p in _p("FANOUT_SPAWN_PATTERNS", FANOUT_SPAWN_PATTERNS)):
-        return "fanout-spawn-error"
     if any(p in stderr_blob for p in _p("CONFIG_CONFLICT_PATTERNS", CONFIG_CONFLICT_PATTERNS)):
         return "config-conflict"
     # L3 — weak vmap fallback (extraction-error) wins over the repair-dispatch
@@ -994,167 +1076,6 @@ def validate_response(
 
 # ─── CLI-aware answer extraction (NEW) ────────────────────────────────────
 
-def extract_codex_answer(
-    stdout: str, last_msg_path: Optional[str]
-) -> Tuple[str, Optional[str]]:
-    """Codex `--json` extraction. Returns (answer_text, error_or_None).
-
-    Priority:
-    1. `turn.completed` overrides `error` events (Codex emits retry-as-error
-       events like `Reconnecting... N/5 (...403...)` followed by HTTP-fallback
-       success — these are not real failures).
-    2. `turn.failed` without `turn.completed` is authoritative for failure.
-    3. Read -o file (final agent_message) → success.
-    4. Fallback: last `item.completed` of type `agent_message` in JSONL.
-    """
-    error_msg: Optional[str] = None
-    saw_completed = False
-    saw_failed = False
-    for ln in stdout.splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            obj = json.loads(ln)
-        except Exception:
-            continue
-        t = obj.get("type")
-        if t == "error":
-            msg = obj.get("message")
-            if isinstance(msg, str):
-                error_msg = msg
-        elif t == "turn.failed":
-            saw_failed = True
-            err = obj.get("error", {})
-            if isinstance(err, dict):
-                error_msg = err.get("message", str(err))
-        elif t == "turn.completed":
-            saw_completed = True
-    # Only return error if turn explicitly failed without completion. When
-    # turn.completed is present, prior `error` events were transient retry
-    # noise (Codex emits Reconnecting... N/5 as `type:error` even when HTTP
-    # fallback succeeds). Bailing on first error text caused ~48% silent-fail
-    # rate under sustained load (2026-05-03 stress test, 628/1307 codex).
-    if saw_failed and not saw_completed:
-        return "", error_msg or "turn.failed without message"
-
-    if last_msg_path and os.path.exists(last_msg_path):
-        try:
-            with open(last_msg_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception as e:
-            return "", f"failed to read last_message file: {e}"
-        # Empty last_msg file = abnormal — vendor reported success (rc=0)
-        # but didn't write any answer. Fall through to JSONL agent_message
-        # fallback; if that also yields nothing, the final return at the
-        # bottom emits the explicit ext_err. (2026-05-03 later-3 fault test
-        # exposed: empty file silently returned as ok.)
-        if content.strip():
-            return content, None
-
-    for ln in reversed(stdout.splitlines()):
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            obj = json.loads(ln)
-        except Exception:
-            continue
-        if obj.get("type") == "item.completed":
-            item = obj.get("item", {})
-            if item.get("type") == "agent_message":
-                return item.get("text", ""), None
-    return "", "no final answer in JSONL or last-message file"
-
-
-def extract_codex_fanout(stdout: str) -> Tuple[list[dict], bool]:
-    """Extract per-subagent raw messages from a codex --json collab stream.
-
-    Returns (agents, complete). `agents` is a list of {thread_id, message}
-    for each subagent that reached a TERMINAL state (completed / errored /
-    interrupted / shutdown / not_found — the codex-rs exec_events wire enum),
-    de-duplicated by thread_id (last terminal state wins, since `wait` then
-    `close_agent` re-emit the same state). A failed thread's `message` may be
-    absent and is recorded as "".
-
-    `complete` is True ONLY if at least one subagent was spawned AND every
-    referenced thread reached a `completed` terminal state; False for
-    zero-agent fan-out, any failed thread, or any thread that never reached
-    a terminal state.
-    """
-    by_thread: dict[str, dict] = {}
-    seen: set[str] = set()                 # every thread the parent referenced
-    final_status: dict[str, str] = {}      # last TERMINAL status per thread
-    for ln in stdout.splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            obj = json.loads(ln)
-        except Exception:
-            continue
-        if obj.get("type") != "item.completed":
-            continue
-        item = obj.get("item", {})
-        if item.get("type") != "collab_tool_call":
-            continue
-        for tid in item.get("receiver_thread_ids") or []:
-            if isinstance(tid, str):
-                seen.add(tid)
-        states = item.get("agents_states") or {}
-        for tid, st in states.items():
-            if not isinstance(st, dict):
-                continue
-            seen.add(tid)
-            status = st.get("status")
-            # Wire enum (codex-rs exec_events, verified rust-v0.135.0 and
-            # v0.142.5): pending_init | running | interrupted | completed |
-            # errored | shutdown | not_found. "running" is the in-flight
-            # value ("in_progress"/"failed" never appear on the wire — the
-            # pre-2026-07-04 skip set matched a nonexistent token, so a
-            # running snapshot was mis-recorded as terminal).
-            if status in ("pending_init", "running", None):
-                continue  # not yet terminal — a later event may supersede it
-            by_thread[tid] = {"thread_id": tid, "message": st.get("message") or ""}
-            final_status[tid] = status  # last terminal status wins (completed OR errored/…)
-    # complete iff at least one thread was referenced AND every referenced thread
-    # reached a "completed" terminal state. Zero agents (fan-out ignored) or any
-    # non-completed/never-terminated thread → False. (no-silent-partial)
-    complete = bool(seen) and all(final_status.get(tid) == "completed" for tid in seen)
-    return list(by_thread.values()), complete
-
-
-# --- Implementer-report status helper (Archetype B) ---
-# re.match semantics (anchored to start of string) — only the first non-empty
-# line is consulted. A buried/echoed "STATUS:" later in the report does NOT
-# fire. Fix C (cross-family review 2026-05-31): dropped re.MULTILINE search
-# and replaced with first-non-empty-line iteration.
-_IMPL_STATUS_RE = re.compile(
-    r"STATUS:\s*(DONE_WITH_CONCERNS|DONE|NEEDS_CONTEXT|BLOCKED)\b"
-)
-
-
-def extract_implementer_status(text: str) -> Optional[str]:
-    """Deterministic grep of the implementer report's mandated first line
-    (`STATUS: <DONE|DONE_WITH_CONCERNS|NEEDS_CONTEXT|BLOCKED>`). Returns the
-    status token or None when absent/unrecognized. NOT an AI call — a
-    structural check on a constrained output. A None result is a safe
-    fallback: leader-side verification is authoritative regardless.
-
-    Only the FIRST non-empty line is consulted (Fix C). A buried or echoed
-    `STATUS:` later in the report cannot false-match.
-    """
-    if not text:
-        return None
-    for line in text.splitlines():
-        s = line.strip()
-        if not s:
-            continue  # skip leading blank lines
-        m = _IMPL_STATUS_RE.match(s)  # reuse the compiled pattern (anchored)
-        return m.group(1) if m else None  # the first non-empty line decides
-    return None
-
-
 def extract_gemini_answer(stdout: str, stderr: str) -> Tuple[str, Optional[str]]:
     """Gemini `--output-format json` extraction.
 
@@ -1313,90 +1234,88 @@ _CHILD_ENV_SCRUB = (
 )
 
 
-def scrubbed_child_env(base=None, *, remove=()) -> dict:
-    """The single-source vendor-child env: `base` (default `os.environ`) minus the
-    `_CHILD_ENV_SCRUB` injection vars. `_run_once` applies it at the single
-    provider-child spawn site. Returns a fresh dict."""
-    src = base if base is not None else os.environ
-    omitted = set(_CHILD_ENV_SCRUB) | set(remove)
-    return {k: v for k, v in src.items() if k not in omitted}
+# R-NOCOST/C11/C37: the agreed cross-family names apply to every vendor child.
+# This is environment hygiene, not proof of the CLI's selected billing route.
+_CHILD_ENV_CREDENTIALS = (
+    'GOOGLE_API_KEY', 'GEMINI_API_KEY',
+    'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_GENAI_USE_VERTEXAI',
+    'GEMINI_CLI_USE_COMPUTE_ADC', 'CLOUD_SHELL',
+    'GOOGLE_GEMINI_BASE_URL', 'GOOGLE_VERTEX_BASE_URL',
+    'GEMINI_DEFAULT_AUTH_TYPE',
+    'GOOGLE_CLOUD_ACCESS_TOKEN', 'AGY_ADC_AUTH',
+    'GOOGLE_GENAI_USE_ENTERPRISE', 'OPENAI_API_KEY',
+    'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN',
+    'OPENAI_BASE_URL', 'OPENAI_ORGANIZATION',
+    'OPENAI_PROJECT', 'ANTHROPIC_API_KEY',
+    'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+    'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
+    'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_ANTHROPIC_AWS',
+    'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD', 'CLAUDE_CODE_USE_GATEWAY',
+    'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_API_BASE_URL',
+    'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR', 'CLAUDE_CODE_OAUTH_TOKEN',
+    'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR', 'CLAUDE_CODE_OAUTH_REFRESH_TOKEN',
+    'CLAUDE_CODE_GATEWAY_TOKEN', 'CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR',
+    'ANTHROPIC_FOUNDRY_API_KEY', 'ANTHROPIC_FOUNDRY_AUTH_TOKEN',
+    'ANTHROPIC_AWS_API_KEY', 'AWS_BEARER_TOKEN_BEDROCK',
+    'ANTHROPIC_IDENTITY_TOKEN', 'ANTHROPIC_IDENTITY_TOKEN_FILE',
+    'ANTHROPIC_FEDERATION_RULE_ID', 'ANTHROPIC_SERVICE_ACCOUNT_ID',
+    'ANTHROPIC_PROFILE', 'ANTHROPIC_ORGANIZATION_ID',
+    'ANTHROPIC_WORKSPACE_ID',
+)
+
+# Only Gemini keeps this project group for its supported Google login.
+_GEMINI_PROJECT_ENV = (
+    'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION',
+    'GOOGLE_CLOUD_REGION', 'GOOGLE_CLOUD_QUOTA_PROJECT',
+)
 
 
-def _drain(stream, accum: list[str], passthrough, outcome: dict) -> None:
-    """Reader thread — line iter, accumulate, optional mirror to passthrough."""
-    try:
-        for line in iter(stream.readline, ""):
-            accum.append(line)
-            if passthrough is not None:
-                try:
-                    passthrough.write(line)
-                    passthrough.flush()
-                except Exception:
-                    pass
-    except Exception as e:
-        outcome["error"] = type(e).__name__
-    finally:
-        try:
-            stream.close()
-        except Exception as e:
-            outcome["error"] = type(e).__name__
-        outcome["done"] = True
+def scrubbed_child_env(base=None, *, cli=None, remove=()) -> dict:
+    """Return a fresh child mapping; reject names before retrieving their values.
 
-
-def _terminate_provider_process_group(
-    proc, reason: str, provider_pgid: Optional[int] = None
-) -> bool:
-    """Signal the saved group and reap the direct child.
-
-    The result reports signaling/reaping errors, not descendant zombie removal.
+    Every route removes the agreed loader and credential/endpoint names.
+    Gemini alone keeps its project group; explicit extra removals still win.
+    Model/effort settings, PATH, config pointers and GOOGLE_GENAI_USE_GCA remain unchanged.
     """
-    log(f"{reason}; sending SIGTERM")
-    completed = True
-    try:
-        if provider_pgid is not None:
-            os.killpg(provider_pgid, signal.SIGTERM)
-        else:
-            proc.terminate()
-    except (ProcessLookupError, PermissionError) as error:
-        log(f"SIGTERM failed: {error}")
-        if isinstance(error, PermissionError):
-            completed = False
-    direct_child_unreaped = False
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        direct_child_unreaped = True
+    src = base if base is not None else os.environ
+    omitted = set(_CHILD_ENV_SCRUB) | set(_CHILD_ENV_CREDENTIALS) | set(remove)
+    if cli != "gemini":
+        omitted.update(_GEMINI_PROJECT_ENV)
+    return {key: src[key] for key in src if key not in omitted}
 
-    group_survives = False
-    if provider_pgid is not None:
+
+def _read_capture(stream, size: int) -> bytes:
+    """Read a finite snapshot without moving a vendor's shared file offset."""
+    chunks = []
+    offset = 0
+    while offset < size:
+        chunk = os.pread(stream.fileno(), min(size - offset, 1024 * 1024), offset)
+        if not chunk:
+            raise OSError("capture ended before its snapshot length")
+        chunks.append(chunk)
+        offset += len(chunk)
+    return b"".join(chunks)
+
+
+def _terminate_provider_process(proc, reason: str) -> bool:
+    """Bounded direct-child termination/reaping; descendants are vendor-owned."""
+    log(f"{reason}; terminating direct child")
+    for action in (proc.terminate, proc.kill):
         try:
-            os.killpg(provider_pgid, 0)
-            group_survives = True
+            action()
         except ProcessLookupError:
             pass
-        except PermissionError as error:
-            log(f"process-group liveness check failed: {error}")
-            completed = False
-            group_survives = True
-
-    if group_survives or (provider_pgid is None and direct_child_unreaped):
-        log("SIGTERM ignored; sending SIGKILL")
+        except OSError as error:
+            log(f"direct-child termination failed ({type(error).__name__})")
         try:
-            if group_survives:
-                os.killpg(provider_pgid, signal.SIGKILL)
-            else:
-                proc.kill()
-        except ProcessLookupError:
+            proc.wait(timeout=5)
+            return True
+        except subprocess.TimeoutExpired:
             pass
-        except PermissionError:
-            completed = False
-
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        log("zombie: SIGKILL also unresponsive")
-        completed = False
-    return completed
+        except OSError as error:
+            log(f"direct-child wait failed ({type(error).__name__})")
+    log("direct child did not complete within termination deadline")
+    return False
 
 
 def _run_once(
@@ -1412,7 +1331,7 @@ def _run_once(
 
     The handler only records state: raising between Popen and its assignment
     could lose the child handle. The engine observes cancellation in its wait
-    loop and uses the same bounded group/reader cleanup as other terminal paths.
+    loop and terminates/reaps only the direct child with bounded waits.
     Library calls from non-main threads retain their caller's signal policy.
     """
     received: list[int] = []
@@ -1432,8 +1351,8 @@ def _run_once(
         )
         # Covers a signal arriving after the engine's final collection check.
         if received and not result._output_transport_failed and result.exit_code != EXIT_TIMEOUT:
-            _mark_signal_failure(result, received[0])
-            log(f"[wrapper] {cli} unknown exit={result.exit_code} "
+            _mark_signal_failure(result, received[0], cli)
+            log(f"[wrapper] {cli} {result.classification} exit={result.exit_code} "
                 f"vendor={result.vendor_exit_code} elapsed={result.elapsed_s:.1f}s")
         return result
     finally:
@@ -1441,9 +1360,10 @@ def _run_once(
             signal.signal(signum, handler)
 
 
-def _mark_signal_failure(result: RunResult, signum: int) -> None:
-    result.exit_code = EXIT_CLI_FAIL
-    result.classification = "unknown"
+def _mark_signal_failure(result: RunResult, signum: int, cli: str) -> None:
+    auth_stop = _auth_carrier_stop(cli, result.stderr, result.stdout, result.vendor_exit_code)
+    result.exit_code = EXIT_TERMINAL if auth_stop else EXIT_CLI_FAIL
+    result.classification = "oauth-env" if auth_stop else "unknown"
     result.extraction_error = f"wrapper interrupted ({signal.Signals(signum).name})"
     result._output_transport_failed = True
     result.final_answer = ""
@@ -1455,15 +1375,10 @@ def _run_once_owned(
     stdin_text: Optional[str], classify_and_log: bool, remove_env,
     received: list[int],
 ) -> RunResult:
-    """One Popen invocation.
+    """Capture one direct invocation through owned anonymous stream files.
 
-    stdout = capture-only (structured JSON/JSONL — not for human stream).
-    stderr = mirror to parent stderr (human progress visibility).
-    stdin_text: when provided, strictly encode UTF-8 and feed those bytes via
-    a daemon writer thread so a large prompt cannot deadlock against a full OS
-    pipe before the child starts reading. The writer must complete its write,
-    flush, and close phases within bounded reconciliation joins. When None
-    (default), stdin is DEVNULL (gemini/claude behavior unchanged).
+    Input completion means availability, not vendor consumption. Output is a
+    finite snapshot after direct-child completion; no descendant EOF or mirror.
     """
     effective_cwd = os.path.realpath(cwd or os.getcwd())
     log(
@@ -1493,205 +1408,118 @@ def _run_once_owned(
                 _stdin_delivery_failed=True,
             ), "not-started")
 
-    # Scrub loader/interpreter injection vars so a poisoned parent env cannot
-    # reach the vendor child (I-2/I-3). Explicit env= replaces the implicit
-    # full-os.environ inheritance. scrubbed_child_env() is the shared
-    # single-source scrub (the agy pty transport applies the same one).
-    child_env = scrubbed_child_env(remove=remove_env)
-
-    popen_kwargs: dict = dict(
-        cwd=cwd,
-        env=child_env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=(subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL),
-        text=True,
-        encoding="utf-8",
-        bufsize=1,
-    )
-    if hasattr(os, "setsid"):
-        popen_kwargs["preexec_fn"] = os.setsid
-
-    try:
-        proc = subprocess.Popen(cmd, **popen_kwargs)
-    except OSError as e:
-        elapsed = time.monotonic() - start
-        log(f"OSError on spawn: {e}")
-        return observed(RunResult(
-            EXIT_ARG_ERROR, "", f"spawn failed: {e}\n", elapsed,
-            classification="unknown",
-        ), "not-started")
-
-    provider_pgid: Optional[int] = None
-    if all(hasattr(os, name) for name in ("killpg", "getpgid", "getpgrp")):
-        try:
-            candidate_pgid = os.getpgid(proc.pid)
-            if candidate_pgid == proc.pid and candidate_pgid != os.getpgrp():
-                provider_pgid = candidate_pgid
-        except (AttributeError, OSError):
-            pass
-
-    stdin_done = threading.Event()
-    stdin_errors: list[str] = []
-    t_in = None
-    threads: list = []
-    stdout_buf: list[str] = []
-    stderr_buf: list[str] = []
-    out_state: dict = {}
-    err_state: dict = {}
     transport_error = None
-    setup_failed = False
-
-    def _feed_stdin() -> None:
+    timed_out = setup_failed = False
+    captured = {"stdout": "", "stderr": ""}
+    with ExitStack() as resources:
         try:
-            written = proc.stdin.buffer.write(stdin_bytes)
-            if written != len(stdin_bytes):
-                stdin_errors.append("write")
-            proc.stdin.buffer.flush()
-        except Exception:
-            stdin_errors.append("write")
-        finally:
-            try:
-                proc.stdin.close()
-            except Exception:
-                stdin_errors.append("close")
-            finally:
-                stdin_done.set()
-
-    def _finish_stdin() -> None:
-        if t_in is None:
-            return
-        t_in.join(timeout=2)
-        if not stdin_done.is_set():
-            _terminate_provider_process_group(
-                proc, "stdin writer incomplete", provider_pgid
+            streams = {name: resources.enter_context(tempfile.TemporaryFile(mode="w+b", buffering=0))
+                       for name in ("stdout", "stderr")}
+            input_stream = subprocess.DEVNULL
+            if stdin_bytes is not None:
+                input_stream = resources.enter_context(tempfile.TemporaryFile(mode="w+b", buffering=0))
+                if input_stream.write(stdin_bytes) != len(stdin_bytes):
+                    raise OSError("incomplete input preparation")
+                input_stream.flush()
+                input_stream.seek(0)
+        except OSError as error:
+            diagnostic = f"stream preparation failed ({type(error).__name__})"
+            log(diagnostic)
+            return observed(RunResult(
+                EXIT_CLI_FAIL, "", "", time.monotonic() - start,
+                classification="unknown", extraction_error=diagnostic,
+                _output_transport_failed=True,
+            ), "not-started")
+        try:
+            proc = subprocess.Popen(
+                cmd, cwd=cwd, env=scrubbed_child_env(cli=cli, remove=remove_env),
+                stdin=input_stream, stdout=streams["stdout"], stderr=streams["stderr"],
+                start_new_session=os.name == "posix",
             )
-            t_in.join(timeout=2)
-
-    timed_out = False
-    try:
-        # Construction/start belongs inside the same cleanup boundary as wait.
-        if stdin_bytes is not None and proc.stdin is not None:
-            t_in = threading.Thread(target=_feed_stdin, daemon=True)
-            threads.append(t_in)
-            t_in.start()
-        for stream, buf, mirror, state in (
-            (proc.stdout, stdout_buf, None, out_state),
-            (proc.stderr, stderr_buf, sys.stderr, err_state),
-        ):
-            thread = threading.Thread(
-                target=_drain, args=(stream, buf, mirror, state), daemon=True
-            )
-            threads.append(thread)
-            thread.start()
-        deadline = time.monotonic() + timeout
-        while not received:
-            try:
-                proc.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
-                break
-            except subprocess.TimeoutExpired:
-                if time.monotonic() >= deadline:
-                    timed_out = True
+        except OSError as error:
+            log(f"OSError on spawn: {error}")
+            return observed(RunResult(
+                EXIT_ARG_ERROR, "", f"spawn failed: {error}\n", time.monotonic() - start,
+                classification="unknown",
+            ), "not-started")
+        try:
+            deadline = time.monotonic() + timeout
+            while not received:
+                try:
+                    proc.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
                     break
-        if timed_out or received:
-            _terminate_provider_process_group(
-                proc, f"timeout after {timeout}s" if timed_out else
-                "wrapper termination requested", provider_pgid
-            )
-        _finish_stdin()
-        # A reaped leader may still own descendants, even with closed pipes.
-        if not timed_out and provider_pgid is not None:
-            try:
-                os.killpg(provider_pgid, 0)
-            except ProcessLookupError:
-                pass
-            else:
-                if not _terminate_provider_process_group(
-                    proc, "provider descendant remained after exit", provider_pgid
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+            if timed_out or received:
+                if not _terminate_provider_process(
+                    proc, f"timeout after {timeout}s" if timed_out else "wrapper termination requested",
                 ):
-                    transport_error = "process-group cleanup incomplete"
-    except BaseException as exc:
-        try:
-            _terminate_provider_process_group(proc, "wrapper interrupted", provider_pgid)
-        except Exception as cleanup_error:
-            log(f"provider cleanup failed ({type(cleanup_error).__name__})")
-        for thread in threads:
-            try:
-                thread.join(timeout=2)
-            except RuntimeError:  # A constructed thread may not have started.
-                pass
-        # Close unclaimed pipes only; closing a pipe owned by a blocked reader
-        # on this thread would turn bounded cleanup into an unbounded wait.
-        if not any(thread.is_alive() for thread in threads):
-            for stream in (proc.stdin, proc.stdout, proc.stderr):
-                if stream is not None:
-                    try:
-                        stream.close()
-                    except Exception:
-                        pass
-        if not isinstance(exc, Exception):
-            raise
-        setup_failed = True
-        transport_error = f"transport setup/wait failed ({type(exc).__name__})"
-    else:
-        for thread in threads:
-            if thread is not t_in:
-                thread.join(timeout=2)
+                    transport_error = "direct-child termination incomplete"
+        except BaseException as error:
+            _terminate_provider_process(proc, "wrapper interrupted")
+            if not isinstance(error, Exception):
+                raise
+            setup_failed = True
+            transport_error = f"transport setup/wait failed ({type(error).__name__})"
 
-    for name, state in (("stdout", out_state), ("stderr", err_state)):
-        if not state.get("done") or state.get("error"):
-            detail = state.get("error", "incomplete")
-            transport_error = transport_error or f"{name} collection failed ({detail})"
+        # Freeze lengths before reading. Descendant writes cannot extend the
+        # collection or be overwritten by a seek on the inherited offset.
+        sizes = {}
+        for name, stream in streams.items():
+            try:
+                sizes[name] = os.fstat(stream.fileno()).st_size
+            except OSError as error:
+                transport_error = transport_error or f"{name} collection failed ({type(error).__name__})"
+        for name, size in sizes.items():
+            try:
+                data = _read_capture(streams[name], size)
+                try:
+                    captured[name] = data.decode("utf-8")
+                except UnicodeDecodeError as error:
+                    captured[name] = data[:error.start].decode("utf-8")
+                    raise
+                finally:
+                    captured[name] = captured[name].replace("\r\n", "\n").replace("\r", "\n")
+            except (OSError, UnicodeError) as error:
+                transport_error = transport_error or f"{name} collection failed ({type(error).__name__})"
+
     if transport_error:
         log(transport_error)
-
     elapsed = time.monotonic() - start
-    stdout = "".join(stdout_buf)
-    stderr = "".join(stderr_buf)
+    stdout, stderr = captured["stdout"], captured["stderr"]
     rc = proc.returncode if proc.returncode is not None else -1
-
-    delivery_failed = stdin_bytes is not None and (
-        not stdin_done.is_set() or bool(stdin_errors)
-    )
     if timed_out:
         log(f"timed out elapsed={elapsed:.1f}s")
         result = RunResult(EXIT_TIMEOUT, stdout, stderr, elapsed)
     else:
         log(f"exit={rc} elapsed={elapsed:.1f}s")
-        ec = EXIT_OK if rc == 0 else EXIT_CLI_FAIL
-        result = RunResult(ec, stdout, stderr, elapsed)
-        if rc == 0 and delivery_failed:
-            phase = stdin_errors[0] if stdin_errors else "incomplete"
-            result.exit_code = EXIT_CLI_FAIL
-            result.classification = "unknown"
-            result.extraction_error = f"stdin delivery failed ({phase})"
-            result._stdin_delivery_failed = True
-            log(result.extraction_error)
-        elif transport_error and (rc == 0 or setup_failed):
+        result = RunResult(EXIT_OK if rc == 0 else EXIT_CLI_FAIL, stdout, stderr, elapsed)
+        if transport_error and (rc == 0 or setup_failed):
             result.exit_code = EXIT_CLI_FAIL
             result.classification = "unknown"
             result.extraction_error = transport_error
             result._output_transport_failed = True
-
     result._effective_cwd = effective_cwd
     result.vendor_exit_code = rc
     if received and not timed_out:
-        _mark_signal_failure(result, received[0])
-    if classify_and_log:
+        _mark_signal_failure(result, received[0], cli)
+    if (result.exit_code != EXIT_OK and
+            _auth_carrier_stop(cli, stderr, stdout, rc)):
+        result.classification = "oauth-env"
+        result.exit_code = EXIT_TERMINAL
+    elif classify_and_log:
         if not (result._stdin_delivery_failed or result._output_transport_failed):
             result.classification = classify(
                 cli, stderr, stdout, result.exit_code, vendor_exit_code=rc,
             )
-        log(
-            f"[wrapper] {cli} {result.classification} "
-            f"exit={result.exit_code} vendor={result.vendor_exit_code} "
-            f"elapsed={elapsed:.1f}s"
-        )
     elif not (result._stdin_delivery_failed or result._output_transport_failed):
         result.classification = "unclassified"
-
-    return observed(result, "not-used" if stdin_bytes is None else
-                    "failed" if delivery_failed else "complete")
+    if classify_and_log:
+        log(f"[wrapper] {cli} {result.classification} exit={result.exit_code} "
+            f"vendor={result.vendor_exit_code} elapsed={elapsed:.1f}s")
+    return observed(result, "not-used" if stdin_bytes is None else "complete")
 
 
 def run_cli_with_retry(
@@ -1708,24 +1536,15 @@ def run_cli_with_retry(
     remove_env=(),
     prompt_suffix: str = "",
 ) -> RunResult:
-    """Top-level driver.
+    """Run once, extract the vendor answer, and validate locally.
 
-    Layers (in order):
-    1. Schema injection — if `pydantic_cls`, prepend the schema block to prompt.
-    2. Server-capacity retry — `SERVER_CAP_BACKOFF_S` (skipped if
-       `repair_mode` or `single_provider_call`).
-    3. Answer extraction — cli-aware (JSONL events / single JSON object).
-    4. Schema validation — if `pydantic_cls`, validate; on failure, retry once
-       (mode = "schema_repair") with a clarifying suffix in the prompt unless
-       `single_provider_call` is set.
-
-    `cmd_builder(prompt) -> argv` lets us rebuild the argv after schema-repair
-    prompt mutation without leaking command construction into this function.
+    The historical name and single_provider_call parameter remain compatible;
+    every route is now single-call. Vendor-internal retries and explicit later
+    review retries are separate. cmd_builder receives the initial schema-injected
+    prompt plus the caller's final clause, without correction-prompt mutation.
     """
-    # Next-run IPC cleanup (owner contract: a subsequent run clears prior
-    # residue). The legacy `repair_mode` compatibility flag skips cleanup and
-    # retries for an explicit single-attempt diagnostic invocation. The current
-    # fresh native proposal-only child has no provider-wrapper invocation.
+    # Legacy repair mode skips normal next-run IPC cleanup. It does not restart
+    # inference, and the current native repair child only proposes a patch.
     if not repair_mode:
         prune_stale_run_logs(cli)
 
@@ -1748,7 +1567,6 @@ def run_cli_with_retry(
         "cli-subscription-cap",
         "token-limit",
         "oauth-env",
-        "fanout-spawn-error",
         "config-conflict",
         "task-blocked",
     )
@@ -1774,13 +1592,7 @@ def run_cli_with_retry(
             r.extraction_error = ext_err
             return promote_terminal(r, "task-blocked")
         if ext_err.startswith("is_error=true"):
-            cls = classify(
-                "claude",
-                stderr=ext_err,
-                stdout="",
-                exit_code=EXIT_CLI_FAIL,
-                vendor_exit_code=r.vendor_exit_code,
-            )
+            cls = classify_extraction("claude", r, ext_err)
             if cls in terminal_classes:
                 log(f"answer extraction error: {ext_err}")
                 r.extraction_error = ext_err
@@ -1794,13 +1606,7 @@ def run_cli_with_retry(
             promoted = promote_claude_extraction(r, ext_err)
             if promoted is not None:
                 return promoted
-        cls = classify(
-            cli,
-            stderr=ext_err,
-            stdout="",
-            exit_code=EXIT_CLI_FAIL,
-            vendor_exit_code=r.vendor_exit_code,
-        )
+        cls = classify_extraction(cli, r, ext_err)
         if cls in terminal_classes:
             r.extraction_error = ext_err
             return promote_terminal(r, cls)
@@ -1816,178 +1622,93 @@ def run_cli_with_retry(
             return r
         return None
 
-    schema_repair_attempt = 0
-    while True:
-        # The caller's final clause follows schema and retry instructions.
-        sent_prompt = effective_prompt + ("\n\n" + prompt_suffix if prompt_suffix else "")
-        cmd = cmd_builder(sent_prompt)
+    # The caller's final clause follows initial schema instructions.
+    sent_prompt = effective_prompt + ("\n\n" + prompt_suffix if prompt_suffix else "")
+    cmd = cmd_builder(sent_prompt)
+    run_once_kwargs = {"stdin_text": sent_prompt if prompt_via_stdin else None}
+    if remove_env:
+        run_once_kwargs["remove_env"] = remove_env
+    result = _run_once(cli, cmd, cwd=cwd, timeout=timeout, **run_once_kwargs)
+    result.repair_attempt = 0
+    result.schema_repair_attempt = 0
+    result.mode = "repair" if repair_mode else "normal"
+    if result._stdin_delivery_failed or result._output_transport_failed or (
+        prompt_via_stdin and result.exit_code == EXIT_TIMEOUT
+    ):
+        return result
 
-        # Layer 2: server-cap retry.
-        max_retries = (
-            0 if repair_mode or single_provider_call else SERVER_CAP_MAX_RETRIES
-        )
-        result: Optional[RunResult] = None
-        for attempt in range(max_retries + 1):
-            run_once_kwargs = {
-                "stdin_text": sent_prompt if prompt_via_stdin else None,
-            }
-            if remove_env:
-                run_once_kwargs["remove_env"] = remove_env
-            r = _run_once(
-                cli,
-                cmd,
-                cwd=cwd,
-                timeout=timeout,
-                **run_once_kwargs,
-            )
-            r.repair_attempt = attempt if repair_mode else 0
-            r.schema_repair_attempt = schema_repair_attempt
-            if repair_mode:
-                r.mode = "repair"
-            elif schema_repair_attempt > 0:
-                r.mode = "schema_repair"
-            else:
-                r.mode = "normal"
-            result = r
-            if r._stdin_delivery_failed or r._output_transport_failed or (
-                prompt_via_stdin and r.exit_code == EXIT_TIMEOUT
-            ):
-                return r
-            cls = r.classification
-            if cli == "claude":
-                _answer, ext_err = extract_claude_answer(r.stdout, r.stderr)
-                if ext_err:
-                    promoted = promote_claude_extraction(r, ext_err)
-                    if promoted is not None:
-                        return promoted
-                    # Finding #1 (2026-07-05): a claude API error envelope
-                    # (is_error=true, rc=0) is classified "ok" by the rc-based
-                    # `classify` above (cls = r.classification). promote_claude_
-                    # extraction returns None for a NON-terminal re-classification
-                    # (server-capacity is retryable, not terminal), so cls stayed
-                    # "ok" and the loop broke BELOW before the server-cap retry —
-                    # a retryable overload surfaced as extraction-error with zero
-                    # retries. Propagate a retryable re-classification into cls
-                    # (and r.classification, so a retry-exhaust returns a consistent
-                    # rc=64/server-capacity result) to engage the retry branch.
-                    if ext_err.startswith("is_error=true"):
-                        recls = classify(
-                            "claude", stderr=ext_err, stdout="",
-                            exit_code=EXIT_CLI_FAIL,
-                            vendor_exit_code=r.vendor_exit_code,
-                        )
-                        if recls == "server-capacity":
-                            r.classification = cls = "server-capacity"
-            if cls == "ok":
-                break
-            if cls in terminal_classes:
-                # Re-emit summary so the [wrapper] line's exit token matches
-                # the wrapper's actual final rc (65). Without this the line
-                # carries _run_once's stale rc=1 which contradicts the
-                # wrapper's $? (2026-05-03 later-3 fault test exposed).
-                return promote_terminal(r, cls)
-            if cls == "schema-rejected":
-                r.exit_code = EXIT_SCHEMA_REJECTED
-                log(
-                    f"[wrapper] {cli} {cls} "
-                    f"exit={r.exit_code} vendor={r.vendor_exit_code} "
-                    f"elapsed={r.elapsed_s:.1f}s"
-                )
-                return r
-            if cls == "server-capacity":
-                if attempt < max_retries:
-                    wait = SERVER_CAP_BACKOFF_S[attempt]
-                    # Test seam (mirrors agy's AGY_NO_BACKOFF): zero the backoff so
-                    # the retry PATH can be verified without the (15,45)s wall.
-                    # Off by default — consumers keep the real backoff.
-                    if os.environ.get("TRIAD_SERVER_CAP_NO_BACKOFF") == "1":
-                        wait = 0
-                    log(
-                        f"server-capacity (attempt {attempt+1}/{max_retries+1}); "
-                        f"sleep {wait}s"
-                    )
-                    time.sleep(wait)
-                    continue
-                r.exit_code = EXIT_RATE_GIVE_UP
-                # Re-emit — promote rc=1 → 64 in the [wrapper] line.
-                log(
-                    f"[wrapper] {cli} {cls} "
-                    f"exit={r.exit_code} vendor={r.vendor_exit_code} "
-                    f"elapsed={r.elapsed_s:.1f}s"
-                )
-                return r
-            # cls in {"unknown", "timeout"} — fail-fast. Both surface through
-            # the dispatch skill's repair/escalation classification path; a
-            # timeout is likely escalation because a hang is not a classifier
-            # gap.
-            return r
-
-        assert result is not None
-
-        # Layer 3: extract final answer.
-        if cli == "codex":
-            answer, ext_err = extract_codex_answer(result.stdout, last_msg_path)
-        elif cli == "claude":
-            answer, ext_err = extract_claude_answer(result.stdout, result.stderr)
-        else:
-            answer, ext_err = extract_gemini_answer(result.stdout, result.stderr)
-
+    cls = result.classification
+    if cli == "claude":
+        _answer, ext_err = extract_claude_answer(result.stdout, result.stderr)
         if ext_err:
-            log(f"answer extraction error: {ext_err}")
-            result.extraction_error = ext_err
-            result.final_answer = ""
-            promoted = promote_extraction_classification(result, ext_err)
+            promoted = promote_claude_extraction(result, ext_err)
             if promoted is not None:
                 return promoted
-            if result.exit_code == EXIT_OK:
-                # Vendor returned rc=0 but extractor found no answer (empty
-                # JSON envelope, missing last-message file, etc.). Promote
-                # to wrapper failure AND re-classify — `_run_once` had set
-                # classification="ok" based on rc alone, which is now stale.
-                # Re-emit the one-line final summary so the dispatch contract
-                # receives the corrected classification token.
-                result.exit_code = EXIT_CLI_FAIL
-                result.classification = "extraction-error"
-                log(
-                    f"[wrapper] {cli} extraction-error "
-                    f"exit={result.exit_code} vendor={result.vendor_exit_code} "
-                    f"elapsed={result.elapsed_s:.1f}s"
-                )
-            return result
+            # A zero-exit Claude error envelope can still report capacity.
+            if ext_err.startswith("is_error=true"):
+                if classify_extraction("claude", result, ext_err) == "server-capacity":
+                    result.classification = cls = "server-capacity"
+    if cls in terminal_classes:
+        return promote_terminal(result, cls)
+    if cls in ("schema-rejected", "server-capacity"):
+        result.exit_code = (EXIT_SCHEMA_REJECTED if cls == "schema-rejected"
+                            else EXIT_RATE_GIVE_UP)
+        log(
+            f"[wrapper] {cli} {cls} "
+            f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+            f"elapsed={result.elapsed_s:.1f}s"
+        )
+        return result
+    if cls != "ok":
+        return result
 
-        if cli in ("claude", "gemini") and pydantic_cls is not None:
-            try:
-                _check_original_json(strip_markdown_fences(result.stdout), pydantic_cls)
-            except ValueError as error:
-                result.validation_error = str(error)
-                return promote_schema_fail(result)
+    # Extract only this invocation's final answer.
+    if cli == "claude":
+        answer, ext_err = extract_claude_answer(result.stdout, result.stderr)
+    else:
+        answer, ext_err = extract_gemini_answer(result.stdout, result.stderr)
 
-        result.final_answer = answer
+    if ext_err:
+        log(f"answer extraction error: {ext_err}")
+        result.extraction_error = ext_err
+        result.final_answer = ""
+        promoted = promote_extraction_classification(result, ext_err)
+        if promoted is not None:
+            return promoted
+        if result.exit_code == EXIT_OK:
+            # Vendor returned rc=0 but extractor found no answer (empty
+            # JSON envelope, missing last-message file, etc.). Promote
+            # to wrapper failure AND re-classify — `_run_once` had set
+            # classification="ok" based on rc alone, which is now stale.
+            # Re-emit the one-line final summary so the dispatch contract
+            # receives the corrected classification token.
+            result.exit_code = EXIT_CLI_FAIL
+            result.classification = "extraction-error"
+            log(
+                f"[wrapper] {cli} extraction-error "
+                f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+                f"elapsed={result.elapsed_s:.1f}s"
+            )
+        return result
 
-        # Layer 4: schema validation.
-        if pydantic_cls is None:
-            return result
-
-        ok, validated_or_err = validate_response(answer, pydantic_cls)
-        if ok:
-            result.validated = validated_or_err
-            return result
-
-        result.validation_error = str(validated_or_err)
-        log(f"schema validation failed: {validated_or_err}")
-
-        if schema_repair_attempt >= 1 or repair_mode or single_provider_call:
+    if cli in ("claude", "gemini") and pydantic_cls is not None:
+        try:
+            _check_original_json(strip_markdown_fences(result.stdout), pydantic_cls)
+        except ValueError as error:
+            result.validation_error = str(error)
             return promote_schema_fail(result)
 
-        # 1 retry — augment prompt with the failure notice and loop.
-        schema_repair_attempt += 1
-        effective_prompt = (
-            effective_prompt
-            + "\n\nIMPORTANT: Your previous response failed JSON schema validation:\n"
-            + f"{validated_or_err}\n\n"
-            + "Reply again with valid JSON only — no prose, no markdown fences."
-        )
-        log(f"schema_repair_attempt {schema_repair_attempt}/1 — retrying")
+    result.final_answer = answer
+
+    if pydantic_cls is None:
+        return result
+    ok, validated_or_err = validate_response(answer, pydantic_cls)
+    if ok:
+        result.validated = validated_or_err
+        return result
+    result.validation_error = str(validated_or_err)
+    log(f"schema validation failed: {validated_or_err}")
+    return promote_schema_fail(result)
 
 
 # ─── Audit log ────────────────────────────────────────────────────────────
@@ -2465,7 +2186,6 @@ CLASSIFICATION_TOKENS: frozenset[str] = frozenset(
         "extraction-error",
         "schema-fail",
         "schema-rejected",
-        "fanout-spawn-error",
         "config-conflict",
         "task-blocked",
         "unknown",
@@ -2477,9 +2197,7 @@ PATTERN_LIST_NAMES: frozenset[str] = frozenset(
         "SERVER_CAPACITY_PATTERNS",
         "CLI_SUB_CAP_PATTERNS",
         "TOKEN_LIMIT_PATTERNS",
-        "OAUTH_ENV_PATTERNS",
         "SCHEMA_REJECTED_PATTERNS",
-        "FANOUT_SPAWN_PATTERNS",
         "CONFIG_CONFLICT_PATTERNS",
         "AGY_AUTH_BANNER_PATTERNS",
     )
@@ -2493,11 +2211,12 @@ REPAIR_CLASSIFICATION_TOKENS: frozenset[str] = frozenset(
 )
 
 # Each pattern-list name → the canonical classification classify() returns when
-# that list matches. An EXACT mirror of classify() (see the L2 substring block):
+# that list matches. AGY_AUTH_BANNER entries are carrier line prefixes on own
+# stderr or reflected-report lines; the other lists are L2 substrings:
 #   AGY_AUTH_BANNER → oauth-env, CLI_SUB_CAP → cli-subscription-cap,
 #   SERVER_CAPACITY → server-capacity, TOKEN_LIMIT → token-limit,
-#   OAUTH_ENV → oauth-env, SCHEMA_REJECTED → schema-rejected,
-#   FANOUT_SPAWN → fanout-spawn-error, CONFIG_CONFLICT → config-conflict.
+#   SCHEMA_REJECTED → schema-rejected,
+#   CONFIG_CONFLICT → config-conflict.
 # A pattern proposal's `classification` must equal PATTERN_LIST_CLASS[pattern_list]
 # (else appending the substring would make classify() return a DIFFERENT class
 # than the proposal claims). Locked in step with PATTERN_LIST_NAMES at import.
@@ -2505,9 +2224,7 @@ PATTERN_LIST_CLASS: dict[str, str] = {
     "SERVER_CAPACITY_PATTERNS": "server-capacity",
     "CLI_SUB_CAP_PATTERNS": "cli-subscription-cap",
     "TOKEN_LIMIT_PATTERNS": "token-limit",
-    "OAUTH_ENV_PATTERNS": "oauth-env",
     "SCHEMA_REJECTED_PATTERNS": "schema-rejected",
-    "FANOUT_SPAWN_PATTERNS": "fanout-spawn-error",
     "CONFIG_CONFLICT_PATTERNS": "config-conflict",
     "AGY_AUTH_BANNER_PATTERNS": "oauth-env",
 }
@@ -2527,12 +2244,6 @@ _MAX_SUBSTRING_LEN = 200
 # signatures ("oauth", "quota"). NOT a claim of full semantic specificity — that
 # is the analyzer's + owner's job (see SECURITY.md), only a coarse over-broad guard.
 _MIN_SUBSTRING_LEN = 4
-# Per-cli total entry cap across vendor_exit_map + all pattern lists — bounded
-# growth so a stream of proposals cannot unboundedly bloat the extension.
-_MAX_EXTENSION_ENTRIES = 500
-# Bound on the analyzer's free-text `reason` (untrusted-derived, surfaced into
-# the leader's context — defense-in-depth against an over-long injection blob).
-_MAX_REASON_LEN = 500
 
 # ── fix2/fix3: L1 vendor_exit_map symmetric guard (round-2 + round-3 re-confirm
 # BLOCKERs) ────────────────────────────────────────────────────────────────
@@ -2568,16 +2279,15 @@ _VENDOR_EXIT_CODE_MAX = 125
 # Excluded (the wrapper/status classes the WRAPPER decides, never a raw vendor
 # exit): timeout (wrapper kills the vendor on its own timeout — exit_code==
 # EXIT_TIMEOUT in classify(), not a vmap code); schema-fail (wrapper pydantic
-# JSON validation — EXIT_SCHEMA_FAIL, not in classify()); task-blocked (codex
-# --task STATUS parse — extract_implementer_status→exit 69); fanout-spawn-error
-# (wrapper fan-out condition via FANOUT_SPAWN_PATTERNS substring); config-conflict
+# JSON validation — EXIT_SCHEMA_FAIL, not in classify()); task-blocked (Claude
+# permission-denial envelope at EXIT_TERMINAL); config-conflict
 # (wrapper/config condition via CONFIG_CONFLICT_PATTERNS).
 # Verified against classify() + the wrapper exit-code semantics (2026-07-06).
 # This applies ONLY to the vendor_exit_map path — the PATTERN path already
 # enforces classification == PATTERN_LIST_CLASS[pattern_list].
 VENDOR_EXIT_PROPOSAL_CLASSES: frozenset[str] = frozenset(
     REPAIR_CLASSIFICATION_TOKENS
-    - {"timeout", "schema-fail", "task-blocked", "fanout-spawn-error", "config-conflict"}
+    - {"timeout", "schema-fail", "task-blocked", "config-conflict"}
 )
 assert (
     VENDOR_EXIT_PROPOSAL_CLASSES <= REPAIR_CLASSIFICATION_TOKENS
@@ -2597,7 +2307,7 @@ def apply_classifier_patch(
 
     proposal = {
         "classification": <one of REPAIR_CLASSIFICATION_TOKENS>,  # required (NOT ok/unknown)
-        "reason":         <one-line str, <= _MAX_REASON_LEN>,     # required
+        "reason":         <non-empty str>,                      # required
         # exactly one target:
         "vendor_exit_code": <int > 0>,    # append {code: classification} to vendor_exit_map
         "pattern_list":     <one of PATTERN_LIST_NAMES>,  # + "substring": <bounded str>
@@ -2619,9 +2329,8 @@ def apply_classifier_patch(
         analyzer + owner review, not this coarse floor — see SECURITY.md.)
       - pattern proposals require classification == PATTERN_LIST_CLASS[pattern_list]
         (the class that list actually yields in classify()).
-      - reason length <= _MAX_REASON_LEN.
-      - per-cli total entries (vendor_exit_map + all pattern lists) may not exceed
-        _MAX_EXTENSION_ENTRIES (bounded growth).
+      - authentication proposals are refused; existing curated entries remain.
+      - reason must be a non-empty string; no reason-length or entry-count cap.
 
     Returns "applied" on success. Raises ValueError on ANY invalid field and
     leaves the extension file UNTOUCHED. A transient read OSError (EACCES/EMFILE/
@@ -2638,6 +2347,11 @@ def apply_classifier_patch(
         raise ValueError("apply_classifier_patch: proposal must be a dict")
 
     classification = proposal.get("classification")
+    if classification == "oauth-env":
+        raise ValueError(
+            "apply_classifier_patch: oauth-env is not a repair proposal; "
+            "escalate authentication recovery to the user"
+        )
     # SEMANTIC: only a meaningful-failure class is a valid patch target. Reject
     # `ok` (would suppress real failures) and `unknown` (meta/default bucket).
     if classification not in REPAIR_CLASSIFICATION_TOKENS:
@@ -2759,11 +2473,6 @@ def apply_classifier_patch(
     reason = proposal.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError("apply_classifier_patch: reason must be a non-empty str")
-    if len(reason) > _MAX_REASON_LEN:
-        raise ValueError(
-            f"apply_classifier_patch: reason exceeds {_MAX_REASON_LEN} chars "
-            f"({len(reason)})"
-        )
 
     ext_path = extension_path if extension_path is not None else _classifier_extension_path()
     ext_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2802,32 +2511,10 @@ def apply_classifier_patch(
             if not isinstance(entry, dict):
                 entry = {}
 
-            # Bounded growth: count the target cli's total entries across
-            # vendor_exit_map + all pattern lists. Reject only when adding a NEW
-            # entry would exceed the cap (an idempotent re-append of an existing
-            # code/substring is fine — it doesn't grow the file).
-            def _cli_entry_count(e: dict) -> int:
-                total = 0
-                vm = e.get("vendor_exit_map")
-                if isinstance(vm, dict):
-                    total += len(vm)
-                ps = e.get("patterns")
-                if isinstance(ps, dict):
-                    for _lst in ps.values():
-                        if isinstance(_lst, list):
-                            total += len(_lst)
-                return total
-
             if has_exit:
                 vmap = entry.get("vendor_exit_map")
                 if not isinstance(vmap, dict):
                     vmap = {}
-                is_new = str(vendor_exit_code) not in vmap
-                if is_new and _cli_entry_count(entry) + 1 > _MAX_EXTENSION_ENTRIES:
-                    raise ValueError(
-                        f"apply_classifier_patch: per-cli entry cap reached for "
-                        f"{cli!r} ({_MAX_EXTENSION_ENTRIES}); refusing unbounded growth"
-                    )
                 vmap[str(vendor_exit_code)] = classification
                 entry["vendor_exit_map"] = vmap
             else:
@@ -2838,11 +2525,6 @@ def apply_classifier_patch(
                 if not isinstance(lst, list):
                     lst = []
                 is_new = substring not in lst
-                if is_new and _cli_entry_count(entry) + 1 > _MAX_EXTENSION_ENTRIES:
-                    raise ValueError(
-                        f"apply_classifier_patch: per-cli entry cap reached for "
-                        f"{cli!r} ({_MAX_EXTENSION_ENTRIES}); refusing unbounded growth"
-                    )
                 if is_new:
                     lst.append(substring)
                 pats[pattern_list] = lst
@@ -2878,6 +2560,129 @@ def apply_classifier_patch(
 
 
 # ─── Per-execution run-log (dispatch SKILL input) ─────────────────────────
+
+def _fallback_json(value: dict) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def _fallback_identity(entry: os.stat_result) -> dict[str, int]:
+    if not stat.S_ISDIR(entry.st_mode) or entry.st_uid != os.getuid():
+        raise OSError(errno.EPERM, "fallback directory is not owned")
+    return {"uid": entry.st_uid, "device": entry.st_dev, "inode": entry.st_ino}
+
+
+def _record_fallback(path: Path) -> None:
+    """Publish allocation proof after the failure IPC itself is preserved."""
+    root = path.parent
+    base_fd = _open_directory_nofollow(root.parent, create=False)
+    proof_fd = -1
+    try:
+        record = {"version": 1, "role": "fallback-ipc", "root": str(root),
+                  "identity": _fallback_identity(root.lstat()), "run_log": path.name}
+        proof_fd = _open_regular_nofollow(base_fd, f".{root.name}.allocation.json",
+            flags=os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        _write_all(proof_fd, _fallback_json(record))
+        os.fsync(proof_fd)
+    finally:
+        if proof_fd >= 0:
+            os.close(proof_fd)
+        os.close(base_fd)
+
+
+def _fallback_inventory(root_fd: int, run_log: str) -> dict[str, list[int]]:
+    """Fallback IPC is flat: its original log and optional repair companion."""
+    inventory = {}
+    for name in sorted(os.listdir(root_fd)):
+        entry = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+        if (name not in (run_log, run_log + ".repair.json")
+                or not (stat.S_ISREG(entry.st_mode) or stat.S_ISLNK(entry.st_mode))
+                or (stat.S_ISREG(entry.st_mode) and entry.st_nlink != 1)):
+            raise OSError(errno.EPERM, "unexpected fallback contents")
+        inventory[name] = [entry.st_dev, entry.st_ino, entry.st_mode,
+                           entry.st_size, entry.st_mtime_ns]
+    return inventory
+
+
+def _prune_fallback(base_fd: int, root: Path, cutoff: float) -> None:
+    """Keep the allocation record until the exact proven tree is gone."""
+    proof_name = f".{root.name}.allocation.json"
+    proof_fd = _open_regular_nofollow(base_fd, proof_name,
+        flags=os.O_RDWR, normalize_mode=False)
+    root_fd = -1
+    try:
+        # Different dispatches may sweep the same machine-level allocation.
+        if not _bounded_flock(proof_fd, timeout_s=0):
+            return
+        if not _regular_fd_matches_name(base_fd, proof_name, proof_fd):
+            raise OSError(errno.ESTALE, "fallback allocation changed before lock")
+        proof_identity = os.fstat(proof_fd)
+        if proof_identity.st_uid != os.getuid() or proof_identity.st_size > 65536:
+            raise OSError(errno.EPERM, "invalid fallback proof owner or size")
+        raw = os.read(proof_fd, 65537)
+        first, separator, tail = raw.partition(b"\n")
+        record = json.loads(first)
+        if (not separator or not isinstance(record, dict)
+                or first + separator != _fallback_json(record)
+                or set(record) != {"version", "role", "root", "identity", "run_log"}
+                or type(record["version"]) is not int or record["version"] != 1
+                or record["role"] != "fallback-ipc" or record["root"] != str(root)
+                or not isinstance(record["identity"], dict)
+                or set(record["identity"]) != {"uid", "device", "inode"}
+                or any(type(v) is not int for v in record["identity"].values())
+                or record["identity"]["uid"] != os.getuid()
+                or not isinstance(record["run_log"], str)
+                or not record["run_log"].endswith(".json")
+                or os.sep in record["run_log"]):
+            raise OSError(errno.EPERM, "invalid fallback allocation")
+        # The first line remains allocation proof if a stop interrupts the
+        # appended deletion-start line. No deletion begins before a full line.
+        started = json.loads(tail) if tail.endswith(b"\n") else None
+        if tail.endswith(b"\n") and (not isinstance(started, dict)
+                or set(started) != {"deleting"} or not isinstance(started["deleting"], dict)
+                or tail != _fallback_json(started)):
+            raise OSError(errno.EPERM, "invalid fallback deletion record")
+        if started is None and proof_identity.st_mtime >= cutoff:
+            return
+        try:
+            entry = os.stat(root.name, dir_fd=base_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            _unlink_regular_if_same(base_fd, proof_name, proof_identity)
+            return
+        if _fallback_identity(entry) != record["identity"]:
+            raise OSError(errno.ESTALE, "fallback allocation identity changed")
+        root_fd = os.open(root.name, os.O_RDONLY | _audit_open_flags(
+            "O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC"), dir_fd=base_fd)
+        if _fallback_identity(os.fstat(root_fd)) != record["identity"]:
+            raise OSError(errno.ESTALE, "fallback directory changed during open")
+        actual = _fallback_inventory(root_fd, record["run_log"])
+        if started is None:
+            os.lseek(proof_fd, len(first) + 1, os.SEEK_SET)
+            os.ftruncate(proof_fd, len(first) + 1)
+            _write_all(proof_fd, _fallback_json({"deleting": actual}))
+            os.fsync(proof_fd)
+        elif any(started["deleting"].get(name) != facts for name, facts in actual.items()):
+            raise OSError(errno.ESTALE, "fallback contents changed after cleanup started")
+        if not _regular_fd_matches_name(base_fd, proof_name, proof_fd):
+            raise OSError(errno.ESTALE, "fallback allocation record changed")
+        for name, facts in actual.items():
+            current = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+            if [current.st_dev, current.st_ino, current.st_mode,
+                    current.st_size, current.st_mtime_ns] != facts:
+                raise OSError(errno.ESTALE, "fallback leaf changed")
+            if stat.S_ISLNK(current.st_mode):
+                os.unlink(name, dir_fd=root_fd)
+            elif not _unlink_regular_if_same(root_fd, name, current):
+                raise OSError(errno.EIO, "fallback leaf was not removed")
+        if _fallback_identity(os.stat(root.name, dir_fd=base_fd,
+                follow_symlinks=False)) != record["identity"]:
+            raise OSError(errno.ESTALE, "fallback directory replaced during cleanup")
+        os.rmdir(root.name, dir_fd=base_fd)
+        _unlink_regular_if_same(base_fd, proof_name, proof_identity)
+    finally:
+        if root_fd >= 0:
+            os.close(root_fd)
+        os.close(proof_fd)
+
 
 def emit_run_log(
     cli: str,
@@ -2982,7 +2787,23 @@ def emit_run_log(
         fallback_root = Path(
             tempfile.mkdtemp(prefix=f"triad-{cli}-run-log-")
         ).resolve(strict=True)
-        path = write_under(fallback_root)
+        try:
+            path = write_under(fallback_root)
+        except Exception:
+            # Only this call's allocation; rmdir preserves any remaining data.
+            try:
+                fallback_root.rmdir()
+            except OSError:
+                pass
+            raise
+        try:
+            _record_fallback(path)
+        except Exception:
+            # Keep usable repair IPC even when cleanup proof cannot be stored.
+            try:
+                log("cleanup-proof-unavailable: fallback IPC retained")
+            except OSError:
+                pass
 
     return path
 
@@ -3119,7 +2940,7 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     whose mtime is older than `age_floor_s`. Called at the START of every normal
     (non-repair-mode) dispatch, so a SUBSEQUENT run cleans up the residue a
     prior run left on failure — including failure classes (terminal / server-cap
-    / schema-rejected / fanout-partial / task-blocked) whose evidence remains for
+    / schema-rejected / task-blocked) whose evidence remains for
     analyzer and owner handling. The cap-based `_prune_run_logs` remains the
     over-cap failsafe; this is the time-based next-run sweep.
 
@@ -3131,7 +2952,8 @@ def prune_stale_run_logs(cli: str, age_floor_s: int = _STALE_IPC_AGE_FLOOR_S) ->
     # `emit_run_log` uses a unique private temp directory only when the
     # import-time log root is unconfigured and its primary root is unusable.
     # Explicit configured-root failure has no fallback. Sweep prior unconfigured
-    # fallback IPC directories on the same age-floor contract as normal run logs.
+    # fallback IPC only with allocation proof aged by at least one hour;
+    # unmarked residue is preserved. Normal logs below use each file's mtime.
     prune_stale_tmp_dirs(f"triad-{cli}-run-log-", age_floor_s=age_floor_s)
     runs_dir = _LOG_DIR / cli / "runs"
     cutoff = time.time() - max(0, age_floor_s)
@@ -3177,22 +2999,17 @@ def prune_stale_tmp_dirs(
     age_floor_s: int = _STALE_IPC_AGE_FLOOR_S,
     base: Optional[str] = None,
 ) -> None:
-    """Next-run cleanup of leaked `tempfile.mkdtemp(prefix=...)` report dirs.
+    """Sweep proven fallback IPC allocations; preserve unmarked old residue.
 
-    The codex `--task` fan-out path auto-creates `<TMPDIR>/codex_report_*` dirs
-    (synthesis + per-agent raw reports) for leader inspection and never unlinks
-    them — a true per-fan-out leak. This sweeps prior ones older than
-    `age_floor_s` at the START of a dispatch, mirroring `prune_stale_run_logs`:
-    the current run's dir is freshly created (< floor) so it is preserved for
-    the leader to read. Best-effort, per-dir tolerant.
-
-    `base` defaults to the system temp dir (`tempfile.gettempdir()`).
+    Prefixes select candidates, never ownership. Allocation proof supplies the
+    age and exact directory identity, survives interruption and is removed last.
+    `base` is an isolated stand-in; otherwise use the system temporary directory.
     """
     # The system temp root may be exposed through macOS's `/var` symlink; it is
     # trusted only when selected internally. Caller-provided bases remain
     # literal so a symlinked managed root is skipped by the no-follow open.
     base_dir = Path(base) if base else Path(tempfile.gettempdir()).resolve()
-    cutoff = time.time() - max(0, age_floor_s)
+    cutoff = time.time() - max(_STALE_IPC_AGE_FLOOR_S, age_floor_s)
     try:
         base_fd = _open_directory_nofollow(base_dir, create=False)
     except OSError:
@@ -3202,15 +3019,21 @@ def prune_stale_tmp_dirs(
             names = os.listdir(base_fd)
         except OSError:
             return
-        for name in names:
-            if not name.startswith(prefix):
-                continue
+        suffix = ".allocation.json"
+        candidates = {name for name in names if name.startswith(prefix)}
+        candidates.update(name[1:-len(suffix)] for name in names
+                          if name.startswith("." + prefix) and name.endswith(suffix))
+        skipped = False
+        for name in sorted(candidates):
             try:
-                entry = os.stat(name, dir_fd=base_fd, follow_symlinks=False)
-                if stat.S_ISDIR(entry.st_mode) and entry.st_mtime < cutoff:
-                    shutil.rmtree(name, dir_fd=base_fd, ignore_errors=True)
+                _prune_fallback(base_fd, base_dir / name, cutoff)
+            except (OSError, ValueError, TypeError):
+                skipped = True
+        if skipped:
+            try:
+                log("cleanup-skipped: unproven or changed fallback IPC retained")
             except OSError:
-                continue
+                pass
     finally:
         try:
             os.close(base_fd)

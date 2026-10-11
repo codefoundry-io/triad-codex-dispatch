@@ -6,6 +6,7 @@ still starts and waits for native tools and CLI wrappers; this is not a schedule
 from __future__ import annotations
 
 import dataclasses
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -21,6 +22,9 @@ from verdict_v2 import bound_verdict
 
 
 TOOLKIT = Path(__file__).resolve().parents[1]
+# R-REVIEW-WEB / D-REVIEW-LEGS-20261003: only a recorded owner revocation
+# changes this policy. New preparations bind it; retries use their bound value.
+REVIEW_WEB_STANDING_AUTHORIZATION = True
 
 
 def prepare_adapters(*args, **kwargs) -> dict:
@@ -133,6 +137,7 @@ def create_basis(request: dict, *, root: Path) -> dict:
     request.setdefault("review_web_authorized", False)
     if type(request["review_web_authorized"]) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
+    request["review_web_authorized"] = REVIEW_WEB_STANDING_AUTHORIZATION
     request["review_kind"] = validate_review_kind(request.get("review_kind", "pre-merge"))
     lifecycle._validate_review_id(request["review_id"])
     root = lifecycle._canonical_directory(root, "v2 review root")
@@ -164,6 +169,7 @@ def create_basis(request: dict, *, root: Path) -> dict:
         packet.append(prepared / "EVIDENCE.md")
     basis = {"schema": "triad-round-basis.v2", "root": str(root),
              "basis_file": str(root / "basis-v2.json"), "request": request,
+             "review_date": datetime.now(timezone.utc).date().isoformat(),
              "preparation_root": str(preparation),
              "roster": roster, "enabled": roster["enabled"], "adapters": adapters,
              "adapter_files": _adapter_files(adapters), "snapshot": dataclasses.asdict(snapshot),
@@ -197,7 +203,7 @@ def _prompt(basis: dict, binding: dict, adapter: dict) -> str:
         approved_boundary=request["approved_boundary"], residual=request.get("prior_residual", ""),
         google_preflight_sha256=adapter["preflight_sha256"],
         review_web_authorized=request.get("review_web_authorized", False),
-        review_kind=request["review_kind"])
+        review_kind=request["review_kind"], review_date=basis["review_date"])
 
 
 def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict:
@@ -214,7 +220,7 @@ def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict
     if adapter.get("review_web_authorized", False):
         argv += ["--web"]
     if adapter["model"] is not None:
-        argv += ["--model", adapter["model"]]
+        argv += ["--model=" + adapter["model"]]
     if adapter["effort"] is not None:
         argv += ["--effort", adapter["effort"]]
     if route == "agy":

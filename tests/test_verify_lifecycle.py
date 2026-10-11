@@ -99,7 +99,7 @@ def test_failed_report_retention_preserves_synthetic_evidence(catalog_only_vendo
     for path in preserved:
         if path.name.startswith("triad-lifecycle-fixture-"):
             module.shutil.rmtree(path)
-    assert set(catalog_only_vendor.read_text().splitlines()) == {"--version", "models"}
+    assert set(catalog_only_vendor.read_text().splitlines()) == {"--version"}
 
 
 def test_lifecycle_test_does_not_need_host_codex_or_claude(catalog_only_vendor, monkeypatch):

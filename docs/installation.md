@@ -6,6 +6,46 @@ Choose **marketplace installation** or **local installation from Git**. Both
 install the same plugin and use the same runtime setup. Do not register both
 under the same marketplace name.
 
+## AGY review-profile setup (pending candidate)
+
+The current source candidate requires two explicitly provisioned AGY profiles
+for legacy/v2 formal review. After reviewing the packaged `bin/agents/` files,
+run from the selected toolkit root:
+
+
+U7 adds `excludeDefaultComponents: true` to both profiles and requires AGY>=1.2.1
+for read-only calls, including raw investigations (which use the research twin).
+Updating an older profile requires reviewing the two-file delta and explicitly
+running the same installer with `--replace`; dispatch never updates it.
+Global settings and legacy `.agybak`, lock and lease files are preserved without
+automatic healing/deletion. Requested web refuses a known URL-wide deny or
+malformed existing settings; it never edits them. Live1.3.3 evidence proves useful
+read/search/web and no file after a write request, not provider-denied execution.
+A pre-U7 crash may have left TRIAD deny entries in `settings.json` itself. Compare
+any leftover `.agybak` snapshot with current settings and manually reconcile only
+confirmed TRIAD residue, preserving later operator edits; do not blindly restore
+the whole backup. TRIAD performs no automatic recovery.
+
+```sh
+python3 bin/_agy_agent.py --install
+```
+
+This writes only `~/.gemini/config/agents/triad-codex-readonly-review.md` and
+`triad-codex-readonly-research.md`. It does not change permissions or Claude-host
+profiles. Identical files are left alone; changed files require review and an
+explicit `--replace`. Dispatch never installs them automatically. An upgrade
+that changes their source bytes requires explicit setup again. Removal is
+manual removal of these two B-owned files only, after confirming they are no
+longer used; bootstrap does not own them.
+
+Preflight binds name/path/SHA-256; missing or changed definitions refuse the
+review before inference. The no-web profile supplies native reads/searches;
+the authorized `--web` route selects the research twin. Model and effort remain
+CLI arguments. Profiles select tools but are not a sufficient permission
+boundary; existing plan/sandbox and result checks remain. Version/preflight success
+does not prove search capability; that requires a successful native search and
+read under the selected profile.
+
 ## Select the version
 
 The commands below select `main`, the current release line.
@@ -16,22 +56,26 @@ use route B and check out the full commit ID recorded in the release notes.
 ## Prerequisites
 
 Use your normal login terminal on macOS, Linux or WSL2. Install Git, Bash,
-Python 3.12+, Codex, Claude Code 2.1.280+ for the default Opus 5.5 route,
+Python 3.12+, Codex, Claude Code for the CLI-resolved `opus` review default,
 and at least one Google CLI:
 
 - AGY is preferred and required for personal Google Sign-In.
 - **Legacy Gemini CLI** means the `gemini` executable route, distinct from AGY.
-  It does not mean downgrading. Formal review requires Gemini CLI `>=0.34.0`,
+  It does not mean downgrading. Gemini CLI requires `>=0.63.0`; formal review also requires
   successful version/help/policy preflight and the existing Gemini Enterprise
   OAuth sign-in. AGY must be absent for the legacy selector to choose this route.
-  The v2 Pro default has separate version support checks; see the
+  All models and raw, legacy and v2 routes share the same version floor; see the
   [roster reference](../README.md#project-review-roster-check).
 
+The v2 Claude route requires Claude Code >=2.1.205 and checks its required controls
+before selection. This is the v2 preflight floor, not a new raw/legacy version gate.
+
 Claude Code [2.1.280 added Opus 5.5](https://github.com/anthropics/claude-code/releases/tag/v2.1.280).
-This release was checked with 2.1.282. The v2 adapter's older preflight-interface
-floor is separate from this model requirement; bootstrap checks binary presence,
-not model entitlement or effective runtime effort. Upgrade Claude Code before
-using the new default.
+That version-specific model requirement is separate from the current `opus`
+alias default, which does not attest a fixed runtime version. The v2 adapter
+checks its required CLI version and controls before selection; explicit model
+IDs remain caller choices on raw/v2 routes. Bootstrap checks binary presence,
+not model entitlement or effective runtime effort.
 
 Sign in using each vendor's native workflow (`codex login` for Codex). TRIAD does
 not configure accounts or copy credentials. On Linux/WSL2, install `bubblewrap`
@@ -130,8 +174,11 @@ permission rules and credentials. It does not sign in or install dependencies.
    the Legacy Gemini CLI authentication identifier remains `gemini-enterprise`.
    [Resolve the roster](../README.md#project-review-roster-check) before dispatch;
    a successful resolution is not proof of provider access. Gemini has no effort
-   flag. Default reviews do not use web; request web verification directly for
-   the specific round when needed.
+   flag. The public v2 source candidate binds the owner's standing web
+   authorization to every new round; omitted/false caller values do not revoke
+   it. An enabled native Codex leg must report `web_available: true`.
+   Legacy reviews remain no-web unless requested directly for that round.
+   This source change does not update an already installed revision.
 
 3. **Optional paths.** Default users do not need extra environment variables.
    If you choose `TRIAD_BOOTSTRAP_BIN_DIR` or `TRIAD_CLASSIFIER_EXTENSION`, use an
@@ -149,14 +196,18 @@ Settings references: [Codex configuration](https://learn.chatgpt.com/docs/config
 ### Gemini CLI 3.8 Flash setup
 
 Checked **2026-10-02**. For native Gemini CLI, request `gemini-3.8-flash`;
-AGY's `gemini-3.8-flash-high` is a separate selection slug. TRIAD's version floor
-for this model is **0.61.0**; upgrade through your existing CLI install method
-if needed. This verified setup guidance covers stable **0.61.0 or newer**;
-preview/nightly channels are outside its verified scope, separate from adapter
-version acceptance. Older supported v2 models retain their 0.60.0 floor: this is
-a model-specific requirement, not a blanket pin to the latest CLI. Version
+AGY's `gemini-3.8-flash-high` is a separate selection slug. As of the owner's
+2026-10-09 decision, TRIAD supports **Gemini CLI 0.63.0 or later** for every model
+and raw, legacy and v2 route. Upgrade through your existing install method if
+needed. This floor is independent of model-catalog membership. Preview/nightly
+runtime compatibility remains unverified; a 0.63.0 prerelease is below the floor.
+The historical model-specific floor is superseded. Version
 0.60.0 lacks the 3.8 alias and can remap strings ending in `flash` to an older
 model ([tagged routing source](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/models.ts#L230-L270)).
+
+The native settings guidance below was verified against v0.61.0 sources on
+2026-10-02; its settings and alias behavior still need verification on v0.63.0.
+It is historical configuration evidence, not proof of current runtime behavior.
 
 For a native interactive session, `gemini --model gemini-3.8-flash` requests
 the exact ID. The v0.61.0 built-in alias inherits **HIGH** generation configuration

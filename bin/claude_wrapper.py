@@ -6,7 +6,7 @@ effort, fallback-model, working-directory, timeout, schema, and debug controls.
 Provider-owned permission and trust settings are left to the native CLI for
 ordinary calls. The exact formally bound ``LegVerdict`` route adds native
 ``--permission-mode plan`` and fails before provider resolution unless it uses
-``claude-opus-5-5`` with ``xhigh`` effort, a 1,200-second timeout, and no fallback model.
+``opus`` with ``xhigh`` effort, a 1,200-second timeout, and no fallback model.
 
 Stdout is the final answer text from envelope `.result` (or, with
 ``--pydantic``, the validated JSON object). Stderr is wrapper logging and
@@ -35,7 +35,7 @@ from _common import (
 
 
 EFFORT_CHOICES = ("low", "medium", "high", "xhigh", "max")
-FORMAL_CLAUDE_MODEL = "claude-opus-5-5"
+FORMAL_CLAUDE_MODEL = "opus"
 FORMAL_CLAUDE_EFFORT = "xhigh"
 FORMAL_CLAUDE_TIMEOUT = 1200
 
@@ -168,10 +168,7 @@ def _run_native_structured_once(
         result.final_answer = ""
     elif extraction_error is not None:
         result.extraction_error = extraction_error
-        classification = _common.classify(
-            "claude", extraction_error, "", _common.EXIT_CLI_FAIL,
-            vendor_exit_code=result.vendor_exit_code,
-        )
+        classification = _common.classify_extraction("claude", result, extraction_error)
         if classification == "unknown":
             classification = "extraction-error"
         result.classification = classification
@@ -285,6 +282,9 @@ def main() -> int:
     )
     p.add_argument("--web", action="store_true", help="Explicit owner-authorized native web verification")
     args = p.parse_args()
+    if args.model is not None and not isinstance(args.model, str):
+        log("model argument was not preserved as a string; refusing dispatch")
+        return EXIT_ARG_ERROR
 
     process_cwd = None
     try:
@@ -375,7 +375,7 @@ def main() -> int:
         or args.fallback_model is not None
     ):
         log(
-            "formal Claude route requires --model claude-opus-5-5 --effort xhigh "
+            "formal Claude route requires --model opus --effort xhigh "
             "--timeout 1200 and forbids --fallback-model"
         )
         return EXIT_ARG_ERROR

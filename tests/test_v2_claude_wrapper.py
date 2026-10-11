@@ -145,3 +145,12 @@ def test_failed_provider_cannot_become_success_from_valid_structured_output(invo
     assert rc != 0 and stdout == "" and len(calls) == 1
     assert records[-1]["vendor_exit_code"] == 1
     assert records[-1]["transport"]["attempt"] == 2
+
+
+@pytest.mark.parametrize("model", ["claude-opus-5-5", "claude-opus-4-6"])
+def test_v2_explicit_model_id_is_not_replaced_by_alias_default(invoke, model):
+    rc, _, _, calls, _, _ = invoke(replace={"--model": model})
+    assert rc == 0
+    cmd = calls[0][1]
+    assert cmd[cmd.index("--model") + 1] == model
+    assert "--agent" not in cmd

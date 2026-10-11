@@ -1,0 +1,315 @@
+# Whole-system audit: prompts, implementation, specification and agent workload
+
+Date: 2026-10-11. Owner-requested audit and subsequent authorized corrections are
+complete for the selected scope. Merge, installation and release remain separate.
+
+## Closing assessment
+
+| Owner question | Current conclusion |
+|---|---|
+| Are prompts minimal and AI used only where needed? | The functional Claude read/search conflict was corrected and all four decision scenarios pass. Code retains argv, schema, six bindings, agreement and exact cleanup; AI handles review judgment and observed-failure diagnosis. No further wording or optional helper rewrite is selected. |
+| Does source implement the specification without omissions? | Selected corrections and cumulative integration passed verification/review. This is not full conformance certification: the explicitly unmeasured and held boundaries below remain qualified. |
+| Does the specification contain errors? | The identified case, timing, tool, status and source-map conflicts were reconciled in shared e8c90b8. All 57 cases, 137 DL rows and PR12's 30 A evidence cells were preserved. Claude's new-contract verification remains its host's work. |
+| Must the main agent create/read unnecessary documents? | The 121,981-byte active SoT was shortened, then retired with its temporary startup hook/routing at task completion. History remains available on demand. Generated review artifacts are not eight manually authored documents; routine successful-read auditing is not required. |
+
+Completed corrections: [F1: print-timeout admission](../superpowers/plans/2026-10-11-agy-print-timeout.md),
+[F2: exact legacy ownership](../superpowers/plans/2026-10-11-legacy-agent-ownership.md),
+[F3: available Claude search](../superpowers/plans/2026-10-11-claude-read-search.md),
+and [shared reconciliation](../superpowers/plans/2026-10-11-shared-fact-reconciliation.md).
+The cumulative production delta from base632f426 is 1,200 added / 1,544 removed
+lines across 19 files (net -344); most added lines are tests and retained evidence.
+This count is not a measured runtime/token saving.
+
+Verification: F3's final dedicated GREEN passed 184 focused and 2,447 full tests,
+with 4 skips, plus four skill validators. Comparison of 340 stored file hashes
+and newly tracked files confirms unchanged runtime, skill entrypoints, prompt
+payloads, contracts and tests. Later changes are public setup/selection descriptions
+and administrative evidence/retirement prose. Shared authoring1/1 and186 tests
+pass. Broad tests were not repeated for those prose-only changes.
+
+Final combined review `triad-spec-integration-20261011-r2` ended
+ALL_SELECTED_APPROVED / ROUND_INTEGRITY_OK: fresh Sol/xhigh, Astra/high and
+Google Pro/high all SAFE, under the owner's observed-Claude-limit alternative.
+This is not fixed workspace four-leg ledger admission. All producers reached
+terminal state before exact temporary cleanup; durable evidence is retained at
+workspace `_runs/reviews/triad-spec-integration-20261011-r2`. R1 remains preserved.
+Its AGY project prerequisite and Claude effort-assurance documentation findings
+were corrected once and included in the complete fresh R2.
+
+Two nonblocking observations are deliberately unselected:
+
+- Raw/custom-schema Gemini transport can record `cli_version: null` even after
+  a successful version probe (`bin/gemini_wrapper.py:477`). The >=0.63 floor still
+  executes and formal preparation/runtime receipt separation is unchanged. This
+  is diagnostic precision, not evidence of unsupported answer admission.
+- `load_receipt` rereads a small preflight file for hashing and verifies logical
+  equality (`bin/google_preflight_v2.py:90-93`). No correctness failure or material
+  cost was shown; changing `load_preflight`'s return type also affects another
+  consumer. The optional refactor creates no automatic follow-up task.
+
+U6b/U9 remain held. U8, environment/effort overrides and unused Claude-agent
+resolver work remain withdrawn. The intermediate-hashing proposal is unanswered
+and unselected; current checks are unchanged. AGY credit channel/event/exit,
+full C37/C43 mappings, DL90/98 guarantees, unbound submodules, exit-zero Git
+warning impact, Ubuntu/service coverage and fresh installed exposure remain
+qualified as detailed below. No broader completeness claim follows from SAFE.
+
+Handoff: [Codex draft PR40](https://github.com/codefoundry-io/triad-codex-dispatch/pull/40)
+and [shared draft PR13](https://github.com/codefoundry-io/triad-dispatch-spec/pull/13).
+PR12 remains A-owned. The [completed SoT](../status/spec-to-code-sot.md) records
+retirement; evidence is historical and no longer mandatory startup reading.
+
+## Original audit result — historical basis
+
+The core responsibility split is sound, but the system is not fully conformant.
+Two implementation defects were reproduced without a provider call, and a shared
+Claude prompt contradicts the documented tools of the default external route.
+The main recurring context cost is the development SoT, not eight manually
+authored documents per review: most review artifacts are generated by code.
+
+| Owner question | Conclusion |
+|---|---|
+| Are prompts minimal and AI used only where needed? | Mostly appropriate division. One functional Claude instruction conflict needs correction; manual native-binding copying and duplicated status prose can be reduced. No evidence justifies wholesale prompt rewriting. |
+| Does all source implement the specification without omissions? | No: the existing AGY print-timeout contract is missing from result admission. Legacy install cleanup also violates the documented owner-edit preservation contract. Other unverified/pending areas remain explicitly qualified below. |
+| Does the specification contain errors? | Yes: one tool contradiction, obsolete C6 mechanism, incomplete C43 input domain, competing final-collection guidance, and stale host status/source mappings. Main and two open drafts need reconciliation. |
+| Must the main agent create/read unnecessary documents? | Yes for repeated full-history startup reading and duplicate progress narration. No general requirement was found to create a new research/spec/checkpoint document for every correction or audit successful read logs. |
+
+## Basis and method
+
+- Codex source B: `e3593a76752fc3ea679de5ab756ee433c93998f1` in this checkout.
+- Common specification S: PR13 `69983bb4cc3836fd07958a1aaf0f52f5fe61569e`;
+  freshly fetched main `3afc4d7e931e55d601dd74877bdbe65e610a8e59`.
+- PR12: `d805b50d9824e0e18435d902bc48bf2732480554`. PR12 and PR13 are both
+  **OPEN**, not merged or adopted. Their merge base is the recorded main; neither
+  current draft includes the other's complete changes. Last PR13 comment at
+  inspection was `6104953702`.
+- Claude source A, read-only comparison: `1de943af4436b3eca2aea903d05c223c8d56f92d`.
+  Its native implementation was not a port or modification target.
+- Six fresh native investigations: lifecycle Astra/high; prompts Sol/xhigh;
+  wrappers, shared spec, document burden and repair/install Sol/high. One separate
+  Google Pro/high investigation completed via AGY in 122.1 seconds, vendor and
+  wrapper exit0. Requested model settings are recorded; hidden native runtime
+  settings remain UNEXPOSED. The observed Claude usage limit remains in force;
+  no quota-check call was purchased.
+- Reviewed production/module inventory, governing prompt/contract surfaces,
+  all 32 common rule anchors, 57 canonical cases across 12 units, 21 contract
+  files and 33 shared prompt clauses. Related tests were inspected selectively.
+  This is whole-system scope, not a claim that every test literal or every
+  historical document was line-reviewed.
+- Prompt text used `skill-prompt-review`; its linter inspected 17 explicit
+  files. Linter exit1 reports candidates, not 17 failed prompts. Concrete
+  identifiers, version floors and meaningful scope constraints were retained.
+- Pre/post investigation fingerprints matched for B, S and A. B's original
+  seven unrelated untracked files were preserved. Only this audit's reports and
+  subsequent evidence/status documentation are authorized writes.
+
+Task-local evidence is under workspace
+`_runs/infra/20261011-whole-system-audit/`: `before-inventory.json`,
+`after-read-inventory.json`, `after-read-delta.json`, the six domain reports,
+`prompt-lint.txt`, `google-result.txt`, `wrappers-probes/`, and
+`repair-install-probe/`. These are diagnosis evidence, not startup reading.
+
+## Required corrections
+
+### F1 — High: an AGY print timeout can be admitted as a completed answer
+
+**Scenario.** AGY emits its measured own stderr line
+`[agy] print timeout after <duration> with turn in progress; returning partial output`,
+then exits0 with a SUCCESS event containing partial text or schema-valid output.
+
+**Expected.** The existing S R-CLASSIFY / C43 / DL-62 and
+`contracts/vendor-failure-lines.json:23-26` require `timeout`/2 at any vendor exit,
+withholding the answer. This is an already observed carrier, not a guessed error.
+
+**Actual.** B `bin/antigravity_wrapper.py:329-340` checks the outer timeout but
+does not recognize the vendor print-timeout line. Its main path explicitly runs
+with `classify_and_log=False` (`:813`) before `_interpret_run` (`:836`), so the
+later schema/raw success branches (`:405-480`) can admit it. A's current
+`3rd-Agent/wrappers/antigravity_wrapper.py:_is_vendor_print_timeout` already
+handles the measured carrier; its implementation is evidence, not the rule.
+
+**Reproduction.** Current-source provider-free fixtures returned `ok`/0 and an
+answer for both raw and schema-valid own-line inputs, where 2 was expected.
+Quoted-line and lookalike controls stayed successful. The structured result was
+locally validated, showing why schema validity alone does not establish completion.
+See `wrappers-probes/result.json` and `wrappers.md` for exact calls and limits.
+This reproduces an admission defect; it is not a newly induced live vendor timeout.
+
+**Minimum next change.** Add the measured own-line timeout decision to existing
+AGY result admission, preserving authentication precedence, original evidence,
+and negative controls. Expand existing C43's input description to honor each
+row's carrier/exit conditions: its current universal exit1 wording misses the
+already specified exit0 case. No new token, retry loop or classification campaign.
+
+### F2 — High: legacy cleanup can delete an owner-edited agent
+
+**Scenario.** An operator edits an old managed repair-agent TOML while retaining
+its generated header. Later TRIAD removal targets that legacy file.
+
+**Expected.** `README.md:853-859` and `SECURITY.md:312-319` promise exact managed
+content matching and preservation of edited/foreign files.
+
+**Actual.** `bin/bootstrap_repair.py:677-690` establishes legacy-agent ownership
+from substrings in the first five lines, independent of the remaining content.
+`remove_managed_artifact` (`:694-717`) deletes the accepted file. The same
+predicate is used by installation quarantine. Inode/race protection does not
+correct an overly broad initial ownership decision.
+
+**Reproduction.** In an isolated temporary directory, a recognized header
+control was removed, the same control with an appended owner model edit was
+also removed, and a foreign control was preserved. Only the helper was invoked;
+no actual installation or user file was touched. Fixtures and their owned
+temporary directory were removed after terminal completion.
+
+**Minimum next change.** Match supported complete historical payloads or their
+bounded exact representation and preserve nonmatching edits. Add retained-header
+owner-edit controls for both removal and quarantine. Preserve existing genuine
+legacy migration, no-clobber and race protections. This is the existing ownership
+contract, not the withdrawn U8 installation-coexistence project.
+
+### F3 — Medium: the Claude prompt forbids the default route's search mechanism
+
+**Scenario.** A related unchanged consumer is not named in the diff and must be
+discovered by the external Claude CLI reviewer.
+
+**Conflict.** S `prompts/leg-claude.md:22` and B's identical vendored
+`prompts/review-v2/leg-claude.md:22` allow Read/Grep/Glob but prohibit commands.
+S R-AGENT-ROLES and `decisions/2026-10-09-leg-agent-scope.md:50-58` instead
+record the default external route's Read/Bash tools and successful `rg` discovery
+without dedicated Grep/Glob. B's renderer consumes this clause unchanged
+(`bin/review_prompts_v2.py:101-126`). A's native tool set is a different route.
+
+Two independent native readers confirmed the contradiction. No live Claude
+behavior failure or current-version tool census was rerun during this audit;
+the capability evidence is the checked-in bounded observation.
+
+**Minimum next change.** Clarify the shared clause for the external route to
+permit read-only shell search/inspection within the authorized scope. Preserve
+the prohibition on executing candidate code/tests/builds and modifying state.
+Re-vendor that clause, then use one changed-API/unnamed-consumer scenario and a
+named-file control if a choice probe is needed. Do not add a Claude agent profile,
+resolver, preselected related-file list or routine read-by-read audit.
+
+## Specification reconciliation
+
+These corrections do not imply additional host mechanisms or that an
+unimplemented Claude amendment is a defect while that host implements it.
+
+| Record | Concrete inconsistency | Bounded disposition |
+|---|---|---|
+| C6 (`cases/cases.json:66-74`) | Canonical input/expected still require a settings-restore failure; both hosts now mark that transaction inapplicable, and current policy preserves global settings. | Keep ID/history and explicitly supersede the old mechanism; use existing U7/C68/C72 outcome references. Do not rebuild a restore transaction. |
+| C43 / DL-62 | Input says vendor exit1; measured print-timeout row and R-CLASSIFY require any exit, including0. | Extend the existing case's domain and evidence with F1. DL-102 turn timeout/truncation is a separate carrier. |
+| R-AGREE (`reference/review-rules.md:46-54`) | An extra collection is suggested while an old direct attempt may still run; newer R-TERMINAL requires completion before final admission. | Make interim AGREED unusable until direct invocations and TRIAD-owned writers finish, then collect/verify finally. No wait for vendor-only descendants or added poll loop. |
+| `units.json:56,75` | B web still described as per-request false and AGY as a settings transaction. | Align current-fact cells with standing web authorization and profile-only read-only settings checks. |
+| R-PREPARE date annotation (`reference/review-rules.md:1118-1119`) and DL-46 | B date binding described as open despite `review_round_v2.py:172,177` binding the date. | Correct status and retain historical evidence; no new runtime work. |
+| Main / PR12 / PR13 | PR12's current A facts and PR13's later B/common replacements overlap but are not integrated. | Reconcile both drafts before merge/adoption; retain host ownership and later replacement decisions. |
+
+The old schema-repair mapping and three capacity-retry troubleshooting phrases
+are stale descriptions already superseded by the explicit one-call contract.
+They warrant opportunistic factual cleanup, not restoring retries or another
+wording-review cycle. Historical facts with explicit old commits are not
+automatically current implementation claims.
+
+## AI, code and document workload
+
+| Responsibility | Keep with | Audit judgment |
+|---|---|---|
+| Objective, review points, relevant-code discovery, impact and uncertainty | Owner/leader/reviewer AI | Semantic decisions; do not force a leader-authored related-file list. |
+| Actual failure diagnosis, source research and classifier proposal | Repair AI | Appropriate conditional use; no invented failure campaign or automatic settings mutation. |
+| Roster, argv, schema, six bindings, all-selected agreement, exact own cleanup | Code | Already centralized. Keep these checks; vendor CLIs cannot decide TRIAD's cross-leg agreement. |
+| Native accepted handle/status and exposed runtime fields | Leader observing host tools | Necessary observations; hidden fields remain unexposed. |
+| Copying six allocation bindings into a native receipt | Existing recorder/helper | Optional simplification: the recorder already loads the allocation. Preserve identity validation; do not ask AI to judge equality. |
+| Detailed per-unit outcome and live progress | Unit evidence plus one short live pointer | Eliminate duplicate narratives rather than add another tracker. |
+
+At the audited basis, the mandatory spec-to-code startup set is **5 files /
+133,862 UTF-8 bytes / 1,909 lines**. The SoT alone is **121,981 bytes / 1,730
+lines**, 91.1% of the set. Its completed-history and retrospective regions total
+**100,598 bytes (82.5%)**. This is a measured file obligation, not an exact token
+or observed latency measurement. Conditional reference corpus is not added to
+the per-startup total.
+
+The task hook emits the full SoT with a 3,500-token allowance; H AGENTS and the
+recorded fallback still require the full file. The reader therefore receives
+current rules alongside old round instructions, including superseded read-audit
+guidance. Historical/current precedence exists, but repeated reconciliation is
+avoidable. The latest completed unit is also narrated in its plan and the SoT.
+
+Recommended document change: keep the existing SoT as the short current entry
+(owner constraints, stage, pending decision, next action, completion checklist
+and links); retain completed detail outside mandatory startup reading. Use one
+live summary and existing unit evidence. Keep the task hook until whole-task
+completion, then remove the already authorized exact hook/temp routing. No new
+database, schema, automation or global trust change is needed.
+
+One v2 attempt's eight fixed toolkit artifacts are **not eight leader-authored
+documents**. TASK/current objective and actual host observations are meaningful
+inputs; prompt/binding/seal/terminal files are largely generated. EVIDENCE and
+source-read observations are optional. Success-log read auditing is not required.
+The installed user's flow does not inherit this development SoT or source RED/GREEN
+process. These distinctions prevent counting the whole documentation corpus as
+mandatory runtime cost.
+
+## Coverage and unresolved limits
+
+| Source surface | Investigation and result |
+|---|---|
+| All 20 top-level `bin/*.py` modules | Assigned across lifecycle, wrappers, prompt and repair/install readers; related consumers and governing contracts traced. The large legacy `review_round.py` was inspected by functional sections, not certified line-by-line. |
+| `scripts/bootstrap.sh`, `scripts/verify_distribution.py`, skill lifecycle script; manifests/data/policies | Install/distribution/ownership and supported runtime inspected; F2. Archive equality verifier hashes a declared subset, not every shipped file. |
+| Four skills, six review references, five prompt payloads, two AGY profiles | Fresh text/criteria review and linter; F3. No mass wording rewrite justified. |
+| 32 anchors / 57 cases / 12 units / 21 contracts / 33 clauses | Complete common-spec inventory and group map in `spec.md`; this is consistency/traceability coverage, not 57 fresh passing host cases. |
+| Tests and runtime evidence | Two targeted provider-free defect reproductions with controls, plus a bounded metadata timing fixture. The earlier 2369-passed/4-skipped full suite is retained historical unit evidence, not rerun or upgraded to complete conformance here. |
+
+Still unclosed or qualified:
+
+- Full C37 authentication and C43 per-CLI mappings are not declared complete by
+  this audit. Known remaining DL-86/92 work is not a new speculative campaign;
+  the unmeasured AGY credit-output location remains unmeasured.
+- DL-90/98's classifier/extractor exception and terminal-record guarantees are
+  not fully covered by current outer handling. This is a source-traced remaining
+  contract gap, not a reproduced crash or live vendor incident in this audit.
+  Reconcile the promise with the newer best-effort diagnostic boundary before
+  selecting any correction; no new exception framework or failure campaign follows.
+- C69/U6b declaration/evidence cleanup and U9 expansion remain on hold. Existing
+  exact ownership cleanup remains valuable; no larger framework was justified.
+- A supported guarded review of unbound submodule content is not fully covered
+  by the top-level Git fingerprint. Repeated hashing cannot fix missing coverage.
+  This conditional boundary needs an explicit support decision before a new
+  recursive mechanism. No submodule incident was reproduced here.
+- Exit0 Git enumeration warnings are discarded by `_git`; current-host
+  unreadable-directory impact was not reproduced. Keep it a candidate, not a
+  proven incident or a blanket stderr-refusal requirement.
+- Repeated intermediate tree hashing is the existing pending owner tradeoff:
+  initial/final checks may reduce work but discover drift after an extra paid
+  call. No timing policy was changed or performance saving measured.
+- A fake metadata executable with a short-lived stdout holder delayed PIPE
+  version collection (1.454s vs file snapshot 0.051s); the 1s Gemini deadline
+  still terminated at1.006s. The proposed unbounded-timeout defect was rejected.
+- Rendered prompts end with residual/schema data after their closing clause.
+  This is a minor structural suggestion with no observed wrong decision. No
+  additional wording round is scheduled from it.
+- Ubuntu/service matrices, fresh installed-skill exposure, all vendor error
+  carriers and universal provider permission enforcement were not tested.
+
+Google independently identified date-status drift. Its proposed native Codex
+CLI web flag was rejected: native spawning has its own exposed tool arguments,
+and the rendered prompt plus declared capability carries the web condition.
+Its optional Claude-agent speculation was excluded by the recorded withdrawal.
+Its broad claims of complete conformance/no document burden exceeded inspected
+evidence and do not override the reproduced defects or startup measurement.
+An audit result is evidence to adjudicate, not authority by vote.
+
+## Recommended execution order
+
+1. Correct C43's domain/evidence and implement F1 with observed-line controls.
+2. Correct F2 under the existing owner-file preservation contract; prove exact
+   historical positives and edited-file negatives in isolated fixtures.
+3. Clarify/vend F3 and verify the read-only search decision once if needed.
+4. Reconcile the bounded shared-spec status/case conflicts and both open drafts.
+5. Shorten the existing live SoT while preserving history and completion cleanup.
+6. Decide repeated-tree checks and optional receipt-copy simplification only
+   with their concrete tradeoffs. They are not prerequisites for fixes1-3.
+
+Each implemented behavioral unit still uses its applicable tests and independent
+review. This audit supplies diagnosis and priorities, not their GREEN proof or
+permission to merge, install, publish a release, change native legs, or revive
+withdrawn Claude-agent/effort/U8 work.

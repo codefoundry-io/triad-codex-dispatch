@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Single-shot AGY wrapper using the 1.1.20 headless plan-mode contract.
+"""AGY dispatch with explicit native-tool profiles for read-only calls.
 
-The wrapper forwards one prompt through ``stream-json``, admits only the
-terminal ``result`` event, and validates contracted output locally. Formal
-plan-mode calls pass the review-bound native finish schema, admit terminal
-``structured_output``, and repeat local verdict binding. Explicit project calls
-validate owner-provisioned read-only permissions without a global lease. Other
-calls retain the transient global-settings transaction. Formal preflight and
-dispatch default to six denies and omit headless adaptation; raw calls retain the
-version-gated adaptation.
+No path writes or locks machine settings. Optional project permissions and
+requested-web conflicts are checked read-only; formal results retain bindings.
+Formal plan-mode calls pass the review-bound native finish schema, admit terminal
+structured_output, and repeat strict local verdict validation.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -24,11 +21,13 @@ from typing import Any
 
 import _common
 import _agy_settings
+import _agy_agent
 import review_round
 from _common import load_pydantic_class, validate_response
 
 
 AGY_VERSION_FLOOR = (1, 1, 20)
+READONLY_AGY_VERSION_FLOOR = (1, 2, 1)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
@@ -36,6 +35,7 @@ FORMAL_AGY_MODEL = "gemini-3.1-pro-high"
 FORMAL_AGY_EFFORT = "high"
 FORMAL_AGY_TIMEOUT = 600
 _WEB_EVIDENCE_PATH = Path(__file__).resolve().parents[1] / "prompts" / "investigation.md"
+# Compatibility subset; the shared builder owns the complete effective set.
 FORMAL_AGY_ENV_REMOVE = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
@@ -69,7 +69,7 @@ def _probe_agy_version(agy_bin: str) -> tuple[int, int, int] | None:
             capture_output=True,
             text=True,
             timeout=15,
-            env=_common.scrubbed_child_env(),
+            env=_common.scrubbed_child_env(cli="antigravity"),
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -79,34 +79,12 @@ def _probe_agy_version(agy_bin: str) -> tuple[int, int, int] | None:
     return _parse_agy_version(result.stdout)
 
 
-def _probe_agy_models(agy_bin: str) -> set[str] | None:
-    try:
-        result = subprocess.run(
-            [agy_bin, "models"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=_common.scrubbed_child_env(remove=FORMAL_AGY_ENV_REMOVE),
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
-        return None
-    models: set[str] = set()
-    for line in result.stdout.splitlines():
-        slug, separator, label = line.partition("\t")
-        if separator and slug and label:
-            models.add(slug)
-    return models
-
-
 def _route_args(
     model: str | None, effort: str | None, project: str | None = None
 ) -> list[str]:
     args: list[str] = []
     if model:
-        args += ["--model", model]
+        args += ["--model=" + model] if model.startswith("-") else ["--model", model]
     if effort:
         args += ["--effort", effort]
     if project is not None:
@@ -132,6 +110,7 @@ def _build_cmd(
     skip_permissions: bool = True,
     project: str | None = None,
     add_dirs: tuple[str, ...] = (),
+    agent: str | None = None,
 ) -> list[str]:
     print_timeout = max(timeout - OFFSET_S, MIN_PRINT_TIMEOUT_S)
     cmd = [agy_bin]
@@ -151,6 +130,8 @@ def _build_cmd(
         cmd += ["--mode", "plan", "--sandbox"]
     for directory in add_dirs:
         cmd += ["--add-dir", directory]
+    if agent is not None:
+        cmd += ["--agent", agent]
     return cmd + _route_args(model, effort, project)
 
 
@@ -211,6 +192,74 @@ def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) 
     return {"done_view_file_event_count": count, "relative_paths": paths} if count else None
 
 
+def _agy_step_denied(step: dict[str, Any]) -> bool:
+    """Measured denial heads are separate from structured finish recovery."""
+    info = step.get("tool_info")
+    error = info.get("error") if isinstance(info, dict) else None
+    message = error.get("message") if isinstance(error, dict) else None
+    if step.get("state") != "ERROR" or not isinstance(message, str):
+        return False
+    first = next((line.strip().casefold() for line in message.splitlines() if line.strip()), "")
+    if first.startswith(("tool call denied by pre-tool hook", "user denied permission")):
+        return True
+    if first.startswith("permission check failed for ") and '": ' in first:
+        return first.rsplit('": ', 1)[-1].startswith(("user denied permission", "permission denied for"))
+    return False
+
+
+def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
+    """Only ERROR recovery needs tool outcomes; normal success has no census."""
+    results = [pos for pos, event in enumerate(events) if event.get("event") == "result"]
+    if len(results) != 1:
+        return False
+    updates = [(pos, event["step_update"]) for pos, event in enumerate(events)
+               if event.get("event") == "step_update" and isinstance(event.get("step_update"), dict)]
+    if any(pos > results[0] for pos, _ in updates):
+        return False
+    reads = {"view_file", "grep_search", "list_dir", "find_by_name"}
+    if web:
+        reads.update(("read_url_content", "search_web"))
+    tools = []
+    last_success = last_error = -1
+    for pos, step in updates:
+        info = step.get("tool_info")
+        info = info if isinstance(info, dict) else {}
+        state, kind = step.get("state"), step.get("step_type")
+        error = bool(info.get("error"))
+        if kind == "finish" and state == "DONE" and not error:
+            last_success = pos
+        elif kind != "tool" and (state == "ERROR" or error):
+            return False
+        if kind != "tool":
+            continue
+        names = {name for name in (step.get("tool_name"), info.get("name"))
+                 if isinstance(name, str) and name}
+        if not names:
+            return False
+        index = step.get("step_index")
+        index = index if isinstance(index, int) and not isinstance(index, bool) else None
+        tools.append((pos, step, names, index, error))
+    terminal = {(index, name): pos for pos, step, names, index, _ in tools
+                if index is not None and step.get("state") in ("DONE", "ERROR") for name in names}
+    read_succeeded = False
+    for pos, step, names, index, error in tools:
+        state = step.get("state")
+        if state == "ACTIVE" and index is not None and all(
+                terminal.get((index, name), -1) > pos for name in names):
+            continue
+        if state not in ("DONE", "ERROR"):
+            return False
+        if names - reads - {"finish"}:
+            if _agy_step_denied(step):
+                continue
+            return False
+        if "finish" in names and (state == "ERROR" or error):
+            last_error = pos
+        if names <= reads and state == "DONE" and not error:
+            read_succeeded = True
+    return read_succeeded and last_error >= 0 and last_success > last_error
+
+
 def _terminal_error_suffix(result: dict[str, Any] | None) -> str:
     error = result.get("error") if result is not None else None
     if isinstance(error, str):
@@ -254,6 +303,7 @@ def _interpret_run(
     expected_family: str | None = None,
     expected_content_digest: str | None = None,
     plan_mode: bool = False,
+    web: bool = False,
 ) -> _common.RunResult:
     """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
@@ -275,13 +325,31 @@ def _interpret_run(
             ):
                 route_conflict = exposed_model
     run.runtime_identity = route_conflict or exposed_model or run.runtime_identity
+    status = result.get("status") if isinstance(result, dict) else None
+    if _common._auth_carrier_stop("antigravity", run.stderr, run.stdout, run.vendor_exit_code):
+        return _fail(run, "oauth-env", _common.EXIT_TERMINAL,
+                     "provider authentication failed" + _terminal_error_suffix(result))
     if run.exit_code == _common.EXIT_TIMEOUT:
         return _fail(run, "timeout", _common.EXIT_TIMEOUT, "provider timed out")
     if run._stdin_delivery_failed or run._output_transport_failed:
         run.dispatch_phase = "post-dispatch-result"
         return run
+    if _common.agy_print_timed_out(run.stderr):
+        return _fail(run, "timeout", _common.EXIT_TIMEOUT,
+                     "AGY print timed out; partial output withheld")
 
-    status = result.get("status") if isinstance(result, dict) else None
+    terminal_error = result.get("error") if isinstance(result, dict) else None
+    if (
+        run.vendor_exit_code == 1
+        and status == "ERROR"
+        and result.get("response") == ""
+        and isinstance(terminal_error, str)
+        and re.match(r"^timeout waiting for response\b", terminal_error)
+    ):
+        return _fail(
+            run, "vendor-timeout", _common.EXIT_TERMINAL,
+            "AGY turn timed out" + _terminal_error_suffix(result),
+        )
 
     if run.vendor_exit_code != 0:
         detail = "\n".join(
@@ -293,6 +361,7 @@ def _interpret_run(
             stdout="",
             exit_code=_common.EXIT_CLI_FAIL,
             vendor_exit_code=run.vendor_exit_code,
+            agy_result=result,
         )
         return _fail(
             run,
@@ -318,7 +387,11 @@ def _interpret_run(
         and isinstance(result.get("response"), str)
         and bool(result["response"].strip())
     )
-    if status != "SUCCESS" and not denied_post_completion:
+    resubmitted = (
+        plan_mode and pydantic_cls is not None and status == "ERROR"
+        and not denied_post_completion and _agy_finish_resubmitted(events, web=web)
+    )
+    if status != "SUCCESS" and not denied_post_completion and not resubmitted:
         return _fail(
             run,
             "vendor-error",
@@ -396,6 +469,12 @@ def _interpret_run(
                 _common.EXIT_CLI_FAIL,
                 "terminal result has no non-empty response",
             )
+        if any(re.fullmatch(r"[ \t]*<truncated \d+ (?:bytes|lines)>[ \t]*", line)
+               for line in response.splitlines()):
+            return _fail(
+                run, "truncated-answer", _common.EXIT_TERMINAL,
+                "AGY folded the raw answer (own-line truncation marker)",
+            )
         run.final_answer = response.rstrip()
 
     run.exit_code = _common.EXIT_OK
@@ -444,6 +523,9 @@ def main() -> int:
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+    if args.model is not None and not isinstance(args.model, str):
+        _common.log("model argument was not preserved as a string; refusing dispatch")
+        return _common.EXIT_ARG_ERROR
 
     process_cwd = None
     try:
@@ -574,6 +656,15 @@ def main() -> int:
         return _common.EXIT_ARG_ERROR
     selector_receipt = None
     v2_fields = None
+    agent_control = {}
+    readonly = args.sandbox == "read-only"
+    profile_web = args.web if selected_context else True
+    if readonly:
+        try:
+            agent_control = _agy_agent.controls(profile_web)
+        except (ValueError, OSError) as exc:
+            _common.log(f"AGY config-conflict: {exc}")
+            return _common.EXIT_TERMINAL
     if args.google_selector_receipt is not None:
         try:
             selector_receipt = review_round.load_google_selector_receipt(
@@ -613,6 +704,15 @@ def main() -> int:
             _common.log(f"Google selector receipt rejected: {exc}")
             return _common.EXIT_ARG_ERROR
 
+    if formal_bindings:
+        try:
+            record = json.loads(args.google_preflight_receipt.read_bytes())
+            if not isinstance(record, dict) or any(record.get(key) != value for key, value in agent_control.items()):
+                raise ValueError("profile differs from bound preflight")
+        except (ValueError, OSError) as exc:
+            _common.log(f"AGY config-conflict: {exc}")
+            return _common.EXIT_TERMINAL
+
     if args.preflight_only and not v2_verdict and (
         args.model not in (FORMAL_AGY_MODEL, "gemini-3.8-flash-high") or args.effort != FORMAL_AGY_EFFORT
     ):
@@ -627,46 +727,31 @@ def main() -> int:
         else _common.require_binary("agy")
     )
     version = _probe_agy_version(agy_bin)
-    if version is None or version < AGY_VERSION_FLOOR:
+    floor = READONLY_AGY_VERSION_FLOOR if readonly else AGY_VERSION_FLOOR
+    if version is None or version < floor:
         found = _version_text(version) if version is not None else "unprobeable"
-        _common.log(f"agy {found} is below required {_version_text(AGY_VERSION_FLOOR)}")
+        _common.log(f"agy {found} is below required {_version_text(floor)}")
         return _common.EXIT_TERMINAL
 
-    if args.preflight_only:
-        advertised_models = _probe_agy_models(agy_bin)
-        if advertised_models is None:
-            _common.log("agy model catalog is unprobeable")
-            return _common.EXIT_TERMINAL
-        if args.model not in advertised_models:
-            _common.log(
-                f"agy model catalog does not advertise required model {args.model}"
-            )
-            return _common.EXIT_TERMINAL
-
-    deny_rules = (
-        _agy_settings.build_deny_rules(args.sandbox, formal_review=selected_context and not args.web)
-        if args.sandbox is not None else []
-    )
     if args.project is not None:
         settings_guard = _agy_settings.agy_project_guard(
             args.project, cwd, formal_review=selected_context and not args.web,
-            **({"require_web": True} if selected_context and args.web else {}),
+            require_web=args.web,
         )
     else:
-        try:
-            lock_timeout = float(os.environ.get("AGY_SETTINGS_LOCK_TIMEOUT", "30"))
-        except ValueError:
-            _common.log("AGY_SETTINGS_LOCK_TIMEOUT must be a number")
-            return _common.EXIT_ARG_ERROR
-        settings_guard = _agy_settings.agy_settings_guard(
-            deny_rules, lock_timeout=lock_timeout,
-            **({"require_web": True} if selected_context and args.web else {}),
-        )
+        settings_guard = contextlib.nullcontext()
+    try:
+        if args.web:
+            _agy_settings.check_web_settings()
+    except (ValueError, OSError) as exc:
+        _common.log(f"AGY settings/config conflict: {exc}")
+        return _common.EXIT_TERMINAL
 
     if args.preflight_only:
         try:
             with settings_guard:
-                pass
+                if _agy_agent.controls(profile_web) != agent_control:
+                    raise ValueError("AGY profile changed during preflight")
         except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
             _common.log(f"AGY settings/config conflict: {exc}")
             return _common.EXIT_TERMINAL
@@ -680,13 +765,14 @@ def main() -> int:
             "review_id": selector_receipt.review_id,
             "route": "agy",
             "route_args": _route_args(args.model, args.effort, args.project),
+            **agent_control,
             **({"review_web_authorized": True} if args.web else {}),
             **(v2_fields or {}),
         }
         sys.stdout.write(
             json.dumps(
                 receipt,
-                ensure_ascii=v2_verdict,
+                ensure_ascii=True,
                 sort_keys=True,
                 separators=(",", ":"),
             )
@@ -722,17 +808,20 @@ def main() -> int:
         timeout=args.timeout,
         json_schema=schema,
         sandbox=args.sandbox == "read-only",
-        skip_permissions=not selected_context and _agy_needs_skip_permissions(version),
+        skip_permissions=not readonly and _agy_needs_skip_permissions(version),
         project=args.project,
         add_dirs=tuple(args.add_dir),
+        agent=agent_control.get("agent"),
     )
     run_options: dict[str, Any] = {"classify_and_log": False}
     if formal_bindings:
         run_options["remove_env"] = FORMAL_AGY_ENV_REMOVE
     raw = None
-    release_failed = False
+    configuration_error = None
     try:
         with settings_guard:
+            if readonly and _agy_agent.controls(profile_web) != agent_control:
+                raise ValueError("AGY profile changed before dispatch")
             raw = _common._run_once(
                 "antigravity",
                 cmd,
@@ -740,11 +829,13 @@ def main() -> int:
                 args.timeout,
                 **run_options,
             )
+            if readonly and _agy_agent.controls(profile_web) != agent_control:
+                raise ValueError("AGY profile changed during dispatch")
     except (TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         _common.log(f"AGY settings/config conflict: {exc}")
         if raw is None:
             return _common.EXIT_TERMINAL
-        release_failed = True
+        configuration_error = str(exc)
     result = _interpret_run(
         raw,
         pydantic_cls,
@@ -753,13 +844,14 @@ def main() -> int:
         expected_family=args.expected_family,
         expected_content_digest=args.expected_content_digest,
         plan_mode=local_plan_response,
+        web=args.web,
     )
-    if release_failed:
+    if configuration_error is not None:
         if result.exit_code == _common.EXIT_OK:
             result = _fail(result, "config-conflict", _common.EXIT_TERMINAL,
-                           "AGY settings release failed after provider completion")
+                           f"AGY configuration failed after provider completion: {configuration_error}")
         else:
-            result.extraction_error = (result.extraction_error or "") + "; AGY settings release also failed"
+            result.extraction_error = (result.extraction_error or "") + f"; AGY configuration also failed: {configuration_error}"
         result.final_answer = ""
         result.validated = None
     result.transport = {**_common.transport_receipt("antigravity", result),

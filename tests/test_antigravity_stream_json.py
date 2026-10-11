@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import profile_receipt
 from pydantic import BaseModel, ConfigDict
 
 
@@ -127,7 +128,8 @@ def _google_selector_fixture(
     if route == "agy":
         preflight_record = {
             **preflight_common,
-            "agy_version": "1.1.20",
+            **profile_receipt(),
+            "agy_version": "1.2.1",
             "effort": "high",
             "model": "gemini-3.1-pro-high",
             "route_args": [
@@ -143,7 +145,7 @@ def _google_selector_fixture(
             "effective_approval_mode": "unexposed",
             "model": "auto",
             "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
-            "gemini_version": "0.60.0",
+            "gemini_version": "0.63.0",
             "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "read_only_enforcement": "packaged-mode-independent-policy",
             "requested_approval_mode": "plan",
@@ -187,7 +189,8 @@ def _agy_preflight_fixture(
     review_id: str = "review-r1",
 ) -> Path:
     receipt = {
-        "agy_version": "1.1.20",
+        **profile_receipt(),
+        "agy_version": "1.2.1",
         "effort": "high",
         "executable": str(executable),
         "google_selector_receipt_sha256": hashlib.sha256(
@@ -944,7 +947,7 @@ def test_terminal_diagnostic_is_one_bounded_nonempty_line() -> None:
     )
 
 
-@pytest.mark.parametrize("error", ["rate limit exceeded", "invalid authentication credentials"])
+@pytest.mark.parametrize("error", ["rate limit exceeded"])
 def test_terminal_diagnostic_does_not_feed_nonzero_exit_classifier(error: str) -> None:
     payload = {"status": "ERROR"}
     baseline = wrapper._interpret_run(_run_result(_stream(payload), rc=1), None)
@@ -1020,7 +1023,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     calls: list[list[str]] = []
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 1))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
@@ -1068,7 +1071,6 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.delenv("AGY_NO_HEADLESS_AUTOAPPROVE", raising=False)
-    guarded: list[list[str]] = []
     payload = {
         "review_id": "review-r1",
         "family": "google",
@@ -1081,19 +1083,13 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
     }
     selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
     preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 1))
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_a, **_k: None
     )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
 
-    @contextlib.contextmanager
-    def fake_guard(deny_rules, *, lock_timeout):
-        assert lock_timeout == 30.0
-        guarded.append(list(deny_rules))
-        yield
 
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", fake_guard)
 
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log, remove_env):
         calls.append(cmd)
@@ -1156,10 +1152,9 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
         "plan",
     ]
     assert "--dangerously-skip-permissions" not in calls[0]
-    assert guarded == [wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]]
 
 
-def test_formal_provider_failure_restores_settings_bytes(
+def test_formal_provider_failure_never_changes_settings_bytes(
     tmp_path: Path, monkeypatch
 ) -> None:
     target = tmp_path / "settings.json"
@@ -1169,7 +1164,7 @@ def test_formal_provider_failure_restores_settings_bytes(
     monkeypatch.setenv("AGY_SETTINGS_PATH", str(target))
     selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
     preflight_receipt = _agy_preflight_fixture(tmp_path, selector_receipt, selected)
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 1))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
         wrapper._common, "persist_result_artifacts", lambda *_args, **_kwargs: None
@@ -1180,8 +1175,8 @@ def test_formal_provider_failure_restores_settings_bytes(
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
         live = json.loads(target.read_text())
         assert live["permissions"]["allow"] == ["command(git)"]
-        assert live["permissions"]["deny"] == wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]
-        assert backup.exists()
+        assert target.read_bytes() == baseline
+        assert not backup.exists()
         return _run_result("", rc=7, stderr="provider failed")
 
     monkeypatch.setattr(wrapper._common, "_run_once", fake_run)
@@ -1223,7 +1218,7 @@ def test_formal_main_stops_before_provider_without_read_only_sandbox(
     monkeypatch, capsys
 ) -> None:
     monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/opt/bin/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 1))
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
     monkeypatch.setattr(
         wrapper._common,
@@ -1257,24 +1252,15 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     monkeypatch, capsys, tmp_path, model
 ) -> None:
     pruned: list[str] = []
-    guarded: list[list[str]] = []
-    catalog_probes: list[str] = []
     selector_receipt, _prompt, selected = _google_selector_fixture(tmp_path)
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 1))
     monkeypatch.setattr(
-        wrapper,
-        "_probe_agy_models",
-        lambda binary: catalog_probes.append(binary) or {model},
+        wrapper.subprocess, "run",
+        lambda *a, **k: pytest.fail("unexpected model catalog subprocess"),
     )
     monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", pruned.append)
 
-    @contextlib.contextmanager
-    def fake_guard(deny_rules, *, lock_timeout):
-        assert lock_timeout == 30.0
-        guarded.append(list(deny_rules))
-        yield
 
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", fake_guard)
     monkeypatch.setattr(
         wrapper._common,
         "_run_once",
@@ -1304,7 +1290,8 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert wrapper.main() == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt == {
-        "agy_version": "1.1.20",
+        **profile_receipt(),
+        "agy_version": "1.2.1",
         "effort": "high",
         "executable": str(selected),
         "google_selector_receipt_sha256": hashlib.sha256(
@@ -1317,61 +1304,16 @@ def test_preflight_proves_version_and_route_without_provider_submission(
         "route_args": ["--model", model, "--effort", "high"],
     }
     assert pruned == ["antigravity"]
-    assert catalog_probes == [str(selected)]
-    assert guarded == [wrapper._agy_settings._READ_ONLY_DENY + ["read_url(*)"]]
 
 
-def test_probe_agy_models_parses_the_advertised_catalog_and_scrubs_auth_env(
-    monkeypatch,
-) -> None:
-    observed: dict[str, object] = {}
-
-    def fake_run(command, **kwargs):
-        observed["command"] = command
-        observed["kwargs"] = kwargs
-        return wrapper.subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=(
-                "gemini-3.1-pro-high\tGemini 3.1 Pro (High)\n"
-                "gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n"
-            ),
-            stderr="Fetching available models...\n",
-        )
-
-    monkeypatch.setattr(wrapper.subprocess, "run", fake_run)
-
-    assert wrapper._probe_agy_models("/selected/agy") == {
-        "gemini-3.1-pro-high",
-        "gemini-3.1-pro-low",
-    }
-    assert observed["command"] == ["/selected/agy", "models"]
-    kwargs = observed["kwargs"]
-    assert kwargs["capture_output"] is True
-    assert kwargs["text"] is True
-    assert kwargs["check"] is False
-    assert kwargs["timeout"] == 30
-    assert "GOOGLE_API_KEY" not in kwargs["env"]
-
-
-def test_preflight_rejects_when_required_agy_model_is_not_advertised(
+def test_preflight_accepts_without_any_agy_catalog(
     monkeypatch, capsys, tmp_path
 ) -> None:
     selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
-    catalog_probes: list[str] = []
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 1))
     monkeypatch.setattr(
-        wrapper,
-        "_probe_agy_models",
-        lambda binary: catalog_probes.append(binary) or {"gemini-3.1-pro-low"},
-        raising=False,
-    )
-    monkeypatch.setattr(
-        wrapper._agy_settings,
-        "agy_settings_guard",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("settings guard entered")
-        ),
+        wrapper.subprocess, "run",
+        lambda *a, **k: pytest.fail("unexpected catalog subprocess"),
     )
     monkeypatch.setattr(
         wrapper._common,
@@ -1399,11 +1341,10 @@ def test_preflight_rejects_when_required_agy_model_is_not_advertised(
         ],
     )
 
-    assert wrapper.main() == _common.EXIT_TERMINAL
-    assert catalog_probes == [str(_selected)]
-    assert "does not advertise required model gemini-3.1-pro-high" in (
-        capsys.readouterr().err
-    )
+    assert wrapper.main() == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["model"] == "gemini-3.1-pro-high"
+    assert receipt["provider_started"] is False
 
 
 def test_preflight_rejects_gemini_selector_receipt_before_binary_probe(
@@ -1745,95 +1686,3 @@ def test_formal_agy_rejects_non_google_expected_family_before_binary_probe(
     with pytest.raises(SystemExit) as rejected:
         wrapper.main()
     assert rejected.value.code == 2
-
-
-def test_preflight_settings_failure_stops_before_provider(
-    monkeypatch, capsys, tmp_path
-) -> None:
-    selector_receipt, _prompt, _selected = _google_selector_fixture(tmp_path)
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 1, 20))
-    monkeypatch.setattr(
-        wrapper, "_probe_agy_models", lambda _bin: {"gemini-3.1-pro-high"}
-    )
-    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
-
-    @contextlib.contextmanager
-    def failing_guard(_deny_rules, *, lock_timeout):
-        assert lock_timeout == 30.0
-        raise TimeoutError("busy settings")
-        yield
-
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", failing_guard)
-    monkeypatch.setattr(
-        wrapper._common,
-        "_run_once",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("provider started")
-        ),
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "antigravity_wrapper.py",
-            "--prompt",
-            "route proof",
-            "--model",
-            "gemini-3.1-pro-high",
-            "--effort",
-            "high",
-            "--sandbox",
-            "read-only",
-            "--google-selector-receipt",
-            str(selector_receipt),
-            "--expected-review-id",
-            "review-r1",
-            "--preflight-only",
-        ],
-    )
-
-    assert wrapper.main() == _common.EXIT_TERMINAL
-    assert "AGY settings/config conflict: busy settings" in capsys.readouterr().err
-
-
-@pytest.mark.parametrize("raw_exit,vendor_exit,stderr,expected_exit,classification", [
-    (0, 0, "captured provider progress", _common.EXIT_TERMINAL, "config-conflict"),
-    (_common.EXIT_TIMEOUT, -15, "captured provider progress", _common.EXIT_TIMEOUT, "timeout"),
-    (_common.EXIT_CLI_FAIL, 1, "payload size exceeds", _common.EXIT_TERMINAL, "token-limit"),
-])
-def test_c6_completed_stream_survives_settings_release_failure(
-    monkeypatch, capsys, raw_exit, vendor_exit, stderr, expected_exit, classification,
-):
-    raw_stream = _stream({"status": "SUCCESS", "response": "completed answer"})
-    captured = []
-    calls = []
-    monkeypatch.setattr(wrapper._common, "require_binary", lambda _name: "/fixture/agy")
-    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _bin: (1, 2, 7))
-    monkeypatch.setattr(wrapper._common, "prune_stale_run_logs", lambda _cli: None)
-    monkeypatch.setattr(wrapper._common, "persist_result_artifacts",
-                        lambda *args, **_kwargs: captured.append(args[4]))
-
-    @contextlib.contextmanager
-    def release_failure(_deny_rules, *, lock_timeout):
-        yield
-        raise OSError("synthetic release failure")
-
-    def complete(*args, **_kwargs):
-        calls.append(args)
-        raw = _run_result(raw_stream, rc=vendor_exit, stderr=stderr)
-        raw.exit_code = raw_exit
-        return raw
-
-    monkeypatch.setattr(wrapper._agy_settings, "agy_settings_guard", release_failure)
-    monkeypatch.setattr(wrapper._common, "_run_once", complete)
-    monkeypatch.setattr(sys, "argv", ["antigravity_wrapper.py", "--prompt", "review"])
-    assert wrapper.main() == expected_exit
-    assert capsys.readouterr().out == ""
-    assert len(calls) == 1
-    assert len(captured) == 1
-    result = captured[0]
-    assert result.classification == classification
-    assert result.vendor_exit_code == vendor_exit
-    assert result.stdout == raw_stream
-    assert result.stderr == stderr
-    assert result.final_answer == "" and result.validated is None

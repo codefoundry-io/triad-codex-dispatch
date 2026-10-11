@@ -118,7 +118,7 @@ def gemini_policy_case(tmp_path, monkeypatch):
         expected_review_id="conditions-r1", expected_route="gemini")
     monkeypatch.setattr(gemini_wrapper.subprocess, "run", lambda argv, **kw:
         subprocess.CompletedProcess(argv, 0,
-            "0.60.0" if argv[-1] == "--version" else _formal_gemini_help(), ""))
+            "0.63.0" if argv[-1] == "--version" else _formal_gemini_help(), ""))
     return policy, selector_path, selector, tmp_path / "preflight.json"
 
 
@@ -137,7 +137,7 @@ def test_preflight_hashes_the_same_policy_bytes_it_validated(
     original = policy.read_bytes()
     def help_after_edit(argv, **kwargs):
         if argv[-1] == "--version":
-            return subprocess.CompletedProcess(argv, 0, "0.60.0", "")
+            return subprocess.CompletedProcess(argv, 0, "0.63.0", "")
         policy.write_bytes(original + b"\n# edit after policy validation\n")
         return subprocess.CompletedProcess(argv, 0, _formal_gemini_help(), "")
     monkeypatch.setattr(gemini_wrapper.subprocess, "run", help_after_edit)

@@ -11,24 +11,17 @@ from test_provider_wrappers import (
 from test_review_round import _canonical_json_bytes, _prepared_digest, _review_metadata, ReviewBrief, prepared, review_round
 
 
-@pytest.mark.parametrize("model,version,accepted", [
-    ("gemini-3.8-flash", "0.61.0", True),
-    ("gemini-3.8-flash", "0.60.0", False),
-    ("gemini-3.8-flash", "0.60.9", False),
-    ("gemini-3.8-flash", "0.61.0-preview.1", False),
-    ("gemini-3.8-flash", "0.62.0", True),
-    ("gemini-3.8-flash", "1.0.0", True),
-    ("gemini-3.1-pro-preview", "0.60.0", True),
-    ("gemini-3.5-flash", "0.60.0", True),
+@pytest.mark.parametrize("version,accepted", [
+    ("0.61.0", False), ("0.62.9", False), ("0.63.0-preview.1", False),
+    ("0.63.0", True), ("0.63.0+build.1", True), ("0.64.0", True),
+    ("1.0.0", True),
 ])
-def test_model_specific_stable_cli_floor(model, version, accepted):
-    from google_preflight_v2 import gemini_model_support
-
+def test_model_independent_cli_floor(version, accepted):
     if accepted:
-        gemini_model_support(model, version)
+        assert review_round.validate_formal_gemini_version(version) == version
     else:
         with pytest.raises(ValueError):
-            gemini_model_support(model, version)
+            review_round.validate_formal_gemini_version(version)
 
 
 @pytest.fixture
@@ -39,7 +32,7 @@ def version_case(tmp_path):
     return selector, selected, tmp_path
 
 
-def _probe(case, monkeypatch, *, version="0.60.0", failure=None, missing_policy=False):
+def _probe(case, monkeypatch, *, version="0.63.0", failure=None, missing_policy=False):
     selector, selected, cwd = case
     calls = []
     def run(argv, **kwargs):
@@ -64,7 +57,7 @@ def _probe(case, monkeypatch, *, version="0.60.0", failure=None, missing_policy=
 
 @pytest.mark.parametrize("version", [
     "0.33.9", "0.34.0-rc.1", "not-a-version", "0.60.0\n0.33.0", "0.34",
-    "00.34.0", "0.60.0-01", "0.60.0-alpha..1", "0.60.0+build..1",
+    "00.63.1", "0.63.1-01", "0.63.1-alpha..1", "0.63.1+build..1",
 ])
 def test_unsupported_version_refuses_before_help(version_case, monkeypatch, capsys, version):
     result, calls = _probe(version_case, monkeypatch, version=version)
@@ -74,7 +67,7 @@ def test_unsupported_version_refuses_before_help(version_case, monkeypatch, caps
 
 
 @pytest.mark.parametrize("version", [
-    "0.34.0", "0.60.0", "1.0.0", "0.34.0+build.1", "0.34.1-rc.1",
+    "0.63.0", "0.64.0", "1.0.0", "0.63.0+build.1", "0.63.1-rc.1",
 ])
 def test_supported_version_is_recorded_with_exact_probes(
     version_case, monkeypatch, capsys, version,
@@ -104,7 +97,8 @@ def test_version_probe_failure_stops_before_help(version_case, monkeypatch, caps
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("bad_version", [None, "", "0.33.9", "0.34.0-rc.1", 123])
+@pytest.mark.parametrize("bad_version", [None, "", "0.33.9", "0.34.0-rc.1", 123,
+    "0.60.0", "0.62.9", "0.63.0-preview.1"])
 def test_receipt_refuses_missing_or_unsupported_observed_version(
     version_case, monkeypatch, capsys, bad_version,
 ):
@@ -124,7 +118,7 @@ def test_receipt_refuses_missing_or_unsupported_observed_version(
 def test_observed_version_changes_the_common_basis(version_case, prepared, monkeypatch, capsys):
     selector, _, cwd = version_case
     digests = []
-    for version in ("0.34.0", "0.60.0"):
+    for version in ("0.63.0", "0.64.0"):
         assert _probe(version_case, monkeypatch, version=version)[0] == 0
         path = cwd / "record.json"
         path.write_bytes(_canonical_json_bytes(json.loads(capsys.readouterr().out)))
@@ -139,8 +133,8 @@ def test_observed_version_changes_the_common_basis(version_case, prepared, monke
 
 
 @pytest.mark.parametrize("version,missing_policy,accepted", [
-    ("0.61.0", False, True), ("0.61.0", True, False),
-    ("0.34.0", False, True), ("0.33.9", False, False),
+    ("0.64.0", False, True), ("0.64.0", True, False),
+    ("0.63.0", False, True), ("0.62.9", False, False),
 ])
 def test_C65_formal_gemini_later_version_preserves_capability_checks(version_case, monkeypatch, capsys, version, missing_policy, accepted):
     result, calls = _probe(version_case, monkeypatch, version=version, missing_policy=missing_policy)
@@ -153,4 +147,4 @@ def test_C65_formal_gemini_later_version_preserves_capability_checks(version_cas
         assert record["requested_approval_mode"] == "plan"
     else:
         assert result == _common.EXIT_ARG_ERROR and output == ""
-    assert [argv[-1] for argv, _ in calls] == (["--version"] if version == "0.33.9" else ["--version", "--help"])
+    assert [argv[-1] for argv, _ in calls] == (["--version"] if version == "0.62.9" else ["--version", "--help"])

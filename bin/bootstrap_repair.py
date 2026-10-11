@@ -53,9 +53,18 @@ LEGACY_CONFIG_FRAGMENT_TEXT = (
     b"[shell_environment_policy]\n"
     b'inherit = "core"\n'
 )
-LEGACY_AGENT_HEADER_A = "# Codex named subagent"
-LEGACY_AGENT_HEADER_B = "wrapper repair agent"
-LEGACY_AGENT_SCOPE = "Installed by bootstrap to the Codex personal agent-discovery scope"
+# Complete originals copied unchanged by bootstrap at 307745f and dca0cd4.
+# Later path-rendered templates have no immutable installed-byte receipt.
+FROZEN_LEGACY_AGENT_SHA256 = frozenset(
+    {
+        "2f396abfbc2c4d558a00a4a5885c620cdeb9956b099b656e6910ce416bc28cae",
+        "0f5b6298b76c6b164cbf189b8eff1765736d0b895eb750ccf1fedb576a979f0b",
+        "d7b7988d7f3ff5430ba791760e25714a7d5a40d1e310ea4a060bf879fb26c4d9",
+        "ade14b3ec2ede604d49284c8dcbbaeb3ab74b7d706ba6899e57a36fd72a9f942",
+        "674c31cab5ad9024d53a02c9784e876be76d22af3a27ca0ed6dc5b480106ee3e",
+        "2b6e10b2bcdacea3fbd1c7c784dac26afce6345c83518ab9bf5103facb47141e",
+    }
+)
 _LEGACY_PROFILE_BROAD_DIRECTORY_ROOTS = frozenset(
     [
         Path(value).resolve()
@@ -675,12 +684,7 @@ def _delete_expected(expected: State, owner_directory: Path | None = None) -> No
 
 
 def _legacy_agent_data_is_managed(data: bytes) -> bool:
-    try:
-        head = "".join(data.decode("utf-8").splitlines(keepends=True)[:5])
-    except UnicodeDecodeError:
-        return False
-    pair_match = LEGACY_AGENT_HEADER_A in head and LEGACY_AGENT_HEADER_B in head
-    return pair_match or LEGACY_AGENT_SCOPE in head
+    return hashlib.sha256(data).hexdigest() in FROZEN_LEGACY_AGENT_SHA256
 
 
 def managed_removal_data_is_owned(data: bytes, kind: str) -> bool:

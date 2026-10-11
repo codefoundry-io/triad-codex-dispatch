@@ -66,8 +66,7 @@ def fake_provider(monkeypatch):
         monkeypatch.setattr(wrapper, "run_cli_with_retry", ordinary)
         monkeypatch.setattr(wrapper, "persist_result_artifacts", lambda *a, **k: None)
     monkeypatch.setattr(antigravity_wrapper, "_probe_agy_version", lambda _: (1, 2, 7))
-    monkeypatch.setattr(antigravity_wrapper._agy_settings, "agy_settings_guard",
-                        lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(gemini_wrapper, "_probe_version", lambda *a: "0.63.0")
     return calls, binaries
 
 

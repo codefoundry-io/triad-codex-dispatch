@@ -17,7 +17,7 @@ directly:
 
 - `$triad-claude-dispatch` for a single-shot Claude Code consult.
 - `$triad-antigravity-dispatch` for an authorized raw INVESTIGATION consult,
-  including web-grounded research and live URL checks. REVIEW defaults to no web; enable the bound all-leg option only on a direct owner request for that round.
+  including web-grounded research and live URL checks. Public v2 binds the owner's standing review-web authorization. Legacy REVIEW defaults to no web; enable its bound all-leg option only on a direct owner request for that round.
 - `$triad-gemini-dispatch` for a standalone authorized Gemini CLI compatibility
   consult; it does not choose or lead a formal Google-family review.
 - `$triad-cross-family-review` before risky merges.
@@ -44,6 +44,10 @@ Google dispatch; bind both receipt SHA values plus the selected model and effort
 the common review digest. Never
 switch after the selected provider starts or fails.
 
+AGY legacy/v2 formal review requires explicit profile setup from the selected
+toolkit's `docs/installation.md` before preflight, repeated after an upgrade
+changes the packaged profile bytes; dispatch never installs or replaces them.
+
 Once any provider leg has started, a later required-leg start or result failure invalidates
 admission but already-started sibling families finish. Strictly validate their
 available terminal results and run post-review integrity verification. Preserve
@@ -56,10 +60,11 @@ Select provider permissions and project trust in that authenticated developer
 environment before dispatch. TRIAD does not install a separate Codex profile,
 rule, permission mode, or pre-spawn `shell_environment_policy`.
 Formal AGY preflight and dispatch never pass `--dangerously-skip-permissions`.
-Only raw investigations retain the version-gated headless adaptation, unless
-`AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Callers do not pass the flag. Calls
-without a project use the transient settings lease and restore its original
-bytes; explicit projects are validated without permission-file writes.
+Only permissive raw investigations retain version-gated headless adaptation,
+unless `AGY_NO_HEADLESS_AUTOAPPROVE=1` opts out. Read-only calls select explicitly
+provisioned native-tool profiles with component exclusion and require AGY>=1.2.1.
+No call writes/locks/restores global settings. Legacy backup/lease residue is
+preserved; explicit projects are validated without permission-file writes.
 Trusted Python and `PATH` values are prerequisites. After trusted launcher and
 interpreter startup, wrapper descendants remain scrubbed of loader and
 interpreter injection variables.
@@ -82,11 +87,27 @@ any TOML table header, and update existing keys rather than adding duplicates.
 Repair analysis uses a fresh native proposal-only child with prompt-controlled
 no-edit behavior. The child reads an untrusted absolute run-log path and the
 local classifier framework as needed, then returns a proposal or escalation.
+When needed, it may search/fetch public sources using sanitized error/version
+context and cite them in `reason`; it never sends private log content, reruns a
+vendor or derives entries from errors seen only in public sources, and escalates
+when necessary research is unavailable or inconclusive.
 The owner applies a validated proposal locally from the authenticated terminal
 with the printed absolute bootstrap command for `bin/apply_patch.py`, including
 the pinned absolute `--classifier-file`. Run logs remain available as untrusted
 evidence until the wrapper's age-floor cleanup; do not manually remove them
 after analysis.
+The applier refuses `oauth-env` proposals; authentication recovery remains with
+the user. Existing curated rules, semantic checks, locking and atomic writes stay;
+reason-length and entry-count caps are removed.
+When loading an extension, unsupported vendor-exit classes and exit-zero entries
+are ignored with a diagnostic. Valid siblings, curated authentication and source
+file bytes remain intact; this does not permit new authentication proposals.
+After apply, use the same command with `--verify-run-log <absolute-run-log-path>`
+to verify classification from the saved failure without another vendor call.
+Unchanged classes and transport failures that bypassed runtime classification are
+not verified repairs. Retained nonzero vendor diagnoses follow their runtime path.
+Report mismatches or unsupported records; do not admit a failed review from
+this check. Only unknown/extraction-error enter repair, not timeout or auth.
 
 The plugin-add step prints a safely quoted absolute bootstrap command from its
 returned `installedPath`. Run that printed absolute bootstrap command exactly
@@ -100,15 +121,17 @@ authority over other user-global paths.
 
 An owner-provisioned dedicated AGY project can be selected with
 `--project <canonical-lowercase-UUID> --cwd <absolute-review-root> --sandbox read-only`.
-Follow the canonical leg contract's project record and default no-web formal deny
-prerequisites (the five raw read-only denies plus `read_url(*)`). Explicitly requested
-review web retains the five raw denies and refuses an existing `read_url(*)` deny
+Follow the canonical leg contract's project record and bound web condition.
+A false condition (the legacy default) requires the five raw read-only denies plus
+`read_url(*)`. A true condition (public v2 standing authorization or a legacy direct
+request) retains the five raw denies and refuses an existing `read_url(*)` deny
 before inference without removing it.
 The wrapper validates that record without a global settings lease or permission
 mutation; provisioning remains separately authorized owner work. Use the same
 project for preflight and dispatch, and both Pro/Flash preflights when paired.
 The existing receipt hash binds its route arguments. Keep the project record
-stable during the call; omission preserves the legacy global transaction.
+stable during the call; omission skips project-record validation. Global settings
+remain untouched on either route.
 
 Claude, AGY, and organization Gemini Enterprise OAuth are managed independently
 from Codex auth. Auth failures should be surfaced to the user, not repaired by

@@ -31,6 +31,7 @@ def _fs_case_insensitive(probe: Path) -> bool:
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ROOT / "scripts" / "bootstrap.sh"
 BOOTSTRAP_REPAIR = ROOT / "bin" / "bootstrap_repair.py"
+FROZEN_LEGACY_AGENT = (ROOT / "tests/fixtures/legacy-agents/307745f-claude.toml").read_bytes()
 APPLY_PATCH = ROOT / "bin" / "apply_patch.py"
 FIXTURES = ROOT / "tests" / "fixtures"
 PROVIDER_WRAPPERS = (
@@ -500,8 +501,8 @@ def test_bootstrap_help_describes_claude_parity_and_google_route_selection() -> 
     assert "personal Google Sign-In requires agy" in help_text
     assert "Gemini Enterprise OAuth may use gemini when agy is absent" in help_text
     assert "same authenticated login terminal" in help_text
-    assert "transient global-settings transaction" in help_text
-    assert "restores the original bytes" in help_text
+    assert "native-tool exclusion profiles" in help_text
+    assert "All calls leave global settings untouched" in help_text
     assert "Gemini Enterprise OAuth sign-in" in help_text
     assert "--dangerously-skip-permissions" in help_text
     assert "does not install persistent global AGY permission policy" in help_text
@@ -4827,11 +4828,7 @@ def test_install_legacy_quarantine_preserves_foreign_replacement_after_capture(
     codex_home = tmp_path / "codex-home"
     target = codex_home / "agents" / "claude-wrapper-repair.toml"
     target.parent.mkdir(parents=True)
-    target.write_bytes(
-        b"# Codex named subagent for Claude wrapper repair agent\n"
-        b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
-        b'name = "claude-wrapper-repair"\n'
-    )
+    target.write_bytes(FROZEN_LEGACY_AGENT)
     foreign = b"# foreign replacement\nname = \"owner-controlled\"\n"
     replacement = tmp_path / "foreign-legacy-agent"
     replacement.write_bytes(foreign)
@@ -5052,11 +5049,7 @@ def test_remove_preserves_user_artifact_with_nonleading_managed_marker(
         (
             "legacy-agent",
             "agents/claude-wrapper-repair.toml",
-            (
-                b"# Codex named subagent for Claude wrapper repair agent\n"
-                b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
-                b'name = "claude-wrapper-repair"\n'
-            ),
+            FROZEN_LEGACY_AGENT,
             "TRIAD_BOOTSTRAP_TEST_SWAP_LEGACY_AGENT_BEFORE_REMOVE",
         ),
     ),

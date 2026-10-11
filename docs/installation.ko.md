@@ -6,6 +6,43 @@
 두 방식은 같은 플러그인과 공통 실행 환경 설정을 사용합니다. 같은 마켓플레이스 이름으로
 두 경로를 중복 등록하지 마세요.
 
+## AGY 리뷰 프로필 설정 — 반영 대기 후보
+
+현재 소스 후보는 legacy/v2 정식 리뷰에 AGY 프로필 두 개를 요구합니다.
+선택한 toolkit의 `bin/agents/` 파일을 검토한 뒤 루트에서 실행합니다.
+
+
+U7은 두 프로필에 `excludeDefaultComponents: true`를 추가합니다. Raw 읽기 전용
+조사를 포함한 읽기 전용 호출은 AGY 1.2.1 이상이 필요하며 raw는 research 프로필을
+사용합니다. 이전 프로필 갱신은 두 파일의 변경을 검토한 뒤 같은 설치 명령에
+`--replace`를 명시해야 합니다. 실행 중 자동 갱신하지 않습니다.
+전역 설정과 이전 `.agybak`, lock, lease 파일은 자동 복원·삭제하지 않습니다.
+요청한 웹 사용과 충돌하는 기존 URL 금지나 잘못된 설정은 수정 없이 거부합니다.
+1.3.3 실측에서는 읽기·검색·웹과 쓰기 요청 시 파일 미생성을 확인했습니다.
+쓰기 호출을 실행 단계에서 차단했다는 증거는 아닙니다.
+U7 이전 비정상 종료로 `settings.json` 자체에 TRIAD deny가 남았을 수 있습니다.
+남은 `.agybak`과 현재 설정을 비교해 확인된 TRIAD 잔여 항목만 직접 정리하고,
+이후 사용자 변경은 보존하세요. 전체 백업을 무조건 덮어쓰지 않으며 TRIAD는 자동 복구하지 않습니다.
+
+```sh
+python3 bin/_agy_agent.py --install
+```
+
+쓰기 대상은 `~/.gemini/config/agents/triad-codex-readonly-review.md`와
+`triad-codex-readonly-research.md`입니다. 권한 설정이나 Claude 호스트의
+프로필은 변경하지 않습니다. 같은 파일은 유지하고, 내용이 다르면 검토 후
+명시적 `--replace`가 필요합니다. 리뷰 실행 중 자동 설치하지 않습니다.
+업데이트로 프로필 내용이 바뀌면 다시 설정해야 합니다. 제거할 때는 더 이상
+사용하지 않는지 확인한 뒤 이 두 Codex 소유 파일만 직접 제거합니다.
+bootstrap은 이 파일들의 설치·제거를 관리하지 않습니다.
+
+preflight는 이름·경로·SHA-256을 결합하고 누락·변경 시 추론 전에 거부합니다.
+일반 리뷰에는 읽기·검색 프로필, 승인된 `--web`에는 웹 도구가 추가된 프로필을
+선택합니다. 모델·effort는 CLI로 전달합니다. 프로필만으로 권한 제한을 보장하지
+않으며 기존 plan/sandbox와 결과 검증을 유지합니다. 버전·preflight 통과만으로
+검색 성공을 보장하지 않습니다. 선택한 프로필에서 실제 네이티브 검색과 읽기가
+성공해야 검색 기능을 확인할 수 있습니다.
+
 ## 설치할 버전 선택
 
 아래 명령은 최신 공개 버전 경로인 `main`을 선택합니다.
@@ -16,22 +53,26 @@
 ## 준비 사항
 
 macOS, Linux 또는 WSL2의 평소 로그인 터미널을 사용합니다. Git, Bash,
-Python 3.12 이상, Codex, 기본 Opus 5.5 경로용 Claude Code 2.1.280 이상과
+Python 3.12 이상, Codex, CLI가 해석하는 `opus` 리뷰 기본값용 Claude Code와
 Google CLI 하나 이상이 필요합니다.
 
 - AGY를 우선 사용하며 개인 Google Sign-In에는 AGY가 필요합니다.
 - **Gemini 구버전 CLI 사용**은 AGY와 구분되는 `gemini` 실행 파일 경로를 뜻합니다.
-  다운그레이드를 권하는 표현이 아닙니다. 정식 리뷰에는 Gemini CLI `>=0.34.0`,
+  다운그레이드를 권하는 표현이 아닙니다. Gemini CLI는 `>=0.63.0`부터 지원하며, 정식 리뷰에는
   version/help/policy preflight 통과와 기존 Gemini Enterprise OAuth 로그인이
   필요합니다. 기존 selector는 AGY가 없을 때만 이 경로를 선택합니다.
-  v2 Pro 기본 모델에는 별도 버전 지원 검사가 있습니다.
+  모든 모델과 raw·legacy·v2 경로에 같은 버전 하한을 적용합니다.
   [리뷰 구성 안내](../README.ko.md#프로젝트-리뷰어-설정-확인)를 참고하세요.
 
+v2 Claude 경로는 Claude Code >=2.1.205를 요구하고 선택 전에 필요한 옵션을
+확인합니다. 이는 v2 preflight 하한이며 raw·legacy에 새 버전 검사를 추가하지 않습니다.
+
 [Claude Code 2.1.280에서 Opus 5.5가 추가됐습니다](https://github.com/anthropics/claude-code/releases/tag/v2.1.280).
-이 릴리스는 2.1.282로 확인했습니다. v2 adapter의 기존 preflight 인터페이스
-최소 버전은 이 모델 요구사항과 별개입니다. bootstrap은 실행 파일 존재를 확인하며
-모델 사용 권한이나 실제 runtime effort를 확인하지는 않습니다. 새 기본 모델을
-사용하기 전에 Claude Code를 업데이트하세요.
+이 특정 모델의 버전 요구사항은 현재 `opus` 별칭 기본값과 별개이며, 별칭은 실제
+실행 모델의 고정 버전을 보증하지 않습니다. v2 adapter는 선택 전에 필요한 CLI
+버전과 옵션을 확인합니다. raw/v2 경로에서는 명시적 모델 ID 선택을 유지합니다.
+bootstrap은 실행 파일 존재를 확인하며 모델 사용 권한이나 실제 runtime effort를
+확인하지는 않습니다.
 
 각 CLI의 기본 로그인 절차로 인증합니다(Codex는 `codex login`). TRIAD는 계정을
 설정하거나 인증 정보를 복사하지 않습니다. Linux/WSL2에서 Codex sandbox가 요구하면
@@ -127,8 +168,10 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
    사용에 필요한 실제 인증 식별자는 `gemini-enterprise`입니다.
    실행 전에 [구성 확인](../README.ko.md#프로젝트-리뷰어-설정-확인)을 수행합니다.
    구성 확인 성공은 provider 접근권 증명이 아닙니다. Gemini에는 effort flag가
-   없습니다. 기본 리뷰는 웹을 사용하지 않으며 필요한 해당 라운드에 직접 웹 검증을
-   요청해야 합니다.
+   없습니다. Public v2 소스 후보는 사용자의 상시 웹 허용을 새 라운드에 고정하며,
+   요청값 생략·false로 이를 철회하지 않습니다. 활성 native Codex leg는
+   `web_available: true`를 보고해야 합니다. Legacy는 해당 라운드에 직접 요청한
+   경우에만 웹을 허용합니다. 이 소스 변경이 기존 설치 revision을 바꾸지는 않습니다.
 
 3. **선택 경로.** 기본 설치에는 추가 환경변수가 필요하지 않습니다.
    `TRIAD_BOOTSTRAP_BIN_DIR` 또는 `TRIAD_CLASSIFIER_EXTENSION`을 바꾼다면
@@ -146,14 +189,18 @@ classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인�
 ### Gemini CLI 3.8 Flash 설정
 
 확인일: **2026-10-02**. Native Gemini CLI에서는 `gemini-3.8-flash`를 요청합니다.
-AGY의 `gemini-3.8-flash-high`는 별도 선택 slug입니다. TRIAD에서 이 모델의 버전
-하한은 **0.61.0**이며 필요하면 기존 CLI 설치 방식으로 업데이트하세요.
-검증된 설정 안내는 안정 버전 **0.61.0 이상**을 대상으로 합니다. preview/nightly는
-이 안내의 검증 범위 밖이며 adapter의 버전 수용 조건과는 별개입니다.
-지원되는 이전 v2 모델의 0.60.0 하한은 유지합니다. 모델별 조건이며 모든 모델에
-최신 CLI를 고정하는 조건은 아닙니다. 0.60.0에는 3.8 alias가 없고 `flash`로 끝나는
+AGY의 `gemini-3.8-flash-high`는 별도 선택 slug입니다. 2026-10-09 사용자 결정에
+따라 TRIAD의 모든 Gemini 모델과 raw·legacy·v2 경로는 **CLI 0.63.0부터**
+지원합니다. 필요하면 기존 CLI 설치 방식으로 업데이트하세요. 모델 목록 조회나
+모델별 허용 목록은 사용하지 않습니다. preview/nightly 실행 호환성은 미검증이며,
+0.63.0 prerelease는 지원 하한보다 낮습니다. 이전 모델별 하한은 이 결정으로
+대체됐습니다. 0.60.0에는 3.8 alias가 없고 `flash`로 끝나는
 문자열을 이전 모델로 바꿀 수 있습니다
 ([태그가 고정된 routing 소스](https://github.com/google-gemini/gemini-cli/blob/v0.60.0/packages/core/src/config/models.ts#L230-L270)).
+
+아래 native 설정 안내는 2026-10-02에 v0.61.0 소스로 확인한 내용입니다.
+설정과 alias 동작은 v0.63.0에서 재검증이 필요하며, 과거 설정 근거가 현재
+런타임 동작을 증명하지는 않습니다.
 
 Native 대화형 세션에서는 `gemini --model gemini-3.8-flash`로 정확한 ID를 요청합니다.
 v0.61.0 기본 alias는 **HIGH** generation 설정을 상속합니다

@@ -20,12 +20,12 @@ import gemini_wrapper
 PAYLOAD = ROOT / "tests/fixtures/shared-spec/exit-tokens.json"
 CONTRACT = json.loads(PAYLOAD.read_text())
 TOKENS = {row["token"]: row["exit"] for row in CONTRACT["tokens"]}
-MAP_ONLY = {"admission-refused", "vendor-timeout", "input-delivery-failed"}
+MAP_ONLY = {"admission-refused", "input-delivery-failed"}
 
 
 def test_fixture_has_exact_published_bytes():
     assert hashlib.sha256(PAYLOAD.read_bytes()).hexdigest() == (
-        "0e27186c915d0bc4f26246830daabed2dd1f737c491dbdf5144afcd5bd943bfd"
+        "200e199293060c726563d882deb52361bc01e205f7d9fae3686e5cedc9758519"
     )
 
 
@@ -40,8 +40,7 @@ def test_shared_exit_constants_and_classifier_membership():
         assert getattr(_common, name) == code
     assert _common.CLASSIFICATION_TOKENS <= TOKENS.keys()
     assert _common.REPAIR_CLASSIFICATION_TOKENS <= _common.CLASSIFICATION_TOKENS
-    for vendor in ("CLAUDE", "CODEX", "GEMINI", "ANTIGRAVITY"):
-        assert set(getattr(_common, vendor + "_VENDOR_EXIT_MAP").values()) <= TOKENS.keys()
+    assert set(_common.ANTIGRAVITY_VENDOR_EXIT_MAP.values()) <= TOKENS.keys()
 
 
 def _literal_classifications(module):
@@ -85,7 +84,7 @@ def test_alias_and_direct_exception_do_not_expand_repair_targets():
     assert _common.map_classification_to_exit("permission-unavailable") == 65
     assert any(row.startswith("route-mismatch ")
                for row in CONTRACT["b_delta"]["emitted_without_map_row"])
-    assert not (MAP_ONLY | {"route-mismatch", "permission-unavailable"}) & _common.CLASSIFICATION_TOKENS
+    assert not (MAP_ONLY | {"vendor-timeout", "route-mismatch", "permission-unavailable"}) & _common.CLASSIFICATION_TOKENS
     assert _common.map_classification_to_exit("not-a-registered-token") == 1
 
 

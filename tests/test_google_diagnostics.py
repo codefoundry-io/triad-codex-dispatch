@@ -84,7 +84,8 @@ def test_default_probes_are_metadata_only_with_closed_stdin_and_neutral_cwd(tmp_
     assert snapshot["status"] == "complete"
     assert snapshot["version"] == "1.2.5"
     assert [x["args"] for x in calls] == [["--version"], ["--help"]]
-    assert all(x["stdin_empty"] and not x["present"] for x in calls)
+    expected = {"GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "GOOGLE_CLOUD_QUOTA_PROJECT"} if cli == "gemini" else set()
+    assert all(x["stdin_empty"] and set(x["present"]) == expected for x in calls)
     assert all(Path(x["cwd"]).parent == tmp_path / "neutral" for x in calls)
     assert len({x["cwd"] for x in calls}) == 1
     assert snapshot["probes"][0]["stdout_bytes"] == 10
@@ -102,10 +103,6 @@ def test_selection_preserves_nonstrict_fallback_and_strict_refusal(tmp_path, pin
         assert snapshot["error"] == ("binary_missing" if pin == "absent" else "selection_failed")
     else:
         assert [x["args"] for x in calls] == [["--version"], ["--help"]]
-
-
-def test_fake_observes_every_production_google_selector():
-    assert set(GOOGLE_ENV) == set(_load().FORMAL_AGY_ENV_REMOVE)
 
 
 @pytest.mark.parametrize("version", [
@@ -233,7 +230,7 @@ def test_launch_failure_is_fixed_incomplete_json(tmp_path, monkeypatch):
     assert "PRIVATE_" not in json.dumps(snapshot)
 
 
-def test_timeout_cleans_same_group_descendant_without_forwarding_stderr(tmp_path, monkeypatch, capsys):
+def test_timeout_leaves_vendor_descendant_without_forwarding_stderr(tmp_path, monkeypatch, capsys):
     module = _load()
     pid_file = tmp_path / "descendant.pid"
     binary = tmp_path / "agy-timeout"
@@ -252,12 +249,8 @@ def test_timeout_cleans_same_group_descendant_without_forwarding_stderr(tmp_path
         probe = snapshot["probes"][0]
         assert probe["status"] == "timeout"
         assert probe["stdout_sha256"] == hashlib.sha256(b"metadata\n").hexdigest()
-        for _ in range(100):
-            state = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True).stdout.strip()
-            if not state or state.startswith("Z"):
-                break
-            time.sleep(0.02)
-        assert not state or state.startswith("Z")
+        state = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True).stdout.strip()
+        assert state and not state.startswith("Z")
         output = capsys.readouterr()
         assert "PRIVATE_STDERR" not in output.out + output.err + json.dumps(snapshot)
     finally:

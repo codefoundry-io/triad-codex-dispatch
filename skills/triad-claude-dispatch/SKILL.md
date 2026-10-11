@@ -11,7 +11,7 @@ permission selection native. The fully bound formal `LegVerdict` route adds
 native per-call Plan Mode without changing persistent user configuration.
 Explicitly requested `--web` preapproves native `WebSearch`/`WebFetch`; review calls
 must also match the [bound round condition](../triad-cross-family-review/references/review-web.md).
-The fully bound formal route rejects any model other than `claude-opus-5-5`, any effort
+The fully bound formal route rejects any model other than `opus`, any effort
 other than `xhigh`, any timeout other than `1200`, and every `--fallback-model`
 before provider resolution.
 
@@ -29,7 +29,7 @@ before provider resolution.
 ## Cross-family review leg
 
 Use `triad-cross-family-review` and read its
-`references/leg-contracts.md`. The formal Claude route is `--model claude-opus-5-5
+`references/leg-contracts.md`. The formal Claude route is `--model opus
 --effort xhigh --timeout 1200 --pydantic verdict_schema:LegVerdict
 --expected-review-id "$review_id" --expected-family claude
 --expected-content-digest "$review_digest"`. Claude reviews only; it does not
@@ -41,3 +41,14 @@ and content digest.
 Return the wrapper's terminal stdout to the leader. Keep run logs and result
 files outside immutable reviewed evidence. Provider findings never authorize a
 code or design change; the leader reproduces and classifies them.
+
+Each wrapper invocation runs inference once; capacity or schema failure does not
+automatically replay the CLI. Diagnose the returned failure before any explicit
+later invocation. Vendor-internal retries remain vendor-owned.
+
+For terminal `unknown` or `extraction-error`, follow the
+[repair protocol](../../docs/references/repair-protocol.md) with the last emitted
+`run-log:` path as opaque data. Its fresh native child proposes; the owner applies
+and verifies against that stored record without another vendor call. A timeout
+is surfaced without phrase repair; `oauth-env` requires user authentication
+recovery. A repaired classifier does not make the failed review valid.

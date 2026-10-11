@@ -59,7 +59,7 @@ def run(code, tmp_path, prompt=PROMPT, timeout=3):
 
 
 @pytest.mark.parametrize("route", ["raw", "ordinary", "native"])
-def test_stdin_early_close_is_not_success(route, tmp_path, children):
+def test_stdin_early_close_preserves_valid_result(route, tmp_path, children):
     cmd = [sys.executable, "-c", EARLY_CLOSE]
     if route == "raw":
         result = run(EARLY_CLOSE, tmp_path)
@@ -72,11 +72,11 @@ def test_stdin_early_close_is_not_success(route, tmp_path, children):
             cmd, str(tmp_path), 3, LegVerdict, stdin_text=PROMPT,
             expected_review_id="review-r1", expected_family="claude",
             expected_content_digest="a" * 64)
-    assert result.exit_code == _common.EXIT_CLI_FAIL
+    assert result.exit_code == 0
     assert result.vendor_exit_code == 0
-    assert result.classification == "unknown"
-    assert result.final_answer == ""
-    assert result.validated is None
+    assert result.transport["stdin_delivery"] == "complete"
+    if route != "raw":
+        assert result.validated == PAYLOAD
     assert len(children) == 1
 
 
@@ -132,7 +132,7 @@ def test_stdin_timeout_beats_partial_capacity_envelope(route, tmp_path, children
 
 
 @pytest.mark.parametrize("route", ["ordinary", "native"])
-def test_stdin_failed_delivery_does_not_retry_capacity_shaped_output(
+def test_stdin_early_close_does_not_mask_capacity_envelope(
         route, tmp_path, children):
     envelope = json.dumps({"is_error": True, "result": "model overloaded"})
     code = "import os; os.read(0,1); os.close(0); print(" + repr(envelope) + ")"
@@ -144,15 +144,15 @@ def test_stdin_failed_delivery_does_not_retry_capacity_shaped_output(
     else:
         result = claude_wrapper._run_native_structured_once(
             cmd, str(tmp_path), 3, LegVerdict, stdin_text=PROMPT)
-    assert result.exit_code == _common.EXIT_CLI_FAIL
-    assert result.classification == "unknown"
+    assert result.exit_code == _common.EXIT_RATE_GIVE_UP
+    assert result.classification == "server-capacity"
     assert len(children) == 1
 
 
 @pytest.mark.parametrize("message,expected,count", [
     ("payload size exceeds", _common.EXIT_TERMINAL, 1),
     ("model overloaded", _common.EXIT_RATE_GIVE_UP,
-     _common.SERVER_CAP_MAX_RETRIES + 1),
+     1),
 ])
 def test_stdin_real_vendor_rejection_keeps_priority(
         message, expected, count, tmp_path, children):
@@ -171,142 +171,6 @@ def test_no_stdin_remains_devnull(tmp_path, children):
     result = run("import sys; print(len(sys.stdin.buffer.read()))", tmp_path, None)
     assert result.exit_code == 0 and result.stdout.strip() == "0"
     assert not result._stdin_delivery_failed
-
-
-@pytest.mark.parametrize("failure", ["write", "short", "flush", "close", "none"])
-def test_stdin_writer_phases_are_checked(failure, monkeypatch, tmp_path):
-    class Input:
-        @property
-        def buffer(self):
-            return self
-
-        def write(self, data):
-            assert data == b"input"
-            if failure == "write":
-                raise OSError("PRIVATE PROMPT BYTES")
-            return 1 if failure == "short" else len(data)
-
-        def flush(self):
-            if failure == "flush":
-                raise OSError("PRIVATE PROMPT BYTES")
-
-        def close(self):
-            if failure == "close":
-                raise OSError("PRIVATE PROMPT BYTES")
-
-    class Process:
-        pid = -1
-        returncode = 0
-        stdin = Input()
-        stdout = io.StringIO(SUCCESS)
-        stderr = io.StringIO("")
-
-        def wait(self, timeout):
-            return 0
-
-    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: Process())
-    result = run("unused", tmp_path, "input")
-    assert result.exit_code == (0 if failure == "none" else _common.EXIT_CLI_FAIL)
-    assert "PRIVATE PROMPT BYTES" not in (result.extraction_error or "")
-    assert result.vendor_exit_code == 0
-
-
-def test_stdin_incomplete_writer_uses_bounded_join_and_cleanup(monkeypatch, tmp_path):
-    joins = []
-    cleanups = []
-    real_thread = _common.threading.Thread
-
-    class NeverStarted:
-        def start(self):
-            pass
-
-        def join(self, timeout):
-            joins.append(timeout)
-
-    def thread(*args, **kwargs):
-        if kwargs.get("target").__name__ == "_feed_stdin":
-            return NeverStarted()
-        return real_thread(*args, **kwargs)
-
-    class Process:
-        pid = -1
-        returncode = 0
-        stdin = io.StringIO()
-        stdout = io.StringIO(SUCCESS)
-        stderr = io.StringIO("")
-
-        def wait(self, timeout):
-            return 0
-
-    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: Process())
-    monkeypatch.setattr(_common.threading, "Thread", thread)
-    monkeypatch.setattr(_common, "_terminate_provider_process_group",
-                        lambda *args: cleanups.append(args))
-    result = run("unused", tmp_path, "input")
-    assert joins == [2, 2]
-    assert len(cleanups) == 1
-    assert result.exit_code == _common.EXIT_CLI_FAIL
-    assert result.extraction_error == "stdin delivery failed (incomplete)"
-
-
-def test_stdin_reconciliation_interrupt_rethrows_and_cleans_up(
-        monkeypatch, tmp_path):
-    interruption = KeyboardInterrupt("cancel during stdin reconciliation")
-    joins = []
-    cleanups = []
-    real_thread = _common.threading.Thread
-
-    class InterruptingWriter:
-        def __init__(self, target):
-            self.target = target
-
-        def start(self):
-            self.target()
-
-        def is_alive(self):
-            return False  # This test double completes its target synchronously.
-
-        def join(self, timeout):
-            joins.append(timeout)
-            if len(joins) == 1:
-                raise interruption
-
-    class Process:
-        pid = 4242
-        returncode = 0
-        stdin = io.TextIOWrapper(io.BytesIO())
-        stdout = io.StringIO(SUCCESS)
-        stderr = io.StringIO("")
-
-        def wait(self, timeout):
-            return 0
-
-    process = Process()
-
-    def thread(*args, **kwargs):
-        if kwargs.get("target").__name__ == "_feed_stdin":
-            return InterruptingWriter(kwargs["target"])
-        return real_thread(*args, **kwargs)
-
-    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: process)
-    monkeypatch.setattr(_common.threading, "Thread", thread)
-    monkeypatch.setattr(os, "getpgid", lambda pid: pid)
-    monkeypatch.setattr(os, "getpgrp", lambda: 7)
-    monkeypatch.setattr(
-        _common,
-        "_terminate_provider_process_group",
-        lambda *args: cleanups.append(args),
-    )
-
-    with pytest.raises(KeyboardInterrupt) as caught:
-        _common._run_once(
-            "claude", ["claude", "-p", "review"], str(tmp_path), 60,
-            stdin_text="input",
-        )
-
-    assert caught.value is interruption
-    assert cleanups == [(process, "wrapper interrupted", process.pid)]
-    assert joins == [2, 2]
 
 
 @pytest.mark.parametrize("formal", [False, True])
@@ -331,7 +195,7 @@ def test_claude_prompt_file_reaches_text_stdin_once(
     monkeypatch.setattr(_common, "_LOG_DIR", log_root)
     monkeypatch.setattr(_common, "_LOG_DIR_CONFIGURED", True)
     monkeypatch.setenv("TRIAD_AUDIT_REDACT_PROMPTS", "1")
-    model = "claude-opus-5-5" if formal else "opus"
+    model = "opus" if formal else "claude-opus-5-5"
     args = ["claude_wrapper.py", "--prompt-file", str(prompt_file),
             "--cwd", str(tmp_path), "--model", model, "--effort", "xhigh"]
     if formal:
@@ -353,7 +217,7 @@ def test_claude_prompt_file_reaches_text_stdin_once(
     assert len(children) == 1
     assert PROMPT not in record["argv"] and loaded not in record["argv"]
     assert record["argv"][:5] == ["--print", "--input-format", "text", "--output-format", "json"]
-    assert record["argv"][record["argv"].index("--model") + 1] == ("claude-opus-5-5" if formal else "opus")
+    assert record["argv"][record["argv"].index("--model") + 1] == ("opus" if formal else "claude-opus-5-5")
     assert record["argv"][record["argv"].index("--effort") + 1] == "xhigh"
     if formal:
         assert record["argv"][record["argv"].index("--permission-mode") + 1] == "plan"

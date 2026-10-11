@@ -60,11 +60,6 @@ _RESULT_METADATA_COPY_CONTRACT = (
     "directly from the single Review metadata JSON record. Before returning, compare each "
     "copied value character-for-character with that record; the three pairs must be identical."
 )
-_REVIEW_NO_WEB_CONTRACT = (
-    "Do not use web search, URL fetching, or other network research in REVIEW. "
-    "If external evidence is required, report the gap in open_questions for a "
-    "separate leader-authorized INVESTIGATION. "
-)
 _AGY_GOOGLE_TOOL_CONTRACT = (
     "For this Google leg, use only AGY native file-read and search tools for local inspection. "
     "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "
@@ -75,7 +70,7 @@ _AGY_GOOGLE_TOOL_CONTRACT = (
     "the limit in open_questions. "
     "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
     "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-    "The formal read-only permission rules deny all MCP calls. Do not call search_web or read_url_content. "
+    "Do not invoke MCP tools. Do not call search_web or read_url_content. "
     "Do not create or execute an experiment to resolve uncertainty. If static inspection "
     "cannot decide current correctness, report the uncertainty in open_questions. "
 )
@@ -467,8 +462,8 @@ def validate_formal_gemini_version(version: str) -> str:
     ):
         raise RoundIntegrityError("Gemini prerelease version has a leading zero")
     core = tuple(int(match[index]) for index in (1, 2, 3))
-    if core < (0, 34, 0) or (core == (0, 34, 0) and prerelease):
-        raise RoundIntegrityError("Gemini formal review requires CLI >=0.34.0")
+    if core < (0, 63, 0) or (core == (0, 63, 0) and prerelease):
+        raise RoundIntegrityError("Gemini requires CLI >=0.63.0")
     return version
 
 
@@ -493,7 +488,7 @@ def validate_google_preflight_receipt(
         "route",
     }
     route_keys = {
-        "agy": {"agy_version", "effort", "model", "route_args"},
+        "agy": {"agy_version", "effort", "model", "route_args", "agent", "agent_path", "agent_sha256"},
         "gemini": {
             "effective_approval_mode",
             "gemini_version",
@@ -543,6 +538,11 @@ def validate_google_preflight_receipt(
     ):
         raise RoundIntegrityError("Google preflight receipt selector mismatch")
     if route == "agy":
+        import _agy_agent
+        try:
+            _agy_agent.validate_binding(record, web, source_bin=selector_receipt.wrapper.parent)
+        except (ValueError, OSError) as exc:
+            raise RoundIntegrityError(str(exc)) from exc
         if (
             not all(
                 isinstance(record[key], str)

@@ -38,7 +38,7 @@ def adapter_case(tmp_path, monkeypatch):
         monkeypatch.setattr(mod, "resolve_binary", lambda name: binaries.get(name))
         calls = []
 
-        def probe(argv, *, cwd, env=None):
+        def probe(argv, *, cwd, env=None, cli="preflight"):
             calls.append(argv)
             executable = Path(argv[0]).name
             if "--version" in argv:
@@ -58,8 +58,12 @@ def adapter_case(tmp_path, monkeypatch):
             if "--preflight-only" in argv:
                 assert "--pydantic" in argv and argv[argv.index("--pydantic") + 1] == "verdict_v2:LegVerdict"
                 def value(flag):
+                    for item in argv:
+                        if item.startswith(flag + "="):
+                            return item.split("=", 1)[1]
                     return argv[argv.index(flag) + 1]
                 route = value("--expected-route")
+                assert cli == ("gemini" if route == "gemini" else "antigravity")
                 selector_file = Path(value("--google-selector-receipt"))
                 selector = json.loads(selector_file.read_text())
                 record = {"schema_version": 2, "review_id": value("--expected-review-id"),
@@ -69,14 +73,16 @@ def adapter_case(tmp_path, monkeypatch):
                     "google_selector_receipt_sha256": hashlib.sha256(selector_file.read_bytes()).hexdigest(),
                     "model": value("--model"), "effort": value("--effort") if route == "agy" else None,
                     "route_args": ["--model", value("--model"), "--effort", value("--effort")] if route == "agy"
-                                  else ["-m", value("--model")]}
+                                  else ["--model=" + value("--model")]}
                 if "--web" in argv:
                     record["review_web_authorized"] = True
                 if route == "agy":
+                    from conftest import profile_receipt
+                    record.update(profile_receipt("--web" in argv))
                     record["agy_version"] = "1.2.7"
                 else:
                     policy = ROOT / "bin/policies" / ("gemini-formal-web.toml" if "--web" in argv else "gemini-formal-readonly.toml")
-                    record.update({"gemini_version": "0.60.0", "requested_approval_mode": "plan",
+                    record.update({"gemini_version": "0.63.0", "requested_approval_mode": "plan",
                         "effective_approval_mode": "unexposed", "read_only_enforcement": "packaged-mode-independent-policy",
                         "policy": str(policy), "policy_sha256": hashlib.sha256(policy.read_bytes()).hexdigest()})
                 assert selector["route"] == route
@@ -97,13 +103,38 @@ def test_resolved_three_family_invocations_have_real_capability_evidence(adapter
     output = mod.prepare_adapters(roster, **kwargs)
     assert set(output) == {"claude", "codex", "google"}
     assert output["codex"]["transport_route"] == "native" and output["codex"]["binary"] is None
-    assert output["claude"]["model"] == "claude-opus-5-5" and output["claude"]["effort"] == "xhigh"
+    assert output["claude"]["model"] == "opus" and output["claude"]["effort"] == "xhigh"
     assert output["claude"]["selected_model"] == "claude-opus-5-5"
+    selection = next(call for call in calls if call[-1] == "/model opus")
+    assert selection[selection.index("--model") + 1] == "opus"
+    assert "--agent" not in selection
     assert output["google"]["route"] == "agy"
     assert all(item["capabilities_checked"] for item in output.values())
     assert Path(output["google"]["preflight_file"]).is_file()
     assert any("--preflight-only" in call for call in calls)
     assert not any(Path(call[0]).name == "codex" for call in calls)
+
+
+@pytest.mark.parametrize("route", ["agy", "gemini"])
+def test_C18_unlisted_google_pin_survives_roster_resolution_and_preparation(adapter_case, route):
+    mod, _, kwargs, calls, _ = adapter_case()
+    project = kwargs["cwd"]
+    config = project / ".agents" / "triad-review-legs.json"
+    config.parent.mkdir()
+    model = "future-user-pinned-model"
+    config.write_text(json.dumps({"schema": "triad-review-legs.v2", "legs": [
+        {"name": "claude", "enabled": False}, {"name": "codex", "enabled": False},
+        {"name": "google", "google": {"route": route}, route: {"model": model}},
+    ]}))
+    roster = resolve_roster(project)
+    output = mod.prepare_adapters(roster, **kwargs)
+    assert set(output) == {"google"}
+    assert output["google"]["model"] == model
+    assert output["google"]["route"] == route
+    assert len(calls) == 1 and "--preflight-only" in calls[0]
+    assert "--model=" + model in calls[0]
+    receipt = json.loads(Path(output["google"]["preflight_file"]).read_text())
+    assert receipt["model"] == model and receipt["provider_started"] is False
 
 
 def test_C34_opus_55_pin_rejects_provider_selection_of_opus_5(adapter_case, monkeypatch):
@@ -141,7 +172,7 @@ def test_explicit_gemini_pin_uses_own_block_with_agy_present(adapter_case):
     assert "--effort" not in call and "gemini-3.1-pro-high" not in call
 
 
-@pytest.mark.parametrize("fault", ["personal-pin", "missing-pin", "gemini-effort", "native-model", "native-effort", "native-source", "claude-agent", "claude-model", "claude-clamped-effort"])
+@pytest.mark.parametrize("fault", ["personal-pin", "missing-pin", "gemini-effort", "native-model", "native-effort", "native-source", "claude-agent", "claude-model"])
 def test_unsupported_settings_are_refused_before_paid_inference(adapter_case, fault):
     mod, roster, kwargs, calls, binaries = adapter_case()
     if fault == "personal-pin":
@@ -163,9 +194,6 @@ def test_unsupported_settings_are_refused_before_paid_inference(adapter_case, fa
         roster["legs"][0]["claude"]["agent"] = "missing-agent"
     elif fault == "claude-model":
         roster["legs"][0]["claude"]["model"] = "bad-model"
-    elif fault == "claude-clamped-effort":
-        roster["legs"][0]["claude"]["model"] = "claude-opus-4-6"
-        roster["legs"][0]["claude"]["effort"] = "xhigh"
     with pytest.raises(ValueError):
         mod.prepare_adapters(roster, **kwargs)
 
@@ -235,8 +263,9 @@ def test_C65_later_cli_version_preserves_capability_checks(adapter_case, monkeyp
         return
     result = mod.prepare_adapters(roster, **kwargs)["claude"]
     model, effort = ("claude-opus-4-6", "high") if version == "2.1.205" else ("claude-opus-5-5", "xhigh")
-    assert (result["cli_version"], result["model"], result["selected_model"], result["effort"]) == (version, model, model, effort)
-    assert any(call[-1] == "/model " + model for call in calls)
+    requested = model if version == "2.1.205" else "opus"
+    assert (result["cli_version"], result["model"], result["selected_model"], result["effort"]) == (version, requested, model, effort)
+    assert any(call[-1] == "/model " + requested for call in calls)
 
 
 @pytest.mark.parametrize("case", ["later", "missing-capability", "missing-control", "below-floor"])
@@ -244,17 +273,15 @@ def test_C65_google_later_versions_keep_actual_preflight_controls(route, monkeyp
     import antigravity_wrapper as agy
     import gemini_wrapper as gemini
     name = route["name"]
-    version = "1.3.0" if name == "agy" else "0.61.0"
+    version = "1.3.0" if name == "agy" else "0.64.0"
     if name == "agy":
         monkeypatch.setattr(agy, "_probe_agy_version", lambda _: (1, 1, 19) if case == "below-floor" else (1, 3, 0))
         if case == "missing-capability":
-            monkeypatch.setattr(agy, "_probe_agy_models", lambda _: set())
+            monkeypatch.setattr(agy, "_probe_agy_version", lambda _: None)
         if case == "missing-control":
-            @contextlib.contextmanager
             def unavailable_guard(*args, **kwargs):
-                raise ValueError("required read-only settings control unavailable")
-                yield
-            monkeypatch.setattr(agy._agy_settings, "agy_settings_guard", unavailable_guard)
+                raise ValueError("required read-only profile unavailable")
+            monkeypatch.setattr(agy._agy_agent, "controls", unavailable_guard)
     else:
         original = gemini.subprocess.run
         def probe(argv, **kw):

@@ -130,8 +130,10 @@ def _write_google_preflight_receipt(
         "route": route,
     }
     if route == "agy":
+        from conftest import profile_receipt
         record = {
             **common,
+            **profile_receipt(),
             "agy_version": "1.1.20",
             "effort": "high",
             "model": "gemini-3.1-pro-high",
@@ -143,7 +145,7 @@ def _write_google_preflight_receipt(
             "effective_approval_mode": "unexposed",
             "model": "auto",
             "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
-            "gemini_version": "0.60.0",
+            "gemini_version": "0.63.0",
             "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
             "read_only_enforcement": "packaged-mode-independent-policy",
             "requested_approval_mode": "plan",
@@ -3097,7 +3099,7 @@ def test_worktree_prompt_preserves_leader_authored_review_points(
         "the limit in open_questions. "
         "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
         "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-        "The formal read-only permission rules deny all MCP calls. Do not call search_web or read_url_content. "
+        "Do not invoke MCP tools. Do not call search_web or read_url_content. "
         "Do not create or execute an experiment to resolve uncertainty. If static inspection "
         "cannot decide current correctness, report the uncertainty in open_questions. "
     )
@@ -4019,7 +4021,7 @@ def test_rendered_google_prompt_forbids_command_tools_and_experiments(prepared):
         "the limit in open_questions. "
         "Never invoke run_command, command_status, send_command_input, or any other shell, terminal, "
         "file-write, file-edit, notebook-execution, subagent, browser-actuation, or scratch-space tool. "
-        "The formal read-only permission rules deny all MCP calls. Do not call search_web or read_url_content. "
+        "Do not invoke MCP tools. Do not call search_web or read_url_content. "
         "Do not create or execute an experiment to resolve uncertainty. If static inspection "
         "cannot decide current correctness, report the uncertainty in open_questions. "
     )
@@ -4371,7 +4373,7 @@ def test_google_gemini_preflight_receipt_requires_truthful_mode_fields(
         "executable": str(selected),
         "google_selector_receipt_sha256": selector.receipt_sha256,
         "policy": str((BIN / "policies" / "gemini-formal-readonly.toml").resolve()),
-        "gemini_version": "0.60.0",
+        "gemini_version": "0.63.0",
         "policy_sha256": hashlib.sha256((BIN / "policies/gemini-formal-readonly.toml").read_bytes()).hexdigest(),
         "provider_started": False,
         "review_id": "review-r1",

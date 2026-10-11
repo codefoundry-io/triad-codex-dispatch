@@ -18,7 +18,7 @@ from verdict_schema import _read_canonical_regular_file, _reject_duplicate_membe
 
 CONTRACT_ROOT = Path(__file__).resolve().parents[1] / "contracts"
 SOURCE_REPOSITORY = "https://github.com/codefoundry-io/triad-dispatch-spec"
-SOURCE_COMMIT = "04245c740afc9be36ad7702a134f71aec8ff0b7f"
+SOURCE_COMMIT = "fb7c962c83273c8b9c48fd11c482d1f5d50ef24d"
 PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-fields.json", "review-kind.schema.json")
 BINDING_FIELDS = ("review_id", "family", "content_digest", "leg_name", "attempt", "route")
 

@@ -1,4 +1,4 @@
-"""C31/C32: explicit web authorization stays invocation- and basis-scoped."""
+"""C31/C32: review authorization stays bound across routes and retries."""
 import json
 import sys
 from dataclasses import replace
@@ -22,6 +22,11 @@ import hashlib
 import tomllib
 
 
+def shared_web_clause():
+    payload = (Path(__file__).resolve().parents[1] / "prompts/review-v2/common-clauses.md").read_text()
+    return payload.split("## review-web-permission (", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0]
+
+
 @pytest.fixture
 def call_wrapper(tmp_path, monkeypatch, capsys):
     calls = []
@@ -41,7 +46,7 @@ def call_wrapper(tmp_path, monkeypatch, capsys):
         prompt = "Verify the requested external fact."
         if mode != "raw":
             schema = "verdict_v2:LegVerdict" if mode == "v2" else "verdict_schema:LegVerdict"
-            options += ["--pydantic", schema, "--model", "claude-opus-5-5", "--effort", "xhigh", "--timeout", "1200"]
+            options += ["--pydantic", schema, "--model", "opus", "--effort", "xhigh", "--timeout", "1200"]
             for field in fields:
                 options += ["--expected-" + field.replace("_", "-"), "null" if data[field] is None else str(data[field])]
             if authorized is not None:
@@ -113,7 +118,7 @@ def test_C32_common_legacy_permission_preserves_one_digest(prepared, worktree, m
         metadata = json.loads(next(line.removeprefix("Review metadata: ") for line in after.splitlines() if line.startswith("Review metadata: ")))
         assert metadata["review_web_authorized"] is True
         digests.add(metadata["content_digest"])
-        assert "Web verification is explicitly authorized" in after
+        assert shared_web_clause() in after
         assert "Do not use web search, URL fetching" not in after
         assert "Do not call search_web or read_url_content" not in after
         assert metadata["content_digest"] not in before
@@ -123,7 +128,7 @@ def test_C32_common_legacy_permission_preserves_one_digest(prepared, worktree, m
 @pytest.mark.parametrize("family", ["claude", "codex", "google"])
 def test_C32_v2_prompt_selects_one_permission_policy(tmp_path, family):
     prompt = review_prompts_v2.render_prompt(**arguments(tmp_path, family), review_web_authorized=True)
-    assert "Web verification is explicitly authorized" in prompt
+    assert shared_web_clause() in prompt
     assert "access the network/web" not in prompt
     assert "Do NOT access the network" not in prompt and "web/search/fetch tools or" not in prompt
 
@@ -149,10 +154,10 @@ def test_C32_v2_request_has_strict_transient_authorization(round_fixture, value)
     assert basis["request"]["review_web_authorized"] is True
     first = start(fixture, "c")
     assert "--web" in first["invocation"]["argv"]
-    assert "Web verification is explicitly authorized" in Path(first["prompt_file"]).read_text()
+    assert shared_web_clause() in Path(first["prompt_file"]).read_text()
     assert basis["adapters"]["n"]["native_web_available"] is True
     native = start(fixture, "n")
-    assert "Web verification is explicitly authorized" in native["invocation"]["arguments"]["message"]
+    assert shared_web_clause() in native["invocation"]["arguments"]["message"]
     finish(fixture, native, failed=True)
     native_retry = mod.allocate_attempt(Path(basis["basis_file"]), "n", diagnosis="transient failure")
     assert native_retry["adapter"]["native_web_available"] is True
@@ -161,6 +166,51 @@ def test_C32_v2_request_has_strict_transient_authorization(round_fixture, value)
     finish(fixture, first, failed=True)
     retry = mod.allocate_attempt(Path(basis["basis_file"]), "c", diagnosis="transient failure")
     assert "--web" in retry["invocation"]["argv"] and retry["binding"]["content_digest"] == first["binding"]["content_digest"]
+
+
+@pytest.mark.parametrize("caller", ["omitted", False, True])
+def test_C32_v2_standing_permission_binds_every_leg(round_fixture, caller):
+    fixture = round_fixture(request_changes={} if caller == "omitted" else {"review_web_authorized": caller})
+    _, basis, *_ = fixture
+    assert basis["request"]["review_web_authorized"] is True
+    for name in basis["enabled"]:
+        allocation = start(fixture, name)
+        assert allocation["adapter"]["review_web_authorized"] is True
+        assert shared_web_clause() in Path(allocation["prompt_file"]).read_text()
+        if allocation["binding"]["family"] != "codex":
+            assert "--web" in allocation["invocation"]["argv"]
+
+
+@pytest.mark.parametrize("standing", [False, True])
+def test_C32_v2_policy_change_affects_preparation_not_bound_retry(round_fixture, monkeypatch, standing):
+    mod, _, root, tree, request, calls = round_fixture(make_basis=False)
+    monkeypatch.setattr(mod, "REVIEW_WEB_STANDING_AUTHORIZATION", standing, raising=False)
+    request["review_web_authorized"] = not standing
+    basis = mod.create_basis(request, root=root)
+    fixture = (mod, basis, root, tree, request, calls)
+    assert basis["request"]["review_web_authorized"] is standing
+    first = start(fixture, "claude")
+    finish(fixture, first, failed=True)
+    # In-process policy simulation preserves source bytes/toolkit integrity.
+    monkeypatch.setattr(mod, "REVIEW_WEB_STANDING_AUTHORIZATION", not standing)
+    retry = mod.allocate_attempt(Path(basis["basis_file"]), "claude", diagnosis="transient failure")
+    assert retry["binding"]["content_digest"] == first["binding"]["content_digest"]
+    assert ("--web" in retry["invocation"]["argv"]) is standing
+    assert (shared_web_clause() in Path(retry["prompt_file"]).read_text()) is standing
+
+
+@pytest.mark.parametrize("capability", [None, False])
+def test_C32_v2_standing_permission_requires_native_web(round_fixture, monkeypatch, capability):
+    from review_adapters_v2 import prepare_adapters
+    mod, _, root, _, request, _ = round_fixture(make_basis=False, config_legs=[
+        {"name": "claude", "enabled": False}, {"name": "google", "enabled": False}])
+    monkeypatch.setattr(mod, "prepare_adapters", prepare_adapters)
+    request["native_capabilities"].pop("web_available")
+    if capability is not None:
+        request["native_capabilities"]["web_available"] = capability
+    with pytest.raises(ValueError, match="web"):
+        mod.create_basis(request, root=root)
+    assert not (root / "basis-v2.json").exists()
 
 
 @pytest.mark.parametrize("supported", [False, True])
@@ -203,8 +253,12 @@ def test_C32_google_preflight_permission_binds_dispatch_and_policy(route, dispat
     assert rc == (0 if dispatch_web else _common.EXIT_ARG_ERROR), error
     assert len(route["calls"]) == int(dispatch_web)
     if route["name"] == "agy":
-        assert route["guards"] and all("read_url(*)" not in rules for rules in route["guards"])
-        assert all("write_file(*)" in rules and "command(*)" in rules for rules in route["guards"])
+        assert receipt["agent"] == "triad-codex-readonly-research"
+        profile = Path(receipt["agent_path"]).read_bytes()
+        assert hashlib.sha256(profile).hexdigest() == receipt["agent_sha256"]
+        for cmd, *_ in route["calls"]:
+            assert cmd[cmd.index("--agent") + 1] == receipt["agent"]
+            assert "--dangerously-skip-permissions" not in cmd
     else:
         policy = tomllib.loads(Path(receipt["policy"]).read_text())
         allow = next(rule["toolName"] for rule in policy["rule"] if rule["decision"] == "allow")

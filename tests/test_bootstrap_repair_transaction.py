@@ -9,6 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP_REPAIR = ROOT / "bin" / "bootstrap_repair.py"
+FROZEN_LEGACY_AGENT = (ROOT / "tests/fixtures/legacy-agents/307745f-claude.toml").read_bytes()
 
 
 def _load_bootstrap_repair_module():
@@ -1030,11 +1031,7 @@ def test_managed_quarantine_rolls_back_without_clobbering_foreign_destination(
     helper = _load_bootstrap_repair_module()
     source = tmp_path / "agents" / "claude-wrapper-repair.toml"
     source.parent.mkdir()
-    managed = (
-        b"# Codex named subagent for Claude wrapper repair agent\n"
-        b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
-        b'name = "claude-wrapper-repair"\n'
-    )
+    managed = FROZEN_LEGACY_AGENT
     source.write_bytes(managed)
     source.chmod(0o604)
     destination = tmp_path / "quarantine" / source.name
@@ -1067,11 +1064,7 @@ def test_managed_quarantine_preserves_captured_bytes_and_mode(
     helper = _load_bootstrap_repair_module()
     source = tmp_path / "agents" / "claude-wrapper-repair.toml"
     source.parent.mkdir()
-    managed = (
-        b"# Codex named subagent for Claude wrapper repair agent\n"
-        b"# Installed by bootstrap to the Codex personal agent-discovery scope\n"
-        b'name = "claude-wrapper-repair"\n'
-    )
+    managed = FROZEN_LEGACY_AGENT
     source.write_bytes(managed)
     source.chmod(0o604)
 
