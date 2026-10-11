@@ -1,7 +1,7 @@
 """Shared helpers for codex/gemini subprocess wrappers.
 
 Framework — vendor-JSON IO + 5-class classification + noise-tag extraction
-+ pydantic schema validation (optional) with 1 schema-repair retry.
++ optional local pydantic validation after one CLI inference invocation.
 
 Per-CLI vendor JSON modes (always on):
 - Codex: `codex exec --json -o <last_msg> --ephemeral`
@@ -60,9 +60,9 @@ EXIT_CLI_FAIL = 1
 EXIT_TIMEOUT = 2
 EXIT_ARG_ERROR = 3
 EXIT_BINARY_MISSING = 4
-EXIT_RATE_GIVE_UP = 64   # transient retry exhausted → repair-routed classification
+EXIT_RATE_GIVE_UP = 64   # capacity failure; historical constant name retained
 EXIT_TERMINAL = 65       # cli-sub-cap / token-limit / oauth-env → user escalate
-EXIT_SCHEMA_FAIL = 66    # pydantic validation failed even after 1 retry
+EXIT_SCHEMA_FAIL = 66    # local pydantic validation failed
 EXIT_SCHEMA_REJECTED = 67  # codex refused --output-schema at submit (massage/strict-rule drift)
 
 
@@ -100,7 +100,7 @@ SERVER_CAPACITY_PATTERNS: tuple[str, ...] = (
     "model overloaded",
     "overloaded_error",  # 2026-07-05: Anthropic 529 overload api_error_status enum,
     # surfaced by extract_claude_answer into the claude is_error ext_err blob
-    # (`is_error=true (api_error_status=overloaded_error): ...`). Retry-eligible.
+    # (`is_error=true (api_error_status=overloaded_error): ...`). Capacity outcome.
     # Specific vendor enum token — passes the false-positive guard (unlike bare
     # `"529"`). `rate_limit_error` (429) deliberately NOT added: it is ambiguous
     # between a transient rate limit (retry) and a subscription cap (terminal),
@@ -197,11 +197,6 @@ ANTIGRAVITY_VENDOR_EXIT_MAP: dict[int, str] = {
 
 # AGY own-line banner carrier; never a whole-output substring match.
 AGY_AUTH_BANNER_PATTERNS = ("authentication required. please visit the url",)
-
-
-# ─── Retry policy ─────────────────────────────────────────────────────────
-SERVER_CAP_BACKOFF_S: tuple[int, ...] = (15, 45)
-SERVER_CAP_MAX_RETRIES = len(SERVER_CAP_BACKOFF_S)
 
 
 # ─── Audit rotation policy ────────────────────────────────────────────────
@@ -1532,24 +1527,15 @@ def run_cli_with_retry(
     remove_env=(),
     prompt_suffix: str = "",
 ) -> RunResult:
-    """Top-level driver.
+    """Run once, extract the vendor answer, and validate locally.
 
-    Layers (in order):
-    1. Schema injection — if `pydantic_cls`, prepend the schema block to prompt.
-    2. Server-capacity retry — `SERVER_CAP_BACKOFF_S` (skipped if
-       `repair_mode` or `single_provider_call`).
-    3. Answer extraction — cli-aware (JSONL events / single JSON object).
-    4. Schema validation — if `pydantic_cls`, validate; on failure, retry once
-       (mode = "schema_repair") with a clarifying suffix in the prompt unless
-       `single_provider_call` is set.
-
-    `cmd_builder(prompt) -> argv` lets us rebuild the argv after schema-repair
-    prompt mutation without leaking command construction into this function.
+    The historical name and single_provider_call parameter remain compatible;
+    every route is now single-call. Vendor-internal retries and explicit later
+    review retries are separate. cmd_builder receives the initial schema-injected
+    prompt plus the caller's final clause, without correction-prompt mutation.
     """
-    # Next-run IPC cleanup (owner contract: a subsequent run clears prior
-    # residue). The legacy `repair_mode` compatibility flag skips cleanup and
-    # retries for an explicit single-attempt diagnostic invocation. The current
-    # fresh native proposal-only child has no provider-wrapper invocation.
+    # Legacy repair mode skips normal next-run IPC cleanup. It does not restart
+    # inference, and the current native repair child only proposes a patch.
     if not repair_mode:
         prune_stale_run_logs(cli)
 
@@ -1627,172 +1613,93 @@ def run_cli_with_retry(
             return r
         return None
 
-    schema_repair_attempt = 0
-    while True:
-        # The caller's final clause follows schema and retry instructions.
-        sent_prompt = effective_prompt + ("\n\n" + prompt_suffix if prompt_suffix else "")
-        cmd = cmd_builder(sent_prompt)
+    # The caller's final clause follows initial schema instructions.
+    sent_prompt = effective_prompt + ("\n\n" + prompt_suffix if prompt_suffix else "")
+    cmd = cmd_builder(sent_prompt)
+    run_once_kwargs = {"stdin_text": sent_prompt if prompt_via_stdin else None}
+    if remove_env:
+        run_once_kwargs["remove_env"] = remove_env
+    result = _run_once(cli, cmd, cwd=cwd, timeout=timeout, **run_once_kwargs)
+    result.repair_attempt = 0
+    result.schema_repair_attempt = 0
+    result.mode = "repair" if repair_mode else "normal"
+    if result._stdin_delivery_failed or result._output_transport_failed or (
+        prompt_via_stdin and result.exit_code == EXIT_TIMEOUT
+    ):
+        return result
 
-        # Layer 2: server-cap retry.
-        max_retries = (
-            0 if repair_mode or single_provider_call else SERVER_CAP_MAX_RETRIES
-        )
-        result: Optional[RunResult] = None
-        for attempt in range(max_retries + 1):
-            run_once_kwargs = {
-                "stdin_text": sent_prompt if prompt_via_stdin else None,
-            }
-            if remove_env:
-                run_once_kwargs["remove_env"] = remove_env
-            r = _run_once(
-                cli,
-                cmd,
-                cwd=cwd,
-                timeout=timeout,
-                **run_once_kwargs,
-            )
-            r.repair_attempt = attempt if repair_mode else 0
-            r.schema_repair_attempt = schema_repair_attempt
-            if repair_mode:
-                r.mode = "repair"
-            elif schema_repair_attempt > 0:
-                r.mode = "schema_repair"
-            else:
-                r.mode = "normal"
-            result = r
-            if r._stdin_delivery_failed or r._output_transport_failed or (
-                prompt_via_stdin and r.exit_code == EXIT_TIMEOUT
-            ):
-                return r
-            cls = r.classification
-            if cli == "claude":
-                _answer, ext_err = extract_claude_answer(r.stdout, r.stderr)
-                if ext_err:
-                    promoted = promote_claude_extraction(r, ext_err)
-                    if promoted is not None:
-                        return promoted
-                    # Finding #1 (2026-07-05): a claude API error envelope
-                    # (is_error=true, rc=0) is classified "ok" by the rc-based
-                    # `classify` above (cls = r.classification). promote_claude_
-                    # extraction returns None for a NON-terminal re-classification
-                    # (server-capacity is retryable, not terminal), so cls stayed
-                    # "ok" and the loop broke BELOW before the server-cap retry —
-                    # a retryable overload surfaced as extraction-error with zero
-                    # retries. Propagate a retryable re-classification into cls
-                    # (and r.classification, so a retry-exhaust returns a consistent
-                    # rc=64/server-capacity result) to engage the retry branch.
-                    if ext_err.startswith("is_error=true"):
-                        recls = classify_extraction("claude", r, ext_err)
-                        if recls == "server-capacity":
-                            r.classification = cls = "server-capacity"
-            if cls == "ok":
-                break
-            if cls in terminal_classes:
-                # Re-emit summary so the [wrapper] line's exit token matches
-                # the wrapper's actual final rc (65). Without this the line
-                # carries _run_once's stale rc=1 which contradicts the
-                # wrapper's $? (2026-05-03 later-3 fault test exposed).
-                return promote_terminal(r, cls)
-            if cls == "schema-rejected":
-                r.exit_code = EXIT_SCHEMA_REJECTED
-                log(
-                    f"[wrapper] {cli} {cls} "
-                    f"exit={r.exit_code} vendor={r.vendor_exit_code} "
-                    f"elapsed={r.elapsed_s:.1f}s"
-                )
-                return r
-            if cls == "server-capacity":
-                if attempt < max_retries:
-                    wait = SERVER_CAP_BACKOFF_S[attempt]
-                    # Test seam (mirrors agy's AGY_NO_BACKOFF): zero the backoff so
-                    # the retry PATH can be verified without the (15,45)s wall.
-                    # Off by default — consumers keep the real backoff.
-                    if os.environ.get("TRIAD_SERVER_CAP_NO_BACKOFF") == "1":
-                        wait = 0
-                    log(
-                        f"server-capacity (attempt {attempt+1}/{max_retries+1}); "
-                        f"sleep {wait}s"
-                    )
-                    time.sleep(wait)
-                    continue
-                r.exit_code = EXIT_RATE_GIVE_UP
-                # Re-emit — promote rc=1 → 64 in the [wrapper] line.
-                log(
-                    f"[wrapper] {cli} {cls} "
-                    f"exit={r.exit_code} vendor={r.vendor_exit_code} "
-                    f"elapsed={r.elapsed_s:.1f}s"
-                )
-                return r
-            # cls in {"unknown", "timeout"} — fail-fast. Both surface through
-            # the dispatch skill's repair/escalation classification path; a
-            # timeout is likely escalation because a hang is not a classifier
-            # gap.
-            return r
-
-        assert result is not None
-
-        # Layer 3: extract final answer.
-        if cli == "claude":
-            answer, ext_err = extract_claude_answer(result.stdout, result.stderr)
-        else:
-            answer, ext_err = extract_gemini_answer(result.stdout, result.stderr)
-
+    cls = result.classification
+    if cli == "claude":
+        _answer, ext_err = extract_claude_answer(result.stdout, result.stderr)
         if ext_err:
-            log(f"answer extraction error: {ext_err}")
-            result.extraction_error = ext_err
-            result.final_answer = ""
-            promoted = promote_extraction_classification(result, ext_err)
+            promoted = promote_claude_extraction(result, ext_err)
             if promoted is not None:
                 return promoted
-            if result.exit_code == EXIT_OK:
-                # Vendor returned rc=0 but extractor found no answer (empty
-                # JSON envelope, missing last-message file, etc.). Promote
-                # to wrapper failure AND re-classify — `_run_once` had set
-                # classification="ok" based on rc alone, which is now stale.
-                # Re-emit the one-line final summary so the dispatch contract
-                # receives the corrected classification token.
-                result.exit_code = EXIT_CLI_FAIL
-                result.classification = "extraction-error"
-                log(
-                    f"[wrapper] {cli} extraction-error "
-                    f"exit={result.exit_code} vendor={result.vendor_exit_code} "
-                    f"elapsed={result.elapsed_s:.1f}s"
-                )
-            return result
+            # A zero-exit Claude error envelope can still report capacity.
+            if ext_err.startswith("is_error=true"):
+                if classify_extraction("claude", result, ext_err) == "server-capacity":
+                    result.classification = cls = "server-capacity"
+    if cls in terminal_classes:
+        return promote_terminal(result, cls)
+    if cls in ("schema-rejected", "server-capacity"):
+        result.exit_code = (EXIT_SCHEMA_REJECTED if cls == "schema-rejected"
+                            else EXIT_RATE_GIVE_UP)
+        log(
+            f"[wrapper] {cli} {cls} "
+            f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+            f"elapsed={result.elapsed_s:.1f}s"
+        )
+        return result
+    if cls != "ok":
+        return result
 
-        if cli in ("claude", "gemini") and pydantic_cls is not None:
-            try:
-                _check_original_json(strip_markdown_fences(result.stdout), pydantic_cls)
-            except ValueError as error:
-                result.validation_error = str(error)
-                return promote_schema_fail(result)
+    # Extract only this invocation's final answer.
+    if cli == "claude":
+        answer, ext_err = extract_claude_answer(result.stdout, result.stderr)
+    else:
+        answer, ext_err = extract_gemini_answer(result.stdout, result.stderr)
 
-        result.final_answer = answer
+    if ext_err:
+        log(f"answer extraction error: {ext_err}")
+        result.extraction_error = ext_err
+        result.final_answer = ""
+        promoted = promote_extraction_classification(result, ext_err)
+        if promoted is not None:
+            return promoted
+        if result.exit_code == EXIT_OK:
+            # Vendor returned rc=0 but extractor found no answer (empty
+            # JSON envelope, missing last-message file, etc.). Promote
+            # to wrapper failure AND re-classify — `_run_once` had set
+            # classification="ok" based on rc alone, which is now stale.
+            # Re-emit the one-line final summary so the dispatch contract
+            # receives the corrected classification token.
+            result.exit_code = EXIT_CLI_FAIL
+            result.classification = "extraction-error"
+            log(
+                f"[wrapper] {cli} extraction-error "
+                f"exit={result.exit_code} vendor={result.vendor_exit_code} "
+                f"elapsed={result.elapsed_s:.1f}s"
+            )
+        return result
 
-        # Layer 4: schema validation.
-        if pydantic_cls is None:
-            return result
-
-        ok, validated_or_err = validate_response(answer, pydantic_cls)
-        if ok:
-            result.validated = validated_or_err
-            return result
-
-        result.validation_error = str(validated_or_err)
-        log(f"schema validation failed: {validated_or_err}")
-
-        if schema_repair_attempt >= 1 or repair_mode or single_provider_call:
+    if cli in ("claude", "gemini") and pydantic_cls is not None:
+        try:
+            _check_original_json(strip_markdown_fences(result.stdout), pydantic_cls)
+        except ValueError as error:
+            result.validation_error = str(error)
             return promote_schema_fail(result)
 
-        # 1 retry — augment prompt with the failure notice and loop.
-        schema_repair_attempt += 1
-        effective_prompt = (
-            effective_prompt
-            + "\n\nIMPORTANT: Your previous response failed JSON schema validation:\n"
-            + f"{validated_or_err}\n\n"
-            + "Reply again with valid JSON only — no prose, no markdown fences."
-        )
-        log(f"schema_repair_attempt {schema_repair_attempt}/1 — retrying")
+    result.final_answer = answer
+
+    if pydantic_cls is None:
+        return result
+    ok, validated_or_err = validate_response(answer, pydantic_cls)
+    if ok:
+        result.validated = validated_or_err
+        return result
+    result.validation_error = str(validated_or_err)
+    log(f"schema validation failed: {validated_or_err}")
+    return promote_schema_fail(result)
 
 
 # ─── Audit log ────────────────────────────────────────────────────────────

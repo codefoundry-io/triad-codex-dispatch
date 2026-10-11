@@ -42,6 +42,10 @@ Return the wrapper's terminal stdout to the leader. Keep run logs and result
 files outside immutable reviewed evidence. Provider findings never authorize a
 code or design change; the leader reproduces and classifies them.
 
+Each wrapper invocation runs inference once; capacity or schema failure does not
+automatically replay the CLI. Diagnose the returned failure before any explicit
+later invocation. Vendor-internal retries remain vendor-owned.
+
 For terminal `unknown` or `extraction-error`, follow the
 [repair protocol](../../docs/references/repair-protocol.md) with the last emitted
 `run-log:` path as opaque data. Its fresh native child proposes; the owner applies

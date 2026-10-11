@@ -48,6 +48,10 @@ Gemini reviews only; it does not edit or execute candidate code. The leader
 reproduces every finding and asks the owner before any proposed design,
 specification, capability, or scope change.
 
+Each wrapper invocation runs inference once; capacity or schema failure does not
+automatically replay the CLI. Diagnose the returned failure before any explicit
+later invocation. Vendor-internal retries remain vendor-owned.
+
 For terminal `unknown` or `extraction-error`, follow the
 [repair protocol](../../docs/references/repair-protocol.md) with the last emitted
 `run-log:` path as opaque data. Its fresh native child proposes; the owner applies

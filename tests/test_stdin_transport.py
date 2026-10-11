@@ -146,13 +146,13 @@ def test_stdin_early_close_does_not_mask_capacity_envelope(
             cmd, str(tmp_path), 3, LegVerdict, stdin_text=PROMPT)
     assert result.exit_code == _common.EXIT_RATE_GIVE_UP
     assert result.classification == "server-capacity"
-    assert len(children) == (1 if route == "native" else _common.SERVER_CAP_MAX_RETRIES + 1)
+    assert len(children) == 1
 
 
 @pytest.mark.parametrize("message,expected,count", [
     ("payload size exceeds", _common.EXIT_TERMINAL, 1),
     ("model overloaded", _common.EXIT_RATE_GIVE_UP,
-     _common.SERVER_CAP_MAX_RETRIES + 1),
+     1),
 ])
 def test_stdin_real_vendor_rejection_keeps_priority(
         message, expected, count, tmp_path, children):

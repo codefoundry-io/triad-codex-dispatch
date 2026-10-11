@@ -149,14 +149,14 @@ def test_c1_reader_error_preserves_timeout(tmp_path, owned_children, capsys):
     assert "stderr collection failed (UnicodeDecodeError)" in capsys.readouterr().err
 
 
-def test_c1_reader_error_preserves_genuine_capacity_retry(tmp_path, owned_children, capsys):
+def test_c1_reader_error_preserves_genuine_capacity_failure(tmp_path, owned_children, capsys):
     code = ("import os,sys; os.write(1,b'\\xff'); "
             "print('model overloaded',file=sys.stderr); sys.exit(1)")
     result = _invoke("ordinary", code, tmp_path)
     assert result.vendor_exit_code == 1
     assert result.exit_code == _common.EXIT_RATE_GIVE_UP
     assert result.classification == "server-capacity"
-    assert len(owned_children) == _common.SERVER_CAP_MAX_RETRIES + 1
+    assert len(owned_children) == 1
     assert capsys.readouterr().err.count("stdout collection failed (UnicodeDecodeError)") == len(owned_children)
 
 

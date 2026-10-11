@@ -81,6 +81,44 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
+Owner2026-10-11 approved the next automatic whole-CLI restart removal with "진행".
+Current unit: [single CLI invocation](../superpowers/plans/2026-10-11-single-cli-call.md).
+Replace capacity/schema restarts with one inference call and existing64/66 failure;
+preserve vendor internals and explicit review-level retry. Baseline25372be.
+Shared replacement, dedicated RED/GREEN and required unit review precede publication.
+Shared7c4946f is pushed; authoring1/1 and182tests passed, PR13comment6104736069.
+Fresh dedicated RED5failed/4passed measured capacity3calls/schema-invalid2calls,
+with matching source integrity and exact cleanup. The earlier invalid success
+controls are preserved separately; only their dictionary assertion was corrected.
+Candidate removes the two common-driver loops (net93production lines removed),
+preserving classification, extraction and validation. Fresh dedicated GREEN:
+397focused/2369full passed,4skipped; four validators and diff check passed.
+Source fingerprints matched; exact temp cleanup complete. Two exit-code comment
+updates after GREEN preserve the identical executable AST. R1 ended INCOMPLETE:
+Claude's own terminal result reports monthly spend limit, wrapper unknown/exit1.
+Pro/Flash/Astra SAFE, final integrity matched, all handles consumed/exact stages
+cleaned. A Minor duplicate Claude extraction already exists at baseline; verified
+nonblocking, no parser-refactor backlog. The owner fallback is now active: fresh
+Sol/xhigh+Astra/high+Google Pro/high R2, with no carried approval. R2 is now
+ALL_SELECTED_APPROVED: all three SAFE, matching integrity; all actual terminal
+handles consumed, custody exported and exact stages cleaned. Minor residuals:
+pre-existing duplicate Claude extraction and three old troubleshooting "capacity
+retry" phrases; explicit one-call guidance/runtime are correct. No further wording
+round or automatic parser-refactor queue. Commit/shared evidence publication next.
+Owner review fallback: if actual Claude usage-limit exhaustion is observed, finish
+started producers and start a fresh complete Sol/xhigh + Astra/high + Google Pro/high
+round on one basis. Do not interpret auth/tool failure as quota or carry old approval.
+The condition was observed in R1 as recorded above. Native legs stay host-owned.
+Use the active three-leg roster for subsequent task reviews while the observed
+Claude limit remains unresolved; do not purchase another call merely to check it.
+
+Next design choice is pending owner input: repeated reviewed-tree verification
+currently runs during allocate/record/collect. Proposed minimum keeps initial
+and final source integrity plus intermediate condition/result bindings, delaying
+source-drift detection until final collection. The owner has been asked because
+another call could be spent before drift is detected. No dependent edit is made.
+Evidence/cleanup consolidation and U2 mapping remain separate; whole-task hook stays.
+
 **Owner proceeded2026-10-11: bounded vendor-invocation simplification design;
 U6b/U9 expansion drafts remain on hold and must not resume automatically.**
 Read [the current audit](2026-10-11-vendor-responsibility-audit.md). The owner
@@ -147,8 +185,8 @@ verified; no further wording round or automatic backlog. Evidence includes
 This unit is complete: sourceba1b6dc and shared3061281 are pushed. Shared authoring1/1
 and182tests passed; C1/C2/C9/DL-88 evidence and the replacement guidance are shared
 in PR13comment6101997909. The source remains on the existing development branch.
-The next outer capacity/schema restart removal proposal awaits the owner's
-choice. Do not interpret input-availability approval as approval of that policy.
+The outer capacity/schema restart proposal was separately approved by the owner's
+following "진행"; its current execution is recorded above.
 Prior runtime basis47a1503; completed unit sourceba1b6dc follows baseline959d828.
 Neither RED nor leader checks are formal admission. Main merge needs scenario-based
 review and separate approval. The whole-task hook remains while work is unfinished.

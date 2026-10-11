@@ -655,7 +655,7 @@ Gemini는 Google Cloud 프로젝트 변수 4개를 유지하고 다른 경로는
 | `0` | 성공 — 이어서 답변 | 없음. |
 | `3` | 잘못된 wrapper 인자 또는 Gemini 로컬 preflight·버전 검사 거부 | stderr를 확인하세요. 0.63.0 미만이면 CLI를 업그레이드하고, 그 외에는 선택한 실행 파일이나 입력을 고친 뒤 새로 호출하세요. AGY 버전·설정 preflight 거부는 65를 사용합니다. |
 | `4` | 설정된 provider 실행 파일이 제출 전에 없거나 실행할 수 없음 | dispatch 전에는 개인 Google용 AGY 또는 Enterprise OAuth용 AGY/Gemini를 설치하세요. route 선택 뒤에는 같은 실행 파일을 고치고 사후 fallback하지 않습니다. |
-| `64` | Server capacity 소진 (경로별 재시도 적용; AGY는 단일 호출) | 일시적 vendor 과부하; 기다렸다 재시도. |
+| `64` | Server capacity 실패 (CLI 추론 한 번 호출) | 일시적 vendor 과부하; 기다렸다 재시도. |
 | `65` | 인증, config, quota 또는 다른 terminal provider failure(예: `oauth-env`, `cli-subscription-cap`, `token-limit`) | 표시된 provider state를 해결한 뒤 explicit new invocation을 만드세요. |
 | `66` | 구조화 출력(`--pydantic`) 스키마 검증 실패 | `schema-fail is terminal for that invocation`; leader가 판단한 뒤 explicit new invocation을 만들 수 있습니다. shared-directory formal path는 legacy packet-bound schema를 요구하지 않습니다. |
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |
@@ -913,6 +913,11 @@ failure run log는 untrusted repair evidence를 위해 전체 prompt와 vendor t
 [fallback 소유권 테스트](tests/test_fallback_cleanup_ownership.py),
 [리뷰 custody 테스트](tests/test_review_cleanup_custody.py).
 
+Wrapper 호출 하나는 CLI 추론을 한 번 실행합니다. 용량 오류는 `64`, 로컬 schema
+검증 실패는 `66`으로 반환하며 CLI 전체 자동 재호출이나 수정 프롬프트를 추가하지
+않습니다. Vendor 내부 재시도는 그대로이며, 원인을 확인한 뒤 명시적으로 다시
+호출합니다. 같은 조건의 리뷰 항목 재시도는 기존 리뷰 절차를 따릅니다.
+
 ### 전송과 진단 기록
 
 Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실제 실행 route,
@@ -922,8 +927,8 @@ Audit와 실패 run-log에는 같은 `transport` 객체가 기록됩니다. 실�
 의미이며 CLI가 읽지 않거나 일찍 닫아도 유지됩니다. 소비 여부를 증명하지 않으며
 기존 timeout·vendor 오류를 덮어쓰지 않습니다. 관측하지 못한 별도 transport는 `unexposed`입니다. AGY의 기존
 버전 검사와 검증된 Gemini preflight 버전을 재사용하며 추가 provider 호출은 없습니다.
-현재 legacy 호출은 `attempt=1`을 기록하며 capacity/schema-repair 횟수는 기존
-별도 필드 의미를 유지합니다. 명시적 v2 경로는 할당한 leg·attempt에 실제 native
+현재 legacy 호출은 `attempt=1`을 기록하며 capacity/schema-repair 호환 필드는
+0으로 남습니다. 명시적 리뷰 재시도의 attempt와는 별개입니다. 명시적 v2 경로는 할당한 leg·attempt에 실제 native
 호스트 또는 CLI 관측을 결합합니다. preflight 버전으로 미노출 실행 버전을 채우지 않습니다.
 
 Wrapper main thread가 provider 결과를 수집하는 동안 SIGTERM/SIGHUP을 받으면

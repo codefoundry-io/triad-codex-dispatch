@@ -703,7 +703,7 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `0` | Success — the answer follows | Nothing. |
 | `3` | Invalid wrapper arguments or a Gemini local preflight/version refusal | Inspect stderr. Upgrade Gemini CLI if below 0.63.0; otherwise repair the selected executable or invalid input before a new invocation. AGY version/settings preflight refusals use 65. |
 | `4` | The configured provider binary was missing or not executable before submission | Before dispatch, install AGY for personal Google, or AGY/Gemini for Enterprise OAuth. After route selection, repair that same executable; do not fallback after failure. |
-| `64` | Server capacity exhausted (route-specific retries; AGY is single-shot) | Transient vendor overload; wait and retry. |
+| `64` | Server capacity failure (one CLI inference invocation) | Transient vendor overload; wait and retry. |
 | `65` | Authentication, configuration, quota, or another terminal provider failure (for example `oauth-env`, `cli-subscription-cap`, or `token-limit`) | Resolve the cited provider state, then make an explicit new invocation. |
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
@@ -987,6 +987,11 @@ Implementation and regression sources: [log helpers](bin/_common.py),
 [fallback ownership tests](tests/test_fallback_cleanup_ownership.py), and
 [review custody tests](tests/test_review_cleanup_custody.py).
 
+Each wrapper dispatch makes one CLI inference invocation. Capacity failure returns
+`64`; local schema failure returns `66` without an automatic whole-CLI restart or
+correction prompt. Vendor-internal retries remain native. Diagnose failures before
+an explicit later invocation; same-basis review-entry retry retains its own rules.
+
 ### Transport and diagnostic records
 
 Audit rows and failure run logs carry the same `transport` object from the
@@ -997,7 +1002,7 @@ and stdin availability state. Encoding/preparation/spawn refusals are `not-start
 unread, closes stdin early, fails or times out. It does not prove consumption. Unobserved custom transports stay `unexposed`. Existing AGY
 version probes and validated Gemini preflight versions are reused; no additional
 provider call is made. This legacy invocation records `attempt=1`; existing
-capacity/schema-repair counters retain their separate meanings. The explicit
+capacity/schema-repair compatibility counters remain zero; explicit review attempts are separate. The explicit
 v2 path binds the allocated leg/attempt and collects actual native host or CLI
 observations; preflight versions never replace an unexposed runtime version.
 

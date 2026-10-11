@@ -2204,7 +2204,7 @@ def test_gemini_dotted_packaged_verdict_route_does_not_make_capacity_retry_call(
     assert len(calls) == 1
 
 
-def test_gemini_custom_schema_keeps_existing_schema_repair_call(
+def test_gemini_custom_schema_returns_failure_without_repair_call(
     monkeypatch, capsys
 ) -> None:
     calls: list[list[str]] = []
@@ -2249,4 +2249,4 @@ def test_gemini_custom_schema_keeps_existing_schema_repair_call(
 
     assert gemini_wrapper.main() == _common.EXIT_SCHEMA_FAIL
     assert capsys.readouterr().out == ""
-    assert len(calls) == 2
+    assert len(calls) == 1

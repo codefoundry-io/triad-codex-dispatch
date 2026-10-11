@@ -485,3 +485,11 @@ explicit `--add-dir` inputs with entry-cwd/root validation; REVIEW refuses the
 unbound expansion. Native directory grants are not filesystem read-only
 enforcement. Success path evidence and refusal candidates use existing audit
 masking, without adding permanent prompt/page storage or changing failure IPC.
+
+### Wrapper retry boundary
+
+A wrapper dispatch starts inference once. Capacity or local schema-validation
+failure does not replay the workload; existing64/66 outcomes and captured evidence
+are returned. Vendor-internal retries and explicit diagnosed review-level retries
+are separate. Authentication STOP, transport failure and review-binding validation
+remain authoritative; no user setting or native-leg policy changes.
