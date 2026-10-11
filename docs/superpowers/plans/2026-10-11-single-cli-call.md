@@ -43,7 +43,7 @@ host cwd workspace, canonical invocation-owned TMPDIR set before Python.
 - [x] Update affected existing retry-count expectations, initial-clause tests and public guidance. No unrelated parser or logging fix.
 - [x] Fresh dedicated GREEN: affected tests, complete suite, four skill validators, diff check and source integrity. No live vendor required for local policy.
 - [x] Complete required independent unit review; apply only verified bounded corrections.
-- [ ] Commit/push source and shared C78 evidence; update SoT and PR13. Final merge remains separate.
+- [x] Commit/push source and shared C78 evidence; update SoT and PR13. Final merge remains separate.
 
 ## Status
 
@@ -68,3 +68,7 @@ while the explicit one-call sections and executable behavior are correct. Preser
 these notes without another wording round or automatic parser-refactor backlog.
 Evidence: workspace `_runs/infra/20261011-single-cli-call/` and
 `_runs/reviews/triad-single-cli-20261011-r2/`. No merge/install/release claim.
+
+This bounded unit is complete: sourcef4d6331 and shared69983bb pushed;
+shared authoring1/1 and182tests passed. PR13comment6104953702 records completion,
+the active quota fallback, both residuals and A's pending adoption.

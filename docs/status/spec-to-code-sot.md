@@ -104,7 +104,9 @@ ALL_SELECTED_APPROVED: all three SAFE, matching integrity; all actual terminal
 handles consumed, custody exported and exact stages cleaned. Minor residuals:
 pre-existing duplicate Claude extraction and three old troubleshooting "capacity
 retry" phrases; explicit one-call guidance/runtime are correct. No further wording
-round or automatic parser-refactor queue. Commit/shared evidence publication next.
+round or automatic parser-refactor queue. This bounded unit is complete:
+sourcef4d6331 and shared69983bb pushed; authoring1/1 and182shared tests passed.
+PR13comment6104953702 records completion, review selection and remaining limits.
 Owner review fallback: if actual Claude usage-limit exhaustion is observed, finish
 started producers and start a fresh complete Sol/xhigh + Astra/high + Google Pro/high
 round on one basis. Do not interpret auth/tool failure as quota or carry old approval.
