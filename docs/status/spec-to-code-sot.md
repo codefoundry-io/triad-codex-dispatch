@@ -81,6 +81,21 @@ dependent behavior, so both hosts can implement the same clarified contract.
 
 ## Current position
 
+Owner2026-10-11 requested a whole-system audit before further implementation.
+[The audit](../reviews/2026-10-11-whole-system-audit.md) records six fresh native
+investigations plus Google Pro, confirmed AGY print-timeout admission and legacy
+owner-edit cleanup defects, a Claude search-prompt conflict, common-spec drift
+and measured startup/document burden. Source basis is e3593a7; shared69983bb,
+main3afc4d7 and open PR12 d805b50 were reviewed as separate unmerged inputs.
+No product, native-leg, hook or global-setting change was made by the audit.
+Next implementation priority is the existing C43/DL-62 measured print-timeout
+outcome, then exact legacy ownership and the shared Claude read/search clause.
+Audit recommendations are not implementation or formal admission. The repeated
+tree-check timing choice below remains unanswered; U6b/U9 expansion, U8 and the
+unused Claude-agent backlog remain inactive. The whole-task hook stays active.
+
+### Previous completed unit
+
 Owner2026-10-11 approved the next automatic whole-CLI restart removal with "진행".
 Current unit: [single CLI invocation](../superpowers/plans/2026-10-11-single-cli-call.md).
 Replace capacity/schema restarts with one inference call and existing64/66 failure;
