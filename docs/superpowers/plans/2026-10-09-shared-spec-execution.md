@@ -317,13 +317,14 @@ was completed as the bounded U2c candidate below.
 Progress 2026-10-09: U2a Gemini exit41 and U2b measured auth carriers are complete
 in the local candidate with dedicated verification and fresh all-four SAFE
 reviews. U2b also closes the auth portion of DL-92 and implements DL-75/95;
-it does not complete this whole U2 checklist. U2c is now complete: agreed child
+it does not certify the full C37/C43 mappings. U2c is now complete: agreed child
 environment parity, name-before-value filtering, preserved model/effort settings
 and Gemini project passthrough including v2 intermediate preflight. Final
 focused370/full2029 passed with4skips, both validators; complete fresh R2 all-four
 SAFE/matching integrity, exact cleanup. Shared evidence75dc801 and SoT retain
-the failed runner/fixture attempts and R1 correction. Non-auth per-CLI classification,
-general guards and unmeasured vendor carriers remain separate pending work.
+the failed runner/fixture attempts and R1 correction. Non-auth classification,
+general exception/record promises and unmeasured vendor carriers remain disclosed
+limits, not scheduled implementation campaigns.
 Detailed current evidence and remaining limits are in the execution SoT.
 R3 observations: preserve original-stream-only auth when later refactoring Gemini
 extraction; record the constructed formal Claude empty-answer denial/tool_input
@@ -343,29 +344,27 @@ manufactured failure campaign or routine successful-run log audit is planned.
 Do not add a special denial parser or widen
 C74's completed is_error-envelope regression into the constructed empty-answer case.
 
-Status: remaining evidence mapping. First
-reuse existing C43 tests and investigation notes, then identify a demonstrated
-gap; this checklist does not assume every listed correction is still needed.
-
 **Rules:** R-AUTH/R-CLASSIFY/R-NOCOST; C11/C16/C17/C37/C43;
 DL-16/62/65/71/75/76/80/81/82/86/90/92/95/99/117.
-**Files:** `bin/_common.py` (`classify`, child-environment construction,
-`_mark_signal_failure`), `bin/antigravity_wrapper.py`, `bin/gemini_wrapper.py`,
-`bin/claude_wrapper.py`; existing provider/wrapper/parent-signal tests and
-new `tests/test_measured_auth_contract.py` if a single focused module is clearer.
-**Interface:** preserve `RunResult`, common token vocabulary and exit mapping;
-carry source CLI/channel explicitly into the internal classification decision.
 
-- [ ] Map every retained phrase to a contract/source/capture and its carrier.
-  A shared phrase table is not permission to guess AGY quota event placement.
-- [ ] RED: measured structured authentication beats capacity; quoted auth text
-  in an answer does not STOP; Gemini authentication exit 41 stops; a signalled
-  run retains an already captured authentication result; each forbidden env
-  variable is set synthetically before checking that the child lacks it.
-- [ ] Implement the minimal carrier-first decision and per-CLI matching;
-  retain the already-corrected quota rows and generic never-raise/record guarantee.
-- [ ] Run the changed wrapper/classifier/signal modules, check no usable answer
-  is discarded solely for its prose, then complete review and shared evidence.
+Current disposition: reconcile the existing U2a/U2b/U2c and later bounded
+correction evidence with current shared rules, cases and B status cells.
+Completed verification is not repeated merely because an older box is unchecked.
+
+Use existing failed-run records, captures and test evidence. Record unsupported
+carrier/channel/exit combinations as unmeasured; do not manufacture failures,
+inventory every possible classifier error, sweep generic phrases or add a
+never-raise/every-window-record mechanism from this roadmap.
+
+A new correction requires an observed failure or concrete reproduced mismatch
+with the current contract and its own bounded scope. Follow the existing
+failure-driven repair path: inspect the failed record, research only when needed,
+propose a supported change, verify against the stored record and publish learned
+evidence. Native mechanisms remain host-owned.
+
+Full C37/C43 coverage, AGY credits carrier placement and DL-90/98 remain
+uncertified where the current evidence says so. This disposition adds no provider
+call, classifier campaign, new test module or implementation prerequisite.
 
 ## U3 — Measured AGY results and schema compatibility
 
@@ -599,36 +598,24 @@ and effort remain host-owned. No wording scenario probe was needed.
 ## U6 — Cleanup as declared host code
 
 **Rules:** R-CLEANUP; C3/C4/C5/C7/C69; DL-19/22/54/77/79/85.
-**Files:** existing `bin/review_round.py` cleanup, `bin/_common.py`
-(`prune_stale_run_logs`, `prune_stale_tmp_dirs`), proposed
-`bin/cleanup.py` and `bin/data/cleanup-roots.json`, README EN/KO;
-`tests/test_review_cleanup_custody.py`, `tests/test_log_cleanup.py`.
-**Interface decision before code:** choose the concrete deletion entry point
-and config lookup against the shared schema; record ownership, age and resume
-semantics. No command name is silently invented by this roadmap.
 
-- [x] Inventory current roots/proofs/floors and compare A's implementation to
-  the contract. Confirm invocation-time owned temporary cleanup exceptions.
-- [ ] Resolve entry-point/migration design before RED; ask the owner only if
-  it changes shared surfaces or requires an unresolved trade-off.
-- [ ] RED: missing/invalid config deletes nothing; undeclared path is refused;
-  proof is removed last; interruption can resume; linked worktree ownership,
-  live age floors and exports survive; name-shaped unowned temp dirs remain.
-- [ ] Route owning deletions through the agreed code and replace manual-delete
-  advice. Run cleanup/bootstrap contract tests and complete formal review.
+Current disposition: U6a is complete; U6b/C69 declaration, migration and
+sweep/cap/archive expansion remain ON HOLD under the owner steering above.
+The completed roots/proofs/floors inventory remains evidence, not authority to
+select a new deletion interface.
 
-Execution split (2026-10-10): U6a corrects the demonstrated fallback-folder
-ownership omission with existing entry points; [bounded plan](2026-10-10-u6a-fallback-ownership.md).
-U6b retains declared-root/floor migration and normal sweep/cap/archive checks.
-The proposed generic cleanup.py above is not a selected interface or dependency.
-Independent diagnosis and shared ba04c60/C4 boundaries precede U6a code.
+No generic cleanup.py, configuration migration, new janitor, deletion campaign
+or associated test/review work is selected by this roadmap. Preserve existing
+ownership, export, age-floor and interruption protections. Vendor resources
+remain vendor-owned. Old unchecked tasks are historical scope candidates only.
+U6a's [bounded plan](2026-10-10-u6a-fallback-ownership.md) retains its diagnosis.
 
 U6a completed: B `a4fd93c` / shared `c55dca6`, pushed and remote-matched.
 Final340affected/29standalone/2347full passed,4skipped; four validators and fresh
 R3 all-four SAFE/matching integrity. Custody export/exact cleanup are complete.
-U6b's enclosing normal-log-folder proof mapping received A's answer in
-PR13comment6097553901 and PR12 d805b50/DL-152. Current source/spec comparison is
-next; receipt of a reply does not close declaration/migration or C69 conformance.
+A's normal-log-folder proof explanation is available in PR13comment6097553901
+and PR12 d805b50/DL-152 for shared-text reconciliation. It does not close B's
+declaration/migration or C69 conformance, select an interface or release the U6b hold.
 
 ## U7 — AGY isolation without shared settings writes
 
@@ -669,50 +656,59 @@ Reopen only by a new explicit owner scope decision.
 
 **Rules:** R-TERMINAL/R-TOKENS/R-BIND/R-PREPARE;
 DL-13/14/42/43/67/70/72/84/87/88/90/123/125/126.
-**Files:** `bin/_common.py`, `bin/review_round.py`, `bin/review_round_v2.py`;
-`tests/test_parent_signals.py`, `tests/test_v2_evidence_custody.py`,
-`tests/test_v2_round_custody.py`, existing symlink/cleanup tests.
-**Interface:** preserve answer, terminal record and canonical token/exit through
-ordinary operator signals and I/O failures; no new vendor event speculation.
 
-- [ ] Classify each old CHECK-B as present, genuinely failing, unmeasured or
-  optional hardening. DL-124..126 A-only simplifications are not automatic B work.
-- [ ] RED for reproduced gaps: signal between attempts leaves a terminal
-  record; a second signal does not orphan a child; failed stderr write does not
-  lose answer/exit; symlink-listing failure cannot be certified as full coverage;
-  each emitted summary pair is a contract pair.
-- [ ] Implement only supported gaps, run complete affected modules, and review
-  the smallest coherent lifecycle outcome. Split unrelated findings if review
-  could accept one independently; update estimates accordingly.
+Current disposition: U9 expansion remains ON HOLD. Preserve completed evidence
+and reconcile relevant old CHECK-B observations during U10; those labels are not
+confirmed defects or implementation authority.
+
+The owner-selected R-TERMINAL replacement governs external CLI collection and
+C78 governs one inference invocation. Do not restore descendant sweeping,
+no-orphan guarantees, records in every signal window or wrapper capacity/schema
+replay from the former checklist. Finish direct invocations and TRIAD-owned
+custody/result writers; vendor-only stream holders are not an extra completion gate.
+
+A new lifecycle correction needs a current observed failure, an applicable
+contract and separately selected bounded scope. DL-123..126 creates no B port.
+Native mechanisms remain host-owned. DL-90/98 and other unmeasured evidence
+limits remain disclosed rather than becoming a fault-injection campaign.
 
 Measured DL-88 evidence is shared at `c55dca6` /
 `decisions/2026-10-10-b-terminal-evidence.md`: the actual B shared driver returns
 a valid synthetic answer in the control, but raises and returns no RunResult
 when its terminal diagnostic sink raises BrokenPipeError. No live provider,
 real stderr or product edit. A e9960053 already drops failed diagnostic writes;
-its source was read, not executed. Independent diagnosis and the smallest
-existing-contract correction remain next; do not expand this to speculative
-vendor error classes. DL-123..126 needs no B port; other old rows remain
-individual evidence checks, not confirmed defects.
+its source was read, not executed. This is historical diagnostic evidence from
+the former driver. The instruction to schedule another lifecycle correction is
+superseded by the owner-selected vendor-invocation replacement; retain its
+completed evidence without treating it as universal U9 certification or reopening
+the hold. Other old rows remain individual evidence records, not confirmed defects.
 
 ## U10 — Reconcile and hand off
 
-- [ ] Remove confirmed remnants of withdrawn proposals and no-port requirements
-  from active guidance, hooks and relevant code/tests in this host's scope.
-  Use D-BACKLOG-DISPOSITIONS-20261009's item table; record each as removed,
-  absent, deferred with re-entry condition, or common behavior preserved.
-  A live common contract or functioning optional feature is not a deletion target.
-- [ ] Remove superseded executable checklists and stale completion prerequisites;
+Current scope is shared-text/status reconciliation and handoff after the active
+bounded unit's required verification/review. An old TODO, OPEN or CHECK-B is not
+implementation authority. U6b/U9 remain held; U8, environment/effort override work
+and the unused Claude-agent backlog remain withdrawn. No new classifier campaign
+or native-mechanism work follows from integration.
+
+- [x] Record withdrawn/no-port items as removed, absent or preserved within their
+  existing scope. Correct confirmed remnants in active guidance; code/test changes
+  require a separately selected demonstrated mismatch. Historical records, live
+  common contracts and functioning optional features are not deletion targets.
+- [x] Remove superseded executable checklists and stale completion prerequisites;
   reconcile old OPEN cells with current evidence. Retain labelled historical
   research, failed reviews and original observations; no blanket text deletion.
-- [ ] Verify changed links and affected behavior only where actual changes occur;
+- [x] Verify changed links and affected behavior only where actual changes occur;
   send the shared disposition to A without changing A-owned implementation.
 
-- [ ] Account for every current main/PR row, including newly added A rows:
-  completed, pending by owner, limit, not applicable, or explicitly deferred.
-  No `OPEN` -> `FIXED` transition without current evidence.
-- [ ] Reconcile rule text, cases/tests pointers, implementation-map coverage,
-  shared log and both PR descriptions. Evidence documents do not silently
+- [x] Reconcile current main/PR rows with their named contract and evidence.
+  Preserve completed, held, withdrawn, unmeasured, not-applicable and deferred
+  dispositions without requiring every row to become implemented.
+  No OPEN -> FIXED transition without evidence; an older completed case does not
+  certify a later replacement contract.
+- [x] Reconcile rule text, cases/tests pointers, implementation-map coverage,
+  shared log and owned PR13 description; leave A-owned PR12 untouched and share
+  its incorporated evidence/disposition on PR13. Evidence documents do not silently
   override contradictory normative text.
 - [ ] Run the final affected/full checks and required combined review on the
   resulting bytes. Preserve OS/service NOT RUN and runtime UNEXPOSED limits.

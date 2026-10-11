@@ -40,7 +40,7 @@ route clarification if needed. No speculative closing-clause rewrite.
   wording iteration; investigate only actual failures.
 - [x] Fresh Sol/xhigh+Astra/high+Google Pro/high same-basis unit review; collect
   actual terminal results, integrity and exact temporary cleanup.
-- [ ] Commit/push, update existing SoT/audit dispositions and share evidence on PR13.
+- [x] Commit/push, update existing SoT/audit dispositions and share evidence on PR13.
 
 All Python/tests/Git mutations/provider calls use `/bin/zsh -lic` with
 `require_escalated` first, host cwd workspace, and owned TMPDIR before Python.
@@ -89,3 +89,6 @@ three-leg receipt is not fixed four-leg admission, installation or release.
 Evidence: `/Users/chaniri/codex_workspace/_runs/infra/20261011-claude-read-search`
 (`red-clean`, `green`, `vendor-proof.json`, `review-r1/after-green-delta.json`);
 round receipts: `/Users/chaniri/codex_workspace/_runs/reviews/triad-claude-read-search-20261011-r1`.
+
+Completed/pushed B ab86e86 and shared48ed297. Shared authoring1/1 and182tests pass;
+PR13 completion records the exact source/evidence and A adoption follow-up.

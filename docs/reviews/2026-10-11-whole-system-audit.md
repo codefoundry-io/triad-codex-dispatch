@@ -7,7 +7,17 @@ and fresh required reviews; see [F1](../superpowers/plans/2026-10-11-agy-print-t
 and [F2](../superpowers/plans/2026-10-11-legacy-agent-ownership.md), plus
 [F3](../superpowers/plans/2026-10-11-claude-read-search.md). The live SoT
 was shortened with its exact prior contents preserved as linked history. The
-findings below retain their original audit basis; shared reconciliation remains.
+findings below retain their original audit basis. Shared reconciliation is now
+pushed at spec e8c90b8: all57 cases and137 DL rows preserved, authoring1/1 and
+186tests pass. Fresh Sol/xhigh+Astra/high+Google Pro/high R2 all SAFE with matching
+integrity; R1's C34 timing contradiction and its correction are retained. Existing
+B CLI-selection validation remains separate from actual-runtime observations.
+Current partial/held/withdrawn states replace stale executable checklists;
+combined Codex integration review remains the last verification stage.
+
+After F3's2447passed/4skipped full suite,340 stored file hashes were compared:
+runtime, skills, prompts, contracts and tests remain unchanged. Later differences
+are README provenance and administrative evidence prose, not new runtime behavior.
 
 ## Result
 

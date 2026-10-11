@@ -66,10 +66,32 @@ has completed shared clarification9bca149, exact B vendoring, dedicated GREEN
 matching integrity. All four behavior scenarios pass; wording iteration is closed.
 Native tools, bindings and candidate-execution/write prohibitions remain intact.
 
-Next: bounded common-spec fact/draft reconciliation. Preserve PR12's newer A
+Completed unit: [common-spec fact/draft reconciliation](../superpowers/plans/2026-10-11-shared-fact-reconciliation.md).
+F3 is pushed in B ab86e86 / shared48ed297, PR13comment6105788066.
+Preserve PR12's newer A
 evidence alongside PR13's settled replacements and B completion/withdrawals;
 replace obsolete executable checklists with current dispositions. No speculative
 classifier campaign or new native mechanism is selected by old TODO/OPEN labels.
+Shared reconciliation now passes authoring1/1 and186tests; schemas/prompt payloads,
+57case IDs and137DL rows are preserved. Fresh three-leg round
+`triad-shared-reconciliation-20261011-r1` closed NOT_APPROVED with matching
+integrity: two reviewers identified the same C34 selection-preflight versus
+runtime-receipt conflict. The bounded correction preserves existing B selection
+validation, distinguishes actual-runtime observation and corrects the stale B
+default description. Shared186 tests and preservation pass again; fresh complete
+round `triad-shared-reconciliation-20261011-r2` closed ALL_SELECTED_APPROVED with
+matching integrity, all three SAFE, all producers terminal and exact cleanup.
+Shared e8c90b8 is pushed; PR13 description and comment6106035813 record the current
+scope, evidence and A-owned follow-up. PR12 remains A-owned and unmerged.
+Current evidence:
+`_runs/infra/20261011-shared-reconciliation` under the workspace root.
+
+Active stage: combined Codex integration review against base632f426, with the
+same owner-selected roster and shared e8c90b8 immutable source context. Runtime,
+skills, prompts, contracts and tests match the final F3 full-suite bytes
+(2447passed/4skipped;340 files checked). Existing intermediate tree checks remain
+unchanged. Finish review and any required bounded correction before whole-task
+completion and the already authorized exact hook/startup cleanup.
 
 The observed Claude usage limit activates the owner-selected **Sol/xhigh +
 Astra/high + Google Pro/high** complete fresh roster for subsequent task reviews
@@ -83,10 +105,10 @@ Claude call merely to check recovery. Native legs remain host-owned.
   allocate/record/collect. The proposed minimum keeps initial/final source integrity
   and intermediate condition/result bindings, but may spend another call before
   detecting drift. No dependent timing-policy edit is authorized by this proposal.
-- Preserve F1/F2/F3 completed evidence. Reconcile shared status/case conflicts and
-  both open drafts; audit recommendations are not admission.
-- Reconcile existing U2 authentication/carrier evidence and current shared-log B
-  dispositions, then complete U10 integration. This selects no generic phrase sweep,
+- Preserve F1/F2/F3 and shared reconciliation completed evidence. Finish U10's
+  combined review and handoff; audit recommendations are not admission.
+  U2 authentication/carrier evidence and current shared-log B dispositions are
+  reconciled at shared e8c90b8. This selects no generic phrase sweep,
   speculative classifier campaign or new carrier probe. U6b/C69 declaration/evidence
   cleanup and U9 expansion remain on hold;
   U8, environment/effort override work and the unused Claude-agent backlog remain withdrawn and must not auto-resume.
