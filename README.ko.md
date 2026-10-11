@@ -664,6 +664,10 @@ Gemini는 Google Cloud 프로젝트 변수 4개를 유지하고 다른 경로는
 AGY의 최종 `result.error`가 `timeout waiting for response`로 시작하고,
 상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면 답변 없이
 `vendor-timeout` / `65`로 보고합니다. Wrapper 제한시간 초과는 `timeout` / `2`입니다.
+확인된 stderr 전체 줄 `[agy] print timeout after <duration> with turn in
+progress; returning partial output`도 vendor 종료코드와 관계없이 `timeout` / `2`로
+처리하며 일반·구조화 부분 답변을 반환하지 않습니다. 인증 중단과 전송 실패가
+우선하며, 인용문이나 stderr 밖의 문구는 이 규칙으로 처리하지 않습니다.
 
 AGY의 문자열 `result.error`에 확인된 `network issue connecting to the server`
 문장이 있고 상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면

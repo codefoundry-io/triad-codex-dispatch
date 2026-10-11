@@ -712,6 +712,10 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 AGY's terminal `result.error` beginning `timeout waiting for response`, with
 status `ERROR`, an empty response and vendor exit `1`, is reported as
 `vendor-timeout` / `65` with no answer. A wrapper deadline remains `timeout` / `2`.
+The measured whole stderr line `[agy] print timeout after <duration> with turn in
+progress; returning partial output` also returns `timeout` / `2` at any vendor
+exit, withholding raw and structured partial answers. Authentication STOP and
+transport failures retain precedence; quoted or non-stderr text does not match.
 
 AGY's recorded `network issue connecting to the server` sentence in string
 `result.error`, with `ERROR` status, empty response and vendor exit `1`, is

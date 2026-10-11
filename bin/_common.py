@@ -638,6 +638,14 @@ _AUTH_VOCABULARY = re.compile(
     r"|token (?:is |has |has been )?expired|expired (?:token|session)"
     r"|session (?:has )?expired|could not be refreshed|credit balance)\b", re.I)
 _AGY_SCHEMA_REPORT_RE = re.compile(r"^(?=.*\bschema\b)(?=.*\bvalidat)", re.I)
+_AGY_PRINT_TIMEOUT_RE = re.compile(
+    r"^\[agy\] print timeout after \S+ with turn in progress; "
+    r"returning partial output[ \t\r]*$", re.I | re.M)
+
+
+def agy_print_timed_out(stderr: str) -> bool:
+    """C43/DL-62: the measured own stderr line marks an incomplete answer."""
+    return bool(_AGY_PRINT_TIMEOUT_RE.search(stderr))
 
 
 def _error_document(text: str) -> dict:
@@ -721,6 +729,7 @@ def _auth_carrier_stop(cli: str, stderr: str, stdout: str,
                    and isinstance(e.get("result"), dict)]
         # A completed usable answer is not stopped by a sign-in banner.
         if (vendor_exit_code == 0 and results and results[-1].get("status") == "SUCCESS"
+                and not agy_print_timed_out(stderr)
                 and (results[-1].get("structured_output") is not None or
                      isinstance(results[-1].get("response"), str) and results[-1]["response"].strip())):
             return False

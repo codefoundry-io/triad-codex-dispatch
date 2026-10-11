@@ -128,6 +128,9 @@ cancellation guarantee or identical record across every signal window. This is
 not OS containment. Cancellation cannot admit an answer even if the child exits with status 0.
 AGY profile drift still withholds the answer; earlier timeout/provider failures
 retain priority. No stronger provider permission boundary is introduced.
+AGY's measured own stderr print-timeout line withholds raw and structured partial
+answers at any vendor exit. A partial SUCCESS/exit0 envelope cannot suppress an
+authentication STOP; existing wrapper-timeout and transport precedence remains.
 
 ## Guarded symlink review boundary
 

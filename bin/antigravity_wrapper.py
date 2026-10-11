@@ -334,6 +334,9 @@ def _interpret_run(
     if run._stdin_delivery_failed or run._output_transport_failed:
         run.dispatch_phase = "post-dispatch-result"
         return run
+    if _common.agy_print_timed_out(run.stderr):
+        return _fail(run, "timeout", _common.EXIT_TIMEOUT,
+                     "AGY print timed out; partial output withheld")
 
     terminal_error = result.get("error") if isinstance(result, dict) else None
     if (
