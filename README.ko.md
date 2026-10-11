@@ -2,7 +2,7 @@
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
-[v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)에서
+[v0.2.559](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 [English README](README.md)
@@ -236,13 +236,13 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 예정된 호환성 변경 (미출시)
+### 0.2.559 업그레이드
 
 AGY legacy/v2 정식 리뷰에는 읽기·검색 프로필의 명시적 설치가 필요합니다.
 [프로필 설정](docs/installation.ko.md#agy-리뷰-프로필-설정--반영-대기-후보) 후
 preflight receipt를 다시 생성하세요. 프로필이 없거나 변경되면 실행을 거부합니다.
 
-현재 소스 후보는 모든 모델과 raw·legacy·v2 경로에 Gemini CLI >=0.63.0을
+0.2.559는 모든 모델과 raw·legacy·v2 경로에 Gemini CLI >=0.63.0을
 적용하며 기존 경로별·모델별 하한을 대체합니다. 선택된 Gemini CLI를
 업그레이드하고 이전 버전이 기록된 preflight receipt를 다시 생성하세요.
 raw 호출에서 지원하지 않거나 확인할 수 없는 버전은 제출 전에 종료 코드 3으로
@@ -250,8 +250,17 @@ raw 호출에서 지원하지 않거나 확인할 수 없는 버전은 제출 �
 차단하지 않으며 기존 실행 조건 검사는 유지합니다.
 legacy 정식 Claude 경로는 이제 `--model opus`를 요구하며 이전
 `claude-opus-5-5` 값은 provider 확인 전에 거부합니다. raw·v2의 명시적 모델 ID와
-v2의 null 선택은 기존 의미를 유지합니다. 아래 버전별 설명은 이미
-출시된 버전의 동작을 기록한 것입니다.
+v2의 null 선택은 기존 의미를 유지합니다.
+
+wrapper는 이제 vendor를 한 번 호출하며 전체 CLI의 capacity 재시도나
+schema 복구 호출을 자동 반복하지 않습니다. AGY print-timeout의 부분 답변은
+vendor가 성공 종료해도 거부하며 인증 실패의 우선순위를 유지합니다.
+public v2는 상시 리뷰 웹 허용을 고정합니다. 이전 agent 파일은 전체 내용이
+알려진 과거 해시와 일치할 때만 정리하며 수정되거나 불확실한 파일은 보존합니다.
+
+[마켓플레이스 또는 로컬 Git 업데이트](docs/installation.ko.md#업데이트)를 따라
+bootstrap을 다시 실행한 뒤 새 Codex 세션을 시작하세요. 리뷰 프로필 설정은
+명시적으로 수행하며 dispatch는 프로필이나 전역 설정을 자동 갱신하지 않습니다.
 
 ### 0.2.558 업그레이드
 
@@ -507,7 +516,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.559-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -1255,10 +1264,10 @@ Codex는 native로 실행합니다. Google CLI의 인터페이스·실행 제한
 Public v2는 사용자의 상시 허용에 따라 새 라운드의 모든 leg에 웹을 허용합니다.
 요청값 생략·false는 이를 철회하지 않으며, 잘못된 타입이나 native 웹 도구 누락은
 준비 단계에서 거절합니다. 재시도는 저장된 조건을 사용합니다. Legacy는 리뷰별 직접
-요청 방식을 유지하며, 소스 후보 변경이 설치 revision을 바꾸지는 않습니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
+요청 방식을 유지하며, 기존 설치는 업데이트한 뒤 변경됩니다. [호출 절차](skills/triad-cross-family-review/references/review-web.md)를 따릅니다.
 Raw Claude `--web`은 `WebSearch`/`WebFetch`를 허용하고 호출자 프롬프트를 보존합니다.
 0.2.556에는 리뷰별 직접 요청 방식과 raw Claude `--web`이 도입됐습니다.
-v2의 상시 허용 적용은 아직 출시되지 않은 소스 후보이며, 실계정 웹 실행 검증과
+0.2.559는 v2의 상시 허용을 포함하며, 실계정 웹 실행 검증과
 공유 revision 채택은 별도 단계입니다.
 
 ## 승인된 AGY 웹 조사

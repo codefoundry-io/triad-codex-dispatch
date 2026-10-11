@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.559 — 2026-10-11
+
+- Runs each wrapper invocation once, preserving the vendor's terminal result
+  without automatic whole-CLI capacity retries or schema-repair calls. Vendor
+  descendants and remote work remain vendor-owned.
+- Rejects measured AGY print-timeout partial answers, including vendor exit 0,
+  while preserving authentication-failure priority.
+- Requires AGY 1.2.1+ and explicitly installed native read/search profiles for
+  read-only calls; preserves global settings and existing legacy residue.
+- Applies the common Gemini CLI 0.63.0 floor across models and routes without
+  model-catalog probes. Uses the CLI-resolved Claude `opus` alias for legacy
+  review while preserving raw/v2 model selection.
+- Binds standing review-web authorization in public v2 and permits host-provided
+  read-only search in Claude review prompts.
+- Removes legacy agent files only when complete historical payload hashes match;
+  preserves edited and uncertain files.
+- Publishes the merged spec-to-code work after installed Sol, Astra and Google
+  review dispatch completed. Claude verification uses the owner-approved existing
+  usage-limit log; no new successful Claude inference or quota recovery is claimed.
+
 ## 0.2.558 — 2026-10-02
 
 - Adds optional Gemini CLI `gemini-3.8-flash` support with its stable 0.61.0

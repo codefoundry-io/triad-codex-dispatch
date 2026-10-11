@@ -4,7 +4,7 @@
 
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
-[v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)
+[v0.2.559](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)
 provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
@@ -256,13 +256,13 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
-### Pending compatibility change (unreleased)
+### Upgrading to 0.2.559
 
 AGY legacy/v2 formal review now requires explicitly installed read/search
 profiles. Follow [profile setup](docs/installation.md#agy-review-profile-setup-pending-candidate)
 and regenerate preflight receipts; dispatch rejects missing or changed profiles.
 
-The source candidate requires Gemini CLI >=0.63.0 for every model and for raw,
+0.2.559 requires Gemini CLI >=0.63.0 for every model and for raw,
 legacy and v2 routes, replacing the older per-route/model floors. Upgrade the
 selected Gemini CLI and regenerate preflight receipts that record an older
 version. Raw calls with an unsupported or unprobeable version now refuse before
@@ -271,7 +271,15 @@ rejects a pin absent from a packaged list; existing controls still apply.
 The legacy formal Claude route now requires `--model opus` and refuses the former
 `claude-opus-5-5` value before provider resolution. Raw/v2 explicit model IDs and
 v2 null selection retain their existing semantics.
-The versioned notes below describe already shipped releases.
+Wrappers now make one vendor invocation without automatic whole-CLI capacity
+or schema-repair replay. AGY print-timeout partial answers are rejected even
+when the vendor exits successfully; authentication failures retain priority.
+Public v2 binds standing review-web authorization. Legacy agent cleanup requires
+an exact historical payload hash and preserves edited or uncertain files.
+
+Follow the [marketplace or local Git update steps](docs/installation.md#update),
+rerun bootstrap and open a fresh Codex session. Review-profile setup is explicit;
+dispatch does not update profiles or global settings automatically.
 
 ### Upgrading to 0.2.558
 
@@ -545,7 +553,7 @@ an additional release gate.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.558-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.559-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
@@ -1351,10 +1359,10 @@ cleaner, permanent web logger or installed revision adoption.
 true for every new public v2 round under the owner's standing authorization.
 Omitted/false caller values cannot revoke it; invalid types and missing native web
 capability refuse. Retry retains the bound condition. Legacy keeps explicit
-per-round authorization; source candidates do not change installed revisions.
+per-round authorization; an existing installation changes only after an update.
 Raw Claude `--web` adds native `WebSearch`/`WebFetch` permission and keeps the caller prompt.
 Release 0.2.556 introduced per-request review web and raw Claude `--web`.
-The standing v2 binding is an unreleased source candidate; authenticated web
+Release 0.2.559 ships the standing v2 binding; authenticated web
 execution and shared revision adoption remain separate checks.
 
 ## Authorized AGY web investigation
