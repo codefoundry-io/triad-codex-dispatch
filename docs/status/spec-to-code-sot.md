@@ -58,8 +58,18 @@ Shared3495262 clarifies C43; no new carrier was guessed or live timeout induced.
 has completed dedicated RED/GREEN and all three selected independent reviews.
 Only six complete historical originals qualify; uncertain/rendered/edited files
 remain unmanaged. No template inference or user-global cleanup was added.
-Commit/push and shared result recording close this unit. Next is F3's shared Claude
-read/search clause, followed by bounded common-spec fact/draft reconciliation.
+It is committed/pushed in B8efa45e and sharedb6c5b76, PR13comment6105598443.
+
+[Claude read/search clause (F3)](../superpowers/plans/2026-10-11-claude-read-search.md)
+has completed shared clarification9bca149, exact B vendoring, dedicated GREEN
+(184focused/2447full,4skipped) and all three selected independent reviews with
+matching integrity. All four behavior scenarios pass; wording iteration is closed.
+Native tools, bindings and candidate-execution/write prohibitions remain intact.
+
+Next: bounded common-spec fact/draft reconciliation. Preserve PR12's newer A
+evidence alongside PR13's settled replacements and B completion/withdrawals;
+replace obsolete executable checklists with current dispositions. No speculative
+classifier campaign or new native mechanism is selected by old TODO/OPEN labels.
 
 The observed Claude usage limit activates the owner-selected **Sol/xhigh +
 Astra/high + Google Pro/high** complete fresh roster for subsequent task reviews
@@ -73,12 +83,12 @@ Claude call merely to check recovery. Native legs remain host-owned.
   allocate/record/collect. The proposed minimum keeps initial/final source integrity
   and intermediate condition/result bindings, but may spend another call before
   detecting drift. No dependent timing-policy edit is authorized by this proposal.
-- Address the audit's exact legacy owner-edit cleanup (F2) and
-  shared Claude read/search clause (F3) as separate bounded units. Reconcile shared
-  status/case conflicts and both open drafts; audit recommendations are not admission.
-- Complete remaining U2 carrier/authentication mapping and shared-log B-row
-  reconciliation, then U10 final integration. The earlier stage queue is not
-  exhaustive. U6b/C69 declaration/evidence cleanup and U9 expansion remain on hold;
+- Preserve F1/F2/F3 completed evidence. Reconcile shared status/case conflicts and
+  both open drafts; audit recommendations are not admission.
+- Reconcile existing U2 authentication/carrier evidence and current shared-log B
+  dispositions, then complete U10 integration. This selects no generic phrase sweep,
+  speculative classifier campaign or new carrier probe. U6b/C69 declaration/evidence
+  cleanup and U9 expansion remain on hold;
   U8, environment/effort override work and the unused Claude-agent backlog remain withdrawn and must not auto-resume.
 - Use the [whole-system audit](../reviews/2026-10-11-whole-system-audit.md) for exact
   findings/coverage/limits and the [execution plan](../superpowers/plans/2026-10-09-shared-spec-execution.md)

@@ -42,7 +42,7 @@ host cwd workspace, canonical invocation-owned TMPDIR before Python.
   source integrity and exact cleanup. Expected: all applicable checks pass.
 - [x] Fresh Sol/xhigh+Astra/high+Google Pro/high same-basis review before another unit.
   Expected: all selected verdicts admitted, matching final integrity and exact cleanup.
-- [ ] Commit/push, update this plan/SoT and share the bounded result on PR13.
+- [x] Commit/push, update this plan/SoT and share the bounded result on PR13.
 
 Evidence: workspace `_runs/infra/20261011-legacy-agent-ownership/`.
 No actual owner artifact is removed in verification. No install/merge/release claim.
@@ -74,3 +74,7 @@ Deferred minor: Google suggested inlining the existing profile/rules dispatcher
 `_managed_artifact_data_is_owned`. Its single caller was confirmed, but no current
 correctness defect was shown and that unchanged dispatch is outside the legacy
 ownership correction. It creates no automatic follow-up implementation.
+
+Committed/pushed B8efa45e, sharedb6c5b76; authoring1/1 and182tests pass.
+PR13comment6105598443 shares the result. Exact execution scratch was exported
+under the evidence root and removed after task completion; no active next action.

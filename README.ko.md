@@ -1198,8 +1198,8 @@ toolkit을 업데이트하면 새 receipt를 준비하고 이전 라운드의 bo
 
 ## 오프라인 v2 후보 검증
 
-[공통 계약 후보](contracts/README.md)는 공유 커밋
-04245c740afc9be36ad7702a134f71aec8ff0b7f의 원문입니다.
+[공통 계약 후보](contracts/README.md)의 원본 저장소·정확한 공유 커밋·파일별 SHA-256은
+[provenance manifest](contracts/source-manifest.json)에 기록됩니다.
 절대 정규 경로의 일반 결과 파일과 예상 결합값 6개를 지정합니다.
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
@@ -1215,6 +1215,9 @@ toolkit을 업데이트하면 새 receipt를 준비하고 이전 라운드의 bo
 
 현재 사용자·프로젝트 지침에서 v2를 명시적으로 선택하면
 [스킬의 v2 절차](skills/triad-cross-family-review/references/public-v2-review.md)를 따릅니다.
+Claude 지침은 호스트가 제공하는 읽기·검색 도구와 사용 가능한 읽기 전용 셸 검사를
+허용합니다. 후보 코드·테스트·빌드 실행과 쓰기는 계속 금지하며, 도구 목록이나
+provider 권한을 변경하지 않습니다.
 `bin/review_round.py`의 `v2-create`, `v2-allocate`, `v2-record-cli`,
 `v2-record-native`, `v2-record-start-failure`, `v2-collect`가 프로젝트 roster,
 공통 프롬프트, native·wrapper 호출과 결합값 6개의 판정을 연결합니다.

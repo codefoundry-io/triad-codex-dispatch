@@ -12,7 +12,7 @@ from validate_v2 import _json, validate_review_kind
 from verdict_v2 import bound_verdict
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1] / "prompts/review-v2"
-SOURCE_COMMIT = "ca3d990a107b24644fddcf6978a9655f8e106d4f"
+SOURCE_COMMIT = "9bca1493ddf9a4893733404cd11dff300b89f038"
 PAYLOADS = ("common-clauses.md", "leg-claude.md", "leg-codex.md", "leg-google.md")
 
 

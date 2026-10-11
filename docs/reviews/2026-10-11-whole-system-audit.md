@@ -2,11 +2,12 @@
 
 Date: 2026-10-11. Owner-requested audit; no implementation, installation or merge approval.
 
-Subsequent owner-approved corrections: F1 and F2 completed dedicated verification
+Subsequent owner-approved corrections: F1, F2 and F3 completed dedicated verification
 and fresh required reviews; see [F1](../superpowers/plans/2026-10-11-agy-print-timeout.md)
-and [F2](../superpowers/plans/2026-10-11-legacy-agent-ownership.md). The live SoT
+and [F2](../superpowers/plans/2026-10-11-legacy-agent-ownership.md), plus
+[F3](../superpowers/plans/2026-10-11-claude-read-search.md). The live SoT
 was shortened with its exact prior contents preserved as linked history. The
-findings below retain their original audit basis; F3 and shared reconciliation remain.
+findings below retain their original audit basis; shared reconciliation remains.
 
 ## Result
 

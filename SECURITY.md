@@ -443,6 +443,11 @@ The candidate does not alter installed revision pins, legacy review admission,
 provider permissions or raw investigation routes. Bootstrap requires the declared
 schema APIs before persistent writes and never installs Python packages itself.
 
+The v2 Claude clause permits existing host-provided read/search tools,
+including read-only shell inspection; candidate
+code/tests/builds, writes and unauthorized reads remain prohibited. This grants
+no new provider tool or permission.
+
 Explicit v2 operational collection uses immutable named-entry/attempt custody
 within the existing managed review lifecycle. It binds the complete roster,
 source/toolkit, clauses, normalized review phase, selected route, requested

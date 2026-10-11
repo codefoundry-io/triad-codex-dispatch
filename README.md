@@ -1289,9 +1289,10 @@ upgrading the toolkit; do not rewrite an earlier round's bound commands.
 
 ## Offline v2 candidate validation
 
-The [candidate contract bundle](contracts/README.md) comes from shared commit
-04245c740afc9be36ad7702a134f71aec8ff0b7f. Use this explicit source CLI with an
-absolute canonical regular result file and all six expected binding values:
+The [candidate contract bundle](contracts/README.md) records its source repository,
+exact shared commit and per-file SHA-256 in [the provenance manifest](contracts/source-manifest.json).
+Use this explicit source CLI with an absolute canonical regular result file and
+all six expected binding values:
 
     python3 /absolute/plugin/bin/validate_v2.py validate --result-file /absolute/result.json --expected-review-id round-1 --expected-family codex --expected-content-digest <64-lowercase-hex> --expected-leg-name codex-main --expected-attempt 1 --expected-route null
 
@@ -1307,6 +1308,9 @@ Existing legacy routes and custom-schema investigations retain their interfaces.
 
 Select v2 explicitly under the current owner/project instruction and follow the
 [source-skill procedure](skills/triad-cross-family-review/references/public-v2-review.md).
+The Claude clause permits host-provided read/search tools, including read-only
+shell inspection when available. Candidate code/tests/builds and writes remain
+prohibited; this changes no tool inventory or provider permission.
 The operational commands are `v2-create`, `v2-allocate`, `v2-record-cli`,
 `v2-record-native`, `v2-record-start-failure` and `v2-collect` on
 `bin/review_round.py`. They connect the resolved roster, exact shared prompt
