@@ -36,7 +36,7 @@ first, host cwd workspace and canonical invocation-owned TMPDIR before Python.
   diff check and matching source fingerprints. Expected: all applicable checks pass.
 - [x] Fresh Sol/xhigh + Astra/high + Google Pro/high same-basis review. Expected:
   all selected results admitted, matching integrity and exact owned cleanup.
-- [ ] Commit/push, record bounded C43 evidence and update SoT/PR13. No merge/install/release.
+- [x] Commit/push, record bounded C43 evidence and update SoT/PR13. No merge/install/release.
 
 Evidence lives in workspace `_runs/infra/20261011-agy-print-timeout/` and the fresh
 unit review directory. Existing untracked owner documents remain untouched.
@@ -52,3 +52,6 @@ Round `triad-agy-print-timeout-20261011-r1`: all three SAFE, no findings or open
 questions; ALL_SELECTED_APPROVED with matching final integrity. Every producer's
 actual terminal outcome was consumed; custody exported and exact stages cleaned.
 No new live vendor timeout was induced; other C43 rows retain their own limits.
+Published B a8d6fe9 and sharedbe81588; PR13comment6105365271. Shared authoring1/1
+and182tests passed. Live SoT shortened with its exact123,404-byte prior body
+archived; current entry8,745bytes. No task hook or global setting was changed.
