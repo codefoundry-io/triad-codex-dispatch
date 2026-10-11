@@ -685,8 +685,8 @@ the hold. Other old rows remain individual evidence records, not confirmed defec
 
 ## U10 — Reconcile and hand off
 
-Current scope is shared-text/status reconciliation and handoff after the active
-bounded unit's required verification/review. An old TODO, OPEN or CHECK-B is not
+Selected scope is complete: shared-text/status reconciliation and handoff after
+the bounded units' required verification/review. An old TODO, OPEN or CHECK-B is not
 implementation authority. U6b/U9 remain held; U8, environment/effort override work
 and the unused Claude-agent backlog remain withdrawn. No new classifier campaign
 or native-mechanism work follows from integration.
@@ -710,12 +710,20 @@ or native-mechanism work follows from integration.
   shared log and owned PR13 description; leave A-owned PR12 untouched and share
   its incorporated evidence/disposition on PR13. Evidence documents do not silently
   override contradictory normative text.
-- [ ] Run the final affected/full checks and required combined review on the
+- [x] Run the final affected/full checks and required combined review on the
   resulting bytes. Preserve OS/service NOT RUN and runtime UNEXPOSED limits.
-- [ ] Present source commits/diffs, test results, review receipts, A follow-up
+- [x] Present source commits/diffs, test results, review receipts, A follow-up
   and revision/adoption status. Merge/install/release only under their own gates.
-- [ ] At whole-task completion, retire the temporary hook and AGENTS routing
+- [x] At whole-task completion, retire the temporary hook and AGENTS routing
   using the existing SoT checklist; retain evidence and the completed plan.
+
+Closed 2026-10-11: shared e8c90b8 (authoring1/1,186tests) and final combined
+`triad-spec-integration-20261011-r2` all three selected SAFE, matching integrity,
+actual producer completion and exact cleanup. Final runtime/test/payload bytes
+match dedicated GREEN2447passed/4skipped; public description corrections received
+fresh full R2 review. See the whole-system audit and completed SoT for evidence,
+nonblocking unselected findings, deferred limits and exact startup retirement.
+Draft PR40/PR13 are the reviewable handoff; merge/install/release are not complete.
 
 ## Commands and acceptance
 

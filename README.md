@@ -937,10 +937,11 @@ After preparing custody, capture the normal review fingerprint again and follow
 the existing render and post-review integrity steps. This setup check grants no
 admission and is not a substitute for them. Git-ignored files are outside its
 clean-state claim and must remain outside reviewer inputs; shared Git metadata
-and subsequent mutation are not isolated. An AGY reviewer still needs an already
-provisioned UUID bound to exactly this cwd and the existing read-only guard.
-Do not rebind another project's UUID or use global-settings fallback to make a
-new checkout work. Repository rules may continue to require the original
+and subsequent mutation are not isolated. An AGY reviewer needs the provisioned
+matching read/search profile. Only when selecting `--project` must its UUID be
+bound to exactly this cwd and pass the existing read-only project guard. Do not
+rebind another project's UUID or use global-settings fallback to make a new
+checkout work. Repository rules may continue to require the original
 guarded worktree, including its intentional dirty changes.
 
 For guarded review, the leader records approved symlinks' exact text and

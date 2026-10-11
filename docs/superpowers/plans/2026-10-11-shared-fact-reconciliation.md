@@ -97,4 +97,17 @@ Audit input: `/Users/chaniri/codex_workspace/_runs/infra/20261011-whole-system-a
 and its prior `spec.md` bounded corrections. Read relevant sections only; no broad
 research repetition or expansion follows from these records.
 
-Shared unit completion: spec e8c90b8; PR13comment6106035813. The final integration section remains the active stage; these Task1/Task2 checkboxes do not claim whole-task completion.
+Selected task completion: spec e8c90b8; PR13comment6106035813; Codex draft PR40.
+The final integration procedure above is complete, not an active instruction:
+R1 all SAFE identified two public description corrections and a nonblocking raw
+Gemini diagnostic-version observation. After the two prose corrections, fresh
+R2 all three selected reviewers returned SAFE with matching integrity. Google
+also suggested reducing a small duplicate receipt read; no failure/material cost
+justifies selecting that return-type refactor. Both nonblocking observations
+remain recorded without a new backlog. All producers ended before exact cleanup.
+The final runtime, skill entrypoint, prompt payload, contract and test bytes match
+the recorded GREEN; existing intermediate integrity checks remain unchanged.
+Temporary hook/startup routing is retired and the SoT is historical. Evidence
+and the cross-repository execution ledger are retained under workspace
+`_runs/infra/20261011-shared-reconciliation`. Held/unmeasured scope is not certified;
+merge, installation and release remain outside this completion.

@@ -100,8 +100,9 @@ Authentication is `personal-google` or `gemini-enterprise`. Personal Google uses
 AGY. An explicit Google route pin must be available; an absent pin uses the
 packaged authentication-aware selection chain. No provider failure switches it.
 
-Claude preflight checks the installed session-only model interface and documented
-effort compatibility. Null Claude selection inspects `/model`, never resets it.
+Claude preflight checks the wrapper's effort vocabulary, required CLI controls and
+any model/effort contradiction exposed by the session-only selection response.
+Null Claude selection inspects `/model`, never resets it.
 Google uses its selected wrapper's version/containment preflight and its own
 per-CLI model block. Gemini has no effort flag; its supported Pro default is
 separately documented. These checks do not prove account entitlement, effective

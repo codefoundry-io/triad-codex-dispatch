@@ -1,25 +1,65 @@
 # Whole-system audit: prompts, implementation, specification and agent workload
 
-Date: 2026-10-11. Owner-requested audit; no implementation, installation or merge approval.
+Date: 2026-10-11. Owner-requested audit and subsequent authorized corrections are
+complete for the selected scope. Merge, installation and release remain separate.
 
-Subsequent owner-approved corrections: F1, F2 and F3 completed dedicated verification
-and fresh required reviews; see [F1](../superpowers/plans/2026-10-11-agy-print-timeout.md)
-and [F2](../superpowers/plans/2026-10-11-legacy-agent-ownership.md), plus
-[F3](../superpowers/plans/2026-10-11-claude-read-search.md). The live SoT
-was shortened with its exact prior contents preserved as linked history. The
-findings below retain their original audit basis. Shared reconciliation is now
-pushed at spec e8c90b8: all57 cases and137 DL rows preserved, authoring1/1 and
-186tests pass. Fresh Sol/xhigh+Astra/high+Google Pro/high R2 all SAFE with matching
-integrity; R1's C34 timing contradiction and its correction are retained. Existing
-B CLI-selection validation remains separate from actual-runtime observations.
-Current partial/held/withdrawn states replace stale executable checklists;
-combined Codex integration review remains the last verification stage.
+## Closing assessment
 
-After F3's2447passed/4skipped full suite,340 stored file hashes were compared:
-runtime, skills, prompts, contracts and tests remain unchanged. Later differences
-are README provenance and administrative evidence prose, not new runtime behavior.
+| Owner question | Current conclusion |
+|---|---|
+| Are prompts minimal and AI used only where needed? | The functional Claude read/search conflict was corrected and all four decision scenarios pass. Code retains argv, schema, six bindings, agreement and exact cleanup; AI handles review judgment and observed-failure diagnosis. No further wording or optional helper rewrite is selected. |
+| Does source implement the specification without omissions? | Selected corrections and cumulative integration passed verification/review. This is not full conformance certification: the explicitly unmeasured and held boundaries below remain qualified. |
+| Does the specification contain errors? | The identified case, timing, tool, status and source-map conflicts were reconciled in shared e8c90b8. All 57 cases, 137 DL rows and PR12's 30 A evidence cells were preserved. Claude's new-contract verification remains its host's work. |
+| Must the main agent create/read unnecessary documents? | The 121,981-byte active SoT was shortened, then retired with its temporary startup hook/routing at task completion. History remains available on demand. Generated review artifacts are not eight manually authored documents; routine successful-read auditing is not required. |
 
-## Result
+Completed corrections: [F1: print-timeout admission](../superpowers/plans/2026-10-11-agy-print-timeout.md),
+[F2: exact legacy ownership](../superpowers/plans/2026-10-11-legacy-agent-ownership.md),
+[F3: available Claude search](../superpowers/plans/2026-10-11-claude-read-search.md),
+and [shared reconciliation](../superpowers/plans/2026-10-11-shared-fact-reconciliation.md).
+The cumulative production delta from base632f426 is 1,200 added / 1,544 removed
+lines across 19 files (net -344); most added lines are tests and retained evidence.
+This count is not a measured runtime/token saving.
+
+Verification: F3's final dedicated GREEN passed 184 focused and 2,447 full tests,
+with 4 skips, plus four skill validators. Comparison of 340 stored file hashes
+and newly tracked files confirms unchanged runtime, skill entrypoints, prompt
+payloads, contracts and tests. Later changes are public setup/selection descriptions
+and administrative evidence/retirement prose. Shared authoring1/1 and186 tests
+pass. Broad tests were not repeated for those prose-only changes.
+
+Final combined review `triad-spec-integration-20261011-r2` ended
+ALL_SELECTED_APPROVED / ROUND_INTEGRITY_OK: fresh Sol/xhigh, Astra/high and
+Google Pro/high all SAFE, under the owner's observed-Claude-limit alternative.
+This is not fixed workspace four-leg ledger admission. All producers reached
+terminal state before exact temporary cleanup; durable evidence is retained at
+workspace `_runs/reviews/triad-spec-integration-20261011-r2`. R1 remains preserved.
+Its AGY project prerequisite and Claude effort-assurance documentation findings
+were corrected once and included in the complete fresh R2.
+
+Two nonblocking observations are deliberately unselected:
+
+- Raw/custom-schema Gemini transport can record `cli_version: null` even after
+  a successful version probe (`bin/gemini_wrapper.py:477`). The >=0.63 floor still
+  executes and formal preparation/runtime receipt separation is unchanged. This
+  is diagnostic precision, not evidence of unsupported answer admission.
+- `load_receipt` rereads a small preflight file for hashing and verifies logical
+  equality (`bin/google_preflight_v2.py:90-93`). No correctness failure or material
+  cost was shown; changing `load_preflight`'s return type also affects another
+  consumer. The optional refactor creates no automatic follow-up task.
+
+U6b/U9 remain held. U8, environment/effort overrides and unused Claude-agent
+resolver work remain withdrawn. The intermediate-hashing proposal is unanswered
+and unselected; current checks are unchanged. AGY credit channel/event/exit,
+full C37/C43 mappings, DL90/98 guarantees, unbound submodules, exit-zero Git
+warning impact, Ubuntu/service coverage and fresh installed exposure remain
+qualified as detailed below. No broader completeness claim follows from SAFE.
+
+Handoff: [Codex draft PR40](https://github.com/codefoundry-io/triad-codex-dispatch/pull/40)
+and [shared draft PR13](https://github.com/codefoundry-io/triad-dispatch-spec/pull/13).
+PR12 remains A-owned. The [completed SoT](../status/spec-to-code-sot.md) records
+retirement; evidence is historical and no longer mandatory startup reading.
+
+## Original audit result — historical basis
 
 The core responsibility split is sound, but the system is not fully conformant.
 Two implementation defects were reproduced without a provider call, and a shared

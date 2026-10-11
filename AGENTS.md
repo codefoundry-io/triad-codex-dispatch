@@ -5,19 +5,6 @@
 - Keep release version metadata and affected English/Korean/security/migration docs aligned.
 - Preserve Python 3.12+ bootstrap compatibility unless the owner approves a change.
 
-## Spec-to-code continuation
-
-- On a new or resumed spec-to-code session, and after compaction, read
-  `docs/status/spec-to-code-sot.md` before work. It is the single live stage and
-  progress record; verify its basis against current Git state.
-- Follow its stage checklist and update the evidence and next action after each
-  meaningful step and before handoff. Keep each host's native leg host-owned.
-- Validate the specification as well as the code: fix Codex defects, clarify
-  shared-spec gaps before dependent implementation, check Claude claims against
-  source, and never implement guessed vendor output shapes.
-- At task completion, follow the SoT cleanup checklist: remove this task's hook
-  and temporary startup routing, including this section; retain the evidence.
-
 ## Shared infrastructure
 
 On the owner's managed workstation, read

@@ -1,164 +1,89 @@
-# TRIAD Codex spec-to-code — execution SoT
+# TRIAD Codex spec-to-code — COMPLETE / historical
 
-Last updated: 2026-10-11 (Asia/Seoul). Applies to this Codex host's shared-spec
-conformance work. This is the single live progress entry; the shared specification
-remains behavioral authority. This entry grants no adoption/publication permission.
+Closed: 2026-10-11 (Asia/Seoul). The selected implementation, audit corrections,
+shared reconciliation and combined review are complete. **No active next action.**
+This document and linked plans are evidence, not startup instructions or automatic
+authority to resume withdrawn/held work. Merge, installation and release are separate.
 
-## Owner constraints
+## Final outcome
 
-- Develop and validate the specification as well as the code. For a disputed item,
-  distinguish Codex defect, Claude defect, shared-spec gap and unmeasured fact;
-  record the rule/case, relevant code, evidence and disposition. Clarify a shared
-  gap through the shared authoring process before dependent implementation.
-- Keep each host's native leg host-owned: spawning, presets, model/effort and
-  internals. Only the common input/result boundary is shared; never port native
-  mechanisms or guess vendor output shapes.
-- Inspect Claude source as evidence. Verify claims independently from current
-  shared rules, source, Tier 1 documentation and bounded execution when needed.
-  Continue authorized work and share established differences asynchronously;
-  a maintainer reply is neither a prerequisite nor agreement.
-- Preserve intentional dirty work in place: no reset, clean, stash, discard or
-  separating checkout. Pin claims to current commits and relevant dirty files;
-  old OPEN rows and concurrent pending implementations are not current diagnoses.
-- Continue bounded authorized corrections without routine stage approval stops.
-  A substantial design change, conflicting supported requirements or necessary
-  unsupported decision stops only dependent work: ask the owner with the concrete
-  choice, evidence and impact, while independent work continues.
-- Prefer existing logic and reviewer discovery from objective/diff/related code.
-  Do not add security/cwd/replay machinery without an evidenced need, per-file
-  read approval lists, routine successful-run log audits or quota exhaustion probes.
-- Keep prompt review to two or three substantial/behavioral passes. If nuance
-  repeats, use fresh Sol/medium scenario/control probes under the current workspace policy without expected answers
-  or review history; correct choices end wording iteration. No phrase-pinning
-  tests solely for wording. Functional failures still require correction.
-- Product merge, installation, adoption and release retain their applicable
-  owner approvals; permission to publish draft PR #13 does not grant them.
+The [whole-system audit](../reviews/2026-10-11-whole-system-audit.md) answers the
+owner's four questions and retains original findings separately from the final
+assessment. The [execution plan](../superpowers/plans/2026-10-09-shared-spec-execution.md)
+records completed units and dispositions; its U10 is closed.
 
-## Start, resume and update
+- [F1: AGY print-timeout admission](../superpowers/plans/2026-10-11-agy-print-timeout.md):
+  measured own-stderr partial answers are withheld, including vendor exit0;
+  authentication precedence and negative controls remain intact.
+- [F2: legacy ownership](../superpowers/plans/2026-10-11-legacy-agent-ownership.md):
+  six complete historical payload hashes qualify; edited/uncertain files remain
+  unmanaged. Existing user files/settings were not changed.
+- [F3: Claude search](../superpowers/plans/2026-10-11-claude-read-search.md):
+  host-provided read/search and read-only shell inspection are allowed. All four
+  decision scenarios pass; no agent definition or native-leg mechanism was added.
+- [Shared reconciliation](../superpowers/plans/2026-10-11-shared-fact-reconciliation.md):
+  shared e8c90b8 preserves 57 cases,137 DL rows and PR12's30 A evidence cells;
+  replaces obsolete executable checklists with current dispositions; distinguishes
+  B CLI-selection evidence from actual-runtime observations. Shared authoring1/1
+  and186 tests pass. A implementation remains A-owned.
 
-1. Read this entry once from complete hook delivery or the file when delivery is
-   absent/incomplete. Read repository `AGENTS.md` and the development contract;
-   load additional policies only for the current operation and reuse unchanged ones.
-2. Inspect live branch, HEAD and dirty state; explain any basis change before
-   reusing results. Read only the current unit's linked rules/cases/evidence.
-3. Brief the owner in Korean: stage, confirmed issue, next action and impact.
-4. After meaningful progress or before handoff, replace the current position and
-   next action. Keep detailed commands/results in the unit plan and existing
-   evidence; link them here rather than append duplicate result narratives.
-   Completed history never schedules work or requires a startup reread.
+Handoff: [Codex draft PR40](https://github.com/codefoundry-io/triad-codex-dispatch/pull/40)
+and [shared draft PR13](https://github.com/codefoundry-io/triad-dispatch-spec/pull/13).
+PR12 remains A-owned and unmerged. The final commit is the commit containing this
+closure; no commit ID is embedded recursively in its own content.
 
-## Current unit and next action
+## Verification and custody
 
-Owner proceeded with the whole-system audit corrections. F1 is complete:
-[AGY print-timeout admission](../superpowers/plans/2026-10-11-agy-print-timeout.md).
-Its plan owns the dedicated RED/GREEN and same-basis three-leg approval evidence.
-Shared3495262 clarifies C43; no new carrier was guessed or live timeout induced.
+F1/F2/F3 each completed dedicated RED/GREEN and fresh independent review. Latest
+runtime GREEN:184 focused,2,447 full passed,4 skipped; four skill validators pass.
+Comparison of340 saved file hashes and newly tracked files confirms unchanged
+runtime, skill entrypoints, prompt payloads, contracts and tests. Later edits
+are public setup/selection descriptions and administrative closure prose.
 
-[Exact legacy ownership (F2)](../superpowers/plans/2026-10-11-legacy-agent-ownership.md)
-has completed dedicated RED/GREEN and all three selected independent reviews.
-Only six complete historical originals qualify; uncertain/rendered/edited files
-remain unmanaged. No template inference or user-global cleanup was added.
-It is committed/pushed in B8efa45e and sharedb6c5b76, PR13comment6105598443.
+Final combined round `triad-spec-integration-20261011-r2`:
 
-[Claude read/search clause (F3)](../superpowers/plans/2026-10-11-claude-read-search.md)
-has completed shared clarification9bca149, exact B vendoring, dedicated GREEN
-(184focused/2447full,4skipped) and all three selected independent reviews with
-matching integrity. All four behavior scenarios pass; wording iteration is closed.
-Native tools, bindings and candidate-execution/write prohibitions remain intact.
+- Sol/xhigh, Astra/high and Google Pro/high: all SAFE on one new basis.
+- Outcome ALL_SELECTED_APPROVED, integrity ROUND_INTEGRITY_OK; digest
+  `801ce5a04e8ac39b0d5f9b05a8e7a93f00238fd3f214d2e4377bafc7d0b64d07`.
+- Owner-selected three-leg composition followed the observed Claude usage limit;
+  it is not fixed workspace four-leg ledger admission. Hidden native runtime
+  identity remains UNEXPOSED. No quota-recovery call was made.
+- Every producer and cleanup command reached terminal state before exact outer
+  temporary-root removal. Durable rounds remain at workspace
+  `_runs/reviews/triad-spec-integration-20261011-r2`; failed/earlier rounds remain.
+- Commands, findings/rulings, final basis comparison and exported execution ledger:
+  workspace `_runs/infra/20261011-shared-reconciliation`.
 
-Completed unit: [common-spec fact/draft reconciliation](../superpowers/plans/2026-10-11-shared-fact-reconciliation.md).
-F3 is pushed in B ab86e86 / shared48ed297, PR13comment6105788066.
-Preserve PR12's newer A
-evidence alongside PR13's settled replacements and B completion/withdrawals;
-replace obsolete executable checklists with current dispositions. No speculative
-classifier campaign or new native mechanism is selected by old TODO/OPEN labels.
-Shared reconciliation now passes authoring1/1 and186tests; schemas/prompt payloads,
-57case IDs and137DL rows are preserved. Fresh three-leg round
-`triad-shared-reconciliation-20261011-r1` closed NOT_APPROVED with matching
-integrity: two reviewers identified the same C34 selection-preflight versus
-runtime-receipt conflict. The bounded correction preserves existing B selection
-validation, distinguishes actual-runtime observation and corrects the stale B
-default description. Shared186 tests and preservation pass again; fresh complete
-round `triad-shared-reconciliation-20261011-r2` closed ALL_SELECTED_APPROVED with
-matching integrity, all three SAFE, all producers terminal and exact cleanup.
-Shared e8c90b8 is pushed; PR13 description and comment6106035813 record the current
-scope, evidence and A-owned follow-up. PR12 remains A-owned and unmerged.
-Current evidence:
-`_runs/infra/20261011-shared-reconciliation` under the workspace root.
+## Explicitly unselected, held and unmeasured
 
-Active stage: combined Codex integration review against base632f426, with the
-same owner-selected roster and shared e8c90b8 immutable source context. Runtime,
-skills, prompts, contracts and tests match the final F3 full-suite bytes
-(2447passed/4skipped;340 files checked). Existing intermediate tree checks remain
-unchanged. Finish review and any required bounded correction before whole-task
-completion and the already authorized exact hook/startup cleanup.
+- Intermediate-hashing optimization: owner answer remains pending; proposal is
+  unselected, existing allocate/record/collect checks are unchanged. Completion
+  does not answer or withdraw that question.
+- U6b/C69 and U9 expansion: held. U8 coexistence, user environment/effort overrides
+  and unused Claude-agent resolver work: withdrawn; no automatic resumption.
+- Nonblocking raw Gemini `cli_version: null` diagnostic precision and duplicate
+  small preflight-file reading: recorded, unselected; no new automatic backlog.
+- AGY credit channel/event/exit, full C37/C43, DL90/98 exception-record promises,
+  unbound submodule coverage and exit-zero Git warning impact remain qualified.
+  Ubuntu/service matrices, fresh installed exposure and universal permission
+  enforcement are not certified. Never implement guessed vendor output shapes.
+- Claude code remains comparative evidence, not common authority; each host owns
+  native spawning/model/effort internals. No port or A implementation change.
 
-The observed Claude usage limit activates the owner-selected **Sol/xhigh +
-Astra/high + Google Pro/high** complete fresh roster for subsequent task reviews
-while unresolved. Finish started producers, use one common basis and carry no
-approval from another round. Auth/tool failure is not quota; do not buy another
-Claude call merely to check recovery. Native legs remain host-owned.
+## Completed retirement
 
-## Pending choice and remaining work
+- [x] Selected units, required verification/review, shared reconciliation and
+  handoff recorded with their scope limits; reviewed product bytes preserved.
+- [x] Removed this task's SoT-reading SessionStart handler from original checkout
+  `workspace/triad-codex-dispatch/.codex/hooks.json`. It was the file's only
+  remaining configuration, so the task-owned file was removed after exact check.
+- [x] Removed project AGENTS.md's temporary `Spec-to-code continuation` section
+  and workspace AGENTS.md's single temporary TRIAD continuation-routing row.
+  Unrelated dirty work and standing policies remain intact.
+- [x] Verified these active hook/startup routes no longer load this SoT. No
+  recurring replacement, installed-cache change or global-trust edit was made.
+- [x] Preserved historical SoT, prior checkpoints, review receipts and execution
+  evidence; exact task scratch ledger exported and verified before removal.
 
-- **Owner choice remains unanswered:** reviewed-tree checks currently run during
-  allocate/record/collect. The proposed minimum keeps initial/final source integrity
-  and intermediate condition/result bindings, but may spend another call before
-  detecting drift. No dependent timing-policy edit is authorized by this proposal.
-- Preserve F1/F2/F3 and shared reconciliation completed evidence. Finish U10's
-  combined review and handoff; audit recommendations are not admission.
-  U2 authentication/carrier evidence and current shared-log B dispositions are
-  reconciled at shared e8c90b8. This selects no generic phrase sweep,
-  speculative classifier campaign or new carrier probe. U6b/C69 declaration/evidence
-  cleanup and U9 expansion remain on hold;
-  U8, environment/effort override work and the unused Claude-agent backlog remain withdrawn and must not auto-resume.
-- Use the [whole-system audit](../reviews/2026-10-11-whole-system-audit.md) for exact
-  findings/coverage/limits and the [execution plan](../superpowers/plans/2026-10-09-shared-spec-execution.md)
-  for unit dependencies. Completed units and prior failed rounds remain history.
-
-## Evidence limits and completion checklist
-
-AGY credits channel/event/exit remains unmeasured; do not invent a carrier or repeat
-the same factual request without new evidence. Full C37/C43 mappings, DL-90/98's
-exception/record promises, unbound submodule coverage and exit-zero Git warnings
-are not certified complete; the audit distinguishes gaps from unreproduced candidates.
-Ubuntu/service matrices, fresh installed exposure, all error carriers and universal
-permission enforcement remain untested. These limits do not automatically block
-unrelated supported corrections. Keep nonblocking residuals without automatic backlog.
-
-- [ ] Complete each selected bounded unit: governing rule/case mapping, meaningful
-  dedicated RED/GREEN where required, relevant regressions/validators, and fresh
-  required review before the next implementation unit. Changed basis requires a
-  new complete round; reproduce findings and preserve rejected/failed evidence.
-- [ ] Keep actual host/result identity, current bound residual/counterevidence,
-  source integrity and TRIAD-owned producer/writer completion. Export verified
-  evidence before exact round cleanup; preserve unexported/refused residue.
-- [ ] Reconcile remaining shared-log B rows and disclose unassessed scope.
-- [ ] Present linked rules/code/tests/review receipts/limits and complete any
-  required combined pre-merge review. Record applicable approvals separately.
-- [ ] Complete the whole-task cleanup below only after authorized work and its
-  required verification/review are complete, with explicit disposition of deferred work.
-
-## Whole-task cleanup — owner instruction, 2026-10-09
-
-A finished unit, blocked review or interrupted session is not whole-task completion.
-Until completion, keep this task's existing startup hook and temporary routing.
-At completion perform the following without asking again:
-
-- [ ] Record final outcome, linked evidence and explicitly deferred work here;
-  mark this document COMPLETE and historical, with no active next action.
-- [ ] Remove only the SessionStart handler whose command reads this SoT from
-  `/Users/chaniri/codex_workspace/workspace/triad-codex-dispatch/.codex/hooks.json`.
-  Preserve unrelated handlers; remove the file only if this task still owns its
-  entire remaining configuration.
-- [ ] Remove the temporary `Spec-to-code continuation` section from project
-  `AGENTS.md` and the TRIAD spec-to-code routing row from workspace `AGENTS.md`.
-  Preserve unrelated changes and standing development policies.
-- [ ] Verify no active hook/startup instruction loads this completed task; record
-  the cleanup result here and report it to the owner.
-
-Retain the full archived SoT, historical checkpoints and review receipts. Do not
-replace the retired hook with a recurring reminder or alter global trust settings.
-This cleanup grants no merge, installation or release authority beyond approved scope.
-
-[Preserved full history](2026-10-11-spec-to-code-history.md) is evidence only; load a relevant section only when current work needs it.
+[Preserved full history](2026-10-11-spec-to-code-history.md) is available on demand.
+The original 121,981-byte SoT no longer creates mandatory startup reading.

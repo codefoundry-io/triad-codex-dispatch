@@ -867,7 +867,9 @@ Custody 준비 후에는 정상 리뷰 fingerprint를 다시 계산하고 기존
 post-review integrity 절차를 따릅니다. 이 사전 검사는 admission을 부여하거나
 해당 절차를 대체하지 않습니다. Git-ignored 파일은 clean-state 주장에 포함되지
 않으며 리뷰 입력에서 제외해야 합니다. 공유 Git metadata나 이후 변경을 격리하지
-않습니다. AGY에는 이 cwd에 정확히 연결된 기존 UUID와 read-only guard가 필요합니다.
+않습니다. AGY에는 준비된 해당 읽기·검색 profile이 필요합니다. `--project`를
+선택한 경우에만 UUID가 이 cwd에 정확히 연결되고 기존 read-only project guard를
+통과해야 합니다.
 다른 프로젝트 UUID를 재연결하거나 global-settings fallback을 사용하지 마세요.
 저장소 지침이 기존 guarded worktree를 요구한다면 의도된 dirty 변경도 보존합니다.
 
