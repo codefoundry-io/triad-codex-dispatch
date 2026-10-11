@@ -6,13 +6,15 @@
 두 방식은 같은 플러그인과 공통 실행 환경 설정을 사용합니다. 같은 마켓플레이스 이름으로
 두 경로를 중복 등록하지 마세요.
 
-## AGY 리뷰 프로필 설정 — 반영 대기 후보
+<a id="agy-리뷰-프로필-설정--반영-대기-후보"></a>
 
-현재 소스 후보는 legacy/v2 정식 리뷰에 AGY 프로필 두 개를 요구합니다.
+## AGY 리뷰 프로필 설정
+
+0.2.559는 legacy/v2 정식 리뷰에 AGY 프로필 두 개를 요구합니다.
 선택한 toolkit의 `bin/agents/` 파일을 검토한 뒤 루트에서 실행합니다.
 
 
-U7은 두 프로필에 `excludeDefaultComponents: true`를 추가합니다. Raw 읽기 전용
+두 프로필은 `excludeDefaultComponents: true`를 사용합니다. Raw 읽기 전용
 조사를 포함한 읽기 전용 호출은 AGY 1.2.1 이상이 필요하며 raw는 research 프로필을
 사용합니다. 이전 프로필 갱신은 두 파일의 변경을 검토한 뒤 같은 설치 명령에
 `--replace`를 명시해야 합니다. 실행 중 자동 갱신하지 않습니다.
@@ -20,7 +22,7 @@ U7은 두 프로필에 `excludeDefaultComponents: true`를 추가합니다. Raw 
 요청한 웹 사용과 충돌하는 기존 URL 금지나 잘못된 설정은 수정 없이 거부합니다.
 1.3.3 실측에서는 읽기·검색·웹과 쓰기 요청 시 파일 미생성을 확인했습니다.
 쓰기 호출을 실행 단계에서 차단했다는 증거는 아닙니다.
-U7 이전 비정상 종료로 `settings.json` 자체에 TRIAD deny가 남았을 수 있습니다.
+0.2.559 업데이트 이전 비정상 종료로 `settings.json` 자체에 TRIAD deny가 남았을 수 있습니다.
 남은 `.agybak`과 현재 설정을 비교해 확인된 TRIAD 잔여 항목만 직접 정리하고,
 이후 사용자 변경은 보존하세요. 전체 백업을 무조건 덮어쓰지 않으며 TRIAD는 자동 복구하지 않습니다.
 
@@ -46,7 +48,7 @@ preflight는 이름·경로·SHA-256을 결합하고 누락·변경 시 추론 �
 ## 설치할 버전 선택
 
 아래 명령은 최신 공개 버전 경로인 `main`을 선택합니다.
-[v0.2.558 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)에서
+[v0.2.559 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)에서
 버전별 다운로드와 체크섬을 확인할 수 있습니다. 같은 버전을 재현하려면 B 경로에서
 릴리스 노트에 기록된 전체 커밋 ID를 checkout합니다.
 

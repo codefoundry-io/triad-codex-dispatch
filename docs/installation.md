@@ -6,14 +6,16 @@ Choose **marketplace installation** or **local installation from Git**. Both
 install the same plugin and use the same runtime setup. Do not register both
 under the same marketplace name.
 
-## AGY review-profile setup (pending candidate)
+<a id="agy-review-profile-setup-pending-candidate"></a>
 
-The current source candidate requires two explicitly provisioned AGY profiles
+## AGY review-profile setup
+
+0.2.559 requires two explicitly provisioned AGY profiles
 for legacy/v2 formal review. After reviewing the packaged `bin/agents/` files,
 run from the selected toolkit root:
 
 
-U7 adds `excludeDefaultComponents: true` to both profiles and requires AGY>=1.2.1
+Both profiles use `excludeDefaultComponents: true` and require AGY>=1.2.1
 for read-only calls, including raw investigations (which use the research twin).
 Updating an older profile requires reviewing the two-file delta and explicitly
 running the same installer with `--replace`; dispatch never updates it.
@@ -21,7 +23,7 @@ Global settings and legacy `.agybak`, lock and lease files are preserved without
 automatic healing/deletion. Requested web refuses a known URL-wide deny or
 malformed existing settings; it never edits them. Live1.3.3 evidence proves useful
 read/search/web and no file after a write request, not provider-denied execution.
-A pre-U7 crash may have left TRIAD deny entries in `settings.json` itself. Compare
+A crash before upgrading to 0.2.559 may have left TRIAD deny entries in `settings.json` itself. Compare
 any leftover `.agybak` snapshot with current settings and manually reconcile only
 confirmed TRIAD residue, preserving later operator edits; do not blindly restore
 the whole backup. TRIAD performs no automatic recovery.
@@ -49,7 +51,7 @@ read under the selected profile.
 ## Select the version
 
 The commands below select `main`, the current release line.
-[Release v0.2.558](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.558)
+[Release v0.2.559](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)
 contains the versioned download and checksums. For a reproducible installation,
 use route B and check out the full commit ID recorded in the release notes.
 
