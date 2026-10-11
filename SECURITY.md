@@ -317,6 +317,9 @@ profiles, command rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]` fragments, legacy agent TOMLs, and retired
 launchers only when their marker and expected content match. Foreign, edited,
 linked, unreadable, or non-regular targets are preserved and reported.
+Legacy agent ownership requires the SHA256 of the complete file to match a known
+unchanged-copy original. Headers alone do not establish ownership. Unknown or
+machine-rendered variants are preserved with the existing unmanaged-file warning.
 
 Owner-authored `config.toml`, rules, permission profiles, provider settings,
 credentials, and unrelated files are preserved. Cleanup never follows a link

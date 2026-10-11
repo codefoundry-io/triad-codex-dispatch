@@ -463,6 +463,8 @@ plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
 `[shell_environment_policy]`, retired apply/repair launcher만 정리합니다. Foreign,
 edited, linked, non-regular target은 보존하고 보고합니다. owner-authored 설정을 보존하며
 rule, permission profile, credential, 관련 없는 파일을 건드리지 않습니다.
+Legacy agent TOML은 전체 내용이 확인된 원본과 일치할 때만 정리합니다.
+확인되지 않았거나 설치 경로에 따라 생성된 파일은 unmanaged 경고와 함께 보존합니다.
 
 review runtime은 하나의 complete focused directory, required family별 하나의
 `LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
@@ -792,8 +794,9 @@ codex plugin marketplace remove triad-codex-dispatch
 
 `--remove`는 three provider wrapper launchers, review-round selector launcher와 exact plugin-owned legacy launcher,
 profile, command rule, repair-agent registration, `[shell_environment_policy]` fragment를
-marker와 expected byte가 정확히 일치할 때만 삭제합니다. exact legacy three-agent TOML도
-제거합니다. Foreign, edited, linked, non-regular target은 보존하고 보고합니다.
+marker와 expected byte가 정확히 일치할 때만 삭제합니다. Legacy three-agent TOML은
+전체 내용이 확인된 원본과 일치할 때만 제거하며, 확인되지 않았거나 설치 경로에 따라
+생성된 파일은 보존하고 보고합니다. Foreign, edited, linked, non-regular target도 보존합니다.
 owner-authored 설정을 보존하며 `config.toml`, rule, permission profile, credential,
 관련 없는 파일을 건드리지 않습니다.
 학습된 classifier patch는 의도적으로 보존됩니다. 이는 managed

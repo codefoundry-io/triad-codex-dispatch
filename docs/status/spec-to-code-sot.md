@@ -54,12 +54,12 @@ Owner proceeded with the whole-system audit corrections. F1 is complete:
 Its plan owns the dedicated RED/GREEN and same-basis three-leg approval evidence.
 Shared3495262 clarifies C43; no new carrier was guessed or live timeout induced.
 
-Next unit: exact legacy ownership (F2). Header-only matching currently treats an
-appended owner edit as managed. Six historical full payloads were copied unchanged;
-later machine-rendered files have no immutable installed-byte receipt. Use known
-complete content only; preserve uncertain/rendered/edited files with the existing
-unmanaged warning. No template inference or user-global cleanup is added. Prepare
-its bounded plan and fresh dedicated RED before changing production code.
+[Exact legacy ownership (F2)](../superpowers/plans/2026-10-11-legacy-agent-ownership.md)
+has completed dedicated RED/GREEN and all three selected independent reviews.
+Only six complete historical originals qualify; uncertain/rendered/edited files
+remain unmanaged. No template inference or user-global cleanup was added.
+Commit/push and shared result recording close this unit. Next is F3's shared Claude
+read/search clause, followed by bounded common-spec fact/draft reconciliation.
 
 The observed Claude usage limit activates the owner-selected **Sol/xhigh +
 Astra/high + Google Pro/high** complete fresh roster for subsequent task reviews

@@ -498,6 +498,8 @@ profiles, launcher rules, repair-agent registration, pre-spawn
 and expected bytes match. Foreign, edited, linked, or non-regular targets are
 preserved and reported. This cleanup preserves owner-authored settings, rules,
 permission profiles, and credentials; unrelated files remain untouched.
+Legacy agent TOMLs qualify only when their complete bytes match a known original.
+Unknown or machine-rendered variants are preserved with the unmanaged-file warning.
 
 The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
@@ -857,7 +859,9 @@ codex plugin marketplace remove triad-codex-dispatch
 `--remove` deletes the three provider wrapper launchers, the review-round selector launcher, and exact plugin-owned
 legacy launchers, profiles, command rules, repair-agent registration, and
 `[shell_environment_policy]` fragments only when their markers and expected
-bytes match. It also removes exact legacy three-agent TOMLs. Foreign, edited,
+bytes match. It also removes legacy three-agent TOMLs whose complete bytes match
+a known original; unknown or machine-rendered variants are preserved and reported.
+Foreign, edited,
 linked, and non-regular targets are preserved and reported. Owner-authored
 `config.toml` settings, rules, permission profiles, credentials, and unrelated
 files are preserved; an owner file is never removed merely because no managed
