@@ -95,8 +95,9 @@ def test_minor_only_negative_is_valid_and_unchanged(validator):
 ])
 def test_all_expected_binding_axes_are_checked(validator, field, value):
     expected = dict(BINDING, **{field: value})
-    with pytest.raises(ValueError, match="binding"):
+    with pytest.raises(ValueError) as failure:
         validator.validate_verdict(json.dumps(verdict()), expected=expected)
+    assert failure.value.code in {"binding_mismatch", "invalid_expected"}
 
 
 def test_incomplete_expected_binding_is_rejected(validator):
@@ -118,8 +119,9 @@ def test_both_google_routes_keep_their_own_binding(validator, route):
 
 @pytest.mark.parametrize("suffix", [',"attempt":1}', ',"findings":[{"x":1,"x":2}]}'])
 def test_original_duplicate_members_rejected(validator, suffix):
-    with pytest.raises(ValueError, match="duplicate"):
+    with pytest.raises(ValueError) as failure:
         validator.validate_verdict(json.dumps(verdict())[:-1] + suffix, expected=BINDING)
+    assert failure.value.code == "duplicate_member"
 
 
 @pytest.mark.parametrize("raw", ["{", '{"attempt":NaN}', b"\xff"])

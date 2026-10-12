@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 import review_round
-from validate_v2 import _json, validate_review_kind
+from validate_v2 import _json, _library, validate_review_kind
 from verdict_v2 import bound_verdict
 
 BUNDLE_ROOT = Path(__file__).resolve().parents[1] / "prompts/review-v2"
@@ -50,13 +50,6 @@ def _clauses(text: str) -> dict[str, str]:
     return result
 
 
-def _data_fence(value: str) -> str:
-    # JSON quoting preserves the input and prevents injected metadata lines.
-    length = max([2, *(len(match) for match in re.findall(r"`+", value))]) + 1
-    fence = "`" * length
-    return fence + "text\n" + json.dumps(value, ensure_ascii=True) + "\n" + fence
-
-
 def review_web_clause(authorized: bool) -> str:
     if type(authorized) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
@@ -74,7 +67,8 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
         raise ValueError("review_date must be the bound UTC preparation date")
     date.fromisoformat(review_date)
     model = bound_verdict(expected)
-    bundle = load_bundle()
+    shared = _library()
+    load_bundle()
     root = review_round._canonical_directory(worktree, "v2 review worktree")
     for path in packet_files:
         review_round._canonical_regular_file_bytes(path, "bound v2 packet file")
@@ -86,7 +80,8 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
                    or any(not isinstance(value, str) or not value.strip() for value in values)
                    for values in (criteria, approved_boundary))):
         raise ValueError("v2 objective, criteria and approved boundary are required")
-    web_clause = review_web_clause(review_web_authorized)
+    if type(review_web_authorized) is not bool:
+        raise ValueError("review_web_authorized must be a boolean")
     metadata = dict(expected, review_kind=review_kind)
     if review_web_authorized:
         metadata["review_web_authorized"] = True
@@ -96,37 +91,25 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
         metadata["google_preflight_receipt_sha256"] = google_preflight_sha256
     elif google_preflight_sha256 is not None:
         raise ValueError("non-Google prompt cannot own a Google preflight")
-    common = _clauses(bundle["common-clauses.md"])
-    purpose = "plan-purpose" if review_kind == "formal-plan" else "code-purpose"
-    leg_text = bundle[f"leg-{expected['family']}.md"].replace(
-        "common:<review-purpose>", "common:" + purpose)
-    leg = _clauses(leg_text)
-    order = re.findall(r"^\d+\. ([\w:-]+)", leg_text, re.MULTILINE)
-    a_only = {section.split(None, 1)[0]
-              for payload in (bundle["common-clauses.md"], leg_text)
-              for section in re.split(r"^## ", payload, flags=re.MULTILINE)[1:]
-              if re.search(r"\bA-only\b", section.split("\n", 1)[0])}
-    pieces = []
-    for name in order:
-        if name.removeprefix("common:") in a_only:
-            continue
-        try:
-            pieces.append(common[name.removeprefix("common:")] if name.startswith("common:") else leg[name])
-        except KeyError as error:
-            raise ValueError("missing ordered shared clause") from error
     replacements = {
-        "review-web-policy": web_clause, "review-kind": review_kind, "review-date": review_date,
         "worktree": str(root), "brief-file": str(brief_file),
-        "gated-patch-file": str(diff_file), "packet-files": json.dumps([str(path) for path in packet_files]),
+        "packet-files": json.dumps([str(path) for path in packet_files]),
         "review-id": expected["review_id"], "content-digest": expected["content_digest"],
         "leg-name": expected["leg_name"], "attempt": str(expected["attempt"]),
-        "google-route": expected["route"] or "null",
     }
-    clauses = re.sub(r"<(" + "|".join(replacements) + r")>",
-                     lambda match: replacements[match[1]], "\n\n".join(pieces))
+    if expected["family"] == "google":
+        replacements["gated-patch-file"] = str(diff_file)
+    clauses = shared.render_review_clauses(
+        family=expected["family"], host="B", review_date=review_date,
+        review_web_authorized=review_web_authorized, replacements=replacements,
+        review_kind=review_kind, route=expected["route"])
+    # Preserve the established heading before the fence; shared code owns its
+    # caveat and data encoding. The final three lines are the fenced JSON block.
+    caveat, *fence = shared.render_data(residual).rsplit("\n", 3)
+    data_prefix = "" if caveat in clauses else caveat + "\n"
     framing = {"objective": objective, "criteria": criteria, "approved_boundary": approved_boundary}
     return ("Review v2 metadata: " + json.dumps(metadata, sort_keys=True, separators=(",", ":"))
             + "\n\n" + clauses + "\n\nBound review scope:\n" + json.dumps(framing, ensure_ascii=True)
-            + "\n\n" + common["data-fence-caveat"] + "\nPrior findings and rebuttal evidence:\n"
-            + _data_fence(residual) + "\n\nComplete authoritative output schema:\n"
+            + "\n\n" + data_prefix + "Prior findings and rebuttal evidence:\n"
+            + "\n".join(fence) + "\n\nComplete authoritative output schema:\n"
             + json.dumps(model.model_json_schema(), sort_keys=True) + "\n")
