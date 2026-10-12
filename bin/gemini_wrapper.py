@@ -205,6 +205,10 @@ def _run_preflight(
             "Gemini formal preflight did not prove Plan Mode, policy, and Auto model support"
         )
         return EXIT_ARG_ERROR
+    if (v2_fields and v2_fields.get("review_packet_dir") is not None
+            and re.search(r"(?m)^\s*--include-directories\b[^\n]*\[array\]\s*$", help_text) is None):
+        log("Gemini formal preflight requires --include-directories for the bound packet")
+        return EXIT_ARG_ERROR
     sys.stdout.write(
         json.dumps(
             {
@@ -248,6 +252,7 @@ def main() -> int:
     p.add_argument("--cwd", default=None, help="Process working directory")
     p.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
     p.add_argument("--add-dir", action="append", default=[], help="Authorized additional raw-call input directory")
+    p.add_argument("--review-packet-dir", help="Exact bound shared packet directory (formal v2 only)")
     p.add_argument("--web", action="store_true", help="Explicitly authorize web; REVIEW requires matching bound metadata and preflight")
     p.add_argument(
         "--model",
@@ -328,6 +333,9 @@ def main() -> int:
             return EXIT_ARG_ERROR
 
     v2_verdict = args.pydantic in _common.PACKAGED_V2_VERDICT_SPECS
+    if args.review_packet_dir is not None and not v2_verdict:
+        log("--review-packet-dir requires formal v2 review or its preflight")
+        return EXIT_ARG_ERROR
     formal_verdict = (args.pydantic in FORMAL_VERDICT_SPECS or v2_verdict) and not args.preflight_only
     pydantic_cls = None
     if args.pydantic:
@@ -498,6 +506,8 @@ def main() -> int:
             cmd += ["--model=" + args.model]
         for directory in args.add_dir:
             cmd += ["--include-directories", directory]
+        if args.review_packet_dir is not None:
+            cmd += ["--include-directories", args.review_packet_dir]
         return cmd
 
     result = run_cli_with_retry(

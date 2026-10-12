@@ -4,7 +4,7 @@
 
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
-[v0.2.559](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)
+[v0.2.560](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.560)
 provides the versioned release and download checksums.
 
 **Your AI coding assistant shares blind spots with its own reviewers.** Ask
@@ -255,6 +255,19 @@ enforces it (summarized under [Security](#security) below).
   session after install or update.
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
+
+### Upgrading to 0.2.560
+
+Public v2 guarded-worktree Gemini reviews now expose their exact bound packet
+directory to native file tools, so TASK.md and REVIEW.diff are readable while
+the CLI stays in the product worktree. Update using the
+[normal procedure](docs/installation.md#update), rerun bootstrap and open a fresh
+Codex session. Prepare a new review basis; do not edit an old allocated command
+or retry an old valid negative. User settings and other routes are unchanged.
+
+Authenticated Gemini validation is deferred to the owner's company environment.
+Provider-free tests and native file-tool probes do not establish live account
+access or effective enterprise policy.
 
 ### Upgrading to 0.2.559
 
@@ -553,7 +566,7 @@ an additional release gate.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.559-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.560-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing

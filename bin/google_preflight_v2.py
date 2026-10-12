@@ -40,7 +40,19 @@ def fields(args, cwd: str | None, selector) -> dict:
         if effort is not None:
             raise ValueError("Gemini has no supported effort flag")
         route_args = ["--model=" + args.model]
-    return {**({"review_web_authorized": True} if getattr(args, "web", False) else {}), "schema_version": 2, "leg_name": args.expected_leg_name,
+    packet_fields = {}
+    packet = getattr(args, "review_packet_dir", None)
+    if packet is not None:
+        if selector.route != "gemini" or not isinstance(packet, str):
+            raise ValueError("review packet directory is a Gemini v2 launch control")
+        path = review_round._canonical_directory(Path(packet), "review packet directory")
+        root = review_round._lifecycle_root(path)
+        if (packet != str(path) or "," in packet or root is None
+                or root.name != "triad-review-" + selector.review_id):
+            raise ValueError("review packet directory must be the exact canonical shared directory for this round")
+        packet_fields["review_packet_dir"] = packet
+        route_args += ["--include-directories", packet]
+    return {**packet_fields, **({"review_web_authorized": True} if getattr(args, "web", False) else {}), "schema_version": 2, "leg_name": args.expected_leg_name,
             "attempt": args.expected_attempt, "cwd": cwd, "timeout_s": args.timeout,
             "model": args.model, "effort": effort, "route_args": route_args}
 

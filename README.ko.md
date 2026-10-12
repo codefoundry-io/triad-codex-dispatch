@@ -2,7 +2,7 @@
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
-[v0.2.559](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)에서
+[v0.2.560](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.560)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 [English README](README.md)
@@ -235,6 +235,20 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.560 업그레이드
+
+public v2 guarded-worktree의 Gemini 호출은 실행 위치를 제품 작업 폴더로
+유지하면서, 고정된 리뷰 패킷 폴더를 기본 파일 읽기 도구에 전달합니다.
+별도 임시 폴더의 TASK.md와 REVIEW.diff를 읽지 못하던 문제를 수정했습니다.
+[일반 업데이트 절차](docs/installation.ko.md#업데이트)와 bootstrap 실행 후
+새 Codex 세션을 열고 새 리뷰 라운드를 준비하세요. 이전 실행 명령을 직접
+수정하거나 읽기 실패를 보고한 유효한 부정 결과를 같은 라운드에서 재시도하지 마세요.
+사용자 설정과 다른 실행 경로는 바꾸지 않습니다.
+
+Gemini 실계정 검증은 릴리스 후 사용자의 회사 환경에서 진행합니다.
+공급자 호출 없는 테스트와 로컬 읽기 도구 검증은 실제 계정 접근이나
+회사 정책의 적용 결과를 증명하지 않습니다.
 
 ### 0.2.559 업그레이드
 
@@ -516,7 +530,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.559-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.560-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

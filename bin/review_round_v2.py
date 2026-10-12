@@ -160,6 +160,7 @@ def create_basis(request: dict, *, root: Path) -> dict:
         roster, review_id=request["review_id"], cwd=_review_cwd(request),
         authentication_class=request["authentication_class"],
         native_capabilities=request["native_capabilities"], receipt_root=preparation,
+        review_packet_dir=prepared if request["mode"] == "guarded-worktree" else None,
         **({"review_web_authorized": True} if request["review_web_authorized"] else {}))
     if set(adapters) != set(roster["enabled"]) or any(
             adapter.get("capabilities_checked") is not True for adapter in adapters.values()):
@@ -225,6 +226,8 @@ def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict
         argv += ["--effort", adapter["effort"]]
     if route == "agy":
         argv += ["--sandbox", "read-only"]
+    if adapter.get("review_packet_dir") is not None:
+        argv += ["--review-packet-dir", adapter["review_packet_dir"]]
     if adapter.get("agent") is not None:
         argv += ["--agent", adapter["agent"]]
     for field in BINDING_FIELDS:
@@ -285,6 +288,7 @@ def allocate_attempt(basis_file: Path, name: str, *, diagnosis: str | None = Non
             selected, review_id=request["review_id"], cwd=_review_cwd(request),
             authentication_class=request["authentication_class"], native_capabilities=request["native_capabilities"],
             receipt_root=_preparation(Path(basis["root"])), attempt=number,
+            review_packet_dir=Path(request["prepared_dir"]) if request["mode"] == "guarded-worktree" else None,
             **({"review_web_authorized": True} if request.get("review_web_authorized", False) else {}))[name]
         if _controls(adapter) != _controls(basis["adapters"][name]):
             raise ValueError("launch controls changed; every entry requires a new basis")
