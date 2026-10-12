@@ -15,7 +15,7 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 sys.dont_write_bytecode = True
 
-from library_adoption import COMMIT, LICENSE, PACKAGE, RECORD, ROOT, VERSION, bundle_ids, verify_library
+from library_adoption import COMMIT, LICENSE, PACKAGE, RECORD, ROOT, VERSION, bundle_ids, verify_approved_content, verify_library
 
 
 def wheel_files(wheel, source_commit):
@@ -57,6 +57,7 @@ def wheel_files(wheel, source_commit):
               "source_commit": source_commit, "wheel_sha256": hashlib.sha256(artifact).hexdigest(),
               "bundle_ids": bundle_ids(files),
               "sha256": {name: hashlib.sha256(body).hexdigest() for name, body in sorted(files.items())}}
+    verify_approved_content(record["sha256"])
     return files, record
 
 

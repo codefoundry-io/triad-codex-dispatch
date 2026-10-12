@@ -205,3 +205,27 @@ def test_verifier_refuses_unknown_adoption_schema(tree):
     path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError):
         loader().verify_library(tree)
+
+
+@pytest.mark.parametrize("member", ["triad_dispatch_lib/dispatch.py", "triad_dispatch_lib-0.1.0.dev3.dist-info/licenses/LICENSE"])
+def test_self_consistent_altered_wheel_cannot_claim_approved_commit(tree, tmp_path, member):
+    def alter(files):
+        files[member] += b"\n# changed incoming content\n"
+    wheel = make_wheel(tmp_path / "altered.whl", mutation=alter)
+    before = {path.relative_to(tree).as_posix(): path.read_bytes() for path in tree.rglob("*") if path.is_file()}
+    with pytest.raises(ValueError, match="approved content"):
+        vendor_module().refresh(wheel, loader().COMMIT, tree)
+    after = {path.relative_to(tree).as_posix(): path.read_bytes() for path in tree.rglob("*") if path.is_file()}
+    assert before == after
+
+
+def test_generated_record_cannot_reauthorize_changed_implementation(tree):
+    import hashlib
+    target = tree / "bin/triad_dispatch_lib/dispatch.py"
+    target.write_bytes(target.read_bytes() + b"\n# unauthorized\n")
+    record = tree / "contracts/library-adoption.json"
+    metadata = json.loads(record.read_text())
+    metadata["sha256"]["bin/triad_dispatch_lib/dispatch.py"] = hashlib.sha256(target.read_bytes()).hexdigest()
+    record.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="approved content"):
+        loader().verify_library(tree)
