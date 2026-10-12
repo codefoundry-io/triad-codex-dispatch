@@ -5,6 +5,12 @@
 [v0.2.560](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.560)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
+공통 라이브러리 적용 후보는 명시적 v2의 roster·프롬프트·판정 처리에
+`triad-dispatch-lib 0.1.0.dev3`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
+Claude는 별도로 배포하며 [이식 지침](docs/handoffs/claude-library-adoption.md)을 제공합니다.
+이 소스 후보와 위의 공개 릴리스는 별개입니다.
+
 [English README](README.md)
 
 **AI 코딩 어시스턴트는 자기 리뷰어와 blind spot 을 공유합니다.** codex 에게 codex 의

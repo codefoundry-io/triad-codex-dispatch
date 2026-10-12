@@ -6,6 +6,28 @@ Choose **marketplace installation** or **local installation from Git**. Both
 install the same plugin and use the same runtime setup. Do not register both
 under the same marketplace name.
 
+## Shared-library candidate
+
+The candidate includes the exact `triad-dispatch-lib 0.1.0.dev3` package under
+`bin/triad_dispatch_lib/`; no separate library checkout or editable install is
+needed. Continue using the selected Python 3.12+ runtime and install the shipped
+`requirements.txt` there, including `referencing>=0.37,<1`. Bootstrap checks
+prerequisites; reviews do not install dependencies. Existing launcher and runtime
+selection behavior is unchanged.
+
+Maintainers verify generated files with `python3 scripts/vendor_library.py --check`.
+To refresh the approved artifact, use `--wheel /absolute/path/to/wheel --source-commit
+81748d721e56dfc3463888f02328902e18398600 --write` instead of editing generated files.
+Review its recorded artifact hash and library changes first. The refresh refuses
+modified or unexpected managed files; preserve and resolve those conflicts before
+retrying. This source maintenance check does not add edit-preservation guarantees
+to Codex's own plugin-cache replacement. Keep the existing update/removal procedure.
+
+Library source provenance and file hashes are in `contracts/library-adoption.json`.
+The source candidate does not imply publication, global installation or a fresh
+session using the new runtime. Claude's independent port is described in the
+[handoff](handoffs/claude-library-adoption.md).
+
 <a id="agy-review-profile-setup-pending-candidate"></a>
 
 ## AGY review-profile setup

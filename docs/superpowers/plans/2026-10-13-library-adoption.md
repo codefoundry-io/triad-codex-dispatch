@@ -35,9 +35,9 @@ delegate deterministic roster, prompt and verdict logic to it.
 
 **Interfaces:** `library_adoption.verify_library() -> dict` verifies the exact generated path inventory/hashes and returns adoption metadata. `vendor_library.py --check` performs nonwriting verification; `--wheel PATH --source-commit SHA --write` refreshes only unchanged managed files after complete validation.
 
-- [ ] Add failing integrity/refresh preservation tests: changed/missing/extra/symlink files, wrong wheel metadata, complete package resources, normal script import location.
-- [ ] Build from the exact clean library commit, record wheel hash and source identity, copy wheel package bytes and license unchanged; implement verify/refresh without runtime installation or global writes.
-- [ ] Verify generated content and focused tests; record RED/GREEN and commit only assigned files.
+- [x] Add failing integrity/refresh preservation tests: changed/missing/extra/symlink files, wrong wheel metadata, complete package resources, normal script import location.
+- [x] Build from the exact clean library commit, record wheel hash and source identity, copy wheel package bytes and license unchanged; implement verify/refresh without runtime installation or global writes.
+- [x] Verify generated content and focused tests; record RED/GREEN and commit only assigned files. Commits `5852787`, `e1dae12`; 26 passed; independent review and scoped fix review cleared.
 
 ### Task 2: Thin deterministic facades
 

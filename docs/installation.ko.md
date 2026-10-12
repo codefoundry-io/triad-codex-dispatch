@@ -6,6 +6,25 @@
 두 방식은 같은 플러그인과 공통 실행 환경 설정을 사용합니다. 같은 마켓플레이스 이름으로
 두 경로를 중복 등록하지 마세요.
 
+## 공통 라이브러리 적용 후보
+
+후보 배포본은 정확한 `triad-dispatch-lib 0.1.0.dev3` 파일을
+`bin/triad_dispatch_lib/`에 포함합니다. 별도 라이브러리 checkout이나 editable
+설치는 필요 없습니다. 선택한 Python 3.12+ 환경에 배포본의 `requirements.txt`를
+설치하며 `referencing>=0.37,<1`을 사용합니다. 리뷰 실행 중 의존성을 설치하지
+않고 기존 launcher와 Python 선택 방식을 유지합니다.
+
+유지보수자는 `python3 scripts/vendor_library.py --check`로 생성 파일을 확인합니다.
+갱신 시에는 생성 파일을 직접 수정하지 말고 검토한 wheel과 원본 커밋을 지정해
+`scripts/vendor_library.py --wheel /absolute/path/to/wheel --source-commit
+81748d721e56dfc3463888f02328902e18398600 --write`를 사용합니다. 변경되거나 예상하지
+못한 관리 파일이 있으면 갱신을 거부하고 보존합니다. 이 검사는 Codex 자체의
+플러그인 캐시 교체 동작을 변경하지 않으므로 기존 업데이트·제거 절차를 따릅니다.
+
+원본·아티팩트·파일 해시는 `contracts/library-adoption.json`에 기록합니다.
+소스 반영, 공개 릴리스, 전역 설치, 새 세션 노출은 별도의 검증 결과입니다.
+Claude는 [이식 지침](handoffs/claude-library-adoption.md)에 따라 독립 적용합니다.
+
 <a id="agy-리뷰-프로필-설정--반영-대기-후보"></a>
 
 ## AGY 리뷰 프로필 설정
