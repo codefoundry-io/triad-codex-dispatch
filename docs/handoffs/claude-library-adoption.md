@@ -81,6 +81,10 @@ existing host stream exceptions; port that boundary only after dedicated tests.
 - Run installed-package tests from a neutral directory without the library source
   checkout on the import path. Run native macOS and Ubuntu checks; distinguish
   synthetic responses from real authenticated provider evidence.
+- Exercise concurrent cold-cache imports against the shared installed package.
+  If the host checks generated-file inventory at runtime, normal CPython atomic
+  bytecode publication must not cause false refusal. Continue rejecting links,
+  special files and unexpected distribution inputs.
 - Keep a managed-file ledger with the source version and last-written hash. Before
   replacing/removing files, refuse conflicts and preserve user changes/unrelated
   content. Verify upgrade interruption/recovery. Do not confuse a package manager's

@@ -47,6 +47,8 @@ received an owned canonical TMPDIR before Python startup.
 | Readiness correction RED | 6 expected failures: 3 missing/damaged bundle cases, 2 missing dependency API cases, 1 archive inventory case |
 | Readiness correction focused GREEN | 10 bootstrap checks and 13 distribution/runtime checks passed; real-dependency readiness exited 0 |
 | Fresh dedicated GREEN after readiness correction | Strict JSON passed; complete bootstrap and transaction suites 338 passed, 0 skipped in 148.24s; four skill validators and vendor check passed |
+| Formal-review cache publication reproduction | 2 failed, 30 passed before correction; real CPython import paused at atomic replacement |
+| Cache publication correction | 40 focused tests passed in 0.60s; generated-content check passed |
 
 The baseline failure was the expected custody refusal when
 `bin/library_adoption.py` changed between basis preparation and allocation. The
@@ -117,6 +119,33 @@ test dependencies in the action-provisioned job Python and verifies parent/child
 interpreter identity. Isolated runtime probes retain their separate fresh venvs.
 No product permission or runtime selection contract was changed. Final CI runs
 the full source and archived suite again; its result is recorded in the PR.
+
+The first formal round reviewed `b80d08e`. All four producers started before
+collection; all reached terminal state, and the fresh post-review fingerprint
+matched. Google Pro and Flash returned `SAFE`. Native Sol/xhigh returned
+`NOT-SAFE` for a concurrent CPython bytecode publication race in the host's
+generated-package verifier. Claude returned API 429 without a verdict, so the
+round's gate is failed despite valid custody. Its available results are advisory;
+the corrected source still requires a new complete formal round.
+
+The Sol finding was reproduced with a real CPython 3.12 import paused immediately
+before its atomic cache replacement. Both a present `.pyc.<numeric-id>` temporary
+file and its disappearance between enumeration and `lstat` caused false refusal.
+The correction retains the existing final `.pyc` exception and additionally
+tolerates numeric-suffix CPython temporary files for the bundled modules,
+including their disappearance during publication. Existing links, special files,
+unexpected files and changed generated payloads remain rejected. The generated
+library bytes and approved content pin are unchanged. These deterministic tests
+intercept the real publication boundary; they are not a timing-based stress run.
+The original independent Task 1 reviewer inspected the frozen correction and
+relevant consumers, found no new issues, and confirmed unchanged scoped hashes.
+This scoped source review does not substitute for the new four-leg formal round.
+
+Google Pro's non-blocking request to remove the roster compatibility facade was
+declined after checking its actual adapter consumer. The proposed direct call
+would validate host display metadata against a schema that disallows extra
+properties and would omit retained host guards. The existing signature therefore
+remains; this is not an unresolved correctness defect.
 
 ## Final evidence and limits
 

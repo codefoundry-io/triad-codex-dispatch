@@ -64,8 +64,8 @@ def bundle_ids(files):
 def verify_library(root=ROOT):
     """Verify the complete generated inventory and return adoption metadata.
 
-    CPython's regular .pyc files in __pycache__ are transient, not generated
-    distribution inputs. Links and other unexpected cache contents still fail.
+    CPython bytecode and its numeric-suffix atomic-publication files are runtime
+    cache inputs. Their disappearance is allowed; links and special files fail.
     """
     root = Path(root)
     try:
@@ -86,12 +86,23 @@ def verify_library(root=ROOT):
         regular_bytes(root, f"{PACKAGE}/__init__.py")
         actual = {LICENSE}
         for path in (root / PACKAGE).rglob("*"):
-            mode = path.lstat().st_mode
+            cache_file = (
+                (path.parent.name == "__pycache__" and path.suffix == ".pyc")
+                or (path.parent == root / PACKAGE / "__pycache__"
+                    and path.name.split(".", 1)[0] in MODULES
+                    and re.fullmatch(r"[^.]+\.cpython-[0-9]+(?:\.opt-[0-9]+)?\.pyc\.[0-9]+", path.name))
+            )
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                if cache_file:
+                    continue
+                raise
             if stat.S_ISLNK(mode) or not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
                 raise ValueError("unsafe generated file")
             relative = path.relative_to(root).as_posix()
             if stat.S_ISREG(mode):
-                if path.parent.name == "__pycache__" and path.suffix == ".pyc":
+                if cache_file:
                     continue
                 actual.add(relative)
             elif path.name != "__pycache__" and not any(name.startswith(relative + "/") for name in expected):

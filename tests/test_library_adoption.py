@@ -229,3 +229,85 @@ def test_generated_record_cannot_reauthorize_changed_implementation(tree):
     record.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="approved content"):
         loader().verify_library(tree)
+
+
+@pytest.mark.parametrize("disappears", [False, True])
+def test_verifier_during_real_cpython_cache_publication(tree, monkeypatch, disappears):
+    import importlib._bootstrap_external as bootstrap
+    import re
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)
+    source = tree / "bin/triad_dispatch_lib/bundle_manifest.py"
+    cache = Path(importlib.util.cache_from_source(str(source)))
+    module = loader()
+    replace = bootstrap._os.replace
+    lstat = Path.lstat
+    observed = []
+
+    def publish(temporary, destination):
+        if Path(destination) == cache:
+            temporary = Path(temporary)
+            assert re.fullmatch(re.escape(cache.name) + r"\.[0-9]+", temporary.name)
+            assert temporary.is_file()
+            observed.append(temporary.name)
+            if disappears:
+                def disappearing_lstat(path, *args, **kwargs):
+                    if path == temporary and path.exists():
+                        path.unlink()
+                    return lstat(path, *args, **kwargs)
+                monkeypatch.setattr(Path, "lstat", disappearing_lstat)
+            module.verify_library(tree)
+        return replace(temporary, destination)
+
+    monkeypatch.setattr(bootstrap._os, "replace", publish)
+    spec = importlib.util.spec_from_file_location("cache_publication_probe", source)
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    assert observed, "real CPython source import did not publish bytecode"
+    assert probe.SOURCE_PATH == "spec"
+
+
+@pytest.mark.parametrize("kind", ["symlink", "fifo", "unexpected", "non_numeric"])
+def test_cache_exclusion_still_refuses_unsafe_and_unexpected_files(tree, kind):
+    import os
+    cache = tree / "bin/triad_dispatch_lib/__pycache__"
+    cache.mkdir()
+    path = cache / "bundle_manifest.cpython-312.pyc.12345"
+    if kind == "symlink":
+        path.symlink_to(tree / "bin/triad_dispatch_lib/bundle_manifest.py")
+    elif kind == "fifo":
+        os.mkfifo(path)
+    elif kind == "unexpected":
+        (cache / "unexpected.json").write_text("{}")
+    else:
+        (cache / "bundle_manifest.cpython-312.pyc.user").write_text("user file")
+    with pytest.raises(ValueError):
+        loader().verify_library(tree)
+
+
+@pytest.mark.parametrize("name", ["unknown.cpython-312.pyc.123", "bundle_manifest.cpython-312.pyc.123.extra", "bundle_manifest.pyc.123", "bundle_manifest.extra.cpython-312.pyc.123"])
+def test_unrecognized_cache_names_are_not_exempt(tree, name):
+    cache = tree / "bin/triad_dispatch_lib/__pycache__"
+    cache.mkdir()
+    (cache / name).write_bytes(b"unexpected")
+    with pytest.raises(ValueError):
+        loader().verify_library(tree)
+
+
+def test_disappearing_distribution_file_is_not_exempt(tree, monkeypatch):
+    target = tree / "bin/triad_dispatch_lib/agreement.py"
+    original = Path.lstat
+    def disappearing_lstat(path, *args, **kwargs):
+        if path == target and path.exists():
+            path.unlink()
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "lstat", disappearing_lstat)
+    with pytest.raises(ValueError):
+        loader().verify_library(tree)
+
+
+@pytest.mark.parametrize("relative", ["__pycache__/other.pypy-312.pyc", "__pycache__/bundle_manifest.cpython-312.opt-1.pyc", "data/__pycache__/other.pyc"])
+def test_existing_regular_final_bytecode_acceptance_is_preserved(tree, relative):
+    cache = tree / "bin/triad_dispatch_lib" / relative
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_bytes(b"existing runtime cache")
+    loader().verify_library(tree)
