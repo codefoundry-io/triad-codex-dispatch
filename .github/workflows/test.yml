@@ -1,0 +1,50 @@
+name: Test host distribution
+
+on:
+  push:
+    branches: [main, codex/shared-library-adoption]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Verify source, committed archive and isolated bundled runtime
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: |
+          set -euo pipefail
+          root="$(pwd -P)"
+          owned_tmp="$(mktemp -d "$RUNNER_TEMP/triad-host.XXXXXX")"
+          export TMPDIR="$(cd "$owned_tmp" && pwd -P)"
+          archive_output="$root/_runs/distribution/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'rm -rf "$owned_tmp" "$archive_output"' EXIT
+          unset PYTEST_ADDOPTS
+          python -m venv "$TMPDIR/test-venv"
+          python_bin="$TMPDIR/test-venv/bin/python"
+          "$python_bin" -I -m pip --isolated install --disable-pip-version-check --no-cache-dir --only-binary=:all: -r "$root/requirements.txt" pytest
+          "$python_bin" -c 'import platform; print({"os": platform.platform(), "architecture": platform.machine(), "python": platform.python_version()})'
+          "$python_bin" -m pytest -q -ra "$root/tests" --rootdir "$root" -p no:cacheprovider
+          "$python_bin" "$root/scripts/vendor_library.py" --check
+          "$python_bin" "$root/scripts/verify_library_runtime.py" --root "$root"
+          "$python_bin" "$root/scripts/verify_distribution.py" --source-root "$root" --output-dir "$archive_output" > "$TMPDIR/distribution.json"
+          "$python_bin" -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["tests"]["stdout"]); print({"commit":r["commit"], "hash_targets":len(r["hashes"]), "archive_sha256":r["archive_sha256"]})' "$TMPDIR/distribution.json"
+          extracted_root="$("$python_bin" -c 'import json,sys; print(json.load(open(sys.argv[1]))["extracted_root"])' "$TMPDIR/distribution.json")"
+          "$python_bin" "$extracted_root/scripts/verify_library_runtime.py" --root "$extracted_root"
+          git diff --exit-code

@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -67,6 +68,11 @@ EXPECTED_HASH_TARGETS = (
     "prompts/review-v2/source-manifest.json",
     "requirements.txt",
     "scripts/bootstrap.sh",
+    "bin/library_adoption.py",
+    "contracts/library-adoption.json",
+    "scripts/vendor_library.py",
+    "scripts/verify_library_runtime.py",
+    *json.loads((ROOT / "contracts/library-adoption.json").read_text())["sha256"],
 )
 
 
@@ -112,6 +118,9 @@ def fixture_repo(tmp_path: Path) -> Path:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(f"fixture for {relative}\n", encoding="utf-8")
+    for relative in ("bin/library_adoption.py", "contracts/library-adoption.json",
+                     *json.loads((ROOT / "contracts/library-adoption.json").read_text())["sha256"]):
+        shutil.copyfile(ROOT / relative, repo / relative)
     (repo / "tests" / "test_packaged.py").write_text(
         "def test_packaged_bytes():\n    assert True\n",
         encoding="utf-8",
@@ -188,6 +197,9 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
         (fixture_repo / manifest).read_bytes()
     ).hexdigest()
     assert report["version"] == "0.2.533"
+    assert report["library_adoption"]["version"] == "0.1.0.dev3"
+    assert report["os"] and report["architecture"] and report["python"]
+    assert report["tests"]["skipped"] == 0
     assert report["tests"]["returncode"] == 0
     assert report["tests"]["argv"][:3] == [sys.executable, "-m", "pytest"]
     assert report["hashes"][manifest] == {
@@ -203,9 +215,21 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
     )
     assert Path(report["archive"]).is_file()
     assert Path(report["extracted_root"]).is_dir()
-    assert json.loads(
-        (output / "verification.json").read_text(encoding="utf-8")
-    ) == report
+    assert json.loads((output / "verification.json").read_text(encoding="utf-8")) == report
+
+
+def test_generated_distribution_inventory_is_complete():
+    verifier = _load_verifier()
+    assert set(verifier.HASH_TARGETS) == set(EXPECTED_HASH_TARGETS)
+
+
+def test_verifier_refuses_committed_damaged_library(fixture_repo):
+    verifier = _load_verifier()
+    (fixture_repo / "bin/triad_dispatch_lib/verdict.py").write_text("damaged\n")
+    _git(fixture_repo, "add", ".")
+    _git(fixture_repo, "commit", "-m", "damaged generated source")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        verifier.verify_distribution(fixture_repo, fixture_repo / "_runs/distribution/damaged")
 
 
 def test_verifier_ignores_external_pytest_configuration(

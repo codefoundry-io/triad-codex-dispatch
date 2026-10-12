@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -67,6 +69,33 @@ HASH_TARGETS = (
     "prompts/review-v2/source-manifest.json",
     "requirements.txt",
     "scripts/bootstrap.sh",
+    "bin/library_adoption.py",
+    "contracts/library-adoption.json",
+    "scripts/vendor_library.py",
+    "scripts/verify_library_runtime.py",
+    "bin/triad_dispatch_lib/__init__.py",
+    "bin/triad_dispatch_lib/agreement.py",
+    "bin/triad_dispatch_lib/bundle_manifest.py",
+    "bin/triad_dispatch_lib/contracts.py",
+    "bin/triad_dispatch_lib/data/leg-verdict.schema.json",
+    "bin/triad_dispatch_lib/data/prompt-bundle/contracts/review-kind.schema.json",
+    "bin/triad_dispatch_lib/data/prompt-bundle/prompts/common-clauses.md",
+    "bin/triad_dispatch_lib/data/prompt-bundle/prompts/investigation.md",
+    "bin/triad_dispatch_lib/data/prompt-bundle/prompts/leg-claude.md",
+    "bin/triad_dispatch_lib/data/prompt-bundle/prompts/leg-codex.md",
+    "bin/triad_dispatch_lib/data/prompt-bundle/prompts/leg-google.md",
+    "bin/triad_dispatch_lib/data/prompt-bundle/source-manifest.json",
+    "bin/triad_dispatch_lib/data/roster-bundle/contracts/review-legs.schema.json",
+    "bin/triad_dispatch_lib/data/roster-bundle/source-manifest.json",
+    "bin/triad_dispatch_lib/data/source-manifest.json",
+    "bin/triad_dispatch_lib/dispatch.py",
+    "bin/triad_dispatch_lib/errors.py",
+    "bin/triad_dispatch_lib/json_input.py",
+    "bin/triad_dispatch_lib/output.py",
+    "bin/triad_dispatch_lib/prompts.py",
+    "bin/triad_dispatch_lib/roster.py",
+    "bin/triad_dispatch_lib/verdict.py",
+    "vendor/triad-dispatch-lib.LICENSE",
 )
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 
@@ -207,6 +236,13 @@ def safe_extract(archive: Path, destination: Path) -> Path:
     return extracted_root
 
 
+def _verify_library(root: Path) -> dict:
+    spec = importlib.util.spec_from_file_location("distribution_library_adoption", root / "bin/library_adoption.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.verify_library(root=root)
+
+
 def verify_distribution(
     source_root: Path, output_dir: Path
 ) -> dict[str, object]:
@@ -215,6 +251,7 @@ def verify_distribution(
         raise ValueError(f"source root is not a directory: {source}")
     output = _validate_output(source, output_dir)
     head = _validate_source(source)
+    adoption = _verify_library(source)
     manifest = _manifest(source)
     version = manifest["version"]
     prefix = f"triad-codex-dispatch-{version}"
@@ -236,6 +273,9 @@ def verify_distribution(
     )
     extracted_root = safe_extract(archive, output / "unpacked")
 
+    if _verify_library(extracted_root) != adoption:
+        raise RuntimeError("source/archive adoption mismatch")
+
     hashes: dict[str, dict[str, object]] = {}
     for relative in HASH_TARGETS:
         source_hash = sha256_file(source / relative)
@@ -255,6 +295,7 @@ def verify_distribution(
         "pytest",
         "tests",
         "-q",
+        "-ra",
         "-c",
         os.devnull,
         "--rootdir",
@@ -280,6 +321,7 @@ def verify_distribution(
         )
     passed_match = re.search(r"(?m)(\d+) passed(?:,| in |$)", test_result.stdout)
     passed = int(passed_match.group(1)) if passed_match is not None else 0
+    skipped_match = re.search(r"(?m)(\d+) skipped(?:,| in |$)", test_result.stdout)
     if passed < 1:
         raise RuntimeError("archive package tests reported no passing tests")
 
@@ -287,6 +329,9 @@ def verify_distribution(
         "archive": str(archive),
         "archive_sha256": sha256_file(archive),
         "commit": head,
+        "os": platform.platform(),
+        "architecture": platform.machine(),
+        "python": platform.python_version(),
         "extracted_root": str(extracted_root),
         "hashes": hashes,
         "tests": {
@@ -296,11 +341,13 @@ def verify_distribution(
                 "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
             },
             "passed": passed,
+            "skipped": int(skipped_match.group(1)) if skipped_match else 0,
             "returncode": test_result.returncode,
             "stdout": test_result.stdout,
             "stderr": test_result.stderr,
         },
         "version": version,
+        "library_adoption": adoption,
     }
     report_path = output / "verification.json"
     report_path.write_text(
