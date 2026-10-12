@@ -18,6 +18,10 @@ commit/version, host commit and consumed bundle IDs. Consult the Codex candidate
 `contracts/library-adoption.json` for its exact built artifact and managed hashes.
 Do not resolve mutable `main` or perform network/package installation during review.
 
+Candidate references: [library PR #1](https://github.com/codefoundry-io/triad-dispatch-lib/pull/1)
+and [Codex adoption PR #44](https://github.com/codefoundry-io/triad-codex-dispatch/pull/44).
+Use the pinned library identity above; neither PR link is an installation source.
+
 The three resource bundle IDs are:
 
 | Bundle | Content ID |

@@ -45,9 +45,9 @@ delegate deterministic roster, prompt and verdict logic to it.
 
 **Interfaces:** Consume Task 1's verified package. Preserve existing host public signatures and result shapes. Use library `parse_json`, `validate_verdict`, `validate_binding`, `resolve_roster`, `render_review_clauses`, `render_data`; call with host B and exact per-family replacements.
 
-- [ ] Add failing host integration cases for delegation, four routes, repeated family entries, all bindings, overflow JSON and custody changes.
-- [ ] Replace deterministic implementations while retaining canonical file, legacy asset, packet, preflight and wrapper guards. Contract faults fail closed rather than counting as ballots.
-- [ ] Run focused roster/validator/producer/prompt/round/custody suites and commit scoped files with evidence.
+- [x] Add failing host integration cases for delegation, four routes, repeated family entries, all bindings, overflow JSON and custody changes.
+- [x] Replace deterministic implementations while retaining canonical file, legacy asset, packet, preflight and wrapper guards. Contract faults fail closed rather than counting as ballots.
+- [x] Run focused roster/validator/producer/prompt/round/custody suites and commit scoped files with evidence. Commit `317f14f`; 503 passed, 4 existing route skips; independent review cleared.
 
 ### Task 3: Distribution proof and independent host handoff
 
@@ -55,7 +55,13 @@ delegate deterministic roster, prompt and verdict logic to it.
 
 **Interfaces:** Archive verification includes all generated files and metadata. A neutral-directory isolated environment installs only existing host requirements and loads the archived bundled package through the host bin path, never a sibling checkout.
 
-- [ ] Add distribution/dependency readiness checks and native macOS/Ubuntu CI using owned TMPDIR. Preserve the existing clean-source verifier gate.
-- [ ] Run full host regression plus isolated archive smoke; update documentation with exact evidence and limits.
-- [ ] Write concrete Claude instructions: pin identity, use host A clauses, keep native mechanisms and AGY hook profile, shared verdict binding, four-route/cancellation/conformance tests, managed-file conflict preservation and independent release.
+- [x] Add distribution/dependency readiness checks and native macOS/Ubuntu CI using owned TMPDIR. Preserve the existing clean-source verifier gate.
+- [x] Run full host regression plus isolated archive smoke; update documentation with exact evidence and limits. Full source 2515 passed before readiness correction; corrected complete bootstrap/transaction suites 338 passed. Native CI reruns both full source and archive at the frozen final candidate.
+- [x] Write concrete Claude instructions: pin identity, use host A clauses, keep native mechanisms and AGY hook profile, shared verdict binding, four-route/cancellation/conformance tests, managed-file conflict preservation and independent release.
 - [ ] Complete independent task/whole-branch review and the project's available required multi-family gate; report unavailable required routes explicitly without substitution. Push candidate and attach draft PR; no merge or global installation.
+
+This checklist is captured with the source review basis. Later whole-branch,
+formal review and native CI outcomes are recorded in
+[PR #44](https://github.com/codefoundry-io/triad-codex-dispatch/pull/44) and the
+leader's per-round ledger, without rewriting the frozen review inputs. The
+owner authorized Sol/xhigh in place of the unavailable Terra slot for this round.

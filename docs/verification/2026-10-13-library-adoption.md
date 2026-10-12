@@ -1,7 +1,9 @@
 # Codex shared-library adoption evidence
 
-Status: implementation and verification in progress; no release, global install
-or fresh installed-session claim.
+This records evidence available when the source review basis was frozen.
+[Codex PR #44](https://github.com/codefoundry-io/triad-codex-dispatch/pull/44)
+records subsequent native CI and formal review outcomes. No release, global
+install or fresh installed-session claim.
 
 ## Source identity and scope
 
@@ -41,6 +43,10 @@ received an owned canonical TMPDIR before Python startup.
 | Task 2 focused host regressions | 503 passed, 4 skipped in 284.50s; exit 0 |
 | Task 3 distribution and isolated-driver focused tests | 13 passed in 5.27s |
 | Fresh binary-only environment, source host | Four routes; 24 binding swaps rejected by both validator and producer; 3 overflow and 1 duplicate-key refusals; correct bundled import origins |
+| Dedicated GREEN, before readiness correction | Strict JSON probe passed; full host suite 2515 passed, 4 skipped in 572.78s; four skill validators and vendor check passed |
+| Readiness correction RED | 6 expected failures: 3 missing/damaged bundle cases, 2 missing dependency API cases, 1 archive inventory case |
+| Readiness correction focused GREEN | 10 bootstrap checks and 13 distribution/runtime checks passed; real-dependency readiness exited 0 |
+| Fresh dedicated GREEN after readiness correction | Strict JSON passed; complete bootstrap and transaction suites 338 passed, 0 skipped in 148.24s; four skill validators and vendor check passed |
 
 The baseline failure was the expected custody refusal when
 `bin/library_adoption.py` changed between basis preparation and allocation. The
@@ -81,12 +87,46 @@ Task 2 received a separate fresh Sol/high review of commit `317f14f` and affecte
 unchanged consumers. Specification compliance and code quality cleared with no
 findings. Tests were inspected but not rerun by the reviewer.
 
-## Pending evidence
+Task 3 review identified a P2 gap: bootstrap readiness checked external schema
+APIs but did not exercise the bundled package. A temporary copied host reproduced
+exit 0 with the entire package missing and with damaged implementation bytes.
+Commit `bfd19a3` reuses the existing verified import boundary and exercises all
+three bundled resources before persistent setup writes. It separately checks
+the `Resource`/`DRAFT202012` dependency APIs. Damaged packages receive restoration
+guidance; missing external dependencies retain the owner-terminal installation
+guidance. No automatic install or launcher ownership change was introduced.
+The original successful full suite above predates this correction; final native
+CI reruns both complete source and archive suites on the corrected candidate.
 
-Final frozen regressions, installed archive replay,
-native Ubuntu/macOS CI and whole-branch/formal review are pending. The preserved
-untracked translation/history documents prevent claiming a clean local release
-checkout; the existing verifier's clean-source rule remains intact.
+The exact committed `e247634` archive also passed the fresh-venv four-route smoke
+on native macOS. Every import originated under that extracted host's `bin/`.
+The environment, source archive and extraction were removed after terminal
+completion. That smoke predates the bootstrap-only correction; native CI covers
+the final corrected archive separately.
+
+The second dedicated executor observed unchanged runtime, test and skill hashes.
+Its broader manifest detected the concurrent workflow-only commit `75688f6`;
+that CI configuration change is explicitly excluded from its frozen runtime
+claim. It did not rerun the unrelated complete host suite.
+
+Initial native Ubuntu CI at `02f82a5` returned 12 failed, 2501 passed and 6 skipped
+in 812.49s. The failures came from a missing `/bin/zsh` and CI installing
+dependencies only in the parent test venv while child `python3`/bootstrap used
+the action's base runtime. The workflow now installs zsh on Ubuntu, installs
+test dependencies in the action-provisioned job Python and verifies parent/child
+interpreter identity. Isolated runtime probes retain their separate fresh venvs.
+No product permission or runtime selection contract was changed. Final CI runs
+the full source and archived suite again; its result is recorded in the PR.
+
+## Final evidence and limits
+
+The PR records the final native Ubuntu/macOS CI and whole-branch/formal review
+against this source basis, including exact commits and any failed attempt.
+Preserved untracked translation/history documents prevent claiming a clean local
+release checkout; the existing verifier's clean-source rule remains intact.
+Clean native CI runs that verifier against committed source and records its
+archive hash and full regression results. Offline facades and installed runtime
+probes do not establish authenticated behavior for all four provider routes.
 
 No actual global installation, fresh installed-session exposure, package
 publication, host release or final merge has occurred. Claude receives only the

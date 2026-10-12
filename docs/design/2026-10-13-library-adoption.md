@@ -70,9 +70,10 @@ adapters; 100–180 deleted duplicated lines. Generated library bytes are report
 separately. Tests: 120–220 lines; documentation/CI: 150–250 lines. Preserve one
 coherent adoption plan and perform its required review before any later plan.
 
-Implementation update: non-generated production Python changed by 510 additions
-and 121 deletions (net +389), including a 154-line isolated distribution probe.
+Implementation update: non-generated production Python changed by 544 additions
+and 123 deletions (net +421), including a 154-line isolated distribution probe.
 The verified-package helper and refresh tool account for 223 new lines. This
 growth supplies the approved reproducibility and isolated-distribution checks;
-it adds no runtime environment manager or provider mechanism. Generated library
+it includes the bootstrap readiness correction and adds no runtime environment
+manager or provider mechanism. Generated library
 code/assets are 22 unchanged files (81,160 bytes), reported separately.
