@@ -47,7 +47,8 @@ def route(request, tmp_path, monkeypatch, capsys):
         text = state["gemini_version"] + "\n" if cmd[-1] == "--version" else (
             '  -m, --model Model [string]\n'
             '  --approval-mode Set the approval mode [choices: "default", "plan"]\n'
-            '  --policy Additional policy files or directories to load [array]\n')
+            '  --policy Additional policy files or directories to load [array]\n'
+            '  --include-directories Additional directories to include in the workspace [array]\n')
         return subprocess.CompletedProcess(cmd, 0, text, "")
 
     monkeypatch.setattr(gemini.subprocess, "run", probe)

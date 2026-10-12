@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.560 — 2026-10-12
+
+- Fixes public v2 guarded-worktree Gemini reviews whose required task and diff
+  were outside the CLI workspace. Generated calls now include the exact bound
+  packet directory while preserving product cwd and read-only policy.
+- Binds packet access through existing preflight and allocation custody; rejects
+  wrong or changed packet controls before inference. Six result bindings,
+  raw investigation and prepared-directory behavior remain unchanged.
+- Start a fresh review basis after upgrading. Authenticated Gemini validation
+  remains for the owner's company environment after release; provider-free
+  verification does not claim enterprise service or policy conformance.
+
 ## 0.2.559 — 2026-10-11
 
 - Runs each wrapper invocation once, preserving the vendor's terminal result

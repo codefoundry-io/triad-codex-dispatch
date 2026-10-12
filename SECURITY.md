@@ -42,6 +42,13 @@ every mode; an enterprise admin policy remains a higher tier. Bootstrap installs
 no persistent global permission policy, Enterprise authentication, or pre-spawn
 `shell_environment_policy`.
 
+Public v2 guarded Gemini calls add only their exact canonical managed `shared`
+packet directory to the vendor workspace through `--include-directories`.
+The preflight receipt and allocation bind this launch control; missing/changed
+controls or invalid packet roots refuse before inference. Sibling receipts,
+logs and results are not included. Product cwd, read-only policy and result
+bindings remain unchanged; no user setting is edited.
+
 The default selected B Gemini profile explicitly denies `google_web_search` and
 `web_fetch`, retaining its 999/998 rule priorities and Plan Mode transition
 denies. The wrapper checks the complete rule set, exact bytes and adjacent

@@ -40,7 +40,7 @@ def round_fixture(tmp_path, monkeypatch, worktree):
         calls = []
 
         def adapters(roster, *, review_id, cwd, authentication_class, native_capabilities, receipt_root, attempt=1,
-                     review_web_authorized=False):
+                     review_web_authorized=False, review_packet_dir=None):
             calls.append([entry["name"] for entry in roster["legs"] if entry["enabled"]])
             output = {}
             for entry in roster["legs"]:

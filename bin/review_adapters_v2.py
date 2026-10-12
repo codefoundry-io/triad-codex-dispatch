@@ -178,7 +178,8 @@ def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
 
 
 def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
-            authentication_class: str, folder: Path, attempt: int, web: bool = False) -> dict:
+            authentication_class: str, folder: Path, attempt: int, web: bool = False,
+            review_packet_dir: Path | None = None) -> dict:
     pin = entry.get("google", {}).get("route")
     if authentication_class not in ("personal-google", "gemini-enterprise"):
         raise ValueError("unsupported Google authentication class")
@@ -206,6 +207,9 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
     args = SimpleNamespace(expected_review_id=review_id, expected_leg_name=entry["name"],
                            expected_attempt=attempt, expected_route=route,
                            model=model, effort=effort, timeout=entry["timeout_s"], project=None, web=web)
+    packet_control = ({"review_packet_dir": str(review_packet_dir)}
+                      if route == "gemini" and review_packet_dir is not None else {})
+    args.review_packet_dir = packet_control.get("review_packet_dir")
     # The wrapper's preflight is the source of route/version/containment/policy
     # evidence. It receives no review content and performs no review inference.
     argv = [sys.executable, str(wrapper), "--preflight-only", "--prompt", "v2 capability check",
@@ -214,6 +218,8 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
             "--expected-leg-name", entry["name"],
             "--expected-attempt", str(attempt), "--expected-route", route,
             "--google-selector-receipt", str(selector_file)]
+    if packet_control:
+        argv += ["--review-packet-dir", packet_control["review_packet_dir"]]
     if web:
         argv += ["--web"]
     if effort is not None:
@@ -227,14 +233,15 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
     preflight_file = folder / "preflight.json"
     review_round._write_new(preflight_file, raw)
     receipt = google_preflight_v2.load_preflight(preflight_file, selector, args, str(cwd))
-    return {"route": route, "transport_route": route, "binary": binary,
+    return {**packet_control, "route": route, "transport_route": route, "binary": binary,
             "cli_version": receipt["agy_version" if route == "agy" else "gemini_version"],
             "model": model, "effort": effort, "preflight_file": str(preflight_file),
             "preflight_sha256": hashlib.sha256(raw).hexdigest(), "selector_file": str(selector_file)}
 
 
 def prepare_adapters(roster: dict, *, review_id: str, cwd: Path, authentication_class: str,
-                     native_capabilities: dict, receipt_root: Path, attempt: int = 1, review_web_authorized: bool = False) -> dict:
+                     native_capabilities: dict, receipt_root: Path, attempt: int = 1, review_web_authorized: bool = False,
+                     review_packet_dir: Path | None = None) -> dict:
     if type(review_web_authorized) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
     review_round._validate_review_id(review_id)
@@ -266,7 +273,8 @@ def prepare_adapters(roster: dict, *, review_id: str, cwd: Path, authentication_
                 extra = _claude(entry["claude"], cwd=cwd, folder=folder, web=review_web_authorized)
             else:
                 extra = _google(entry, defaults=defaults["google"], review_id=review_id,
-                                cwd=cwd, authentication_class=authentication_class, folder=folder, attempt=attempt, web=review_web_authorized)
+                                cwd=cwd, authentication_class=authentication_class, folder=folder, attempt=attempt,
+                                web=review_web_authorized, review_packet_dir=review_packet_dir)
             output[name] = {**base, **extra}
             _new(folder / "adapter.json", output[name])
         except (ValueError, OSError) as error:

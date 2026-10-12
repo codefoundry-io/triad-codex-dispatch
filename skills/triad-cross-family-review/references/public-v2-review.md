@@ -96,6 +96,13 @@ configured model. Account access and actual runtime identity need separate evide
 `mode` is `guarded-worktree` or `prepared-directory`. Both bind the managed
 packet and canonical worktree; the former reviews the worktree, the latter the
 prepared copy. `prior_residual` is optional and is fenced as data for every entry.
+Guarded Gemini allocations automatically bind the exact managed `shared` packet
+directory through preflight and pass it as native `--include-directories` while
+keeping the product cwd. No manual directory flag is needed. The grant excludes
+sibling receipts/logs/results; arbitrary formal `--add-dir` remains refused.
+Start a fresh basis after upgrading from a version that omitted this control.
+Provider exit 0 with a valid negative reporting unreadable inputs is still a
+coverage gap, not full coverage or a failed-to-run retry.
 Authentication is `personal-google` or `gemini-enterprise`. Personal Google uses
 AGY. An explicit Google route pin must be available; an absent pin uses the
 packaged authentication-aware selection chain. No provider failure switches it.

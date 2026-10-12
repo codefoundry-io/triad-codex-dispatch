@@ -51,7 +51,7 @@ read under the selected profile.
 ## Select the version
 
 The commands below select `main`, the current release line.
-[Release v0.2.559](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.559)
+[Release v0.2.560](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.560)
 contains the versioned download and checksums. For a reproducible installation,
 use route B and check out the full commit ID recorded in the release notes.
 
