@@ -1342,6 +1342,8 @@ def formal_schema_dependency_ready(requirements: Path) -> Path:
         from pydantic import (
             BaseModel,
             ConfigDict,
+            Field,
+            StringConstraints,
             ValidationInfo,
             field_validator,
             model_validator,
@@ -1357,6 +1359,8 @@ def formal_schema_dependency_ready(requirements: Path) -> Path:
             item is not None
             for item in (
                 ConfigDict,
+                Field,
+                StringConstraints,
                 ValidationInfo,
                 field_validator,
                 model_validator,
@@ -1380,10 +1384,15 @@ def formal_schema_dependency_ready(requirements: Path) -> Path:
         ) from error
     try:
         from jsonschema import Draft202012Validator
-        from referencing import Registry
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
 
+        registry = Registry().with_resource(
+            "urn:triad-bootstrap:readiness",
+            Resource.from_contents({"type": "object"}, default_specification=DRAFT202012),
+        )
         Draft202012Validator.check_schema({"type": "object"})
-        if not Draft202012Validator({"type": "object"}, registry=Registry()).is_valid({}):
+        if not Draft202012Validator({"type": "object"}, registry=registry).is_valid({}):
             raise RuntimeError("jsonschema validator API is incomplete")
     except (ImportError, AttributeError, RuntimeError, TypeError, ValueError) as error:
         owner_command = shlex.join(
@@ -1392,6 +1401,28 @@ def formal_schema_dependency_ready(requirements: Path) -> Path:
         raise Refusal(
             "jsonschema Draft 2020-12 APIs are required. Run this in the owner "
             f"terminal, then rerun bootstrap: {owner_command}"
+        ) from error
+    try:
+        # Reuse the v2 host import boundary rather than accepting an ambient
+        # installed library. Exercise each verified resource bundle offline.
+        from validate_v2 import _library
+
+        shared = _library()
+        shared.validate_binding(dict(review_id="bootstrap-readiness", family="codex",
+                                     content_digest="a" * 64, leg_name="codex", attempt=1,
+                                     route=None))
+        shared.load_roster_contract()
+        shared.render_review_clauses(
+            family="codex", host="B", review_date="2026-10-13",
+            review_web_authorized=False,
+            replacements={name: "bootstrap-readiness" for name in (
+                "worktree", "brief-file", "packet-files", "review-id",
+                "content-digest", "leg-name", "attempt")},
+        )
+    except (ImportError, OSError, AttributeError, RuntimeError, TypeError, ValueError) as error:
+        raise Refusal(
+            "Bundled shared library readiness failed. Restore the exact plugin "
+            "package, then rerun bootstrap."
         ) from error
     return runtime
 

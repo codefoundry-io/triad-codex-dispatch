@@ -2,7 +2,7 @@ name: Test host distribution
 
 on:
   push:
-    branches: [main, codex/shared-library-adoption]
+    branches: [main]
   pull_request:
 
 permissions:

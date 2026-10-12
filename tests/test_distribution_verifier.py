@@ -68,6 +68,7 @@ EXPECTED_HASH_TARGETS = (
     "prompts/review-v2/source-manifest.json",
     "requirements.txt",
     "scripts/bootstrap.sh",
+    "bin/bootstrap_repair.py",
     "bin/library_adoption.py",
     "contracts/library-adoption.json",
     "scripts/vendor_library.py",
