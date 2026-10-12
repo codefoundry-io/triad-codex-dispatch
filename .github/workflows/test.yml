@@ -15,7 +15,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -23,6 +23,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
+      - name: Install required login shell on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes zsh
       - name: Verify source, committed archive and isolated bundled runtime
         shell: bash
         env:
@@ -36,9 +41,12 @@ jobs:
           archive_output="$root/_runs/distribution/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           trap 'rm -rf "$owned_tmp" "$archive_output"' EXIT
           unset PYTEST_ADDOPTS
-          python -m venv "$TMPDIR/test-venv"
-          python_bin="$TMPDIR/test-venv/bin/python"
+          # Bootstrap intentionally resolves its runtime; parent and child
+          # Python must share the action-provisioned job environment.
+          python_bin="$(command -v python3)"
+          export PATH="$(dirname "$python_bin"):$PATH"
           "$python_bin" -I -m pip --isolated install --disable-pip-version-check --no-cache-dir --only-binary=:all: -r "$root/requirements.txt" pytest
+          "$python_bin" -c 'import pathlib,subprocess,sys; child=subprocess.check_output(["python3","-c","import sys; print(sys.executable)"],text=True).strip(); assert pathlib.Path(child).resolve() == pathlib.Path(sys.executable).resolve(), (sys.executable,child); print({"parent_python":sys.executable,"child_python":child})'
           "$python_bin" -c 'import platform; print({"os": platform.platform(), "architecture": platform.machine(), "python": platform.python_version()})'
           "$python_bin" -m pytest -q -ra "$root/tests" --rootdir "$root" -p no:cacheprovider
           "$python_bin" "$root/scripts/vendor_library.py" --check
