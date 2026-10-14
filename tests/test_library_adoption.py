@@ -11,6 +11,39 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_bundled_wait_setup_overflow_settles_created_callback():
+    """Observe cleanup before asyncio.run can hide a leaked callback task."""
+    import asyncio
+    sys.path.insert(0, str(ROOT / "bin"))
+    import triad_dispatch_lib as lib
+
+    async def scenario():
+        selected = dict(name="huge-timeout", vendor="codex", enabled=True,
+                        acceptance="required", timeout_s=10**400, codex={})
+        release = asyncio.Event()
+        before = asyncio.all_tasks()
+
+        async def waiting(request):
+            await release.wait()
+
+        with pytest.raises(OverflowError):
+            await lib.run_investigations(
+                [lib.InvestigationRequest(selected, "scope")], waiting,
+                preflight=waiting, max_concurrency=1)
+        pending = asyncio.all_tasks() - before
+        try:
+            assert not pending
+        finally:
+            release.set()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def bounded():
+        async with asyncio.timeout(10):
+            await scenario()
+
+    asyncio.run(bounded())
+
+
 def loader():
     path = ROOT / "bin/library_adoption.py"
     assert path.is_file(), "library integrity verifier is missing"
@@ -32,7 +65,7 @@ def tree(tmp_path):
 def test_verified_identity_and_resources():
     metadata = loader().verify_library()
     assert metadata["version"] == "0.1.0.dev3"
-    assert metadata["source_commit"] == "81748d721e56dfc3463888f02328902e18398600"
+    assert metadata["source_commit"] == "2d1e62e7de6f33fa13a918a39579c6b5e74def00"
     assert set(metadata["bundle_ids"]) == {"verdict", "roster", "prompt"}
     for resource in ("data/leg-verdict.schema.json", "data/roster-bundle/contracts/review-legs.schema.json", "data/prompt-bundle/prompts/common-clauses.md"):
         assert "bin/triad_dispatch_lib/" + resource in metadata["sha256"]
@@ -80,12 +113,12 @@ def test_refresh_preserves_conflicts_and_rejects_bad_wheel(tree, tmp_path):
         archive.writestr("wrong-1.dist-info/METADATA", "Name: wrong\nVersion: 1\n")
     original = (tree / "contracts/library-adoption.json").read_bytes()
     with pytest.raises(ValueError):
-        module.refresh(wheel, "81748d721e56dfc3463888f02328902e18398600", tree)
+        module.refresh(wheel, "2d1e62e7de6f33fa13a918a39579c6b5e74def00", tree)
     assert (tree / "contracts/library-adoption.json").read_bytes() == original
     target = tree / "bin/triad_dispatch_lib/__init__.py"
     target.write_text("intentional user change")
     with pytest.raises(ValueError):
-        module.refresh(wheel, "81748d721e56dfc3463888f02328902e18398600", tree)
+        module.refresh(wheel, "2d1e62e7de6f33fa13a918a39579c6b5e74def00", tree)
     assert target.read_text() == "intentional user change"
 
 

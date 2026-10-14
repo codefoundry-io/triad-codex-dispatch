@@ -22,7 +22,7 @@
     "bin/triad_dispatch_lib/data/roster-bundle/contracts/review-legs.schema.json": "1611655cda859a6738ec8ff52dd3d3aa08539cc8ba01741c8a72426abda37cb9",
     "bin/triad_dispatch_lib/data/roster-bundle/source-manifest.json": "a479b386e88d747610f0d873637a9b12d4fb22461663c7e770793b50dfecdc5e",
     "bin/triad_dispatch_lib/data/source-manifest.json": "fa1a460262840acf9ebe8a8ac856069b1e1055681edb88713c3829dc924e5e57",
-    "bin/triad_dispatch_lib/dispatch.py": "30bc8ec4cb227f8580746e1f86309e159f3bb032c52932b52ff03a8f93cf314c",
+    "bin/triad_dispatch_lib/dispatch.py": "584a55b08c1e19d14c6fe3dbfe4de9cb393e95adaf46c5c3f0aa4a2b58dd3954",
     "bin/triad_dispatch_lib/errors.py": "2ea9686d372996ac1c4e60925afc259d3a5def4e145531aa350c1617c30201f7",
     "bin/triad_dispatch_lib/json_input.py": "cb9ae38d7143d8d1e9b47953dc63b6dc2206a27907d17669995e0da419534a3a",
     "bin/triad_dispatch_lib/output.py": "7c1fd87a8b9a1fc121c89d706fed78283d6fad3dee4655218020a734348218d2",
@@ -31,7 +31,7 @@
     "bin/triad_dispatch_lib/verdict.py": "21e4934e13a93c520f9a5cd28f5b06f13400a5a211133696db6a6c56f4b2fd90",
     "vendor/triad-dispatch-lib.LICENSE": "64d25215d58f76fd170c4688ded0fb7bae5e83e4eeb890d222f02fa798428daa"
   },
-  "source_commit": "81748d721e56dfc3463888f02328902e18398600",
+  "source_commit": "2d1e62e7de6f33fa13a918a39579c6b5e74def00",
   "version": "0.1.0.dev3",
-  "wheel_sha256": "13ab1518aafa44ad67cf0b8793148d2cd8c434ba83b11b11ee9ccdf60b8060fe"
+  "wheel_sha256": "df1e84b56a7238bab2a019064c850c30bde5b6b15268a81a1e74d76df0c187b8"
 }

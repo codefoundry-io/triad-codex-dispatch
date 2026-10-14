@@ -123,8 +123,11 @@ async def _call(callback, args, timeout=None):
     child = asyncio.create_task(invoke())
     try:
         done, _ = await asyncio.wait({child}, timeout=timeout)
-    except asyncio.CancelledError:
-        await _cancel_and_wait((child,))
+    except BaseException:
+        # Wait setup can fail after task creation (for example timer overflow).
+        # Retain ownership until the callback settles on every exceptional exit.
+        if await _cancel_and_wait((child,)):
+            raise asyncio.CancelledError
         raise
     if not done:
         if await _cancel_and_wait((child,)):
