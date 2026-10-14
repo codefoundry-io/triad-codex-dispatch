@@ -11,16 +11,26 @@ separate. Shared specification and deterministic behavior belong together in
 `codefoundry-io/triad-dispatch-lib`; do not maintain another common implementation
 or treat the historical `triad-dispatch-spec` repository as the editing source.
 
-The Codex candidate targets library **0.1.0.dev3**, source commit
-`81748d721e56dfc3463888f02328902e18398600`. It is unpublished and library PR #1 is
-still a candidate. Pin an exact reviewed build; record the wheel SHA-256, library
+The Codex update targets library **0.1.0.dev3**, source commit
+`2d1e62e7de6f33fa13a918a39579c6b5e74def00`. Library PR #1 merged into main at
+`9489543ee24f338e9c6d0e3b032a1aa389986429` on 2026-10-15 (Asia/Seoul), with the same
+reviewed tree. The package remains unpublished. Pin an exact reviewed build; record the wheel SHA-256, library
 commit/version, host commit and consumed bundle IDs. Consult the Codex candidate's
 `contracts/library-adoption.json` for its exact built artifact and managed hashes.
 Do not resolve mutable `main` or perform network/package installation during review.
 
-Candidate references: [library PR #1](https://github.com/codefoundry-io/triad-dispatch-lib/pull/1)
+Integration references: [library PR #1](https://github.com/codefoundry-io/triad-dispatch-lib/pull/1)
 and [Codex adoption PR #44](https://github.com/codefoundry-io/triad-codex-dispatch/pull/44).
 Use the pinned library identity above; neither PR link is an installation source.
+
+Codex's inspected wheel SHA-256 is
+`df1e84b56a7238bab2a019064c850c30bde5b6b15268a81a1e74d76df0c187b8`.
+A separately built wheel needs its own recorded hash and source-byte verification;
+do not assume reproducible archive timestamps. Consult the pinned
+[host contracts](https://github.com/codefoundry-io/triad-dispatch-lib/blob/2d1e62e7de6f33fa13a918a39579c6b5e74def00/docs/host-adoption.md),
+[API](https://github.com/codefoundry-io/triad-dispatch-lib/blob/2d1e62e7de6f33fa13a918a39579c6b5e74def00/spec/reference/library-api.md),
+[conformance map](https://github.com/codefoundry-io/triad-dispatch-lib/blob/2d1e62e7de6f33fa13a918a39579c6b5e74def00/spec/reference/library-conformance.md)
+and [case coverage](https://github.com/codefoundry-io/triad-dispatch-lib/blob/2d1e62e7de6f33fa13a918a39579c6b5e74def00/spec/reference/library-case-coverage.md).
 
 The three resource bundle IDs are:
 
@@ -71,6 +81,23 @@ Do not feed already extracted wrapper verdict JSON to a `claude-json`,
 envelopes. In particular, direct use of the strict AGY stream extractor can change
 existing host stream exceptions; port that boundary only after dedicated tests.
 
+Preserve C23 recovery explicitly: the host must establish same-run ordered
+failed-then-successful finish evidence, read/tool-error checks and its exit,
+authentication, timeout and transport rules. Only then may it submit the original
+final verdict through `native-final`, with truthful observed terminal metadata and
+the same Google/AGY binding. Test missing/reversed finishes and unrelated errors.
+
+If using shared coordination, preserve host faults separately. An ordinary
+integrity callback error, self-cancellation or non-bool result becomes
+`integrity_ok=False`; it does not prove the host check ran to completion. Failure
+to launch/finish that check aborts collection without a collection record.
+`ContractError` propagates after callback cleanup. Keep native requests until a
+matching terminal acknowledgement even if cancellation publication or receipt
+reading fails. Bad response bytes fail admission without undoing already observed
+termination. A timeout initiates cancellation; a late SAFE cannot approve.
+Retain host authentication/token/error classifiers and Minor-only negative
+selection-deviation records; shared admission does not replace them.
+
 ## Verification and installer requirements
 
 - Test arbitrary named entries and all four routes, repeated families, model/effort
@@ -91,6 +118,10 @@ existing host stream exceptions; port that boundary only after dedicated tests.
   cache replacement with a host installer proving edit preservation.
 - Record library conformance, Claude native behavior, source review, distribution,
   fresh installed-session exposure and publication as separate results.
+- Check current official vendor documentation or version-tagged upstream source
+  for CLI/model claims, and record date, installed version and URLs. Historical
+  research is context, not proof of today's behavior. Allow web research in review;
+  use the owner-selected composition and 40-minute reviewer budgets.
 
 If a common semantic change is needed, implement it once with specification and
 tests in the library, then refresh each host's pinned dependency independently.

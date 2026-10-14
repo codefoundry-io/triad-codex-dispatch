@@ -2,14 +2,14 @@
 
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
-[v0.2.560](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.560)에서
+[공개 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases)에서
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
-공통 라이브러리 적용 후보는 명시적 v2의 roster·프롬프트·판정 처리에
+이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
 `triad-dispatch-lib 0.1.0.dev3`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
 Claude는 별도로 배포하며 [이식 지침](docs/handoffs/claude-library-adoption.md)을 제공합니다.
-이 소스 후보와 위의 공개 릴리스는 별개입니다.
+소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)
 
@@ -241,6 +241,20 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.561 업그레이드
+
+명시적 v2의 roster·프롬프트·판정 처리가 배포본에 포함된 공통 라이브러리를
+사용합니다. [적용 기록](contracts/library-adoption.json)은 검토한 소스, wheel,
+전체 생성 파일과 세 리소스 번들의 식별자를 고정합니다. 실행 중 다운로드나
+별도 라이브러리 체크아웃은 필요하지 않습니다. 기존 공급자·네이티브 어댑터와
+Gemini 우회 방식은 호스트에 남으며, 호스트 스케줄러 전체를 교체하지 않습니다.
+
+[일반 업데이트 절차](docs/installation.ko.md#업데이트)에 따라 선택한 Python
+3.12+ 환경에서 배포 requirements를 충족하고 bootstrap을 다시 실행한 뒤
+새 Codex 세션과 새 리뷰 기준을 준비하세요. [Claude 이식 지침](docs/handoffs/claude-library-adoption.md)과
+[Google 경로 인계문](docs/handoffs/gemini-argon-library-adoption.md)에 호스트별
+추가 검증 범위를 기록했습니다.
 
 ### 0.2.560 업그레이드
 
@@ -536,7 +550,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.560-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.561-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

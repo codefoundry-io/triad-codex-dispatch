@@ -6,9 +6,9 @@ Choose **marketplace installation** or **local installation from Git**. Both
 install the same plugin and use the same runtime setup. Do not register both
 under the same marketplace name.
 
-## Shared-library candidate
+## Bundled shared library
 
-The candidate includes the exact `triad-dispatch-lib 0.1.0.dev3` package under
+This source includes the exact `triad-dispatch-lib 0.1.0.dev3` package under
 `bin/triad_dispatch_lib/`; no separate library checkout or editable install is
 needed. Continue using the selected Python 3.12+ runtime and install the shipped
 `requirements.txt` there, including `referencing>=0.37,<1`. Bootstrap checks
@@ -16,12 +16,18 @@ prerequisites; reviews do not install dependencies. Existing launcher and runtim
 selection behavior is unchanged.
 
 Maintainers verify generated files with `python3 scripts/vendor_library.py --check`.
-To refresh the approved artifact, use `--wheel /absolute/path/to/wheel --source-commit
-81748d721e56dfc3463888f02328902e18398600 --write` instead of editing generated files.
+For the currently approved artifact, use `--wheel /absolute/path/to/wheel --source-commit
+2d1e62e7de6f33fa13a918a39579c6b5e74def00 --write` instead of editing generated files.
 Review its recorded artifact hash and library changes first. The refresh refuses
 modified or unexpected managed files; preserve and resolve those conflicts before
 retrying. This source maintenance check does not add edit-preservation guarantees
 to Codex's own plugin-cache replacement. Keep the existing update/removal procedure.
+
+A different approved source/content pin requires a maintainer transition: verify
+the old tree under its old pin, generate and verify the new package in an owned
+empty staging directory, recheck the old managed bytes before replacement, then
+verify the complete new tree. The same-pin refresh command is not a pin migration
+command; do not delete or bypass the old managed-file verification.
 
 Library source provenance and file hashes are in `contracts/library-adoption.json`.
 The source candidate does not imply publication, global installation or a fresh
@@ -73,8 +79,8 @@ read under the selected profile.
 ## Select the version
 
 The commands below select `main`, the current release line.
-[Release v0.2.560](https://github.com/codefoundry-io/triad-codex-dispatch/releases/tag/v0.2.560)
-contains the versioned download and checksums. For a reproducible installation,
+[Published releases](https://github.com/codefoundry-io/triad-codex-dispatch/releases)
+contain versioned downloads and checksums. For a reproducible installation,
 use route B and check out the full commit ID recorded in the release notes.
 
 ## Prerequisites
