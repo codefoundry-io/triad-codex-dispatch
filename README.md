@@ -274,6 +274,9 @@ does not switch the host scheduler to the library coordinator.
 Legacy formal metadata and web-clause helpers also use the shared parser and
 require the verified bundle. An integrity fault stops these paths before
 provider inference; an uncaught integrity error is not a provider verdict.
+Inventory refusals identify missing/unexpected relative paths, and bootstrap
+shows the verifier cause with restoration guidance. Conflicting files remain
+untouched; restore the exact package before retrying.
 
 Use the [normal update procedure](docs/installation.md#update), satisfy the
 shipped requirements in the selected Python 3.12+ environment, rerun bootstrap

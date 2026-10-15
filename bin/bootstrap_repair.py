@@ -1420,8 +1420,11 @@ def formal_schema_dependency_ready(requirements: Path) -> Path:
                 "content-digest", "leg-name", "attempt")},
         )
     except (ImportError, OSError, AttributeError, RuntimeError, TypeError, ValueError) as error:
+        detail = ""
+        if isinstance(error, RuntimeError) and isinstance(error.__cause__, ValueError):
+            detail = f" Details: {error.__cause__}."
         raise Refusal(
-            "Bundled shared library readiness failed. Restore the exact plugin "
+            "Bundled shared library readiness failed." + detail + " Restore the exact plugin "
             "package, then rerun bootstrap."
         ) from error
     return runtime

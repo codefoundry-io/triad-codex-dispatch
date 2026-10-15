@@ -131,3 +131,52 @@ The owner selected `opus`/xhigh with 40 minutes and approved
 Argon/high in place of unavailable Pro, retaining Sol 6.1/xhigh and Flash/high.
 This per-round choice changes no standing model defaults. Release and installation
 remain separate gates.
+
+## Second follow-up adjudication
+
+The next public v2 round reviewed `d5dce32422c20497798cc2dbe19f4faec5101e1d`
+with the owner-selected Opus alias, Sol 6.1, Argon and Flash. All four returned
+`SAFE TO MERGE`; canonical collection returned `AGREED` with no missing leg.
+The collector verified source/custody integrity, and the terminal round was
+exported before its managed root and selector stage/cwd were removed. This
+approval applies to that source only; the corrections below require a fresh round.
+
+Sol identified two older assertions that compared raw filesystem spelling with
+JSON-encoded prompt paths. This is a verifier/test defect, not a production
+encoding failure. The correction compares encoded path tokens, preserving native
+path comparisons; the regression invokes the supported public verifier from a
+fresh process with a canonical temporary path containing Hangul, quotes and a
+backslash. It does not substitute the private probe or inject a dependency site.
+The public-driver case and all three family assertions first failed on the old
+checks (four failures in 3.35 seconds); after correction, all 88 affected tests
+passed in 14.99 seconds on macOS/Python 3.12.13. The public-driver report confirms
+all four routes, 24 binding refusals, three overflow refusals, one duplicate
+refusal, exact supplied-host origins and removal of its temporary environment.
+
+Claude's inventory diagnostic finding was independently confirmed: missing or
+unexpected paths were known but omitted, and bootstrap hid the verifier cause.
+Five regression cases failed on the old messages. The host now reports sorted
+relative missing/unexpected names or the unexpected directory, JSON-escaped to
+keep filenames on one diagnostic line. Bootstrap retains the narrow verified
+library cause and restoration guidance. Twenty-one focused tests passed in 1.66
+seconds, including refusal, conflict preservation and dependency-readiness cases.
+No generated library bytes, pin, admission decision or automatic repair changed.
+
+The schema diagnostic suggestion reflects an intentional pinned API tradeoff:
+stable codes and fixed messages omit JSON location/validator details. Revalidating
+in the host would duplicate the shared semantics. Both handoffs now record this
+limit and direct any required extension to the shared contract. The provider-path
+finding supplied no actual native read failure; retain ASCII JSON encoding and
+the explicit lack of provider read-fidelity proof. Flash's repeated unreachable
+same-pin removal-loop suggestion adds no functional counterexample; its original
+diff-like line number is preserved in custody, with actual source lines 91–92
+recorded in adjudication. No unrelated vendor migration is introduced.
+
+After both corrections, the complete host suite passed **2558 tests, with four
+existing skips, in 631.58 seconds** on macOS 26.6.2 arm64/Python 3.12.13. The
+invocation used an owned canonical TMPDIR and terminated with exit 0. The
+generated-content check and `git diff --check` also passed. Independent
+Astra/high scoped re-review found no actionable issue in the implementation,
+regressions and handoffs; that read-only review is separate from the formal vote.
+Native source/archive CI and the fresh complete formal round remain required for
+this corrected candidate. No publication or installed-session proof is claimed.

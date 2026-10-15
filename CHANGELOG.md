@@ -7,6 +7,7 @@
 - Retains the concurrent CPython bytecode-publication correction and updates the bundled callback wait-setup cleanup, with a host distribution regression. Native spawning, classifiers, recovery exceptions and provider controls remain host-owned.
 - Refreshes Claude adoption and Gemini Argon Google-route handoffs. Source, native CI, formal review, installation and publication remain separately recorded evidence.
 - Encodes scalar prompt paths without losing CR/LF, quoting or non-ASCII filename identity; native invocation paths remain unchanged. Adds compatibility-resource parity checks and documents legacy helpers' shared-parser integrity dependency.
+- Reports missing/unexpected bundled inventory paths and preserves their cause in bootstrap recovery guidance, without admitting or removing conflicting files. The isolated verifier accepts correctly encoded temporary paths.
 
 ## 0.2.560 — 2026-10-12
 

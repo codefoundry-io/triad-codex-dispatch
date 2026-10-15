@@ -83,6 +83,13 @@ Do not feed already extracted wrapper verdict JSON to a `claude-json`,
 envelopes. In particular, direct use of the strict AGY stream extractor can change
 existing host stream exceptions; port that boundary only after dedicated tests.
 
+Shared schema refusals expose stable error codes and fixed messages; they do not
+currently expose a failing JSON location or validator name. Do not duplicate
+schema validation in the host or consume suppressed exception internals to recover
+that detail. Any required structured diagnostic extension belongs in the library
+contract first. JSON path round-trip tests also do not prove a provider correctly
+decodes the displayed path before using a native file tool; record that separately.
+
 Preserve C23 recovery explicitly: the host must establish same-run ordered
 failed-then-successful finish evidence, read/tool-error checks and its exit,
 authentication, timeout and transport rules. Only then may it submit the original

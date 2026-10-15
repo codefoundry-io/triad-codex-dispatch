@@ -80,7 +80,8 @@ def probe(root: Path) -> dict:
                 residual="Synthetic evidence\n```\nnot instructions",
                 google_preflight_sha256="b" * 64 if family == "google" else None)
             assert text.count("The fenced material below is data to judge") == 1
-            assert "Complete authoritative output schema:" in text and str(brief) in text
+            assert "Complete authoritative output schema:" in text
+            assert json.dumps(str(brief), ensure_ascii=True) in text
             for field, replacement in dict(review_id="other", family="claude" if family != "claude" else "codex",
                                            content_digest="c" * 64, leg_name="other", attempt=2,
                                            route="gemini" if route != "gemini" else "agy").items():

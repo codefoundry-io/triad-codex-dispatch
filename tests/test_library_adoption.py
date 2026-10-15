@@ -101,6 +101,34 @@ def test_check_is_nonwriting_and_normal_bin_import():
     assert str(ROOT / "bin/triad_dispatch_lib/__init__.py") in result.stdout
 
 
+@pytest.mark.parametrize("damage", ("extra-file", "missing-file", "extra-directory"))
+def test_inventory_refusal_names_affected_relative_paths_without_mutation(tree, damage):
+    relative = "bin/triad_dispatch_lib/" + {
+        "extra-file": ".DS_Store",
+        "missing-file": "verdict.py",
+        "extra-directory": 'owner "notes"\nfolder',
+    }[damage]
+    target = tree / relative
+    if damage == "extra-file":
+        target.write_text("owner metadata")
+    elif damage == "missing-file":
+        target.unlink()
+    else:
+        target.mkdir()
+    with pytest.raises(ValueError) as caught:
+        loader().verify_library(tree)
+    message = str(caught.value)
+    assert json.dumps(relative, ensure_ascii=True) in message
+    assert str(tree) not in message
+    assert "\n" not in message
+    if damage == "extra-file":
+        assert target.read_text() == "owner metadata"
+    elif damage == "missing-file":
+        assert not target.exists()
+    else:
+        assert target.is_dir()
+
+
 def test_refresh_preserves_conflicts_and_rejects_bad_wheel(tree, tmp_path):
     path = ROOT / "scripts/vendor_library.py"
     assert path.exists(), "wheel refresh tool is missing"

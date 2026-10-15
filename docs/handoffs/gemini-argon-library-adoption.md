@@ -47,6 +47,13 @@ releases independent; the old spec repository is historical, not the editing SOT
 
 ## Required evidence and deliverable
 
+The current shared schema-error API supplies fixed messages and stable codes,
+without JSON-location/validator detail. Preserve that boundary instead of adding
+another host validator or relying on suppressed exception context. A richer
+diagnostic contract must be implemented once in the library. Source tests prove
+lossless JSON path encoding, not the provider's native file-read fidelity; keep
+those evidence claims separate.
+
 Add focused regressions for genuine gaps: successful original carriers, strict
 JSON/schema/six-binding refusals, positive and invalid AGY recovery, requested vs
 effective identity, timeout/cancellation and terminal cleanup. If adopting shared

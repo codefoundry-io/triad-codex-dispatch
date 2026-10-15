@@ -106,9 +106,12 @@ def verify_library(root=ROOT):
                     continue
                 actual.add(relative)
             elif path.name != "__pycache__" and not any(name.startswith(relative + "/") for name in expected):
-                raise ValueError("unexpected generated directory")
+                raise ValueError("unexpected generated directory: " + json.dumps(relative, ensure_ascii=True))
         if actual != set(expected):
-            raise ValueError("generated inventory mismatch")
+            raise ValueError("generated inventory mismatch: " + json.dumps({
+                "missing": sorted(set(expected) - actual),
+                "unexpected": sorted(actual - set(expected)),
+            }, ensure_ascii=True))
         files = {name: regular_bytes(root, name) for name in expected}
         if any(hashlib.sha256(data).hexdigest() != expected[name] for name, data in files.items()):
             raise ValueError("generated hash mismatch")

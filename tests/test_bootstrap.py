@@ -5186,3 +5186,29 @@ def test_install_requires_referencing_bundle_apis_before_persistent_mutation(tmp
     assert not any(launchers.iterdir())
     assert not (Path(env["HOME"]) / ".codex").exists()
     assert not shell_rc.exists()
+
+
+@pytest.mark.parametrize("extra_directory", (False, True))
+def test_install_reports_inventory_path_before_persistent_mutation(tmp_path, extra_directory):
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    relative = "bin/triad_dispatch_lib/" + ('owner "notes"\nfolder' if extra_directory else ".DS_Store")
+    target = repo_root / relative
+    if extra_directory:
+        target.mkdir()
+    else:
+        target.write_text("owner metadata")
+    shell_rc = tmp_path / "shellrc"
+    result, env, launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root,
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)})
+    assert result.returncode != 0
+    assert "Bundled shared library readiness failed" in result.stderr
+    assert json.dumps(relative, ensure_ascii=True) in result.stderr
+    assert "Restore the exact plugin package" in result.stderr
+    assert not any(launchers.iterdir())
+    assert not (Path(env["HOME"]) / ".codex").exists()
+    assert not shell_rc.exists()
+    if extra_directory:
+        assert target.is_dir()
+    else:
+        assert target.read_text() == "owner metadata"

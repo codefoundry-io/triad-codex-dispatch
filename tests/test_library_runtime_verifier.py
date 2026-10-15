@@ -61,3 +61,37 @@ def test_driver_cleans_temporary_environment_after_pip_failure(tmp_path):
     assert result.returncode == 1
     assert "Invalid requirement" in result.stderr
     assert not list(tmp_path.glob("triad-library-runtime-*"))
+
+
+def test_public_driver_accepts_encoded_paths_under_tricky_tmpdir(tmp_path):
+    root = copied_host(tmp_path)
+    shutil.copy2(ROOT / "requirements.txt", root / "requirements.txt")
+    tricky_base = (tmp_path / r'TMP 한글 "quoted" \n').resolve()
+    tricky_base.mkdir()
+    result = subprocess.run(
+        [sys.executable, "-I", str(SCRIPT), "--root", str(root)],
+        cwd=tmp_path,
+        env=dict(os.environ, TMPDIR=str(tricky_base)),
+        text=True,
+        capture_output=True,
+        timeout=900,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["root"] == str(root)
+    assert report["library_origin"] == str(root / "bin/triad_dispatch_lib/__init__.py")
+    assert set(report["host_origins"]) == {
+        "library_adoption", "review_prompts_v2", "review_roster", "validate_v2", "verdict_v2"
+    }
+    assert all(Path(path).is_relative_to(root / "bin") for path in report["host_origins"].values())
+    assert report["routes"] == ["claude", "codex", "agy", "gemini"]
+    assert report["binding_refusals"] == 24
+    assert report["overflow_refusals"] == 3
+    assert report["duplicate_refusals"] == 1
+    assert report["roster_names"] == ["claude", "codex", "google", "codex-second"]
+    assert report["skips"] == []
+    temporary_root = Path(report["temporary_root"])
+    assert temporary_root.parent == tricky_base
+    assert report["temporary_root_removed"] is True
+    assert not temporary_root.exists()
+    assert not list(root.rglob("__pycache__")), "public driver must not write into supplied host"
