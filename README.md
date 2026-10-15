@@ -868,14 +868,21 @@ and launchers are wired to the native provider environment. `ok` is the classifi
 ### Developer path (optional — clone + pytest)
 
 If you want to run the bundled unit tests, clone the repository and run them.
-This needs `pytest` (`python3 -m pip install pytest`), a test-only dependency not
-needed to run the dispatch tools themselves:
+Install the shipped runtime requirements and `pytest` first. `pytest` is a
+test-only dependency not needed to run the dispatch tools themselves:
 
 ```bash
 git clone https://github.com/codefoundry-io/triad-codex-dispatch
 cd triad-codex-dispatch
+python3 -m pip install -r requirements.txt pytest
 python3 -m pytest -q tests/ -p no:cacheprovider   # expect all tests to pass
 ```
+
+The runtime probe tests use these installed dependencies. The separate
+`python3 scripts/verify_library_runtime.py --root "$(pwd -P)"` check provisions
+a fresh environment and needs package-index access. Native CI runs that public
+check against both source and the extracted archive, including encoded paths
+under a temporary directory containing Hangul, quotes and a literal backslash.
 
 For an explicitly provider-free synthetic lifecycle check, run
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py` from the

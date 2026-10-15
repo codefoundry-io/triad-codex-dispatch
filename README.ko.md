@@ -805,15 +805,21 @@ native provider environment에 연결된 것입니다. `ok` 는 분류이며, �
 
 ### 개발자 경로 (선택 — clone + pytest)
 
-번들 unit 테스트를 돌리려면 repository 를 clone 해 실행하세요. `pytest`
-(`python3 -m pip install pytest`)가 필요하며, 이는 테스트 전용 의존성으로 dispatch
+번들 unit 테스트를 돌리려면 repository 를 clone 한 뒤 배포된 runtime requirements와
+`pytest`를 먼저 설치하세요. `pytest`는 테스트 전용 의존성으로 dispatch
 도구 실행 자체에는 필요하지 않습니다:
 
 ```bash
 git clone https://github.com/codefoundry-io/triad-codex-dispatch
 cd triad-codex-dispatch
+python3 -m pip install -r requirements.txt pytest
 python3 -m pytest -q tests/ -p no:cacheprovider   # 모든 테스트 PASS 기대
 ```
+
+runtime probe 테스트는 설치된 의존성을 사용합니다. 별도 명령
+`python3 scripts/verify_library_runtime.py --root "$(pwd -P)"`는 새 환경을 구성하므로
+패키지 인덱스 접근이 필요합니다. 네이티브 CI는 소스와 추출한 아카이브 양쪽에 이 공개
+검증을 실행하며, 한글·따옴표·리터럴 백슬래시를 포함한 임시 디렉터리의 경로 인코딩도 확인합니다.
 
 provider-free 합성 lifecycle 검증을 명시적으로 요청한 경우 checkout에서
 `python3 skills/triad-cross-family-review/scripts/verify_lifecycle.py`를 실행합니다.

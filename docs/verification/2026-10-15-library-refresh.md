@@ -180,3 +180,43 @@ Astra/high scoped re-review found no actionable issue in the implementation,
 regressions and handoffs; that read-only review is separate from the formal vote.
 Native source/archive CI and the fresh complete formal round remain required for
 this corrected candidate. No publication or installed-session proof is claimed.
+
+## Third follow-up adjudication
+
+The public v2 round at `06e3777860f4fafe68705c6367e4454476e2d00f` completed
+all four owner-selected reviewers with `SAFE TO MERGE`; canonical collection
+returned `AGREED`, verified integrity and found no missing leg. The round was
+exported and its exact managed root and selector stage/cwd were removed.
+
+Claude identified a non-blocking cost in the new public-driver pytest case:
+it provisions dependencies again during both default source and archive suites,
+although CI already runs explicit public-driver checks for both. Independent
+source inspection confirmed four such installations per CI job. No inspected
+contract promises an entirely offline suite, and no product failure was observed.
+The bounded correction retains a fresh-process encoded-path probe using the
+test environment's installed dependencies and moves the real public-driver
+tricky-TMPDIR assertions into those two existing native CI calls. Provisioning
+failures remain failures; there is no network-based skip or extra test mode.
+The source/archive report checks retain root and import origins, all four routes,
+24 binding refusals, three overflow refusals, one duplicate refusal, roster names,
+no skips, temporary-parent identity and verified cleanup.
+
+The fixture includes a literal backslash followed by `n`, not an actual newline.
+Argon's original review wording is preserved in custody and qualified by the
+leader's adjudication. Actual CR/LF paths are covered separately by the renderer
+regressions. Neither kind of source test establishes native provider tool-read
+fidelity. This follow-up changes test placement and documentation only; it keeps
+production code, library pins, model defaults and installation behavior intact.
+
+The fresh probe regression failed with the old raw-path assertion (one failure
+in 0.45 seconds) and passed after restoring the encoded-token assertion. All
+three runtime-verifier tests then passed in 3.83 seconds; YAML parsing and the
+extracted workflow's `bash -n` check passed. The complete suite passed **2557
+tests, with four existing route skips, in 614.35 seconds** on macOS 26.6.2
+arm64/Python 3.12.13, using an owned canonical TMPDIR and exiting with status 0.
+The test count decreases by one because the default probe now covers the special
+path and the duplicate provisioning case is removed. Generated-content and
+whitespace checks passed. Independent Astra/high scoped review found no
+actionable issue. Native source/archive CI and a fresh complete formal round
+remain required for the final candidate; publication and installation are not
+claimed by these source results.

@@ -38,6 +38,9 @@ jobs:
           root="$(pwd -P)"
           owned_tmp="$(mktemp -d "$RUNNER_TEMP/triad-host.XXXXXX")"
           export TMPDIR="$(cd "$owned_tmp" && pwd -P)"
+          runtime_tmp="$TMPDIR/"'triad runtime 한글 "quoted" \n'
+          mkdir -p "$runtime_tmp"
+          runtime_tmp="$(cd "$runtime_tmp" && pwd -P)"
           archive_output="$root/_runs/distribution/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           trap 'rm -rf "$owned_tmp" "$archive_output"' EXIT
           unset PYTEST_ADDOPTS
@@ -45,14 +48,48 @@ jobs:
           # Python must share the action-provisioned job environment.
           python_bin="$(command -v python3)"
           export PATH="$(dirname "$python_bin"):$PATH"
+          verify_runtime_report() {
+            local label="$1" verifier_root="$2" package_root="$3"
+            local report_path="$TMPDIR/${label}-runtime.json"
+            TMPDIR="$runtime_tmp" "$python_bin" "$verifier_root/scripts/verify_library_runtime.py" --root "$package_root" > "$report_path"
+            "$python_bin" - "$report_path" "$package_root" "$runtime_tmp" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report_path, root, tricky_tmp = sys.argv[1:]
+          report = json.loads(pathlib.Path(report_path).read_text())
+          package = pathlib.Path(root)
+          expected_modules = {
+              "library_adoption", "review_prompts_v2", "review_roster",
+              "validate_v2", "verdict_v2",
+          }
+          assert report["root"] == str(package)
+          assert report["library_origin"] == str(package / "bin/triad_dispatch_lib/__init__.py")
+          assert report["host_origins"] == {
+              name: str(package / "bin" / (name + ".py")) for name in expected_modules
+          }
+          assert report["routes"] == ["claude", "codex", "agy", "gemini"]
+          assert report["binding_refusals"] == 24
+          assert report["overflow_refusals"] == 3
+          assert report["duplicate_refusals"] == 1
+          assert report["roster_names"] == ["claude", "codex", "google", "codex-second"]
+          assert report["skips"] == []
+          temporary_root = pathlib.Path(report["temporary_root"])
+          assert temporary_root.parent == pathlib.Path(tricky_tmp)
+          assert report["temporary_root_removed"] is True
+          assert not temporary_root.exists()
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+          }
           "$python_bin" -I -m pip --isolated install --disable-pip-version-check --no-cache-dir --only-binary=:all: -r "$root/requirements.txt" pytest
           "$python_bin" -c 'import pathlib,subprocess,sys; child=subprocess.check_output(["python3","-c","import sys; print(sys.executable)"],text=True).strip(); assert pathlib.Path(child).resolve() == pathlib.Path(sys.executable).resolve(), (sys.executable,child); print({"parent_python":sys.executable,"child_python":child})'
           "$python_bin" -c 'import platform; print({"os": platform.platform(), "architecture": platform.machine(), "python": platform.python_version()})'
           "$python_bin" -m pytest -q -ra "$root/tests" --rootdir "$root" -p no:cacheprovider
           "$python_bin" "$root/scripts/vendor_library.py" --check
-          "$python_bin" "$root/scripts/verify_library_runtime.py" --root "$root"
+          verify_runtime_report source "$root" "$root"
           "$python_bin" "$root/scripts/verify_distribution.py" --source-root "$root" --output-dir "$archive_output" > "$TMPDIR/distribution.json"
           "$python_bin" -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["tests"]["stdout"]); print({"commit":r["commit"], "hash_targets":len(r["hashes"]), "archive_sha256":r["archive_sha256"]})' "$TMPDIR/distribution.json"
           extracted_root="$("$python_bin" -c 'import json,sys; print(json.load(open(sys.argv[1]))["extracted_root"])' "$TMPDIR/distribution.json")"
-          "$python_bin" "$extracted_root/scripts/verify_library_runtime.py" --root "$extracted_root"
+          verify_runtime_report archive "$extracted_root" "$extracted_root"
           git diff --exit-code
