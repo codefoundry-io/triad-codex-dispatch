@@ -250,6 +250,10 @@ class, route에서 identity를 추론하지 않습니다.
 별도 라이브러리 체크아웃은 필요하지 않습니다. 기존 공급자·네이티브 어댑터와
 Gemini 우회 방식은 호스트에 남으며, 호스트 스케줄러 전체를 교체하지 않습니다.
 
+legacy 정식 리뷰의 메타데이터와 웹 허용 문구를 읽는 헬퍼도 공통 파서와
+검증된 번들을 사용합니다. 무결성 오류는 공급자 호출 전에 해당 경로를
+중단하며, 전파된 무결성 예외는 공급자의 리뷰 판정이 아닙니다.
+
 [일반 업데이트 절차](docs/installation.ko.md#업데이트)에 따라 선택한 Python
 3.12+ 환경에서 배포 requirements를 충족하고 bootstrap을 다시 실행한 뒤
 새 Codex 세션과 새 리뷰 기준을 준비하세요. [Claude 이식 지침](docs/handoffs/claude-library-adoption.md)과

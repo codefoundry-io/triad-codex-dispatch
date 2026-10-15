@@ -92,13 +92,14 @@ def render_prompt(*, expected: dict, worktree: Path, brief_file: Path,
     elif google_preflight_sha256 is not None:
         raise ValueError("non-Google prompt cannot own a Google preflight")
     replacements = {
-        "worktree": str(root), "brief-file": str(brief_file),
+        "worktree": json.dumps(str(root), ensure_ascii=True),
+        "brief-file": json.dumps(str(brief_file), ensure_ascii=True),
         "packet-files": json.dumps([str(path) for path in packet_files]),
         "review-id": expected["review_id"], "content-digest": expected["content_digest"],
         "leg-name": expected["leg_name"], "attempt": str(expected["attempt"]),
     }
     if expected["family"] == "google":
-        replacements["gated-patch-file"] = str(diff_file)
+        replacements["gated-patch-file"] = json.dumps(str(diff_file), ensure_ascii=True)
     clauses = shared.render_review_clauses(
         family=expected["family"], host="B", review_date=review_date,
         review_web_authorized=review_web_authorized, replacements=replacements,

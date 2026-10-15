@@ -18,6 +18,7 @@
 - Expected runtime delta: upstream dispatch +5/-2, two pin replacements, metadata updates; no novel production algorithm. Tests and documentation counted separately.
 - Model defaults, Gemini workaround, provider/auth/permissions and Claude source remain unchanged. No MCP or deferred SDK adoption.
 - The owner explicitly approved library PR #1 final merge after automatic review requested clarification. It is merged at `9489543ee24f338e9c6d0e3b032a1aa389986429`, with the reviewed tree unchanged. The owner also selected public v2 for the same four-model Codex review. Record release/install/fresh-session evidence separately.
+- After R2's Pro selection failed, the owner selected the `opus` alias with 40 minutes and approved Argon/high for that slot. The next public-v2 round keeps Sol 6.1/xhigh and Flash/high; all CLI budgets remain 2400 seconds, with no standing configuration change. Apply the bounded caller-path correction and documentation/parity follow-ups before a fresh complete review.
 
 ## Review focus
 

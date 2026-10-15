@@ -271,6 +271,10 @@ No runtime download or separate library checkout is needed. The existing
 provider/native adapters and Gemini workaround remain in the host; this update
 does not switch the host scheduler to the library coordinator.
 
+Legacy formal metadata and web-clause helpers also use the shared parser and
+require the verified bundle. An integrity fault stops these paths before
+provider inference; an uncaught integrity error is not a provider verdict.
+
 Use the [normal update procedure](docs/installation.md#update), satisfy the
 shipped requirements in the selected Python 3.12+ environment, rerun bootstrap
 and start a fresh Codex session. Prepare a new review basis after updating.

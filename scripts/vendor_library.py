@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Refresh byte-identical package files from a verified pinned wheel; no install."""
+"""Create or rewrite the same pinned package from a verified wheel; no install.
+
+An existing package must already match the approved content pin. --write is not
+a pin migration; an equal-content rebuilt wheel may update wheel provenance.
+"""
 import argparse
 import base64
 import csv

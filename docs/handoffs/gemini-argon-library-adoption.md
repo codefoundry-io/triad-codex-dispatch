@@ -42,6 +42,8 @@ releases independent; the old spec repository is historical, not the editing SOT
 6. Use host A clauses and `agy_hook_active=True` only when that hook is actually
    enforced. For host B, preserve the exact sealed-packet include-directory rule
    and no provider-settings mutation. Do not exchange these host-specific controls.
+   Encode scalar prompt path replacements as JSON strings while preserving actual
+   filesystem paths and CLI arguments; the renderer requires single-line values.
 
 ## Required evidence and deliverable
 

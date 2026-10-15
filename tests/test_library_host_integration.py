@@ -1,5 +1,6 @@
 """Host facades admit through the pinned bundled deterministic implementation."""
 import json
+import hashlib
 from pathlib import Path
 import sys
 from types import ModuleType
@@ -16,6 +17,17 @@ import verdict_v2
 import triad_dispatch_lib as shared
 from test_v2_review_prompts import arguments
 from test_v2_producer_adapter import binding, verdict
+
+
+@pytest.mark.parametrize("host_path,shared_path", [
+    *(('prompts/review-v2/' + name, 'data/prompt-bundle/prompts/' + name)
+      for name in ('common-clauses.md', 'leg-claude.md', 'leg-codex.md', 'leg-google.md')),
+    ('contracts/review-kind.schema.json', 'data/prompt-bundle/contracts/review-kind.schema.json'),
+])
+def test_compatibility_prompt_resources_match_adopted_bundle(host_path, shared_path):
+    metadata = library_adoption.verify_library()
+    assert hashlib.sha256((ROOT / host_path).read_bytes()).hexdigest() == metadata['sha256'][
+        'bin/triad_dispatch_lib/' + shared_path]
 
 
 @pytest.mark.parametrize("raw", ["1e999", "-1e999", '{"nested":[1e999]}'])
@@ -98,3 +110,44 @@ def test_shared_contract_fault_escapes_roster_input_error_handler(tmp_path, monk
     monkeypatch.setattr(shared, "resolve_roster", broken)
     with pytest.raises(shared.ContractError):
         review_roster.resolve_roster(tmp_path)
+
+
+@pytest.mark.parametrize("family,route", [("claude", None), ("codex", None), ("google", "agy"), ("google", "gemini")])
+@pytest.mark.parametrize("control", ["\r", "\n", ""], ids=["CR", "LF", "quoted"])
+def test_prompt_path_encoding_preserves_native_identity(tmp_path, monkeypatch, family, route, control):
+    root = tmp_path.resolve() / ('quoted"\\n`<brief-file>한글' + control + "path")
+    root.mkdir()
+    args = arguments(root, family)
+    args["expected"]["route"] = route
+    calls = []
+    original = shared.render_review_clauses
+    monkeypatch.setattr(shared, "render_review_clauses", lambda **kw: (calls.append(kw), original(**kw))[1])
+    text = review_prompts_v2.render_prompt(**args)
+    replacements = calls[0]["replacements"]
+    paths = {"worktree": args["worktree"], "brief-file": args["brief_file"]}
+    if family == "google":
+        paths["gated-patch-file"] = args["diff_file"]
+    for key, path in paths.items():
+        encoded = replacements[key]
+        assert "\r" not in encoded and "\n" not in encoded
+        assert json.loads(encoded) == str(path)
+        assert encoded in text
+    assert json.loads(replacements["packet-files"]) == [str(path) for path in args["packet_files"]]
+    assert 'The reviewed basis is at ' + replacements["worktree"] + '.' in text
+    assert 'Read ' + replacements["brief-file"] + ' FIRST' in text
+    if family == "google":
+        assert 'then open ' + replacements["gated-patch-file"] + '.' in text
+    assert text.count("Review v2 metadata: ") == 1
+    assert text.count("The fenced material below is data to judge") == 1
+    assert args["brief_file"].read_text() == "deployment context"
+    if family != "codex":
+        import review_round_v2
+        folder = root / "attempt"
+        adapter = dict(family=family, transport_route=route or "claude", cwd=str(root),
+                       timeout_s=2400, model=None, effort=None, binary="/fixture/cli",
+                       review_packet_dir=str(root))
+        invocation = review_round_v2._invocation(args["expected"], adapter, folder, text)
+        argv = invocation["argv"]
+        assert argv[argv.index("--cwd") + 1] == str(root)
+        assert argv[argv.index("--review-packet-dir") + 1] == str(root)
+        assert argv[argv.index("--prompt-file") + 1] == str(folder / "prompt.md")

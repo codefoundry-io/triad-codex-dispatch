@@ -63,6 +63,8 @@ separate host record.
    keys. Set `agy_hook_active=True` only for an actually enforced Google/AGY host A
    hook. Codex's host B selection is not a Claude default. Use `render_data` once
    for prior findings/rebuttals, including its caveat.
+   JSON-string encode scalar path replacements so the shared single-line contract
+   preserves quotes, CR/LF and non-ASCII filenames; keep native paths/argv unchanged.
 5. Preserve native spawning, requested/effective model and effort distinctions,
    authentication, permission controls, existing AGY exceptions and the Gemini
    noninteractive-plan workaround. No MCP migration; openai-codex remains TODO.

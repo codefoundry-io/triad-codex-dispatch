@@ -13,6 +13,13 @@ resource manifests and adoption record. A changed dependency requires a fresh
 review basis. The host retains native permission, terminal and output custody
 guards; no provider permissions or authentication settings change.
 
+Legacy formal metadata parsing and web-clause loading also transitively use the
+shared parser and its inventory check. A damaged bundle therefore stops legacy
+formal preparation or wrapper preflight before inference as well. Integrity
+`RuntimeError` propagation is deliberate; its process failure is not a provider
+verdict or evidence that the provider ran. Restore the verified distribution
+through the normal update procedure before retrying.
+
 The adoption hashes establish consistency with the reviewed build, not a signed
 publisher identity. Third-party Python dependencies still use the selected host
 runtime. Existing interpreter startup, user-site and bytecode-cache trust

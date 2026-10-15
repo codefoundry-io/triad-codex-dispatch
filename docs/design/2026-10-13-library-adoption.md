@@ -1,5 +1,11 @@
 # Codex adoption of the shared TRIAD library
 
+> Historical design basis (2026-10-13). The source identity, unmerged status and
+> initial generated-byte counts below describe that initial candidate. As of
+> 2026-10-15, the approved pin is `2d1e62e7de6f33fa13a918a39579c6b5e74def00`
+> and library PR #1 is merged. Use the [current refresh record](../verification/2026-10-15-library-refresh.md)
+> and `contracts/library-adoption.json` for the distributed identity and evidence.
+
 The owner approved applying `triad-dispatch-lib` to Codex first. Claude remains a
 separate implementation and release; provide a handoff document for its owner.
 

@@ -64,3 +64,70 @@ a fresh complete four-model formal review, release and installed
 fresh-session exposure are separate gates. The earlier PR #44 round failed because
 a required Claude verdict was unavailable; it grants this candidate no admission
 credit. Results for the current candidate must identify their commit and platform.
+
+Native [CI run 38654506055](https://github.com/codefoundry-io/triad-codex-dispatch/actions/runs/38654506055)
+passed for candidate `2d646bc20ee5495d05524c6b61d4c36b0f967295`. Both job logs name
+synthetic merge `a9e05737231109599f23dc5e936c39840dc547fa`; its parents are the
+candidate and `bd96cdbf0eb83e2187b2b7fa3ac9cd701b58db7e`, and its tracked tree
+`52cc9cb596085d5344b858dfeb7073debb269f97` equals the candidate tree.
+
+| Native runner | Runtime | Source tests | Extracted archive tests |
+| --- | --- | --- | --- |
+| Ubuntu 24.04 x86_64 | Python 3.12.15 | 2533 passed, 6 skipped | 2533 passed, 6 skipped |
+| macOS 15.7.9 arm64 | Python 3.12.10 | 2535 passed, 4 skipped | 2535 passed, 4 skipped |
+
+Ubuntu additionally skips two tests requiring a case-insensitive filesystem.
+Both source/archive isolated runtime probes passed, including all 24 binding
+refusals and temporary-root removal. The two jobs produced archive SHA-256
+`a6fb34d8a58bf4aa831ef5ca74a52d48502191c05aa02b645f6b7af4ed9792f1`
+for that synthetic merge. This is evidence for that immutable tree, before the
+follow-up corrections below, not a release artifact or fresh installed-session
+claim. The corrected candidate requires its own native CI.
+
+## Follow-up review corrections
+
+The public v2 round at Codex `2d646bc20ee5495d05524c6b61d4c36b0f967295`
+completed Opus, native Sol and AGY Flash reviews, each with `SAFE TO MERGE`.
+AGY 1.3.5 rejected the selected Pro model/effort before a verdict, so the collector
+reported `INCOMPLETE`; these three votes do not authorize admission. Collection
+rechecked source/custody integrity, and the terminal round was exported before
+its exact managed root and selector stage/cwd were removed. Its findings remain
+part of the next review's evidence.
+
+Sol identified a host encoding gap: canonical filesystem paths may contain CR/LF,
+but the shared renderer requires caller-encoded single-line replacements. Twelve
+new cases first failed on the old host: eight CR/LF paths were refused by the
+shared renderer, and four quoted-path cases exposed missing JSON encoding.
+The correction JSON-string encodes only worktree, brief and gated-patch display
+values. Tests check lossless path decoding, single-pass placeholder handling,
+complete clause placement and unchanged native argv; no provider read-fidelity
+claim follows from these source tests.
+
+Claude's four Minor findings were independently checked. Legacy metadata and
+web-clause helpers do transitively use the verified shared parser; current
+English/Korean/security guidance now states this dependency while preserving
+deliberate integrity exceptions. The old design is labeled historical and linked
+to this record. All four compatibility prompt files and the phase schema are
+identical to the adopted bundle today; five regression cases guard future refresh
+parity without adding a new runtime mechanism. Same-pin vendoring can rewrite
+files and update rebuilt-wheel provenance, but cannot migrate pins; its docstring
+now says so. The unreachable removal branch is a nonfunctional cleanup suggestion
+and is left unchanged.
+
+The corrected source passed 168 focused tests in 125.41 seconds, including all
+12 path regressions and five resource-parity checks, on the same macOS/Python
+runtime with an owned canonical TMPDIR. Independent Astra/high scoped re-review
+found no actionable issue; this is separate from the required formal vote.
+The first full follow-up run had 2551 passes, four existing skips and one stale
+test assertion expecting an unquoted prepared-directory path. That assertion
+now decodes the JSON path and compares its original identity while retaining the
+adapter cwd assertion; all ten runtime-boundary tests passed in 9.43 seconds.
+The final full replay passed **2552 tests, with four existing skips, in 619.65
+seconds** on macOS 26.6.2 arm64/Python 3.12.13. The invocation used a new owned
+canonical TMPDIR, retained the failed earlier run, and terminated with exit 0.
+Generated-package verification and `git diff --check` passed as well. The
+corrected source still requires native CI and an entire new formal round.
+The owner selected `opus`/xhigh with 40 minutes and approved
+Argon/high in place of unavailable Pro, retaining Sol 6.1/xhigh and Flash/high.
+This per-round choice changes no standing model defaults. Release and installation
+remain separate gates.

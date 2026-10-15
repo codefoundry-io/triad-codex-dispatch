@@ -6,6 +6,7 @@
 - Verifies complete package/license content with an independent pin and records source, artifact and bundle identities. Bootstrap verifies the bundled package and required schema APIs without installing dependencies.
 - Retains the concurrent CPython bytecode-publication correction and updates the bundled callback wait-setup cleanup, with a host distribution regression. Native spawning, classifiers, recovery exceptions and provider controls remain host-owned.
 - Refreshes Claude adoption and Gemini Argon Google-route handoffs. Source, native CI, formal review, installation and publication remain separately recorded evidence.
+- Encodes scalar prompt paths without losing CR/LF, quoting or non-ASCII filename identity; native invocation paths remain unchanged. Adds compatibility-resource parity checks and documents legacy helpers' shared-parser integrity dependency.
 
 ## 0.2.560 — 2026-10-12
 
