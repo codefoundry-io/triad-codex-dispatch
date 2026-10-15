@@ -102,6 +102,14 @@ def _make_repo_root(
     )
     shutil.copy2(BOOTSTRAP_REPAIR, bin_dir / "bootstrap_repair.py")
     shutil.copy2(ROOT / "requirements.txt", repo_root / "requirements.txt")
+    for name in ("library_adoption.py", "validate_v2.py", "verdict_schema.py"):
+        shutil.copy2(ROOT / "bin" / name, bin_dir / name)
+    shutil.copytree(ROOT / "bin/triad_dispatch_lib", bin_dir / "triad_dispatch_lib",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    for name in ("contracts/library-adoption.json", "vendor/triad-dispatch-lib.LICENSE"):
+        target = repo_root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, target)
     if real_skills:
         shutil.copytree(ROOT / "skills", skills_dir)
     return repo_root
@@ -124,6 +132,9 @@ class BaseModel:
     model_json_schema = object()
 class ConfigDict(dict): pass
 class ValidationInfo: pass
+class StringConstraints:
+    def __init__(self, **kwargs): pass
+def Field(*args, **kwargs): return None
 def field_validator(*args, **kwargs): return lambda function: function
 def model_validator(*args, **kwargs): return lambda function: function
 '''
@@ -134,14 +145,21 @@ def model_validator(*args, **kwargs): return lambda function: function
     schema_package.mkdir(exist_ok=True)
     schema_package.joinpath("__init__.py").write_text('''\
 class Draft202012Validator:
+    META_SCHEMA = {"$id": "https://json-schema.org/draft/2020-12/schema"}
     def __init__(self, schema, *, registry): pass
     @staticmethod
     def check_schema(schema): pass
     def is_valid(self, instance): return True
 ''')
+    schema_package.joinpath("exceptions.py").write_text(
+        "class SchemaError(Exception): pass\nclass ValidationError(Exception): pass\n")
     reference_package = site / "referencing"
     reference_package.mkdir(exist_ok=True)
-    reference_package.joinpath("__init__.py").write_text("class Registry: pass\n")
+    reference_package.joinpath("__init__.py").write_text(
+        "class Registry:\n    def with_resource(self, *args): return self\n"
+        "class Resource:\n    @classmethod\n    def from_contents(cls, *args, **kwargs): return cls()\n")
+    reference_package.joinpath("exceptions.py").write_text("class Unresolvable(Exception): pass\n")
+    reference_package.joinpath("jsonschema.py").write_text("DRAFT202012 = object()\n")
     return site
 
 
@@ -5124,3 +5142,73 @@ def test_install_fails_when_codex_home_inside_workspace_via_case_variant(tmp_pat
     assert "CODEX_HOME" in result.stderr
     assert not any(launcher_bin.iterdir())
     assert not variant_codex_home.exists()
+
+
+@pytest.mark.parametrize("damage", ("missing-package", "implementation", "resource"))
+def test_install_refuses_unusable_bundled_library_before_persistent_mutation(tmp_path, damage):
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    package = repo_root / "bin/triad_dispatch_lib"
+    if damage == "missing-package":
+        shutil.rmtree(package)
+    else:
+        target = package / ("verdict.py" if damage == "implementation"
+                            else "data/prompt-bundle/prompts/common-clauses.md")
+        target.write_text("damaged bundled input\n")
+    shell_rc = tmp_path / "shellrc"
+    result, env, launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root,
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)})
+    assert result.returncode != 0
+    assert "Bundled shared library readiness failed" in result.stderr
+    assert "pip install" not in result.stderr
+    assert not any(launchers.iterdir())
+    assert not (Path(env["HOME"]) / ".codex").exists()
+    assert not shell_rc.exists()
+
+
+@pytest.mark.parametrize("surface", ("Resource", "DRAFT202012"))
+def test_install_requires_referencing_bundle_apis_before_persistent_mutation(tmp_path, surface):
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    site = _fake_pydantic_site(tmp_path, "missing-bundle-api")
+    path = site / "referencing" / ("__init__.py" if surface == "Resource" else "jsonschema.py")
+    if surface == "Resource":
+        path.write_text("class Registry: pass\n")
+    else:
+        path.write_text("# missing DRAFT202012\n")
+    shell_rc = tmp_path / "shellrc"
+    result, env, launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root,
+        env_overrides={"PYTHONPATH": str(site), "TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)})
+    assert result.returncode != 0
+    assert "jsonschema Draft 2020-12 APIs are required" in result.stderr
+    assert "-m pip install -r" in result.stderr
+    assert "Bundled shared library readiness failed" not in result.stderr
+    assert not any(launchers.iterdir())
+    assert not (Path(env["HOME"]) / ".codex").exists()
+    assert not shell_rc.exists()
+
+
+@pytest.mark.parametrize("extra_directory", (False, True))
+def test_install_reports_inventory_path_before_persistent_mutation(tmp_path, extra_directory):
+    repo_root = _make_repo_root(tmp_path, real_skills=True)
+    relative = "bin/triad_dispatch_lib/" + ('owner "notes"\nfolder' if extra_directory else ".DS_Store")
+    target = repo_root / relative
+    if extra_directory:
+        target.mkdir()
+    else:
+        target.write_text("owner metadata")
+    shell_rc = tmp_path / "shellrc"
+    result, env, launchers = _run_bootstrap(
+        tmp_path, repo_root=repo_root,
+        env_overrides={"TRIAD_BOOTSTRAP_SHELL_RC": str(shell_rc)})
+    assert result.returncode != 0
+    assert "Bundled shared library readiness failed" in result.stderr
+    assert json.dumps(relative, ensure_ascii=True) in result.stderr
+    assert "Restore the exact plugin package" in result.stderr
+    assert not any(launchers.iterdir())
+    assert not (Path(env["HOME"]) / ".codex").exists()
+    assert not shell_rc.exists()
+    if extra_directory:
+        assert target.is_dir()
+    else:
+        assert target.read_text() == "owner metadata"

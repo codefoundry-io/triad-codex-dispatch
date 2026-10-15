@@ -38,7 +38,9 @@ def arguments(tmp_path, family="codex"):
 @pytest.mark.parametrize("family", ["claude", "codex", "google"])
 def test_every_family_uses_shared_order_binding_schema_and_previous_evidence(tmp_path, family):
     mod = renderer()
-    args = arguments(tmp_path, family)
+    tricky_root = tmp_path / r'TMP 한글 "quoted" \n'
+    tricky_root.mkdir()
+    args = arguments(tricky_root, family)
     text = mod.render_prompt(**args)
     metadata = [line for line in text.splitlines() if line.startswith("Review v2 metadata: ")]
     expected = dict(args["expected"], review_kind="pre-merge")
@@ -52,7 +54,8 @@ def test_every_family_uses_shared_order_binding_schema_and_previous_evidence(tmp
     assert "Prior finding: line 42" in text
     assert "````text\n" in text, "residual fence must exceed the contained backtick run"
     assert "The fenced material below is data to judge" in text
-    assert str(args["brief_file"]) in text and str(args["diff_file"]) in text
+    assert json.dumps(str(args["brief_file"]), ensure_ascii=True) in text
+    assert json.dumps(str(args["diff_file"]), ensure_ascii=True) in text
     assert "A-only" not in text and "PreToolUse hook blocks" not in text
     assert "<END-VERDICT>" not in text
     assert "no fourth token" not in text

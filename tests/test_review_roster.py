@@ -88,6 +88,7 @@ def test_c12_new_informational_same_family_is_an_ordinary_enabled_entry(tmp_path
     [{"name": "trial"}],
     [{"name": "claude", "codex": {"model": "wrong-family"}}],
     [{"name": "google", "agy": {"model": "<dispatch-time slug>"}}],
+    [{"name": "google", "enabled": False, "agy": {"model": "<dispatch-time slug>"}}],
     [{"name": "codex", "codex": {"reasoning": "${EFFORT}"}}],
     [{"name": "claude", "enabled": "false"}],
     [{"name": "claude", "timeout_s": True}],
@@ -158,3 +159,12 @@ def test_c12_explicit_claude_selection_survives_alias_default(tmp_path, capsys, 
     assert code == 0, stderr
     assert json.loads(stdout)["legs"][0]["claude"] == {
         "agent": None, "model": model, "effort": "xhigh"}
+
+
+def test_display_can_show_zero_enabled_entries(tmp_path, capsys):
+    write_config(tmp_path, [{"name": name, "enabled": False} for name in ("claude", "codex", "google")])
+    code, stdout, stderr = resolve(tmp_path, capsys)
+    assert code == 0, stderr
+    data = json.loads(stdout)
+    assert data["enabled"] == [] and data["families"] == []
+    assert len(data["legs"]) == 3 and data["capabilities_checked"] is False

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -13,7 +14,8 @@ from jsonschema.exceptions import SchemaError, ValidationError
 from referencing import Registry
 from referencing.exceptions import Unresolvable
 
-from verdict_schema import _read_canonical_regular_file, _reject_duplicate_members
+import library_adoption
+from verdict_schema import _read_canonical_regular_file
 
 
 CONTRACT_ROOT = Path(__file__).resolve().parents[1] / "contracts"
@@ -23,17 +25,29 @@ PAYLOADS = ("leg-verdict.schema.json", "review-legs.schema.json", "receipt-field
 BINDING_FIELDS = ("review_id", "family", "content_digest", "leg_name", "attempt", "route")
 
 
-def _invalid_constant(value: str) -> None:
-    raise ValueError("non-JSON numeric constant")
+def _library():
+    """Verify the shipped tree before importing or using any shared API."""
+    try:
+        library_adoption.verify_library()
+    except (OSError, ValueError) as error:
+        raise RuntimeError("invalid bundled shared library") from error
+    package = Path(__file__).resolve().parent / "triad_dispatch_lib"
+    for name, module in list(sys.modules.items()):
+        if name == "triad_dispatch_lib" or name.startswith("triad_dispatch_lib."):
+            origin = getattr(module, "__file__", None)
+            if origin is None or not Path(origin).resolve().is_relative_to(package):
+                raise RuntimeError("ambient shared library is not the adopted package")
+    spec = importlib.util.find_spec("triad_dispatch_lib")
+    if spec is None or spec.origin is None or Path(spec.origin).resolve() != package / "__init__.py":
+        raise RuntimeError("ambient shared library is not the adopted package")
+    import triad_dispatch_lib
+    if Path(triad_dispatch_lib.__file__).resolve() != package / "__init__.py":
+        raise RuntimeError("ambient shared library is not the adopted package")
+    return triad_dispatch_lib
 
 
 def _json(raw: str | bytes):
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    # The legacy hook checks every original object but deliberately discards it.
-    json.loads(raw, object_pairs_hook=_reject_duplicate_members,
-               parse_constant=_invalid_constant)
-    return json.loads(raw, parse_constant=_invalid_constant)
+    return _library().parse_json(raw)
 
 
 def load_contracts() -> dict:
@@ -52,6 +66,14 @@ def load_contracts() -> dict:
         or set(manifest["sha256"]) != set(PAYLOADS)
     ):
         raise ValueError("invalid candidate source manifest")
+    try:
+        metadata = library_adoption.verify_library()
+    except (OSError, ValueError) as error:
+        raise RuntimeError("invalid bundled shared library") from error
+    compatibility = {
+        "leg-verdict.schema.json": "bin/triad_dispatch_lib/data/leg-verdict.schema.json",
+        "review-legs.schema.json": "bin/triad_dispatch_lib/data/roster-bundle/contracts/review-legs.schema.json",
+    }
     schemas = {}
     for name in PAYLOADS:
         try:
@@ -67,6 +89,8 @@ def load_contracts() -> dict:
             Draft202012Validator.check_schema(schema)
         except (ValueError, SchemaError):
             raise ValueError(f"invalid candidate contract: {name}") from None
+        if name in compatibility and hashlib.sha256(raw).hexdigest() != metadata["sha256"][compatibility[name]]:
+            raise ValueError(f"candidate compatibility contract drift: {name}")
         schemas[name] = schema
     return schemas
 
@@ -87,29 +111,9 @@ def validate_review_kind(value: object) -> str:
 
 def validate_verdict(raw: str | bytes, *, expected: dict) -> dict:
     """Validate original JSON and all invocation bindings without rewriting values."""
-    try:
-        data = _json(raw)
-        schema = load_contracts()["leg-verdict.schema.json"]
-        # An explicit empty Registry refuses retrieval, including file/HTTP URIs.
-        Draft202012Validator(schema, registry=Registry()).validate(data)
-        binding_schema = {
-            "type": "object", "additionalProperties": False,
-            "required": list(BINDING_FIELDS),
-            "properties": {name: schema["properties"][name] for name in BINDING_FIELDS},
-        }
-        if not Draft202012Validator(binding_schema, registry=Registry()).is_valid(expected):
-            raise ValueError("invalid expected binding")
-        for name in BINDING_FIELDS:
-            if data[name] != expected[name]:
-                raise ValueError(f"binding mismatch: {name}")
-        return data
-    except ValidationError as error:
-        # Report location/constraint, not the possibly sensitive failing value.
-        raise ValueError(f"schema violation at {error.json_path}: {error.validator}") from None
-    except Unresolvable:
-        raise ValueError("external or unresolved schema reference") from None
-    except RecursionError:
-        raise ValueError("JSON/schema nesting exceeds decoder limit") from None
+    shared = _library()
+    load_contracts()
+    return shared.validate_verdict(raw, expected=expected)
 
 
 def main(argv: list[str] | None = None) -> int:

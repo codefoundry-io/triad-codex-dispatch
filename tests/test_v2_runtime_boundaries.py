@@ -132,4 +132,7 @@ def test_prepared_directory_selects_packet_as_reviewer_cwd_and_basis(round_fixtu
         allocation = mod.allocate_attempt(Path(basis["basis_file"]), name)
         assert allocation["adapter"]["cwd"] == request["prepared_dir"]
         if name == "codex":
-            assert f"The reviewed basis is at {request['prepared_dir']}." in allocation["invocation"]["arguments"]["message"]
+            entry = allocation["invocation"]["arguments"]["message"].split("The reviewed basis is at ", 1)[1]
+            path, end = json.JSONDecoder().raw_decode(entry)
+            assert path == request["prepared_dir"]
+            assert entry[end:].startswith(".")

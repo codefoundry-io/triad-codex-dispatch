@@ -3,7 +3,7 @@
 ## Scope and source boundary
 
 - Manage only the Codex-hosted TRIAD implementation. Treat the Claude-hosted `codefoundry-io/triad-dispatch` repository as a read-only reference. For shared defects, provide an evidence-backed fix prompt for its maintainer; do not modify that repository.
-- Shared-spec authoring and cross-host coordination follow [the shared authoring reference](https://github.com/codefoundry-io/triad-dispatch-spec/blob/main/reference/spec-authoring.md) (`R-AUTHORING-SYNC`). This is a maintainer reference, not an installed revision override.
+- Shared-spec authoring and cross-host coordination follow [the consolidated library authoring reference](https://github.com/codefoundry-io/triad-dispatch-lib/blob/2d1e62e7de6f33fa13a918a39579c6b5e74def00/spec/reference/spec-authoring.md) (`R-AUTHORING-SYNC`). Common changes belong in the library's `spec/` and implementation together. This is a maintainer reference, not an installed revision override; host distributions and releases remain independent.
 - Treat this checkout's plugin manifest, skills, scripts, tests, and public documentation as the development source surface. Do not edit an installed plugin cache or copied distribution as a substitute for source changes.
 - `migration/AGENTS.recommended.md` is shipped consumer guidance; it does not govern development of this checkout.
 

@@ -5,11 +5,9 @@ import copy
 import json
 from typing import Any, ClassVar
 
-from jsonschema import Draft202012Validator
 from pydantic import RootModel, model_validator
-from referencing import Registry
 
-from validate_v2 import BINDING_FIELDS, _json, load_contracts, validate_verdict
+from validate_v2 import BINDING_FIELDS, _json, _library, load_contracts, validate_verdict
 
 
 class LegVerdict(RootModel[dict[str, Any]]):
@@ -38,7 +36,10 @@ class LegVerdict(RootModel[dict[str, Any]]):
 
     @classmethod
     def model_json_schema(cls, **kwargs):
-        schema = load_contracts()["leg-verdict.schema.json"]
+        _library()
+        load_contracts()
+        from triad_dispatch_lib.contracts import load_contract
+        schema = load_contract()
         if cls._binding is not None:
             for field, value in cls._binding.items():
                 schema["properties"][field]["const"] = value
@@ -49,16 +50,9 @@ class LegVerdict(RootModel[dict[str, Any]]):
 
 def bound_verdict(expected: dict) -> type[LegVerdict]:
     """Bind one invocation without modifying another model or the shared schema."""
-    schema = load_contracts()["leg-verdict.schema.json"]
-    binding_schema = {
-        "type": "object", "additionalProperties": False,
-        "required": list(BINDING_FIELDS),
-        "properties": {field: schema["properties"][field] for field in BINDING_FIELDS},
-    }
-    if not Draft202012Validator(binding_schema, registry=Registry()).is_valid(expected):
-        raise ValueError("invalid expected v2 binding")
-    if (expected["family"] == "google") != (expected["route"] in ("agy", "gemini")):
-        raise ValueError("expected family and route disagree")
+    shared = _library()
+    load_contracts()
+    shared.validate_binding(expected)
 
     class BoundLegVerdict(LegVerdict):
         _binding: ClassVar[dict | None] = copy.deepcopy(expected)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.561 — 2026-10-15
+
+- Bundles the reviewed triad-dispatch-lib 0.1.0.dev3 implementation at 2d1e62e7de6f33fa13a918a39579c6b5e74def00 for explicit v2 JSON, binding, roster and prompt facades. Common spec and deterministic behavior are authored together in the library; host distributions remain independent.
+- Verifies complete package/license content with an independent pin and records source, artifact and bundle identities. Bootstrap verifies the bundled package and required schema APIs without installing dependencies.
+- Retains the concurrent CPython bytecode-publication correction and updates the bundled callback wait-setup cleanup, with a host distribution regression. Native spawning, classifiers, recovery exceptions and provider controls remain host-owned.
+- Refreshes Claude adoption and Gemini Argon Google-route handoffs. Source, native CI, formal review, installation and publication remain separately recorded evidence.
+- Encodes scalar prompt paths without losing CR/LF, quoting or non-ASCII filename identity; native invocation paths remain unchanged. Adds compatibility-resource parity checks and documents legacy helpers' shared-parser integrity dependency.
+- Reports missing/unexpected bundled inventory paths and preserves their cause in bootstrap recovery guidance, without admitting or removing conflicting files. The isolated verifier accepts correctly encoded temporary paths.
+
 ## 0.2.560 — 2026-10-12
 
 - Fixes public v2 guarded-worktree Gemini reviews whose required task and diff
