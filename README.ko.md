@@ -8,7 +8,8 @@
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
 `triad-dispatch-lib 0.1.0.dev4`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
-Claude는 별도로 배포하며 [이식 지침](docs/handoffs/claude-library-adoption.md)을 제공합니다.
+Claude는 별도로 배포하며 라이브러리의
+[dev4 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)를 사용합니다.
 소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)

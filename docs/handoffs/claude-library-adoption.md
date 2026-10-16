@@ -1,5 +1,11 @@
 # Claude host: adopt triad-dispatch-lib independently
 
+> Historical handoff for Codex 0.2.561 and library dev3 (2026-10-15).
+> The identities, unpublished status and diagnostic limits below describe that
+> snapshot, not the current package. For a new adoption, use the published
+> [dev4 release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev4)
+> and its [host adoption guide](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md).
+
 The owner will forward this handoff. It authorizes no message from the Codex
 implementation task and makes no claim that Claude has already adopted the library.
 

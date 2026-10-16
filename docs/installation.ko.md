@@ -34,7 +34,8 @@ wheel과 `triad-release.json`은
 
 원본·아티팩트·파일 해시는 `contracts/library-adoption.json`에 기록합니다.
 소스 반영, 공개 릴리스, 전역 설치, 새 세션 노출은 별도의 검증 결과입니다.
-Claude는 [이식 지침](handoffs/claude-library-adoption.md)에 따라 독립 적용합니다.
+Claude는 라이브러리의
+[dev4 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)에 따라 독립 적용합니다.
 
 <a id="agy-리뷰-프로필-설정--반영-대기-후보"></a>
 

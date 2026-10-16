@@ -37,8 +37,8 @@ command; do not delete or bypass the old managed-file verification.
 
 Library source provenance and file hashes are in `contracts/library-adoption.json`.
 The source candidate does not imply publication, global installation or a fresh
-session using the new runtime. Claude's independent port is described in the
-[handoff](handoffs/claude-library-adoption.md).
+session using the new runtime. For Claude's independent port, use the library's
+[dev4 adoption guide](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md).
 
 <a id="agy-review-profile-setup-pending-candidate"></a>
 
