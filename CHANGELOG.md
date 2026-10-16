@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.562 — 2026-10-17
+
+- Updates the bundled library to published `triad-dispatch-lib 0.1.0.dev4` at `087af94a7078de0ae9701fb057840b5492f51f66`, with the release wheel hash and complete package/license inventory recorded for reproducible verification.
+- Includes the new receipt module and fourth resource bundle in package integrity and archive checks. Existing v2 facade calls retain their contracts; new library APIs do not change host orchestration.
+- Adds coverage for the new managed files and documents the published library source. Python requirements and the normal Codex update procedure remain the same.
+
 ## 0.2.561 — 2026-10-15
 
 - Bundles the reviewed triad-dispatch-lib 0.1.0.dev3 implementation at 2d1e62e7de6f33fa13a918a39579c6b5e74def00 for explicit v2 JSON, binding, roster and prompt facades. Common spec and deterministic behavior are authored together in the library; host distributions remain independent.

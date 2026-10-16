@@ -8,7 +8,7 @@ under the same marketplace name.
 
 ## Bundled shared library
 
-This source includes the exact `triad-dispatch-lib 0.1.0.dev3` package under
+This source includes the exact `triad-dispatch-lib 0.1.0.dev4` package under
 `bin/triad_dispatch_lib/`; no separate library checkout or editable install is
 needed. Continue using the selected Python 3.12+ runtime and install the shipped
 `requirements.txt` there, including `referencing>=0.37,<1`. Bootstrap checks
@@ -17,11 +17,17 @@ selection behavior is unchanged.
 
 Maintainers verify generated files with `python3 scripts/vendor_library.py --check`.
 For the currently approved artifact, use `--wheel /absolute/path/to/wheel --source-commit
-2d1e62e7de6f33fa13a918a39579c6b5e74def00 --write` instead of editing generated files.
+087af94a7078de0ae9701fb057840b5492f51f66 --write` instead of editing generated files.
 Review its recorded artifact hash and library changes first. The refresh refuses
 modified or unexpected managed files; preserve and resolve those conflicts before
 retrying. This source maintenance check does not add edit-preservation guarantees
 to Codex's own plugin-cache replacement. Keep the existing update/removal procedure.
+
+Obtain the wheel and `triad-release.json` from the
+[pinned library release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev4).
+Check its artifact name, source commit, size and SHA-256 before refreshing.
+The complete package includes four resource bundles; partial module copies are
+not supported.
 
 A different approved source/content pin requires a maintainer transition: verify
 the old tree under its old pin, generate and verify the new package in an owned
