@@ -6,9 +6,10 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-`triad-dispatch-lib 0.1.0.dev3`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+`triad-dispatch-lib 0.1.0.dev4`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
-Claude는 별도로 배포하며 [이식 지침](docs/handoffs/claude-library-adoption.md)을 제공합니다.
+Claude는 별도로 배포하며 라이브러리의
+[dev4 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)를 사용합니다.
 소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)
@@ -241,6 +242,20 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.562 업그레이드
+
+포함된 라이브러리를 공개된
+[0.1.0.dev4 사전 릴리스](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev4)로
+갱신합니다. [적용 기록](contracts/library-adoption.json)은 릴리스 wheel과 소스,
+receipt 모듈 및 네 번째 리소스 번들을 포함한 전체 패키지를 고정합니다.
+기존 호스트 호출은 호환되며 리뷰 실행 방식은 유지합니다.
+
+[일반 업데이트 절차](docs/installation.ko.md#업데이트)에 따라 bootstrap을 다시
+실행하고 새 Codex 세션과 리뷰 기준을 준비하세요. 라이브러리 별도 설치는 필요
+없습니다. 다른 호스트 관리자는 라이브러리의
+[적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)와
+공개 아티팩트를 사용해 독립적으로 업데이트할 수 있습니다.
 
 ### 0.2.561 업그레이드
 
@@ -557,7 +572,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.561-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.562-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

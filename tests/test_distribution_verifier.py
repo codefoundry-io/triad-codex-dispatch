@@ -198,7 +198,7 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
         (fixture_repo / manifest).read_bytes()
     ).hexdigest()
     assert report["version"] == "0.2.533"
-    assert report["library_adoption"]["version"] == "0.1.0.dev3"
+    assert report["library_adoption"]["version"] == "0.1.0.dev4"
     assert report["os"] and report["architecture"] and report["python"]
     assert report["tests"]["skipped"] == 0
     assert report["tests"]["returncode"] == 0
@@ -231,6 +231,21 @@ def test_verifier_refuses_committed_damaged_library(fixture_repo):
     _git(fixture_repo, "commit", "-m", "damaged generated source")
     with pytest.raises(ValueError, match="hash mismatch"):
         verifier.verify_distribution(fixture_repo, fixture_repo / "_runs/distribution/damaged")
+
+
+@pytest.mark.parametrize("relative", ["receipt.py", "data/receipt-bundle/source-manifest.json", "data/receipt-bundle/contracts/receipt-fields.json"])
+@pytest.mark.parametrize("damage", ["missing", "tampered"])
+def test_distribution_refuses_committed_receipt_damage(fixture_repo, relative, damage):
+    target = fixture_repo / "bin/triad_dispatch_lib" / relative
+    assert target.is_file()
+    if damage == "missing":
+        target.unlink()
+    else:
+        target.write_bytes(target.read_bytes() + b"\nchanged\n")
+    _git(fixture_repo, "add", ".")
+    _git(fixture_repo, "commit", "-m", "damaged receipt inventory")
+    with pytest.raises(ValueError):
+        _load_verifier().verify_distribution(fixture_repo, fixture_repo / "_runs/distribution/receipt-damage")
 
 
 def test_verifier_ignores_external_pytest_configuration(

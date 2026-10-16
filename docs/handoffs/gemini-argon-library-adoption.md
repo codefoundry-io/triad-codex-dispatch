@@ -1,5 +1,11 @@
 # Gemini Argon: inspect and adopt the Google-route boundary
 
+> Historical handoff for Codex 0.2.561 and library dev3 (2026-10-15).
+> The package identity and diagnostic limits below describe that snapshot.
+> For a new adoption, use the published
+> [dev4 release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev4)
+> and its [host adoption guide](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md).
+
 This is a handoff for the owner to forward to the Argon agent. It is not an
 already executed Google-host migration or authorization to message another agent.
 There is no separate Gemini host in the current architecture: `gemini` and `agy`
