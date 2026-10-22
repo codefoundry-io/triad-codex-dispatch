@@ -390,9 +390,20 @@ and native envelope/event JSON before success, preserving primary failure
 precedence and malformed AGY-noise handling. Both reserved schema spellings
 (`verdict_schema:LegVerdict`, `verdict_schema.LegVerdict`) use the packaged file
 loader and require complete expected bindings before dispatch. Arbitrary schema
-imports retain their hardened opt-in; raw/custom replies are unchanged. No
+imports retain their hardened opt-in. Schema-free raw replies, direct custom-schema
+validation and other providers' custom-schema handling retain their existing behavior. No
 provider re-ask, permission change or broader transport guarantee is introduced.
 A result-file reader alone cannot recover evidence discarded by another caller.
+
+AGY schema admission, including legacy and custom schemas, strictly parses original
+JSON object event lines before metadata separation. Duplicate members and non-finite
+numbers are rejected in intermediate events as well as the terminal event; existing
+malformed-noise and primary terminal-failure handling is preserved. From the original
+terminal `structured_output` span, only undeclared top-level `toolAction` and
+`toolSummary` are separated as provider metadata. Declared fields and aliases, nested
+data, other unknown-field checks, schema constraints and invocation bindings retain
+their validation. Raw `run.stdout` is preserved, including both metadata values,
+under the existing output-custody rules; only the validated answer is projected.
 
 ## Standalone Google diagnostics
 

@@ -8,24 +8,33 @@ under the same marketplace name.
 
 ## Bundled shared library
 
-This source includes the exact `triad-dispatch-lib 0.1.0.dev4` package under
-`bin/triad_dispatch_lib/`; no separate library checkout or editable install is
-needed. Continue using the selected Python 3.12+ runtime and install the shipped
+This source includes the unpublished `triad-dispatch-lib 0.1.0.dev5` candidate at
+`184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f` under `bin/triad_dispatch_lib/`;
+no separate library checkout or editable install is needed. Continue using the
+selected Python 3.12+ runtime and install the shipped
 `requirements.txt` there, including `referencing>=0.37,<1`. Bootstrap checks
 prerequisites; reviews do not install dependencies. Existing launcher and runtime
 selection behavior is unchanged.
 
 Maintainers verify generated files with `python3 scripts/vendor_library.py --check`.
-For the currently approved artifact, use `--wheel /absolute/path/to/wheel --source-commit
-087af94a7078de0ae9701fb057840b5492f51f66 --write` instead of editing generated files.
+For the currently pinned candidate, run from the toolkit root instead of editing
+generated files:
+
+```bash
+python3 scripts/vendor_library.py --wheel /absolute/path/to/wheel \
+  --source-commit 184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f --write
+```
+
 Review its recorded artifact hash and library changes first. The refresh refuses
 modified or unexpected managed files; preserve and resolve those conflicts before
 retrying. This source maintenance check does not add edit-preservation guarantees
 to Codex's own plugin-cache replacement. Keep the existing update/removal procedure.
 
-Obtain the wheel and `triad-release.json` from the
-[pinned library release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev4).
-Check its artifact name, source commit, size and SHA-256 before refreshing.
+No dev5 release wheel or `triad-release.json` is published yet. The locally built
+candidate wheel used for this bundle is recorded in
+[`contracts/library-adoption.json`](../contracts/library-adoption.json), with
+`wheel_sha256` equal to `738ad14d7976ec83d85f1f3799cddb25e217e234c5db02f23a1f849caa662e4c`.
+Use that reviewed candidate artifact and verify its source and SHA-256 before refreshing.
 The complete package includes four resource bundles; partial module copies are
 not supported.
 
@@ -37,8 +46,9 @@ command; do not delete or bypass the old managed-file verification.
 
 Library source provenance and file hashes are in `contracts/library-adoption.json`.
 The source candidate does not imply publication, global installation or a fresh
-session using the new runtime. For Claude's independent port, use the library's
-[dev4 adoption guide](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md).
+session using the new runtime. Claude and AGY adopt independently; the library's
+[dev5 AGY metadata decision](https://github.com/codefoundry-io/triad-dispatch-lib/blob/184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f/spec/decisions/2026-10-22-agy-result-metadata.md)
+describes the shared change and host boundaries.
 
 <a id="agy-review-profile-setup-pending-candidate"></a>
 

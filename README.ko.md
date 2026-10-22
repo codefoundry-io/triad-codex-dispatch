@@ -9,7 +9,7 @@
 아직 공개되지 않은 `triad-dispatch-lib 0.1.0.dev5` 후보를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
 Claude와 AGY는 별도로 배포합니다. 라이브러리의
-[후보 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f/docs/host-adoption.md)를 참고하세요.
+[dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
 소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)
@@ -250,9 +250,10 @@ class, route에서 identity를 추론하지 않습니다.
 구조화된 답변은 요청한 스키마로 검증합니다. 스키마에 선언된 필드와 별칭은 기존처럼
 애플리케이션 데이터로 검증합니다. 알 수 없는 필드, 잘못된 JSON, 누락된 판정,
 불일치하는 바인딩과 terminal 실패 검사는 유지합니다.
-AGY 사용자 정의 스키마도 분리 전에 원본 JSON을 엄격히 파싱하므로, 이전 호출에서
-정규화될 수 있었던 중복 멤버와 비유한 숫자를 거부합니다. 직접 검증 함수와 다른
-공급자의 사용자 정의 스키마 처리는 기존 동작을 유지합니다.
+AGY 스키마 호출은 legacy와 사용자 정의 스키마를 포함해 분리 전에 원본 JSON 이벤트
+행을 엄격히 파싱하고 중복 멤버와 비유한 숫자를 거부합니다. 중간 이벤트에도 적용하며,
+깨진 로그 행은 기존 방식으로 처리합니다. 직접 검증 함수와 다른 공급자의 사용자 정의
+스키마 처리는 기존 동작을 유지합니다.
 
 포함된 라이브러리는 위에 기록한 미공개 dev5 후보입니다. 공개와 설치는 별도 단계이며,
 공개 후 일반 업데이트 절차를 사용합니다. 업데이트 후에는 새 리뷰를 시작해야 하며
@@ -1191,8 +1192,10 @@ Canonical wrapper도 성공 결과를 내보내기 전에 원본 답변과 nativ
 JSON 중복을 검사하며, 중복 판정은 추가 formal provider 호출 없이 schema failure로
 반환합니다. 예약 표기 `verdict_schema:LegVerdict`와 `verdict_schema.LegVerdict`는
 모두 패키지의 스키마 파일을 읽고 dispatch 전에 세 expected review binding을
-요구합니다. 사용자 정의 스키마, raw 조사, 깨진 AGY 로그 행 처리와 기존 provider
-실패 우선순위는 유지합니다. schema field나 리뷰 구성은 추가하지 않습니다.
+요구합니다. 직접 사용자 정의 스키마 검증과 다른 공급자의 처리는 기존 동작을 유지하며,
+AGY 스키마 호출은 [0.2.563](#02563-업그레이드)의 엄격한 파싱을 적용합니다.
+스키마 없는 raw 조사, 깨진 AGY 로그 행 처리와 기존 provider 실패 우선순위는 유지합니다.
+schema field나 리뷰 구성은 추가하지 않습니다.
 result-file reader만으로는 다른 호출자가 이미 없앤 중복을 복원할 수 없습니다.
 
 ## Google CLI 메타데이터 스냅샷

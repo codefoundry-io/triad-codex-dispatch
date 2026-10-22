@@ -8,22 +8,30 @@
 
 ## 포함된 공통 라이브러리
 
-이 소스는 정확한 `triad-dispatch-lib 0.1.0.dev4` 파일을
+이 소스는 아직 공개되지 않은 `triad-dispatch-lib 0.1.0.dev5` 후보를
+커밋 `184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f`에서 가져와
 `bin/triad_dispatch_lib/`에 포함합니다. 별도 라이브러리 checkout이나 editable
 설치는 필요 없습니다. 선택한 Python 3.12+ 환경에 배포본의 `requirements.txt`를
 설치하며 `referencing>=0.37,<1`을 사용합니다. 리뷰 실행 중 의존성을 설치하지
 않고 기존 launcher와 Python 선택 방식을 유지합니다.
 
 유지보수자는 `python3 scripts/vendor_library.py --check`로 생성 파일을 확인합니다.
-현재 승인된 아티팩트를 갱신할 때에는 생성 파일을 직접 수정하지 말고 검토한 wheel과 원본 커밋을 지정해
-`scripts/vendor_library.py --wheel /absolute/path/to/wheel --source-commit
-087af94a7078de0ae9701fb057840b5492f51f66 --write`를 사용합니다. 변경되거나 예상하지
+현재 고정된 후보를 갱신할 때에는 생성 파일을 직접 수정하지 말고 toolkit 루트에서 실행합니다.
+
+```bash
+python3 scripts/vendor_library.py --wheel /absolute/path/to/wheel \
+  --source-commit 184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f --write
+```
+
+검토한 아티팩트 해시와 라이브러리 변경을 먼저 확인합니다. 변경되거나 예상하지
 못한 관리 파일이 있으면 갱신을 거부하고 보존합니다. 이 검사는 Codex 자체의
 플러그인 캐시 교체 동작을 변경하지 않으므로 기존 업데이트·제거 절차를 따릅니다.
 
-wheel과 `triad-release.json`은
-[고정된 라이브러리 릴리스](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev4)에서
-받고, 갱신 전에 아티팩트 이름·원본 커밋·크기·SHA-256을 확인합니다.
+dev5 릴리스 wheel과 `triad-release.json`은 아직 공개되지 않았습니다. 이 번들에 사용한
+로컬 빌드 후보 wheel은 [`contracts/library-adoption.json`](../contracts/library-adoption.json)에
+기록되어 있으며, `wheel_sha256`은
+`738ad14d7976ec83d85f1f3799cddb25e217e234c5db02f23a1f849caa662e4c`입니다.
+검토한 후보 아티팩트를 사용하고 갱신 전에 원본 커밋과 SHA-256을 확인합니다.
 전체 패키지에는 네 리소스 번들이 포함되며 일부 모듈만 복사하는 방식은 지원하지 않습니다.
 
 다른 소스·콘텐츠 pin으로 전환할 때는 유지보수자가 기존 pin으로 기존 파일을
@@ -34,8 +42,8 @@ wheel과 `triad-release.json`은
 
 원본·아티팩트·파일 해시는 `contracts/library-adoption.json`에 기록합니다.
 소스 반영, 공개 릴리스, 전역 설치, 새 세션 노출은 별도의 검증 결과입니다.
-Claude는 라이브러리의
-[dev4 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)에 따라 독립 적용합니다.
+Claude와 AGY는 독립적으로 적용합니다. 공통 변경과 호스트 경계는 라이브러리의
+[dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
 
 <a id="agy-리뷰-프로필-설정--반영-대기-후보"></a>
 
