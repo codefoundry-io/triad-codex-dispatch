@@ -8,7 +8,7 @@
   "name": "triad-dispatch-lib",
   "schema_version": 1,
   "sha256": {
-    "bin/triad_dispatch_lib/__init__.py": "be8ef9340c3c37f116ba7632595c52d605659d826609030a3592293cbbece07b",
+    "bin/triad_dispatch_lib/__init__.py": "5e3eef3f1bc1792f6be2cadc784f2ddc42a429fa72ddeaea675cce5b71fabc3a",
     "bin/triad_dispatch_lib/agreement.py": "1087c64ad4fab3d3b14dc12485c11512b8cbdc95b2868fe6c78fc51b264c69bd",
     "bin/triad_dispatch_lib/bundle_manifest.py": "5e6fc1a31d0901ea82928817a76942f0ee73360e75f6e1fd53e07cd8ba6a0446",
     "bin/triad_dispatch_lib/contracts.py": "e9c56cd3b422087b767eb129b22e05dbb063b981f293d8868242dea3a5dff73a",
@@ -28,14 +28,14 @@
     "bin/triad_dispatch_lib/dispatch.py": "584a55b08c1e19d14c6fe3dbfe4de9cb393e95adaf46c5c3f0aa4a2b58dd3954",
     "bin/triad_dispatch_lib/errors.py": "66dcb87a6e4281f25f7dc371926b431ad5f90bfc40eaab72e018b4c1819cd930",
     "bin/triad_dispatch_lib/json_input.py": "cb9ae38d7143d8d1e9b47953dc63b6dc2206a27907d17669995e0da419534a3a",
-    "bin/triad_dispatch_lib/output.py": "7c1fd87a8b9a1fc121c89d706fed78283d6fad3dee4655218020a734348218d2",
+    "bin/triad_dispatch_lib/output.py": "1207d32f7d146301949fe45cb93d7ba88a981933ed70c4d1feb40c08ed171a57",
     "bin/triad_dispatch_lib/prompts.py": "dc47e3077e43387b7080bd8391318196fc7d520887e15b2c6c7100d0e1ab5ed9",
     "bin/triad_dispatch_lib/receipt.py": "c0e3d938ad1cc333e536abd20e63c316f7eafec99ec041b841da566af78b0c0d",
     "bin/triad_dispatch_lib/roster.py": "60a62e60eeff04cfb862305d285113a177855e354c35c9c0564c944573a53606",
     "bin/triad_dispatch_lib/verdict.py": "3b5514ceb4e0e0ab56d5046981ebeb5270ceb2a98d096270d106c2ea3f338fac",
     "vendor/triad-dispatch-lib.LICENSE": "64d25215d58f76fd170c4688ded0fb7bae5e83e4eeb890d222f02fa798428daa"
   },
-  "source_commit": "087af94a7078de0ae9701fb057840b5492f51f66",
-  "version": "0.1.0.dev4",
-  "wheel_sha256": "c5bfdf10c4ce81f431ec7f77106e4d77b1556ac9c7b6b01bdb6616f988e8b2cc"
+  "source_commit": "184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f",
+  "version": "0.1.0.dev5",
+  "wheel_sha256": "738ad14d7976ec83d85f1f3799cddb25e217e234c5db02f23a1f849caa662e4c"
 }

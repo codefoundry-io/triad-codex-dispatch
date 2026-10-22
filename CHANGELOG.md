@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.563 — 2026-10-22
+
+- Accepts AGY's undeclared top-level `toolAction` and `toolSummary` as provider metadata before validating the result. Raw output preserves both fields; declared application fields and aliases retain their validation.
+- Preserves strict verdict and binding checks, unknown-field rejection, original JSON checks, terminal failures and the existing bounded ERROR recovery rules.
+- Bundles the unpublished `triad-dispatch-lib 0.1.0.dev5` candidate at `184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f`, with independently pinned package inventory and wheel provenance. Host adoption and publication remain independent.
+
 ## 0.2.562 — 2026-10-17
 
 - Updates the bundled library to published `triad-dispatch-lib 0.1.0.dev4` at `087af94a7078de0ae9701fb057840b5492f51f66`, with the release wheel hash and complete package/license inventory recorded for reproducible verification.

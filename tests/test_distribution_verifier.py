@@ -198,7 +198,7 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
         (fixture_repo / manifest).read_bytes()
     ).hexdigest()
     assert report["version"] == "0.2.533"
-    assert report["library_adoption"]["version"] == "0.1.0.dev4"
+    assert report["library_adoption"]["version"] == "0.1.0.dev5"
     assert report["os"] and report["architecture"] and report["python"]
     assert report["tests"]["skipped"] == 0
     assert report["tests"]["returncode"] == 0

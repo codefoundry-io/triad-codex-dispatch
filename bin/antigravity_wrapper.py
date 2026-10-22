@@ -294,6 +294,36 @@ def _fail(
     return run
 
 
+def _declared_agy_fields(cls: Any) -> tuple[str, ...]:
+    """Preserve declared names/aliases; unresolved root schemas retain metadata."""
+    schema = cls.model_json_schema()
+    keep_all = ("toolAction", "toolSummary")
+    if not isinstance(schema.get("properties"), dict):
+        return keep_all
+    declared = set()
+    pending = [schema]
+    while pending:
+        node = pending.pop()
+        if not isinstance(node, dict) or "$ref" in node or "$dynamicRef" in node:
+            return keep_all
+        declared.update(node.get("properties", {}))
+        for key in ("allOf", "anyOf", "oneOf"):
+            pending.extend(node.get(key, []))
+        pending.extend(node[key] for key in ("if", "then", "else") if key in node)
+        pending.extend(node.get("dependentSchemas", {}).values())
+    for name, field in getattr(cls, "model_fields", {}).items():
+        declared.add(name)
+        for alias in (field.alias, field.validation_alias):
+            if isinstance(alias, str):
+                declared.add(alias)
+            elif alias is not None:
+                paths = alias.convert_to_aliases()
+                if paths and not isinstance(paths[0], list):
+                    paths = [paths]
+                declared.update(path[0] for path in paths if path and isinstance(path[0], str))
+    return tuple(sorted(declared))
+
+
 def _interpret_run(
     run: _common.RunResult,
     pydantic_cls: Any,
@@ -406,21 +436,29 @@ def _interpret_run(
             f"requested model {expected_model!r} but AGY exposed {route_conflict!r}",
         )
     if pydantic_cls is not None:
+        from validate_v2 import _library
+        shared = _library()
+        from triad_dispatch_lib.json_input import json_member_span
+
         original_check = getattr(pydantic_cls, "_triad_check_original_json", None)
-        if original_check is not None:
-            try:
-                for line in (run.stdout or "").split("\n"):
-                    if not line.lstrip().startswith("{"):
-                        continue
-                    try:
-                        # Hooks can fail before the decoder detects malformed suffixes.
-                        json.loads(line)
-                        original_check(line)
-                    except json.JSONDecodeError:
-                        continue  # Preserve the stream parser's malformed/noise handling.
-            except ValueError as error:
-                run.validation_error = str(error)
-                return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, str(error))
+        terminal_line = None
+        try:
+            for line in (run.stdout or "").split("\n"):
+                if not line.lstrip().startswith("{"):
+                    continue
+                try:
+                    # Preserve malformed/noise handling before strict original checks.
+                    json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                event = shared.parse_json(line)
+                if original_check is not None:
+                    original_check(line)
+                if event.get("event") == "result" and isinstance(event.get("result"), dict):
+                    terminal_line = line
+        except ValueError as error:
+            run.validation_error = str(error)
+            return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, str(error))
         structured = result.get("structured_output")
         if structured is None:
             run.validation_error = "terminal result has no structured_output"
@@ -430,7 +468,15 @@ def _interpret_run(
                 _common.EXIT_SCHEMA_FAIL,
                 run.validation_error,
             )
-        encoded = json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
+        try:
+            payload, _metadata = shared.separate_agy_metadata(
+                json_member_span(terminal_line, "result", "structured_output"),
+                declared_fields=_declared_agy_fields(pydantic_cls),
+            )
+        except ValueError as error:
+            run.validation_error = str(error)
+            return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, str(error))
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         valid, payload = validate_response(encoded, pydantic_cls)
         if not valid:
             run.validation_error = (

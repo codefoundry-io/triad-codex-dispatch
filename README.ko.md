@@ -6,10 +6,10 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-`triad-dispatch-lib 0.1.0.dev4`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+아직 공개되지 않은 `triad-dispatch-lib 0.1.0.dev5` 후보를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
-Claude는 별도로 배포하며 라이브러리의
-[dev4 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)를 사용합니다.
+Claude와 AGY는 별도로 배포합니다. 라이브러리의
+[후보 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f/docs/host-adoption.md)를 참고하세요.
 소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)
@@ -242,6 +242,18 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.563 업그레이드
+
+이 후보는 AGY 결과의 최상위 `toolAction`, `toolSummary`가 요청 스키마에 선언되지
+않았을 때 공급자 메타데이터로 분리합니다. 원본 출력에는 두 필드를 보존하며,
+구조화된 답변은 요청한 스키마로 검증합니다. 스키마에 선언된 필드와 별칭은 기존처럼
+애플리케이션 데이터로 검증합니다. 알 수 없는 필드, 잘못된 JSON, 누락된 판정,
+불일치하는 바인딩과 terminal 실패 검사는 유지합니다.
+
+포함된 라이브러리는 위에 기록한 미공개 dev5 후보입니다. 공개와 설치는 별도 단계이며,
+공개 후 일반 업데이트 절차를 사용합니다. 업데이트 후에는 새 리뷰를 시작해야 하며
+이전에 실패한 라운드가 승인으로 바뀌지는 않습니다.
 
 ### 0.2.562 업그레이드
 
@@ -572,7 +584,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.562-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.563-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
