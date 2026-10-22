@@ -93,14 +93,20 @@ def test_custom_schema_keeps_legacy_duplicate_handling():
 
 
 @pytest.mark.parametrize("route", ["claude", "gemini", "agy"])
-def test_custom_wrapper_schema_keeps_legacy_duplicate_handling(route, monkeypatch):
+def test_custom_wrapper_duplicate_handling_respects_route_contract(route, monkeypatch):
     class Custom(BaseModel):
         model_config = {"extra": "allow"}
     family = "claude" if route == "claude" else "google"
     answer = '{"content_digest":"old",' + _answer(family)[1:]
     result = _admit(route, _envelope(route, answer), Custom, monkeypatch)
-    assert result.exit_code == 0
-    assert result.validated["content_digest"] == "a" * 64
+    if route == "agy":
+        # AGY metadata separation requires strict original JSON for every schema.
+        assert result.exit_code == _common.EXIT_SCHEMA_FAIL
+        assert result.classification == "schema-fail"
+        assert result.final_answer == "" and result.validated is None
+    else:
+        assert result.exit_code == 0
+        assert result.validated["content_digest"] == "a" * 64
 
 
 @pytest.mark.parametrize("route", ["claude", "gemini", "agy"])

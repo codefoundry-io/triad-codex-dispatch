@@ -270,6 +270,9 @@ as provider metadata. Original output keeps these fields, while the structured
 answer is validated against the requested schema. Fields declared by that schema
 and their aliases remain application data. Unknown fields, invalid JSON, missing
 verdicts, mismatched bindings and terminal failures retain their existing checks.
+AGY custom schemas also parse the original JSON strictly before separation,
+rejecting duplicate members and non-finite values that older custom-schema calls
+could normalize. Direct validation and other providers keep their prior behavior.
 
 The bundled library is the unpublished dev5 candidate recorded above. Publication
 and installation are separate steps; once released, use the normal update flow.

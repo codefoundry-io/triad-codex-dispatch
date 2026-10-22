@@ -4,6 +4,7 @@
 
 - Accepts AGY's undeclared top-level `toolAction` and `toolSummary` as provider metadata before validating the result. Raw output preserves both fields; declared application fields and aliases retain their validation.
 - Preserves strict verdict and binding checks, unknown-field rejection, original JSON checks, terminal failures and the existing bounded ERROR recovery rules.
+- Custom AGY schemas now also reject duplicate members and non-finite JSON before metadata separation; direct validation and other providers retain their existing custom-schema behavior.
 - Bundles the unpublished `triad-dispatch-lib 0.1.0.dev5` candidate at `184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f`, with independently pinned package inventory and wheel provenance. Host adoption and publication remain independent.
 
 ## 0.2.562 — 2026-10-17
