@@ -12,7 +12,7 @@ named roster and per-CLI settings through [the v2 procedure](public-v2-review.md
 | Family | Formal route |
 |---|---|
 | Claude | `opus`, `xhigh`, 1,200-second wrapper deadline |
-| Google with `personal-google` | AGY 1.2.1 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline |
+| Google with `personal-google` | AGY 1.2.1 or newer, `gemini-4-argon-high`, `high`, 600-second wrapper deadline |
 | Google with `gemini-enterprise` | Prefer the same AGY route; when AGY is absent, use Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline |
 | Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits |
 
@@ -50,16 +50,16 @@ different billing route.
 
 ### Explicit workspace paired worktree opt-in
 
-Only when owner-governed workspace instructions require both Pro and Flash, use
+Only when owner-governed workspace instructions require both Argon and Flash, use
 the fixed paired `render-worktree` path. Keep one AGY selector and preflight
-`gemini-3.1-pro-high` / `high` and `gemini-3.8-flash-high` / `high` separately.
-Every family render receives the Pro receipt as `--google-preflight-receipt` and
+`gemini-4-argon-high` / `high` and `gemini-3.8-flash-high` / `high` separately.
+Every family render receives the Argon receipt as `--google-preflight-receipt` and
 the Flash receipt as `--google-flash-preflight-receipt`. For Flash only, add
 `--google-review-model gemini-3.8-flash-high` to the Google-family render. The
 renderer binds both receipts into the common digest and selects the correct
 member for dispatch. Each Google wrapper invocation uses its own selected
 preflight receipt and exact model/high arguments. Do not edit rendered metadata
-or use the focus overlay to turn Pro into Flash. The public default remains
+or use the focus overlay to turn Argon into Flash. The public default remains
 three-family; prepared rendering has no paired opt-in. Workspace instructions
 own extra-leg admission and conditional native advice, not this public schema.
 

@@ -2,6 +2,10 @@
 
 ## 0.2.563 — 2026-10-22
 
+- Select `gemini-4-argon-high` / `high` for the default AGY and fixed legacy
+  review route, including the Argon/Flash pair and source-skill examples. Explicit
+  raw/public-v2 model overrides and the separate Gemini CLI route remain supported.
+
 - Accepts AGY's undeclared top-level `toolAction` and `toolSummary` as provider metadata before validating the result. Raw output preserves both fields; declared application fields and aliases retain their validation.
 - Preserves strict verdict and binding checks, unknown-field rejection, original JSON checks, terminal failures and the existing bounded ERROR recovery rules.
 - Custom AGY schemas now also reject duplicate members and non-finite JSON before metadata separation; direct validation and other providers retain their existing custom-schema behavior.

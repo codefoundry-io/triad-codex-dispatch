@@ -93,10 +93,10 @@ def _google_selector_fixture(
             **preflight_common,
             "agy_version": "1.1.20",
             "effort": "high",
-            "model": "gemini-3.1-pro-high",
+            "model": "gemini-4-argon-high",
             "route_args": [
                 "--model",
-                "gemini-3.1-pro-high",
+                "gemini-4-argon-high",
                 "--effort",
                 "high",
             ],

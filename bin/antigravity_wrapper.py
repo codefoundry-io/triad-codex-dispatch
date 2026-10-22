@@ -31,7 +31,7 @@ READONLY_AGY_VERSION_FLOOR = (1, 2, 1)
 OFFSET_S = 10
 MIN_PRINT_TIMEOUT_S = 5
 HEADLESS_SOFTDENY_FLOOR = (1, 1, 3)
-FORMAL_AGY_MODEL = "gemini-3.1-pro-high"
+FORMAL_AGY_MODEL = "gemini-4-argon-high"
 FORMAL_AGY_EFFORT = "high"
 FORMAL_AGY_TIMEOUT = 600
 _WEB_EVIDENCE_PATH = Path(__file__).resolve().parents[1] / "prompts" / "investigation.md"
@@ -763,7 +763,7 @@ def main() -> int:
         args.model not in (FORMAL_AGY_MODEL, "gemini-3.8-flash-high") or args.effort != FORMAL_AGY_EFFORT
     ):
         _common.log(
-            "formal AGY preflight requires Pro High or Flash High with --effort high"
+            "formal AGY preflight requires Argon High or Flash High with --effort high"
         )
         return _common.EXIT_ARG_ERROR
 

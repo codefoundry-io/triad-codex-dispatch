@@ -111,11 +111,17 @@ Explicitly requested review web retains the five raw denies and refuses an exist
 rules also refuse before inference. No route creates or edits global permission
 or lease files; this path adds read-only project validation.
 Additional project denies remain intact. Preflight and dispatch must select the
-same UUID, bound through the existing hashed `route_args`; a paired Pro/Flash
+same UUID, bound through the existing hashed `route_args`; a paired Argon/Flash
 review must use one project. The owner keeps the project configuration stable
 during the call. This local check neither prevents arbitrary external
 configuration edits nor proves runtime policy
 attestation. Project provisioning remains an explicit owner operation.
+
+The current fixed AGY review base requests `gemini-4-argon-high`/`high`; the paired
+Flash member remains `gemini-3.8-flash-high`/`high`. Both preflight receipts and
+the selected member remain bound in the common review digest. This requested
+selection does not attest the provider's runtime identity or change permissions.
+Raw and public v2 explicit model selection retain their existing validation.
 
 Formal AGY calls use owner-provisioned native AGY CLI sign-in. Formal Gemini
 calls preserve the existing organization Sign in with

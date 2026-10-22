@@ -150,7 +150,7 @@ def test_new_names_preserve_documented_omitted_selection_defaults(adapter_case, 
         assert result["selected_model"] == "claude-opus-5-5"
         assert not any("--agent" in call for call in calls)
     else:
-        assert (result["route"], result["model"], result["effort"]) == ("agy", "gemini-3.1-pro-high", "high")
+        assert (result["route"], result["model"], result["effort"]) == ("agy", "gemini-4-argon-high", "high")
 
 
 @pytest.mark.parametrize("fault", ["selected-route-missing", "empty-claude-selection", "native-default-unexposed"])

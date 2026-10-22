@@ -265,6 +265,11 @@ enforces it (summarized under [Security](#security) below).
 
 ### Upgrading to 0.2.563
 
+The current AGY base review model is `gemini-4-argon-high` with `high` effort,
+replacing Pro 3.1 in the fixed legacy route and Argon/Flash pair. The Flash member
+remains `gemini-3.8-flash-high`/`high`. Raw and public v2 explicit model overrides
+retain their existing semantics; the Gemini CLI route keeps its own model selection.
+
 This candidate accepts AGY's undeclared top-level `toolAction` and `toolSummary`
 as provider metadata. Original output keeps these fields, while the structured
 answer is validated against the requested schema. Fields declared by that schema
@@ -588,7 +593,7 @@ from each required family, and fresh complete rounds after bounded fixes. Batch,
 packet, receipt, PTY, and sentinel review transports are removed. AGY requires
 1.1.20 or newer and uses native `stream-json`; the formal plan-mode route
 passes native `--json-schema`, consumes `structured_output`, and validates it
-locally. It passes `gemini-3.1-pro-high` with `high` effort. A formally bound
+locally. It passes `gemini-4-argon-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
@@ -607,13 +612,13 @@ native. Ordinary `codex` remains the normal path.
 
 An explicit workspace four-leg gate can additionally use AGY
 `gemini-3.8-flash-high` at `high` through the guarded-worktree renderer. Select
-one AGY route, preflight Pro and Flash separately, and pass the Pro receipt as
+one AGY route, preflight Argon and Flash separately, and pass the Argon receipt as
 `--google-preflight-receipt` plus the Flash receipt as
 `--google-flash-preflight-receipt` to **every** `render-worktree` call. Both exact
 receipts enter the common digest. For the Flash prompt add
 `--family google --google-review-model gemini-3.8-flash-high`; dispatch it with
 its own Flash preflight receipt and matching model/high arguments. No hand-edited
-Pro prompt or Pro receipt can stand in for Flash custody. This fixed opt-in does
+Argon prompt or Argon receipt can stand in for Flash custody. This fixed opt-in does
 not change the public three-family default, prepared-directory renderer, or
 `LegVerdict` fields, and does not configure a workspace's admission composition.
 
@@ -1221,7 +1226,7 @@ the wrapper refuses a missing rule without changing owner configuration.
 A true condition (public v2 standing authorization or a legacy direct request) instead refuses
 that known whole-URL deny before inference and leaves it intact. The
 existing preflight `route_args` and receipt hash bind it to the rendered review;
-paired Pro/Flash preflights must select the same project. Keep the project
+paired Argon/Flash preflights must select the same project. Keep the project
 configuration stable throughout the call. This is a configured native permission
 boundary, not OS confinement or runtime policy attestation. Omitting `--project`
 skips project-record validation; global settings remain untouched. See the

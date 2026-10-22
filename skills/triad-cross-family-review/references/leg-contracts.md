@@ -204,7 +204,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --expected-review-id "$review_id" \
   --cwd "$review_target_cwd" \
   --sandbox read-only \
-  --model gemini-3.1-pro-high \
+  --model gemini-4-argon-high \
   --effort high \
   --preflight-only \
   > "$google_preflight_file"
@@ -247,7 +247,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --google-preflight-receipt "$google_preflight_file" \
   --cwd "$review_target_cwd" \
   --sandbox read-only \
-  --model gemini-3.1-pro-high \
+  --model gemini-4-argon-high \
   --effort high \
   --timeout 600 \
   --pydantic verdict_schema:LegVerdict \
@@ -281,7 +281,7 @@ route without `--project`; do not silently repoint an existing project.
 
 The existing preflight `route_args` ends with `--project <UUID>` and is bound by
 the receipt hash. Pass the identical UUID at dispatch; keep the project record
-stable for the full call. In a paired Pro/Flash review, both preflights use the
+stable for the full call. In a paired Argon/Flash review, both preflights use the
 same project UUID. Each family render still receives the unchanged receipts;
 do not add metadata fields or rewrite rendered prompts. Omitting `--project`
 skips project-record validation. Project provisioning requires owner authority
@@ -379,7 +379,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --prompt-file "$investigation_prompt_file" \
   --cwd "$investigation_cwd" \
   --sandbox read-only --web \
-  --model gemini-3.1-pro-high --effort high --timeout 600
+  --model gemini-4-argon-high --effort high --timeout 600
 ```
 
 An optional custom `--pydantic` schema remains available; do not pass formal

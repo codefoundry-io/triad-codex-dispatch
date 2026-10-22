@@ -145,7 +145,7 @@ def test_c72_legacy_preflight_roundtrips_unicode_profile_path(tmp_path, monkeypa
     monkeypatch.setattr(wrapper, "_probe_agy_version", lambda _: (1, 3, 2))
     selector, _, _ = _google_selector_fixture(tmp_path)
     monkeypatch.setattr(sys, "argv", ["antigravity_wrapper.py", "--prompt", "preflight",
-        "--cwd", str(tmp_path), "--sandbox", "read-only", "--model", "gemini-3.1-pro-high",
+        "--cwd", str(tmp_path), "--sandbox", "read-only", "--model", "gemini-4-argon-high",
         "--effort", "high", "--expected-review-id", "review-r1",
         "--google-selector-receipt", str(selector), "--preflight-only"])
     assert wrapper.main() == 0
@@ -167,7 +167,7 @@ def test_c72_preflight_refuses_unprovisioned_profile(tmp_path, monkeypatch, caps
     monkeypatch.setattr(wrapper._common, "_run_once", lambda *a, **k: pytest.fail("provider started"))
     selector, _, _ = _google_selector_fixture(tmp_path)
     monkeypatch.setattr(sys, "argv", ["antigravity_wrapper.py", "--prompt", "preflight",
-        "--cwd", str(tmp_path), "--sandbox", "read-only", "--model", "gemini-3.1-pro-high",
+        "--cwd", str(tmp_path), "--sandbox", "read-only", "--model", "gemini-4-argon-high",
         "--effort", "high", "--expected-review-id", "review-r1",
         "--google-selector-receipt", str(selector), "--preflight-only"])
     assert wrapper.main() == 65

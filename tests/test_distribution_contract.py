@@ -140,7 +140,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
 
     for route_contract in (
         "Claude | `opus`, `xhigh`, 1,200-second wrapper deadline",
-        "AGY 1.2.1 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline",
+        "AGY 1.2.1 or newer, `gemini-4-argon-high`, `high`, 600-second wrapper deadline",
         "Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline",
         'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits',
     ):
@@ -172,7 +172,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     for provider_specific_detail in (
         "--permission-mode plan",
         "--approval-mode plan",
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         "AGY native tool names",
     ):
         assert provider_specific_detail not in prompt_contract
@@ -225,7 +225,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             '--google-preflight-receipt "$google_preflight_file"',
             '--cwd "$review_target_cwd"',
             "--sandbox read-only",
-            "--model gemini-3.1-pro-high",
+            "--model gemini-4-argon-high",
             "--effort high",
             "--timeout 600",
             "--pydantic verdict_schema:LegVerdict",
@@ -389,7 +389,7 @@ def test_google_preflight_blocks_bind_exact_provider_free_contract() -> None:
         '  --expected-review-id "$review_id" \\',
         '  --cwd "$review_target_cwd" \\',
         "  --sandbox read-only \\",
-        "  --model gemini-3.1-pro-high \\",
+        "  --model gemini-4-argon-high \\",
         "  --effort high \\",
         "  --preflight-only \\",
         '  > "$google_preflight_file"',

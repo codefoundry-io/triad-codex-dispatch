@@ -252,7 +252,7 @@ def _google_preflight_metadata(
         or (
             receipt.route == "agy"
             and (
-                receipt.model not in ("gemini-3.1-pro-high", "gemini-3.8-flash-high")
+                receipt.model not in ("gemini-4-argon-high", "gemini-3.8-flash-high")
                 or receipt.effort != "high"
                 or not _valid_agy_route_args(receipt.route_args, receipt.model)
             )
@@ -551,7 +551,7 @@ def validate_google_preflight_receipt(
             or not isinstance(record["route_args"], list)
             or not all(isinstance(value, str) for value in record["route_args"])
             or not record["agy_version"].strip()
-            or record["model"] not in ("gemini-3.1-pro-high", "gemini-3.8-flash-high")
+            or record["model"] not in ("gemini-4-argon-high", "gemini-3.8-flash-high")
             or record["effort"] != "high"
             or not _valid_agy_route_args(record["route_args"], record["model"])
         ):
@@ -634,7 +634,7 @@ def validate_google_selector_prompt(
 def validate_google_pair_metadata(metadata: dict[str, object], model: str) -> None:
     """Validate the fixed opt-in pair and its shared guarded-worktree digest."""
     pair = metadata.get("google_preflight_pair")
-    models = {"gemini-3.1-pro-high", "gemini-3.8-flash-high"}
+    models = {"gemini-4-argon-high", "gemini-3.8-flash-high"}
     fields = {"google_preflight_model", "google_preflight_effort", "google_preflight_receipt_sha256"}
     if not isinstance(pair, dict) or set(pair) != models or model not in models:
         raise RoundIntegrityError("formal prompt requires the fixed Google preflight pair")
@@ -2201,12 +2201,12 @@ def render_worktree_review_prompt(brief: WorktreeReviewBrief) -> str:
     if flash is not None:
         if flash.review_web_authorized != brief.review_web_authorized:
             raise RoundIntegrityError("paired preflight web authorization mismatch")
-        if (receipt.route != "agy" or receipt.model != "gemini-3.1-pro-high"
+        if (receipt.route != "agy" or receipt.model != "gemini-4-argon-high"
                 or flash.model != "gemini-3.8-flash-high" or flash.review_id != review_id
                 or _google_selector_metadata(flash) != _google_selector_metadata(receipt)
                 or flash.route_args[4:] != receipt.route_args[4:]
                 or flash.preflight_receipt_sha256 == receipt.preflight_receipt_sha256):
-            raise RoundIntegrityError("paired Google preflights must bind Pro and Flash to one selector")
+            raise RoundIntegrityError("paired Google preflights must bind Argon and Flash to one selector")
         pair = {receipt.model: _google_preflight_metadata(receipt),
                 flash.model: _google_preflight_metadata(flash)}
         if requested_model not in pair or (brief.family != "google" and requested_model != receipt.model):
@@ -2409,7 +2409,7 @@ def _parser() -> argparse.ArgumentParser:
     render_worktree.add_argument("--google-selector-receipt", type=Path, required=True)
     render_worktree.add_argument("--google-preflight-receipt", type=Path, required=True)
     render_worktree.add_argument("--google-flash-preflight-receipt", type=Path)
-    render_worktree.add_argument("--google-review-model", choices=("gemini-3.1-pro-high", "gemini-3.8-flash-high"))
+    render_worktree.add_argument("--google-review-model", choices=("gemini-4-argon-high", "gemini-3.8-flash-high"))
     render_worktree.add_argument("--web-authorized", action="store_true", help="Owner explicitly requested web for this round")
     render_worktree.add_argument("--native-web-available", action="store_true", help="Current host exposes native web tools")
     render_worktree.add_argument("--objective", required=True)

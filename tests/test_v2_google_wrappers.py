@@ -34,7 +34,7 @@ def route(request, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(_common, "_LOG_DIR_CONFIGURED", True)
     monkeypatch.setenv("TRIAD_WRAPPER_ALLOWED_ROOTS", str(home))
     monkeypatch.setenv("TRIAD_WRAPPER_HARDENED", "1")
-    model = "gemini-3.1-pro-high" if name == "agy" else "gemini-3.1-pro-preview"
+    model = "gemini-4-argon-high" if name == "agy" else "gemini-3.1-pro-preview"
     calls = []
 
 
@@ -178,8 +178,8 @@ def test_agy_metadata_does_not_bypass_v2_schema_or_any_binding(route, change):
     assert output == "" and len(route["calls"]) == 1
 
 
-@pytest.mark.parametrize("model", ["gemini-3.1-pro-high", "gemini-3.8-flash-high"])
-def test_agy_pro_and_flash_emit_singleton_bound_route_schema(route, model, monkeypatch):
+@pytest.mark.parametrize("model", ["gemini-4-argon-high", "gemini-3.8-flash-high", "gemini-3.1-pro-high"])
+def test_agy_explicit_models_emit_singleton_bound_route_schema(route, model, monkeypatch):
     if route["name"] != "agy":
         pytest.skip("AGY JSON schema transport contract")
     route["model"] = model
