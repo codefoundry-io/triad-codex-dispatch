@@ -11,24 +11,21 @@ Unreleased candidate; status updated 2026-10-23.
 - Accepts AGY's undeclared top-level `toolAction` and `toolSummary` as provider metadata before validating the result. Raw output preserves both fields; declared application fields and aliases retain their validation.
 - Preserves strict verdict and binding checks, unknown-field rejection, original JSON checks, terminal failures and the existing bounded ERROR recovery rules.
 - Custom AGY schemas now also reject duplicate members and non-finite JSON before metadata separation; direct validation and other providers retain their existing custom-schema behavior.
-- Bundles the unpublished `triad-dispatch-lib 0.1.0.dev5` candidate at `184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f`, with independently pinned package inventory and wheel provenance. Host adoption and publication remain independent.
+- Bundles the published `triad-dispatch-lib 0.1.0.dev5` prerelease at `859f27c07c1123e87b50344f587999a0cbc172a6`, with independently pinned package inventory and release-wheel provenance. The package and license bytes are unchanged from the reviewed candidate; host adoption and publication remain independent.
 - Corrects the paired web-review guidance from Pro/Flash to Argon/Flash. At
   documentation basis `5110c25fac3c8b9ef623799a0dde0f2b12b2ace0`, a fresh focused
   check and 66 relevant regressions passed, with valid source-skill metadata.
   The full runtime suite at `8de3977fc8170383cb940be83c9e23eeace07d89` passed
   2,611 tests with 5 skips; these are separate verification results.
-- Release remains blocked: round `20261023-codex-agy-argon-r4-6b0f21` at `5110c25`
-  closed `ADMITTED_NOT_SAFE` (three `SAFE`, one `NOT-SAFE`/Major), with matching
-  final integrity. Multiple result events plus non-JSON Unicode whitespace can
-  make status and payload validation select different terminal events. The
-  mechanism is confirmed by static tracing; vendor occurrence has not been
-  observed, and this documentation update does not fix it.
-- Before release, bind extraction to the selected terminal or refuse inconsistent
-  input, add earlier-SAFE/later-NOT-SAFE and missing-structured-output regressions,
-  and obtain a fresh complete host review. Retain the separate damaged-inventory
-  artifact-persistence limit. After library dev5 publication, verify and refresh
-  released-artifact provenance before host release. Follow-up details and current
-  CI are tracked in [PR #47](https://github.com/codefoundry-io/triad-codex-dispatch/pull/47).
+- Refuses a result wrapped in non-JSON Unicode whitespace before extracting a
+  payload from an earlier result. Regression tests reproduce both an earlier
+  SAFE/later NOT-SAFE mismatch and an uncaught missing-field exception; ordinary
+  JSON whitespace retains last-result selection. Vendor occurrence is unobserved.
+- The prior round `20261023-codex-agy-argon-r4-6b0f21` at `5110c25` closed
+  `ADMITTED_NOT_SAFE` with matching integrity. Its terminal-selection finding is
+  corrected here; release still requires a fresh complete host review. Retain
+  the separate damaged-inventory artifact-persistence limit. Follow-up evidence
+  and CI are tracked in [PR #47](https://github.com/codefoundry-io/triad-codex-dispatch/pull/47).
 
 The recorded reviews apply to their named bases; this release-note update does
 not claim new formal approval, publication or installation.

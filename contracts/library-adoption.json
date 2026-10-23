@@ -35,7 +35,7 @@
     "bin/triad_dispatch_lib/verdict.py": "3b5514ceb4e0e0ab56d5046981ebeb5270ceb2a98d096270d106c2ea3f338fac",
     "vendor/triad-dispatch-lib.LICENSE": "64d25215d58f76fd170c4688ded0fb7bae5e83e4eeb890d222f02fa798428daa"
   },
-  "source_commit": "184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f",
+  "source_commit": "859f27c07c1123e87b50344f587999a0cbc172a6",
   "version": "0.1.0.dev5",
-  "wheel_sha256": "738ad14d7976ec83d85f1f3799cddb25e217e234c5db02f23a1f849caa662e4c"
+  "wheel_sha256": "833d55e9bf394885423bf1ed954a972747e1968b52b911b5253a9b7971512c7f"
 }

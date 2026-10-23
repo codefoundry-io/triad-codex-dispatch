@@ -6,7 +6,7 @@ import re
 import stat
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f"
+COMMIT = "859f27c07c1123e87b50344f587999a0cbc172a6"
 VERSION = "0.1.0.dev5"
 # SHA-256 of the canonical full package + MIT-license path/digest inventory
 # inspected at COMMIT. Independent of generated adoption records and wheel ZIP

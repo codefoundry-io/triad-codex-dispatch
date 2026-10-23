@@ -447,8 +447,8 @@ def _interpret_run(
                 if not line.lstrip().startswith("{"):
                     continue
                 try:
-                    # Preserve malformed/noise handling before strict original checks.
-                    json.loads(line)
+                    # Match stream candidate recognition; strictly validate the untouched line below.
+                    json.loads(line.strip())
                 except json.JSONDecodeError:
                     continue
                 event = shared.parse_json(line)

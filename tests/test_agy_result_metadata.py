@@ -153,3 +153,48 @@ def test_original_invalid_metadata_is_rejected_before_custom_schema_projection(f
     result = interpret(None, raw=raw)
     assert result.exit_code == _common.EXIT_SCHEMA_FAIL
     assert result.final_answer == "" and result.validated is None
+
+
+@pytest.mark.parametrize("schema", ["legacy", "v2", "custom"])
+@pytest.mark.parametrize("edge", ["\u00a0", "\u2003"])
+def test_schema_rejects_unicode_wrapped_terminal_instead_of_earlier_answer(schema, edge):
+    if schema == "legacy":
+        earlier = _formal_payload()
+        later = {**earlier, "verdict": "NOT-SAFE", "open_questions": ["Required fact missing"]}
+        cls = LegVerdict
+    elif schema == "v2":
+        earlier = verdict()
+        later = {**earlier, "verdict": "DO NOT MERGE", "open_questions": ["Required fact missing"]}
+        cls = bound_verdict(binding(earlier))
+    else:
+        earlier, later, cls = {"ok": True}, {"ok": False}, Answer
+    first = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "structured_output": earlier}})
+    last = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "structured_output": later}})
+    result = interpret(None, cls, raw=first + "\n" + edge + last + edge)
+    assert result.exit_code == _common.EXIT_SCHEMA_FAIL
+    assert result.classification == "schema-fail"
+    assert result.validated is None and result.final_answer == ""
+
+
+def test_unicode_wrapped_terminal_does_not_extract_missing_field_from_earlier_event():
+    first = json.dumps({"event": "result", "result": {"status": "SUCCESS"}})
+    last = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "structured_output": {"ok": False}}})
+    result = interpret(None, raw=first + "\n\u00a0" + last + "\u00a0")
+    assert result.exit_code == _common.EXIT_SCHEMA_FAIL
+    assert result.validated is None and result.final_answer == ""
+
+
+def test_json_whitespace_keeps_last_negative_terminal_without_borrowing_earlier_answer():
+    earlier = _formal_payload()
+    later = {**earlier, "verdict": "NOT-SAFE", "open_questions": ["Required fact missing"]}
+    first = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "structured_output": earlier}})
+    last = json.dumps({"event": "result", "result": {
+        "status": "SUCCESS", "structured_output": later}})
+    result = interpret(None, LegVerdict, raw=first + "\n \t" + last + "\r ")
+    assert result.exit_code == 0
+    assert result.validated == later
+    assert json.loads(result.final_answer)["verdict"] == "NOT-SAFE"

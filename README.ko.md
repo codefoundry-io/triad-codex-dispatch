@@ -6,10 +6,10 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-아직 공개되지 않은 `triad-dispatch-lib 0.1.0.dev5` 후보를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+공개된 `triad-dispatch-lib 0.1.0.dev5` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
 Claude와 AGY는 별도로 배포합니다. 라이브러리의
-[dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/184e9bf6b43197bf4b93b2fd1f0466bdb5cbf24f/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
+[dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/859f27c07c1123e87b50344f587999a0cbc172a6/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
 소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)
@@ -257,11 +257,13 @@ class, route에서 identity를 추론하지 않습니다.
 불일치하는 바인딩과 terminal 실패 검사는 유지합니다.
 AGY 스키마 호출은 legacy와 사용자 정의 스키마를 포함해 분리 전에 원본 JSON 이벤트
 행을 엄격히 파싱하고 중복 멤버와 비유한 숫자를 거부합니다. 중간 이벤트에도 적용하며,
-깨진 로그 행은 기존 방식으로 처리합니다. 직접 검증 함수와 다른 공급자의 사용자 정의
+깨진 로그 행은 기존 방식으로 처리합니다. 결과 앞뒤에 JSON이 허용하지 않는 유니코드
+공백이 있으면 앞선 답변을 검증하지 않고 거부합니다. 직접 검증 함수와 다른 공급자의 사용자 정의
 스키마 처리는 기존 동작을 유지합니다.
 
-포함된 라이브러리는 위에 기록한 미공개 dev5 후보입니다. 공개와 설치는 별도 단계이며,
-공개 후 일반 업데이트 절차를 사용합니다. 업데이트 후에는 새 리뷰를 시작해야 하며
+포함된 라이브러리는 위에 기록한 공개 dev5 사전 릴리스입니다. 이 호스트 후보는
+별도의 리뷰와 릴리스가 필요하며, 공개 후 일반 업데이트 절차를 사용합니다.
+호스트 공개와 설치는 별도 단계입니다. 업데이트 후에는 새 리뷰를 시작해야 하며
 이전에 실패한 라운드가 승인으로 바뀌지는 않습니다.
 
 ### 0.2.562 업그레이드
