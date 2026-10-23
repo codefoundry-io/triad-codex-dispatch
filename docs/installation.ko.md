@@ -8,29 +8,30 @@
 
 ## 포함된 공통 라이브러리
 
-이 소스는 공개된 `triad-dispatch-lib 0.1.0.dev5` 사전 릴리스를
-커밋 `859f27c07c1123e87b50344f587999a0cbc172a6`에서 가져와
+이 소스는 공개된 `triad-dispatch-lib 0.1.0.dev6` 사전 릴리스를
+커밋 `1872227abd42553635c733e0aa228548a577a732`에서 가져와
 `bin/triad_dispatch_lib/`에 포함합니다. 별도 라이브러리 checkout이나 editable
 설치는 필요 없습니다. 선택한 Python 3.12+ 환경에 배포본의 `requirements.txt`를
 설치하며 `referencing>=0.37,<1`을 사용합니다. 리뷰 실행 중 의존성을 설치하지
-않고 기존 launcher와 Python 선택 방식을 유지합니다.
+않습니다. [공용 runtime](shared-runtime.ko.md)은 기존 legacy consumer를
+기본값으로 보존하며 설치된 Codex skill은 검증된 보존 binding을 선택합니다.
 
 유지보수자는 `python3 scripts/vendor_library.py --check`로 생성 파일을 확인합니다.
 현재 고정된 릴리스를 갱신할 때에는 생성 파일을 직접 수정하지 말고 toolkit 루트에서 실행합니다.
 
 ```bash
 python3 scripts/vendor_library.py --wheel /absolute/path/to/wheel \
-  --source-commit 859f27c07c1123e87b50344f587999a0cbc172a6 --write
+  --source-commit 1872227abd42553635c733e0aa228548a577a732 --write
 ```
 
 검토한 아티팩트 해시와 라이브러리 변경을 먼저 확인합니다. 변경되거나 예상하지
 못한 관리 파일이 있으면 갱신을 거부하고 보존합니다. 이 검사는 Codex 자체의
 플러그인 캐시 교체 동작을 변경하지 않으므로 기존 업데이트·제거 절차를 따릅니다.
 
-[dev5 릴리스](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev5)에
+[dev6 릴리스](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev6)에
 wheel과 `triad-release.json`이 공개되었습니다. 이 번들에 사용한 릴리스 wheel은 [`contracts/library-adoption.json`](../contracts/library-adoption.json)에
 기록되어 있으며, `wheel_sha256`은
-`833d55e9bf394885423bf1ed954a972747e1968b52b911b5253a9b7971512c7f`입니다.
+`5baf86483fe04935b2e21654508678eb21f7003a0038fb3875355a2e2967bfdc`입니다.
 갱신 전에 릴리스 manifest, 원본 커밋과 wheel SHA-256을 확인합니다.
 전체 패키지에는 네 리소스 번들이 포함되며 일부 모듈만 복사하는 방식은 지원하지 않습니다.
 
@@ -175,7 +176,9 @@ Python, 플러그인 경로는 해당 workspace의 쓰기 허용 경로 밖에 �
 Python 의존성이 없다면 출력된 requirements 설치 명령을 사용할 Python 환경에서
 실행한 뒤 같은 bootstrap 명령을 다시 실행합니다.
 
-bootstrap은 `~/.local/bin`에 launcher 4개를, `~/.config/triad-codex-dispatch/`에
+bootstrap은 공용 launcher 4개를 검증하여 `~/.local/bin`에 설치하고 보존 Codex
+binding을 등록합니다. 지원하는 이관은 [공용 runtime 안내](shared-runtime.ko.md)를
+따릅니다. `~/.config/triad-codex-dispatch/`에
 classifier 파일을 설치합니다. 기존 Codex 설정, 권한 규칙과 인증 정보는 보존합니다.
 로그인이나 의존성 설치를 자동으로 수행하지 않습니다.
 
@@ -302,7 +305,9 @@ prompt를 보내지 않고 `/model` 화면을 확인할 수 있습니다. 이는
 ## 설치 확인
 
 `codex plugin list --json`에서 TRIAD의 설치 버전을 확인하세요. 대상 프로젝트에서
-`command -v review_round.py`가 설치된 launcher를 가리키는지 확인한 다음
+`command -v review_round.py`가 공용 launcher를 가리키는지 확인하고 canonical plugin
+root로 `python3 "$plugin_root/bin/shared_runtime.py" resolve --plugin-root "$plugin_root" --json`을
+실행해 보존 toolkit과 binding을 검증합니다. 명령 이름만으로 Codex를 식별하지 않습니다.
 **새 Codex 세션**을 열고 TRIAD 스킬 4개가 보이는지 확인합니다.
 `.agents/skills/`에 같은 스킬을 별도로 복사하지 마세요.
 
@@ -314,14 +319,23 @@ Gemini 구버전 CLI 사용은 `triad-gemini-dispatch`, AGY는
 
 ## 업데이트
 
-설치 캐시를 확실히 교체하려면 먼저 현재 설치된 bootstrap의 제거 명령을 출력합니다:
+직접 launcher를 처음 공용으로 이관할 때는 새로 검증한 bootstrap이 기존 legacy
+binding을 검증·보존할 때까지 원래 launcher 네 개와 toolkit을 유지합니다. 기존
+제거 스크립트를 먼저 실행하지 마세요. Plugin manager가 이전 cache를 유지할 수
+없으면 검증한 릴리스를 안정된 로컬 Git 경로(경로 B)에 두고 새 bootstrap을 먼저
+실행한 뒤 cache를 교체합니다. 직접 라운드나 보존 legacy 대상이 사용하는 원래
+cache는 유지하며 최종 설치 root에서도 bootstrap을 실행해 등록합니다.
+[보장 범위](shared-runtime.ko.md#라운드-업데이트와-제거)를 확인하세요.
+
+이미 공용으로 설치된 cache를 교체하려면 먼저 해당 bootstrap의 제거 명령을 출력합니다:
 
 ```bash
 python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
 ```
 
-캐시를 삭제하기 전에 출력된 명령을 실행하세요. 사용자 작성 설정과 학습된 classifier
-patch는 보존됩니다. 제거가 실패하면 보고된 문제를 해결한 뒤 계속하세요.
+캐시를 삭제하기 전에 출력된 명령을 실행하세요. 해당 설치 receipt만 등록 해제하고
+공용 명령·binding·자산, 사용자 작성 설정과 학습된 classifier patch를 보존합니다.
+제거가 실패하면 보고된 문제를 해결한 뒤 계속하세요.
 마켓플레이스 등록을 유지하면서 해당 플러그인만 제거합니다:
 
 ```bash

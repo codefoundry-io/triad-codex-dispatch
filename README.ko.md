@@ -6,7 +6,7 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-공개된 `triad-dispatch-lib 0.1.0.dev5` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+공개된 `triad-dispatch-lib 0.1.0.dev6` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
 Claude와 AGY는 별도로 배포합니다. 라이브러리의
 [dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/859f27c07c1123e87b50344f587999a0cbc172a6/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
@@ -232,16 +232,34 @@ class, route에서 identity를 추론하지 않습니다.
 [SECURITY.md](SECURITY.md)의 전체 threat model과 아래
 [보안](#보안-security) 요약을 참고하세요.
 
+공용 명령, 명시적 consumer 선택, 지원 AGY 하위호환성과 보존 라운드는
+[공용 runtime 안내](docs/shared-runtime.ko.md)를 참고하세요.
+
 ### bootstrap 재실행 참고
 
-- 생성된 wrapper launcher 는 설치된 plugin cache 의 파일을 호출하므로, plugin
-  업데이트 뒤에는 bootstrap 을 다시 실행해 launcher 경로를 최신으로 맞추세요.
+- 설치된 launcher는 보존한 consumer toolkit을 사용합니다. Plugin 업데이트 뒤
+  bootstrap을 다시 실행해 새 버전을 등록하며 기존 binding은 유지합니다.
 - launcher 는 확인된 vendor CLI 경로를 고정하므로, `claude`, `agy`, 선택적
   `gemini` 를 업그레이드/이동한 뒤에도 다시 실행하세요.
 - 기존 Codex session 은 새 plugin skill 을 못 볼 수 있으니 설치/업데이트 후 새
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.564 업그레이드
+
+lib dev6와 [공용 runtime](docs/shared-runtime.ko.md)을 적용합니다. 공용 명령은
+기존 legacy consumer를 기본값으로 유지하고 Codex skill은 명시적으로 검증된
+보존 toolkit을 선택합니다. 지원 AGY 설치의 기존 기본 호출을 유지하며 marker만
+맞거나 출처가 섞인 설치는 이관을 거부합니다. 전역 shell export나 provider 설정은
+변경하지 않습니다.
+
+[업데이트 절차](docs/installation.ko.md#업데이트)를 따라 새 bootstrap을 실행한 뒤
+새 Codex 세션을 시작하세요. 새 binding으로 시작한 라운드는 원래 plugin cache를
+교체·제거해도 보존됩니다. 이관 전에 직접 cache 경로로 시작한 라운드는 기존 cache가,
+보존 AGY 호출은 원래 AGY 설치가 계속 필요합니다. 공용 제거는 해당 설치 receipt만
+등록 해제하고 binding과 자산을 유지합니다. 독립적인 구버전 AGY installer/remover와
+외부 Python/provider 의존성 변경은 별도 조율이 필요합니다.
 
 ### 0.2.563 업그레이드
 
@@ -599,7 +617,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.563-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.564-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -890,7 +908,11 @@ codex plugin remove triad-codex-dispatch@triad-codex-dispatch
 codex plugin marketplace remove triad-codex-dispatch
 ```
 
-`--remove`는 three provider wrapper launchers, review-round selector launcher와 exact plugin-owned legacy launcher,
+공용 설치의 `--remove`는 해당 설치 receipt만 등록 해제하고 공용 launcher, consumer
+binding과 snapshot을 보존합니다. 다른 호스트는 제거하지 않습니다. 이전 cache나
+runtime 의존성을 삭제하기 전에 [보장 범위](docs/shared-runtime.ko.md#라운드-업데이트와-제거)를 확인하세요.
+
+Legacy 직접 설치 cleanup은 검증된 직접 launcher와 exact plugin-owned legacy launcher,
 profile, command rule, repair-agent registration, `[shell_environment_policy]` fragment를
 marker와 expected byte가 정확히 일치할 때만 삭제합니다. Legacy three-agent TOML은
 전체 내용이 확인된 원본과 일치할 때만 제거하며, 확인되지 않았거나 설치 경로에 따라

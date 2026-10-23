@@ -8,13 +8,14 @@ under the same marketplace name.
 
 ## Bundled shared library
 
-This source includes the published `triad-dispatch-lib 0.1.0.dev5` prerelease at
-`859f27c07c1123e87b50344f587999a0cbc172a6` under `bin/triad_dispatch_lib/`;
+This source includes the published `triad-dispatch-lib 0.1.0.dev6` prerelease at
+`1872227abd42553635c733e0aa228548a577a732` under `bin/triad_dispatch_lib/`;
 no separate library checkout or editable install is needed. Continue using the
 selected Python 3.12+ runtime and install the shipped
 `requirements.txt` there, including `referencing>=0.37,<1`. Bootstrap checks
-prerequisites; reviews do not install dependencies. Existing launcher and runtime
-selection behavior is unchanged.
+prerequisites; reviews do not install dependencies. The
+[shared runtime](shared-runtime.md) preserves the established legacy consumer
+while installed Codex skills select their authenticated retained binding.
 
 Maintainers verify generated files with `python3 scripts/vendor_library.py --check`.
 For the currently pinned release, run from the toolkit root instead of editing
@@ -22,7 +23,7 @@ generated files:
 
 ```bash
 python3 scripts/vendor_library.py --wheel /absolute/path/to/wheel \
-  --source-commit 859f27c07c1123e87b50344f587999a0cbc172a6 --write
+  --source-commit 1872227abd42553635c733e0aa228548a577a732 --write
 ```
 
 Review its recorded artifact hash and library changes first. The refresh refuses
@@ -30,11 +31,11 @@ modified or unexpected managed files; preserve and resolve those conflicts befor
 retrying. This source maintenance check does not add edit-preservation guarantees
 to Codex's own plugin-cache replacement. Keep the existing update/removal procedure.
 
-The [dev5 release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev5)
+The [dev6 release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev6)
 publishes the wheel and `triad-release.json`. The release wheel used for this
 bundle is recorded in
 [`contracts/library-adoption.json`](../contracts/library-adoption.json), with
-`wheel_sha256` equal to `833d55e9bf394885423bf1ed954a972747e1968b52b911b5253a9b7971512c7f`.
+`wheel_sha256` equal to `5baf86483fe04935b2e21654508678eb21f7003a0038fb3875355a2e2967bfdc`.
 Verify the release manifest, source commit and wheel SHA-256 before refreshing.
 The complete package includes four resource bundles; partial module copies are
 not supported.
@@ -185,8 +186,10 @@ Python and plugin targets must stay outside that workspace's writable roots.
 If bootstrap reports missing Python dependencies, run its printed requirements
 command in your chosen Python environment and retry the same bootstrap command.
 
-Bootstrap installs four launchers under `~/.local/bin` and the classifier file
-under `~/.config/triad-codex-dispatch/`. It preserves existing Codex settings,
+Bootstrap authenticates and installs the four common launchers under `~/.local/bin`,
+registers a retained Codex binding and manages the classifier file
+under `~/.config/triad-codex-dispatch/`. See [supported transitions](shared-runtime.md#installation-and-selection).
+It preserves existing Codex settings,
 permission rules and credentials. It does not sign in or install dependencies.
 
 ## Personal settings
@@ -314,8 +317,11 @@ default to `inherit`, using the main-session model
 ## Verify the installation
 
 Run `codex plugin list --json` and confirm the installed TRIAD version. In your
-project workspace, check that `command -v review_round.py` resolves the installed
-launcher, then start a **new Codex session**. Confirm the four TRIAD skills appear.
+project workspace, check that `command -v review_round.py` resolves the common
+launcher and resolve the installed plugin root with
+`python3 "$plugin_root/bin/shared_runtime.py" resolve --plugin-root "$plugin_root" --json`.
+Require its authenticated retained toolkit and binding; the command name alone
+does not identify Codex. Then start a **new Codex session** and confirm the four TRIAD skills appear.
 Do not also copy them into `.agents/skills/`.
 
 Ask for one small read-only consult using the installed skill for your selected
@@ -326,15 +332,25 @@ denied writes/shell, and explicitly requested web separately on the chosen route
 
 ## Update
 
-For an explicit cache replacement, first print the current installed bootstrap's
+For the first migration from direct launchers, keep the original four launchers
+and their toolkit available until the new verified bootstrap has authenticated
+and retained their legacy binding. Do not run the old removal script first. If
+your plugin manager cannot retain the old cache during an update, use a verified
+release in a stable local Git download (route B) to run the new bootstrap before
+replacing that cache. Preserve any original cache still used by direct rounds
+or the retained legacy target. Register the final installed plugin root with its
+own bootstrap afterward. See [migration limits](shared-runtime.md#rounds-updates-and-removal).
+
+For an already shared installation's explicit cache replacement, first print its bootstrap's
 removal command:
 
 ```bash
 python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
 ```
 
-Run the printed command before removing its cache. It preserves owner-authored
-settings and learned classifier patches. If removal fails, resolve its reported
+Run the printed command before removing its cache. It unregisters only that
+installation receipt and retains the shared commands, bindings and assets,
+owner-authored settings and learned classifier patches. If removal fails, resolve its reported
 problem before continuing. Then remove only this plugin, keeping the marketplace:
 
 ```bash

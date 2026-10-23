@@ -2,6 +2,8 @@
 
 Use this procedure only when the current owner/project explicitly selects v2.
 Use one canonical toolkit resolved from the source or installed `SKILL.md`.
+Installed operation first follows [consumer selection](shared-runtime.md) and
+uses its authenticated retained root and binding. Source-SOT remains direct.
 Existing legacy commands and development gates keep their wire and workflow.
 Do not convert a legacy result, infer missing evidence or mix protocol versions.
 Publishing a candidate does not adopt a `SPEC_REVISION` or revision tag.
@@ -70,6 +72,13 @@ before capture or adapter preparation. `formal-plan` asks whether the plan as
 written can deliver the requirements; the two code stages inspect actual changes
 and affected consumers. Plan approval does not approve future implementation.
 The selected purpose is rendered once and bound with the normalized request.
+
+Installed requests additionally contain `runtime_binding`, the exact verified
+binding ID returned by the resolver. Preparation authenticates and seals that
+context; retry and collection keep it even after the installation receipt or
+generic command changes. Allocated CLI invocations use immutable hardened
+launchers, so execute the returned argv/env exactly. Source-SOT requests omit
+this field and retain direct source execution. Native Codex spawning is unchanged.
 
 `review_web_authorized` is optional and strictly boolean. Preparation binds the
 owner's standing policy, currently true, even if the caller omits it or supplies
