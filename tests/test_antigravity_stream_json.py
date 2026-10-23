@@ -40,7 +40,7 @@ def _run_result(stdout: str, *, rc: int = 0, stderr: str = "") -> _common.RunRes
 def _stream(result: dict) -> str:
     return "\n".join(
         [
-            json.dumps({"event": "init", "init": {"model": "gemini-3.1-pro-high"}}),
+            json.dumps({"event": "init", "init": {"model": "gemini-4-argon-high"}}),
             json.dumps(
                 {"event": "step_update", "step_update": {"text_delta": "ignored"}}
             ),
@@ -65,7 +65,7 @@ def test_real_child_launch_cwd_survives_terminal_interpretation(
     )
     assert run.vendor_exit_code == 0
     assert run._effective_cwd == str(launch.resolve())
-    interpreted = wrapper._interpret_run(run, _Answer, "gemini-3.1-pro-high")
+    interpreted = wrapper._interpret_run(run, _Answer, "gemini-4-argon-high")
     assert interpreted._effective_cwd == str(launch.resolve())
     assert interpreted.exit_code == exit_code
     assert interpreted.classification == classification
@@ -131,10 +131,10 @@ def _google_selector_fixture(
             **profile_receipt(),
             "agy_version": "1.2.1",
             "effort": "high",
-            "model": "gemini-3.1-pro-high",
+            "model": "gemini-4-argon-high",
             "route_args": [
                 "--model",
-                "gemini-3.1-pro-high",
+                "gemini-4-argon-high",
                 "--effort",
                 "high",
             ],
@@ -196,11 +196,11 @@ def _agy_preflight_fixture(
         "google_selector_receipt_sha256": hashlib.sha256(
             selector_receipt.read_bytes()
         ).hexdigest(),
-        "model": "gemini-3.1-pro-high",
+        "model": "gemini-4-argon-high",
         "provider_started": False,
         "review_id": review_id,
         "route": "agy",
-        "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
+        "route_args": ["--model", "gemini-4-argon-high", "--effort", "high"],
     }
     path = (tmp_path / "agy-preflight.json").resolve()
     path.write_bytes(
@@ -217,7 +217,7 @@ def _agy_preflight_fixture(
 
 def _plan_stream(*tool_calls: tuple[str, dict]) -> str:
     events = [
-        {"event": "init", "init": {"model": "gemini-3.1-pro-high"}},
+        {"event": "init", "init": {"model": "gemini-4-argon-high"}},
     ]
     for step_index, (tool_name, parameters) in enumerate(tool_calls, start=1):
         events.append(
@@ -249,7 +249,7 @@ def _interpret_plan_stream(*tool_calls: tuple[str, dict]) -> _common.RunResult:
     return wrapper._interpret_run(
         _run_result(_plan_stream(*tool_calls)),
         LegVerdict,
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         expected_review_id="review-r1",
         expected_family="google",
         expected_content_digest="a" * 64,
@@ -258,7 +258,7 @@ def _interpret_plan_stream(*tool_calls: tuple[str, dict]) -> _common.RunResult:
 
 
 def _interpret_plan_updates(*updates: dict) -> _common.RunResult:
-    events = [{"event": "init", "init": {"model": "gemini-3.1-pro-high"}}]
+    events = [{"event": "init", "init": {"model": "gemini-4-argon-high"}}]
     events.extend({"event": "step_update", "step_update": update} for update in updates)
     events.append(
         {
@@ -273,7 +273,7 @@ def _interpret_plan_updates(*updates: dict) -> _common.RunResult:
     return wrapper._interpret_run(
         _run_result("\n".join(json.dumps(event) for event in events)),
         LegVerdict,
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         expected_review_id="review-r1",
         expected_family="google",
         expected_content_digest="a" * 64,
@@ -285,7 +285,7 @@ def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
     cmd = wrapper._build_cmd(
         "/opt/bin/agy",
         "review the directory",
-        model="gemini-3.1-pro-high",
+        model="gemini-4-argon-high",
         effort="high",
         timeout=90,
         json_schema='{"type":"object"}',
@@ -303,7 +303,7 @@ def test_agy_110_route_uses_native_stream_schema_and_effort() -> None:
         "--json-schema",
         '{"type":"object"}',
         "--model",
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         "--effort",
         "high",
     ]
@@ -315,7 +315,7 @@ def test_command_builder_combines_sandbox_plan_mode_and_explicit_headless_flag()
     cmd = wrapper._build_cmd(
         "/opt/bin/agy",
         "review the directory",
-        model="gemini-3.1-pro-high",
+        model="gemini-4-argon-high",
         effort="high",
         timeout=90,
         json_schema='{"type":"object"}',
@@ -397,13 +397,13 @@ def test_structured_result_uses_native_payload_then_local_validation() -> None:
         )
     )
 
-    admitted = wrapper._interpret_run(raw, _Answer, "gemini-3.1-pro-high")
+    admitted = wrapper._interpret_run(raw, _Answer, "gemini-4-argon-high")
 
     assert admitted.exit_code == _common.EXIT_OK
     assert admitted.classification == "ok"
     assert admitted.validated == {"ok": True}
     assert admitted.final_answer == '{"ok": true}'
-    assert admitted.runtime_identity == "gemini-3.1-pro-high"
+    assert admitted.runtime_identity == "gemini-4-argon-high"
 
 
 def test_plan_mode_locally_validates_native_structured_output() -> None:
@@ -430,7 +430,7 @@ def test_plan_mode_locally_validates_native_structured_output() -> None:
     admitted = wrapper._interpret_run(
         raw,
         LegVerdict,
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         expected_review_id="review-r1",
         expected_family="google",
         expected_content_digest="a" * 64,
@@ -632,7 +632,7 @@ def test_plan_mode_admits_valid_verdict_after_denied_post_completion_write() -> 
     admitted = wrapper._interpret_run(
         raw,
         LegVerdict,
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         expected_review_id="review-r1",
         expected_family="google",
         expected_content_digest="a" * 64,
@@ -789,7 +789,7 @@ def test_bound_formal_result_rejects_wrong_family_after_local_validation() -> No
     admitted = wrapper._interpret_run(
         raw,
         LegVerdict,
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         expected_review_id="review-r1",
         expected_family="google",
         expected_content_digest="a" * 64,
@@ -817,7 +817,7 @@ def test_exposed_model_conflict_invalidates_successful_result() -> None:
     assert admitted.exit_code == _common.EXIT_TERMINAL
     assert admitted.classification == "route-mismatch"
     assert admitted.final_answer == ""
-    assert admitted.runtime_identity == "gemini-3.1-pro-high"
+    assert admitted.runtime_identity == "gemini-4-argon-high"
 
 
 def test_exposed_model_conflict_invalidates_unstructured_result() -> None:
@@ -835,7 +835,7 @@ def test_exposed_model_conflict_invalidates_unstructured_result() -> None:
     assert admitted.exit_code == _common.EXIT_TERMINAL
     assert admitted.classification == "route-mismatch"
     assert admitted.final_answer == ""
-    assert admitted.runtime_identity == "gemini-3.1-pro-high"
+    assert admitted.runtime_identity == "gemini-4-argon-high"
 
 
 def test_any_exposed_model_conflict_invalidates_successful_result() -> None:
@@ -843,7 +843,7 @@ def test_any_exposed_model_conflict_invalidates_successful_result() -> None:
         "\n".join(
             [
                 json.dumps({"event": "init", "init": {"model": "unexpected-model"}}),
-                json.dumps({"event": "init", "init": {"model": "gemini-3.1-pro-high"}}),
+                json.dumps({"event": "init", "init": {"model": "gemini-4-argon-high"}}),
                 json.dumps(
                     {
                         "event": "result",
@@ -858,7 +858,7 @@ def test_any_exposed_model_conflict_invalidates_successful_result() -> None:
         )
     )
 
-    admitted = wrapper._interpret_run(raw, _Answer, "gemini-3.1-pro-high")
+    admitted = wrapper._interpret_run(raw, _Answer, "gemini-4-argon-high")
 
     assert admitted.exit_code == _common.EXIT_TERMINAL
     assert admitted.classification == "route-mismatch"
@@ -991,7 +991,7 @@ def test_timeout_records_unexposed_runtime_identity() -> None:
     raw = _run_result("")
     raw.exit_code = _common.EXIT_TIMEOUT
 
-    admitted = wrapper._interpret_run(raw, None, "gemini-3.1-pro-high")
+    admitted = wrapper._interpret_run(raw, None, "gemini-4-argon-high")
 
     assert admitted.exit_code == _common.EXIT_TIMEOUT
     assert admitted.classification == "timeout"
@@ -1009,7 +1009,7 @@ def test_timeout_records_exposed_conflicting_runtime_identity() -> None:
     )
     raw.exit_code = _common.EXIT_TIMEOUT
 
-    admitted = wrapper._interpret_run(raw, None, "gemini-3.1-pro-high")
+    admitted = wrapper._interpret_run(raw, None, "gemini-4-argon-high")
 
     assert admitted.exit_code == _common.EXIT_TIMEOUT
     assert admitted.classification == "timeout"
@@ -1051,7 +1051,7 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
             "--prompt",
             "review",
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--pydantic",
@@ -1066,8 +1066,9 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     assert calls[0][calls[0].index("--effort") + 1] == "high"
 
 
+@pytest.mark.parametrize("timeout", [600, 2400])
 def test_main_uses_native_schema_and_binds_formal_leg_locally(
-    monkeypatch, capsys, tmp_path
+    monkeypatch, capsys, tmp_path, timeout
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.delenv("AGY_NO_HEADLESS_AUTOAPPROVE", raising=False)
@@ -1093,8 +1094,8 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
 
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log, remove_env):
         calls.append(cmd)
-        assert _timeout == 600
-        assert cmd[cmd.index("--print-timeout") + 1] == "590s"
+        assert _timeout == timeout
+        assert cmd[cmd.index("--print-timeout") + 1] == {600: "590s", 2400: "2390s"}[timeout]
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
         schema_index = cmd.index("--json-schema")
         schema = json.loads(cmd[schema_index + 1])
@@ -1124,11 +1125,11 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
             "--google-preflight-receipt",
             str(preflight_receipt),
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--timeout",
-            "600",
+            str(timeout),
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -1192,7 +1193,7 @@ def test_formal_provider_failure_never_changes_settings_bytes(
             "--google-preflight-receipt",
             str(preflight_receipt),
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--pydantic",
@@ -1247,7 +1248,7 @@ def test_formal_main_stops_before_provider_without_read_only_sandbox(
     assert "--sandbox read-only" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("model", ["gemini-3.1-pro-high", "gemini-3.8-flash-high"])
+@pytest.mark.parametrize("model", ["gemini-4-argon-high", "gemini-3.8-flash-high"])
 def test_preflight_proves_version_and_route_without_provider_submission(
     monkeypatch, capsys, tmp_path, model
 ) -> None:
@@ -1306,6 +1307,18 @@ def test_preflight_proves_version_and_route_without_provider_submission(
     assert pruned == ["antigravity"]
 
 
+def test_legacy_preflight_rejects_obsolete_pro_before_version_probe(monkeypatch, capsys, tmp_path):
+    selector, _, _ = _google_selector_fixture(tmp_path)
+    monkeypatch.setattr(wrapper, "_probe_agy_version", lambda *_: pytest.fail("version probe reached"))
+    monkeypatch.setattr(sys, "argv", [
+        "antigravity_wrapper.py", "--prompt", "route proof", "--model", "gemini-3.1-pro-high",
+        "--effort", "high", "--sandbox", "read-only", "--google-selector-receipt", str(selector),
+        "--expected-review-id", "review-r1", "--preflight-only",
+    ])
+    assert wrapper.main() == _common.EXIT_ARG_ERROR
+    assert capsys.readouterr().out == ""
+
+
 def test_preflight_accepts_without_any_agy_catalog(
     monkeypatch, capsys, tmp_path
 ) -> None:
@@ -1328,7 +1341,7 @@ def test_preflight_accepts_without_any_agy_catalog(
             "--prompt",
             "route proof",
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--sandbox",
@@ -1343,7 +1356,7 @@ def test_preflight_accepts_without_any_agy_catalog(
 
     assert wrapper.main() == 0
     receipt = json.loads(capsys.readouterr().out)
-    assert receipt["model"] == "gemini-3.1-pro-high"
+    assert receipt["model"] == "gemini-4-argon-high"
     assert receipt["provider_started"] is False
 
 
@@ -1455,7 +1468,7 @@ def test_formal_agy_rejects_preflight_selector_mismatch_before_binary_probe(
             "--google-preflight-receipt",
             str(preflight_receipt),
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--pydantic",
@@ -1479,7 +1492,7 @@ def test_formal_agy_rejects_preflight_selector_mismatch_before_binary_probe(
     ("model", "effort"),
     [
         ("gemini-3.1-pro-low", "high"),
-        ("gemini-3.1-pro-high", "medium"),
+        ("gemini-4-argon-high", "medium"),
     ],
 )
 def test_formal_agy_rejects_arguments_different_from_bound_preflight_before_probe(
@@ -1495,7 +1508,7 @@ def test_formal_agy_rejects_arguments_different_from_bound_preflight_before_prob
     metadata.update(
         {
             "google_preflight_effort": "high",
-            "google_preflight_model": "gemini-3.1-pro-high",
+            "google_preflight_model": "gemini-4-argon-high",
             "google_preflight_receipt_sha256": hashlib.sha256(
                 preflight_receipt.read_bytes()
             ).hexdigest(),
@@ -1553,8 +1566,8 @@ def test_formal_agy_rejects_arguments_different_from_bound_preflight_before_prob
     )
 
 
-@pytest.mark.parametrize("timeout", ("599", "601"))
-def test_formal_agy_rejects_non_600_timeout_before_binary_probe(
+@pytest.mark.parametrize("timeout", ("599", "601", "2399", "2401"))
+def test_formal_agy_rejects_unsupported_timeout_before_binary_probe(
     monkeypatch, capsys, tmp_path, timeout
 ) -> None:
     selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
@@ -1578,7 +1591,7 @@ def test_formal_agy_rejects_non_600_timeout_before_binary_probe(
             "--google-preflight-receipt",
             str(preflight_receipt),
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--timeout",
@@ -1597,7 +1610,7 @@ def test_formal_agy_rejects_non_600_timeout_before_binary_probe(
     )
 
     assert wrapper.main() == _common.EXIT_ARG_ERROR
-    assert "formal AGY review requires --timeout 600" in capsys.readouterr().err
+    assert "formal AGY review requires --timeout 600 or 2400" in capsys.readouterr().err
 
 
 def test_formal_agy_rejects_non_google_prompt_before_binary_probe(
@@ -1626,7 +1639,7 @@ def test_formal_agy_rejects_non_google_prompt_before_binary_probe(
             "--google-preflight-receipt",
             str(preflight_receipt),
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--pydantic",
@@ -1667,7 +1680,7 @@ def test_formal_agy_rejects_non_google_expected_family_before_binary_probe(
             "--google-selector-receipt",
             str(selector_receipt),
             "--model",
-            "gemini-3.1-pro-high",
+            "gemini-4-argon-high",
             "--effort",
             "high",
             "--pydantic",

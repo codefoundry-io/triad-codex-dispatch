@@ -136,8 +136,8 @@ def _write_google_preflight_receipt(
             **profile_receipt(),
             "agy_version": "1.1.20",
             "effort": "high",
-            "model": "gemini-3.1-pro-high",
-            "route_args": ["--model", "gemini-3.1-pro-high", "--effort", "high"],
+            "model": "gemini-4-argon-high",
+            "route_args": ["--model", "gemini-4-argon-high", "--effort", "high"],
         }
     else:
         record = {
@@ -182,10 +182,10 @@ def _google_selector_receipt(
         wrapper=Path(record["wrapper"]),
         receipt_sha256=hashlib.sha256(_canonical_json_bytes(record)).hexdigest(),
         preflight_receipt_sha256="b" * 64,
-        model="gemini-3.1-pro-high" if route == "agy" else "auto",
+        model="gemini-4-argon-high" if route == "agy" else "auto",
         effort="high" if route == "agy" else None,
         route_args=(
-            ("--model", "gemini-3.1-pro-high", "--effort", "high")
+            ("--model", "gemini-4-argon-high", "--effort", "high")
             if route == "agy"
             else ()
         ),
@@ -4413,7 +4413,7 @@ def test_google_gemini_preflight_receipt_requires_truthful_mode_fields(
     [
         ("model", "gemini-3.1-pro-low"),
         ("effort", "medium"),
-        ("route_args", ["--effort", "high", "--model", "gemini-3.1-pro-high"]),
+        ("route_args", ["--effort", "high", "--model", "gemini-4-argon-high"]),
     ],
 )
 def test_google_agy_preflight_receipt_requires_the_exact_formal_route(
@@ -4504,7 +4504,7 @@ def test_google_preflight_receipt_is_bound_into_the_prepared_prompt_digest(
         metadata["google_preflight_receipt_sha256"]
         == hashlib.sha256(preflight_path.read_bytes()).hexdigest()
     )
-    assert metadata["google_preflight_model"] == "gemini-3.1-pro-high"
+    assert metadata["google_preflight_model"] == "gemini-4-argon-high"
     assert metadata["google_preflight_effort"] == "high"
 
 

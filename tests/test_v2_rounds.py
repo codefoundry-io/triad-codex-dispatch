@@ -229,7 +229,7 @@ def test_C33_nonempty_roster_approval_independent_of_family_count(round_fixture,
     disabled = [{"name": name, "enabled": False} for name in ("claude", "codex", "google")]
     selections = {"codex": {"model": "gpt-5.6-terra", "reasoning": "high"},
                   "claude": {"model": "opus", "effort": "high"},
-                  "google": {"model": "gemini-3.1-pro-high", "effort": "high"}}
+                  "google": {"model": "gemini-4-argon-high", "effort": "high"}}
     entries = [{"name": f"trial-{index}", "vendor": vendor, "enabled": True,
                 "acceptance": "informational", "timeout_s": 120,
                 "agy" if vendor == "google" else vendor: selections[vendor]}

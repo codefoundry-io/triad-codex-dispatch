@@ -22,7 +22,7 @@ def test_manifest_describes_the_convergent_distribution() -> None:
     manifest = json.loads(_text(MANIFEST))
 
     assert manifest["name"] == "triad-codex-dispatch"
-    assert manifest["version"] == "0.2.562"
+    assert manifest["version"] == "0.2.563"
     assert manifest["skills"] == "./skills/"
     prompts = "\n".join(manifest["interface"]["defaultPrompt"])
     assert "triad-cross-family-review" in prompts
@@ -36,7 +36,7 @@ def test_current_release_heading_matches_manifest_and_readme_contract() -> None:
     readme = _text(ROOT / "README.md")
     readme_ko = _text(ROOT / "README.ko.md")
 
-    assert f"## {version} — 2026-10-17" in changelog
+    assert f"## {version} — 2026-10-22" in changelog
     assert f"### Upgrading to {version}" in readme
     assert f"### {version} 업그레이드" in readme_ko
     assert f"_runs/distribution/{version}-final-r1" in readme
@@ -140,7 +140,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
 
     for route_contract in (
         "Claude | `opus`, `xhigh`, 1,200-second wrapper deadline",
-        "AGY 1.2.1 or newer, `gemini-3.1-pro-high`, `high`, 600-second wrapper deadline",
+        "AGY 1.2.1 or newer, `gemini-4-argon-high`, `high`, 600-second wrapper deadline",
         "Gemini Enterprise OAuth with CLI Auto, requested Plan Mode, packaged read/search-only policy, and a 600-second wrapper deadline",
         'Fresh Codex | `gpt-5.6-terra`, `xhigh`, `fork_turns="none"`, default child rather than a registered reviewer agent, repeatable 1,200-second native observation waits',
     ):
@@ -172,7 +172,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
     for provider_specific_detail in (
         "--permission-mode plan",
         "--approval-mode plan",
-        "gemini-3.1-pro-high",
+        "gemini-4-argon-high",
         "AGY native tool names",
     ):
         assert provider_specific_detail not in prompt_contract
@@ -225,7 +225,7 @@ def test_formal_routes_are_explicit_and_reviewer_only() -> None:
             '--google-preflight-receipt "$google_preflight_file"',
             '--cwd "$review_target_cwd"',
             "--sandbox read-only",
-            "--model gemini-3.1-pro-high",
+            "--model gemini-4-argon-high",
             "--effort high",
             "--timeout 600",
             "--pydantic verdict_schema:LegVerdict",
@@ -319,7 +319,7 @@ def test_formal_duration_and_terminal_outcome_contract_is_single_sourced() -> No
     assert "FORMAL_CLAUDE_TIMEOUT = 1200" in _text(ROOT / "bin" / "claude_wrapper.py")
     assert "FORMAL_AGY_TIMEOUT = 600" in _text(ROOT / "bin" / "antigravity_wrapper.py")
     assert "FORMAL_GEMINI_TIMEOUT = 600" in _text(ROOT / "bin" / "gemini_wrapper.py")
-    assert "any timeout other than `1200`" in claude
+    assert "any timeout outside `1200` or `2400`" in claude
     assert "--timeout 600" in agy
     assert "--timeout 600" in gemini
     for clause in (
@@ -389,7 +389,7 @@ def test_google_preflight_blocks_bind_exact_provider_free_contract() -> None:
         '  --expected-review-id "$review_id" \\',
         '  --cwd "$review_target_cwd" \\',
         "  --sandbox read-only \\",
-        "  --model gemini-3.1-pro-high \\",
+        "  --model gemini-4-argon-high \\",
         "  --effort high \\",
         "  --preflight-only \\",
         '  > "$google_preflight_file"',
@@ -549,17 +549,17 @@ def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> N
 
     assert (
         "The fully bound formal route rejects any model other than `opus`, any "
-        "effort other than `xhigh`, any timeout other than `1200`, and every "
+        "effort other than `xhigh`, any timeout outside `1200` or `2400`, and every "
         "`--fallback-model` before provider resolution." in claude
     )
     assert (
         "A fully bound formal Claude route fails closed before provider resolution "
-        "unless it uses `--model opus --effort xhigh --timeout 1200` with no "
-        "`--fallback-model`." in readme
+        "unless it uses `--model opus --effort xhigh`, `--timeout 1200` or `--timeout 2400`, "
+        "and no `--fallback-model`." in readme
     )
     assert (
-        "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh "
-        "--timeout 1200`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
+        "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh`, "
+        "`--timeout 1200` 또는 `--timeout 2400`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
         "provider resolution 전에 통과합니다." in readme_ko
     )
     assert "fail-closed formal Claude route pinning" in changelog

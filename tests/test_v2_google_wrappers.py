@@ -34,7 +34,7 @@ def route(request, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(_common, "_LOG_DIR_CONFIGURED", True)
     monkeypatch.setenv("TRIAD_WRAPPER_ALLOWED_ROOTS", str(home))
     monkeypatch.setenv("TRIAD_WRAPPER_HARDENED", "1")
-    model = "gemini-3.1-pro-high" if name == "agy" else "gemini-3.1-pro-preview"
+    model = "gemini-4-argon-high" if name == "agy" else "gemini-3.1-pro-preview"
     calls = []
 
 
@@ -147,8 +147,39 @@ def test_v2_preflight_is_provider_free_and_actual_dispatch_uses_requested_settin
     assert record["transport"]["cli_version"] == ("1.2.7" if route["name"] == "agy" else None)
 
 
-@pytest.mark.parametrize("model", ["gemini-3.1-pro-high", "gemini-3.8-flash-high"])
-def test_agy_pro_and_flash_emit_singleton_bound_route_schema(route, model, monkeypatch):
+@pytest.mark.parametrize("route", ["agy"], indirect=True)
+def test_agy_metadata_is_projected_after_bound_v2_admission_and_retained_in_raw_log(route):
+    options, _ = ready(route)
+    route["state"]["output"] = {"toolAction": "finish", "toolSummary": {"done": True}}
+    rc, output, error = route["invoke"](base=options)
+    assert rc == 0, error
+    expected = verdict(route="agy", leg_name="google-second")
+    assert json.loads(output) == expected
+    files = list((route["home"] / "logs" / "antigravity" / "runs").glob("*.json"))
+    assert len(files) == 1
+    record = json.loads(files[0].read_text())
+    raw = json.loads(record["stdout"])["result"]["structured_output"]
+    assert raw == {**expected, "toolAction": "finish", "toolSummary": {"done": True}}
+    assert record["validated"] == expected
+    assert json.loads(record["final_answer"]) == expected
+
+
+@pytest.mark.parametrize("route", ["agy"], indirect=True)
+@pytest.mark.parametrize("change", [
+    {"review_id": "other"}, {"family": "claude"}, {"content_digest": "b" * 64},
+    {"leg_name": "sibling"}, {"attempt": 1}, {"route": "gemini"},
+    {"unexpected": "extra"}, {"verdict": None},
+])
+def test_agy_metadata_does_not_bypass_v2_schema_or_any_binding(route, change):
+    options, _ = ready(route)
+    route["state"]["output"] = {"toolAction": "finish", "toolSummary": "done", **change}
+    rc, output, _ = route["invoke"](base=options)
+    assert rc == _common.EXIT_SCHEMA_FAIL
+    assert output == "" and len(route["calls"]) == 1
+
+
+@pytest.mark.parametrize("model", ["gemini-4-argon-high", "gemini-3.8-flash-high", "gemini-3.1-pro-high"])
+def test_agy_explicit_models_emit_singleton_bound_route_schema(route, model, monkeypatch):
     if route["name"] != "agy":
         pytest.skip("AGY JSON schema transport contract")
     route["model"] = model

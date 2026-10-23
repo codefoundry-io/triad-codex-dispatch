@@ -61,7 +61,7 @@ An owner-provisioned dedicated project may use `--project <canonical-lowercase-U
 with an explicit `--cwd` and `--sandbox read-only`. The wrapper checks the project
 record's ID, single cwd resource, and the same six formal deny entries by default without a
 global settings lease or permission-file writes. Use the same UUID for preflight
-and dispatch, and for both Pro/Flash preflights in a paired review. Keep the
+and dispatch, and for both Argon/Flash preflights in a paired review. Keep the
 project configuration stable during the call. Follow the exact
 [project invocation contract](../triad-cross-family-review/references/leg-contracts.md#optional-dedicated-agy-project);
 the wrapper does not create or modify projects.
@@ -85,7 +85,7 @@ dispatch never installs or replaces them. The formal wrapper arguments are:
 
 ```text
   --sandbox read-only
-  --model gemini-3.1-pro-high
+  --model gemini-4-argon-high
   --effort high
   --timeout 600
   --pydantic verdict_schema:LegVerdict
@@ -99,9 +99,9 @@ The formal plan-mode route passes native `--json-schema`, admits only the
 terminal result event's `structured_output`, and repeats strict local
 `LegVerdict` validation. It checks the exact review ID,
 Google family, content digest, and review-relative path shape locally. Invalid
-output is terminal and causes no schema-repair provider call. The formal leg uses
-an explicit 600-second wrapper provider-process deadline, and the AGY child gets
-`--print-timeout 590s`. Apply [convergence](../triad-cross-family-review/references/convergence.md)
+output is terminal and causes no schema-repair provider call. The formal leg accepts
+`--timeout 600` or explicit `--timeout 2400`; other deadline values are refused.
+The AGY child gets `--print-timeout 590s` or `--print-timeout 2390s`, respectively. Apply [convergence](../triad-cross-family-review/references/convergence.md)
 to observation waits and terminal outcomes. The formal Google prompt
 authorizes only AGY native file-read/search tools for local inspection.
 Web research is prohibited by default; MCP calls are forbidden by the profile and formal prompt. It forbids command, shell, terminal,

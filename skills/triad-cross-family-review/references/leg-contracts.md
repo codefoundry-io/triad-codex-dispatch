@@ -18,6 +18,11 @@ and result location to a task-specific shell variable before invoking a wrapper.
 Use double-quoted expansions and write wrapper stdout directly to the result
 file so launcher output cannot contaminate the terminal JSON.
 
+The examples retain their existing deadlines. For a requested 40-minute legacy
+formal call, pass `--timeout 2400` to Claude, AGY or Gemini. Other deadline values
+remain refused: Claude accepts 1200 or 2400; AGY and Gemini accept 600 or 2400.
+Raw/public-v2 defaults and early terminal-error handling are unchanged.
+
 These sections own provider-specific argv and terminal receipt handling.
 `review_round.py` owns lifecycle paths, inventory, collision checks, prompt
 metadata, and Google receipt selection and binding. Google selectors and wrappers
@@ -52,7 +57,8 @@ python3 "$toolkit_root/bin/claude_wrapper.py" \
 ```
 
 The wrapper adds Claude's native `--permission-mode plan` and requires the exact
-`opus`/`xhigh`/1,200-second/no-fallback route before provider resolution. It also
+`opus`/`xhigh`/no-fallback route before provider resolution, with a 1,200-second
+deadline or explicitly selected 2,400-second deadline. It also
 checks formal bindings and locally validates the terminal JSON. Read/search tools
 remain available inside the authorized boundary under existing user permissions.
 The result stays provisional until final integrity succeeds.
@@ -204,7 +210,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --expected-review-id "$review_id" \
   --cwd "$review_target_cwd" \
   --sandbox read-only \
-  --model gemini-3.1-pro-high \
+  --model gemini-4-argon-high \
   --effort high \
   --preflight-only \
   > "$google_preflight_file"
@@ -247,7 +253,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --google-preflight-receipt "$google_preflight_file" \
   --cwd "$review_target_cwd" \
   --sandbox read-only \
-  --model gemini-3.1-pro-high \
+  --model gemini-4-argon-high \
   --effort high \
   --timeout 600 \
   --pydantic verdict_schema:LegVerdict \
@@ -281,7 +287,7 @@ route without `--project`; do not silently repoint an existing project.
 
 The existing preflight `route_args` ends with `--project <UUID>` and is bound by
 the receipt hash. Pass the identical UUID at dispatch; keep the project record
-stable for the full call. In a paired Pro/Flash review, both preflights use the
+stable for the full call. In a paired Argon/Flash review, both preflights use the
 same project UUID. Each family render still receives the unchanged receipts;
 do not add metadata fields or rewrite rendered prompts. Omitting `--project`
 skips project-record validation. Project provisioning requires owner authority
@@ -379,7 +385,7 @@ python3 "$toolkit_root/bin/antigravity_wrapper.py" \
   --prompt-file "$investigation_prompt_file" \
   --cwd "$investigation_cwd" \
   --sandbox read-only --web \
-  --model gemini-3.1-pro-high --effort high --timeout 600
+  --model gemini-4-argon-high --effort high --timeout 600
 ```
 
 An optional custom `--pydantic` schema remains available; do not pass formal

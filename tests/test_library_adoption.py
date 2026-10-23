@@ -64,8 +64,8 @@ def tree(tmp_path):
 
 def test_verified_identity_and_resources():
     metadata = loader().verify_library()
-    assert metadata["version"] == "0.1.0.dev4"
-    assert metadata["source_commit"] == "087af94a7078de0ae9701fb057840b5492f51f66"
+    assert metadata["version"] == "0.1.0.dev5"
+    assert metadata["source_commit"] == "859f27c07c1123e87b50344f587999a0cbc172a6"
     assert set(metadata["bundle_ids"]) == {"verdict", "roster", "prompt", "receipt"}
     for resource in ("data/leg-verdict.schema.json", "data/roster-bundle/contracts/review-legs.schema.json", "data/prompt-bundle/prompts/common-clauses.md"):
         assert "bin/triad_dispatch_lib/" + resource in metadata["sha256"]
@@ -163,12 +163,12 @@ def test_refresh_preserves_conflicts_and_rejects_bad_wheel(tree, tmp_path):
         archive.writestr("wrong-1.dist-info/METADATA", "Name: wrong\nVersion: 1\n")
     original = (tree / "contracts/library-adoption.json").read_bytes()
     with pytest.raises(ValueError):
-        module.refresh(wheel, "087af94a7078de0ae9701fb057840b5492f51f66", tree)
+        module.refresh(wheel, "859f27c07c1123e87b50344f587999a0cbc172a6", tree)
     assert (tree / "contracts/library-adoption.json").read_bytes() == original
     target = tree / "bin/triad_dispatch_lib/__init__.py"
     target.write_text("intentional user change")
     with pytest.raises(ValueError):
-        module.refresh(wheel, "087af94a7078de0ae9701fb057840b5492f51f66", tree)
+        module.refresh(wheel, "859f27c07c1123e87b50344f587999a0cbc172a6", tree)
     assert target.read_text() == "intentional user change"
 
 
@@ -179,12 +179,12 @@ def make_wheel(destination, root=ROOT, mutation=None):
     import hashlib
     import io
     import zipfile
-    prefix = "triad_dispatch_lib-0.1.0.dev4.dist-info/"
+    prefix = "triad_dispatch_lib-0.1.0.dev5.dist-info/"
     files = {path.relative_to(root / "bin").as_posix(): path.read_bytes()
              for path in (root / "bin/triad_dispatch_lib").rglob("*")
              if path.is_file() and "__pycache__" not in path.parts}
     files[prefix + "licenses/LICENSE"] = (root / "vendor/triad-dispatch-lib.LICENSE").read_bytes()
-    files[prefix + "METADATA"] = b"Name: triad-dispatch-lib\nVersion: 0.1.0.dev4\nRequires-Python: >=3.12\n"
+    files[prefix + "METADATA"] = b"Name: triad-dispatch-lib\nVersion: 0.1.0.dev5\nRequires-Python: >=3.12\n"
     if mutation:
         mutation(files)
     buffer = io.StringIO()
@@ -245,7 +245,7 @@ def test_valid_wheel_refresh_preserves_all_conflicts(tree, tmp_path, conflict):
 def test_invalid_input_is_fully_validated_before_write(tree, tmp_path, damage):
     def mutate(files):
         if damage == "metadata":
-            files["triad_dispatch_lib-0.1.0.dev4.dist-info/METADATA"] = b"Name: wrong\nVersion: 0.1.0.dev4\nRequires-Python: >=3.12\n"
+            files["triad_dispatch_lib-0.1.0.dev5.dist-info/METADATA"] = b"Name: wrong\nVersion: 0.1.0.dev5\nRequires-Python: >=3.12\n"
         elif damage == "resource":
             files["triad_dispatch_lib/data/leg-verdict.schema.json"] = b"{}"
         elif damage == "missing_resource":
@@ -290,7 +290,7 @@ def test_verifier_refuses_unknown_adoption_schema(tree):
         loader().verify_library(tree)
 
 
-@pytest.mark.parametrize("member", ["triad_dispatch_lib/dispatch.py", "triad_dispatch_lib-0.1.0.dev4.dist-info/licenses/LICENSE"])
+@pytest.mark.parametrize("member", ["triad_dispatch_lib/dispatch.py", "triad_dispatch_lib-0.1.0.dev5.dist-info/licenses/LICENSE"])
 def test_self_consistent_altered_wheel_cannot_claim_approved_commit(tree, tmp_path, member):
     def alter(files):
         files[member] += b"\n# changed incoming content\n"

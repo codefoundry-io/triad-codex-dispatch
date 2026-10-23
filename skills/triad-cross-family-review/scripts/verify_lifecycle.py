@@ -154,7 +154,7 @@ def verify_lifecycle():
             TOOLKIT / "bin/antigravity_wrapper.py",
             "--prompt-file", shared / "TASK.md", "--google-selector-receipt", selector,
             "--expected-review-id", review_id, "--cwd", shared, "--sandbox", "read-only",
-            "--model", "gemini-3.1-pro-high", "--effort", "high", "--preflight-only",
+            "--model", "gemini-4-argon-high", "--effort", "high", "--preflight-only",
         ], neutral)
         preflight.write_text(receipt, encoding="utf-8")
         if json.loads(receipt)["provider_started"] is not False:

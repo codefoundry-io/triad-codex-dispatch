@@ -27,7 +27,7 @@ def catalog_only_vendor(tmp_path, monkeypatch):
         'printf "%s\\n" "$*" >> "$LIFECYCLE_TEST_CALLS"\n'
         'case "$*" in\n'
         '  --version) printf "1.2.2\\n" ;;\n'
-        '  models) printf "gemini-3.1-pro-high\\tGemini 3.1 Pro (High)\\n" ;;\n'
+        '  models) printf "gemini-4-argon-high\\tGemini 4 Argon (High)\\n" ;;\n'
         '  *) echo "inference forbidden in this test" >&2; exit 99 ;;\n'
         "esac\n",
         encoding="utf-8",
@@ -75,6 +75,9 @@ def test_fixed_lifecycle_cli_preserves_json_and_never_dispatches(catalog_only_ve
     assert [step for step in steps if step in lifecycle] == lifecycle
     assert all(isinstance(command["argv"], list) for command in report["commands"])
     assert all(command["returncode"] == 0 for command in report["commands"])
+    preflight = next(command for command in report["commands"] if command["step"] == "preflight")
+    assert preflight["argv"][preflight["argv"].index("--model") + 1] == "gemini-4-argon-high"
+    assert preflight["argv"][preflight["argv"].index("--effort") + 1] == "high"
     assert_cleanup_and_source(report)
 
 

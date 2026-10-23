@@ -93,10 +93,10 @@ def _google_selector_fixture(
             **preflight_common,
             "agy_version": "1.1.20",
             "effort": "high",
-            "model": "gemini-3.1-pro-high",
+            "model": "gemini-4-argon-high",
             "route_args": [
                 "--model",
-                "gemini-3.1-pro-high",
+                "gemini-4-argon-high",
                 "--effort",
                 "high",
             ],
@@ -828,8 +828,9 @@ def test_claude_structured_route_uses_native_schema_once(monkeypatch, capsys) ->
     assert pruned == ["claude"]
 
 
+@pytest.mark.parametrize("timeout", [1200, 2400])
 def test_claude_formal_leg_binds_native_schema_and_local_admission(
-    monkeypatch, capsys
+    monkeypatch, capsys, timeout
 ) -> None:
     calls: list[list[str]] = []
     payload = {
@@ -856,7 +857,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
         assert stdin_text == "review"
         assert "review" not in cmd
         assert cmd[1:6] == ["--print", "--input-format", "text", "--output-format", "json"]
-        assert _timeout == 1200
+        assert _timeout == timeout
         schema = json.loads(cmd[cmd.index("--json-schema") + 1])
         properties = schema["properties"]
         assert properties["review_id"]["const"] == "review-r1"
@@ -889,7 +890,7 @@ def test_claude_formal_leg_binds_native_schema_and_local_admission(
             "--effort",
             "xhigh",
             "--timeout",
-            "1200",
+            str(timeout),
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -990,6 +991,8 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
         ("--model", "opus", "--effort", "xhigh"),
         ("--model", "opus", "--effort", "xhigh", "--timeout", "1199"),
         ("--model", "opus", "--effort", "xhigh", "--timeout", "1201"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "2399"),
+        ("--model", "opus", "--effort", "xhigh", "--timeout", "2401"),
         (
             "--model",
             "opus",
@@ -1021,6 +1024,8 @@ def test_claude_formal_leg_rejects_locally_valid_binding_mismatch(
         "default-timeout",
         "timeout-below",
         "timeout-above",
+        "extended-timeout-below",
+        "extended-timeout-above",
         "fallback-model",
         "empty-fallback-model",
     ),
@@ -1055,7 +1060,7 @@ def test_claude_formal_leg_rejects_nondefault_route_before_provider_resolution(
 
     assert claude_wrapper.main() == _common.EXIT_ARG_ERROR
     assert (
-        "formal Claude route requires --model opus --effort xhigh --timeout 1200 "
+        "formal Claude route requires --model opus --effort xhigh --timeout 1200 or 2400 "
         "and forbids --fallback-model" in capsys.readouterr().err
     )
 
@@ -1268,8 +1273,9 @@ def test_gemini_route_keeps_native_json_without_review_protocol(
     ]
 
 
+@pytest.mark.parametrize("timeout", [600, 2400])
 def test_gemini_formal_leg_uses_plan_policy_scrubbed_oauth_and_bound_result(
-    monkeypatch, capsys, tmp_path
+    monkeypatch, capsys, tmp_path, timeout
 ) -> None:
     captured: dict[str, object] = {}
     payload = {
@@ -1324,7 +1330,7 @@ def test_gemini_formal_leg_uses_plan_policy_scrubbed_oauth_and_bound_result(
             "--expected-content-digest",
             "a" * 64,
             "--timeout",
-            "600",
+            str(timeout),
         ],
     )
 
@@ -1339,7 +1345,7 @@ def test_gemini_formal_leg_uses_plan_policy_scrubbed_oauth_and_bound_result(
     assert cmd.count("-m") == 1
     assert cmd[cmd.index("-m") + 1] == "auto"
     kwargs = captured["kwargs"]
-    assert kwargs["timeout"] == 600
+    assert kwargs["timeout"] == timeout
     assert kwargs["single_provider_call"] is True
     assert set(kwargs["remove_env"]) == {
         "GEMINI_API_KEY",
@@ -1555,8 +1561,8 @@ def test_gemini_formal_leg_rejects_invalid_bindings_before_provider_resolution(
     assert gemini_wrapper.main() == _common.EXIT_ARG_ERROR
 
 
-@pytest.mark.parametrize("timeout", ("599", "601"))
-def test_gemini_formal_leg_rejects_non_600_timeout_before_provider_resolution(
+@pytest.mark.parametrize("timeout", ("599", "601", "2399", "2401"))
+def test_gemini_formal_leg_rejects_unsupported_timeout_before_provider_resolution(
     monkeypatch, capsys, tmp_path, timeout
 ) -> None:
     selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
@@ -1597,7 +1603,7 @@ def test_gemini_formal_leg_rejects_non_600_timeout_before_provider_resolution(
 
     assert gemini_wrapper.main() == _common.EXIT_ARG_ERROR
     assert (
-        "formal Gemini review requires --timeout 600 and CLI Auto model routing"
+        "formal Gemini review requires --timeout 600 or 2400 and CLI Auto model routing"
         in capsys.readouterr().err
     )
 

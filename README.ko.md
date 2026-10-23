@@ -6,10 +6,10 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-`triad-dispatch-lib 0.1.0.dev4`를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+공개된 `triad-dispatch-lib 0.1.0.dev5` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
-Claude는 별도로 배포하며 라이브러리의
-[dev4 적용 안내](https://github.com/codefoundry-io/triad-dispatch-lib/blob/v0.1.0.dev4/docs/host-adoption.md)를 사용합니다.
+Claude와 AGY는 별도로 배포합니다. 라이브러리의
+[dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/859f27c07c1123e87b50344f587999a0cbc172a6/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
 소스 검증과 공개 릴리스·설치 결과는 별도로 기록합니다.
 
 [English README](README.md)
@@ -242,6 +242,29 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.563 업그레이드
+
+현재 AGY 기본 리뷰 모델은 `gemini-4-argon-high`, effort는 `high`이며, 고정 legacy
+경로와 Argon/Flash pair에서 Pro 3.1을 대체합니다. Flash는
+`gemini-3.8-flash-high`/`high`를 유지합니다. Raw와 public v2의 명시적 모델 선택은
+기존 의미를 유지하며, Gemini CLI 경로는 별도 모델 선택을 사용합니다.
+
+이 후보는 AGY 결과의 최상위 `toolAction`, `toolSummary`가 요청 스키마에 선언되지
+않았을 때 공급자 메타데이터로 분리합니다. 원본 출력에는 두 필드를 보존하며,
+구조화된 답변은 요청한 스키마로 검증합니다. 스키마에 선언된 필드와 별칭은 기존처럼
+애플리케이션 데이터로 검증합니다. 알 수 없는 필드, 잘못된 JSON, 누락된 판정,
+불일치하는 바인딩과 terminal 실패 검사는 유지합니다.
+AGY 스키마 호출은 legacy와 사용자 정의 스키마를 포함해 분리 전에 원본 JSON 이벤트
+행을 엄격히 파싱하고 중복 멤버와 비유한 숫자를 거부합니다. 중간 이벤트에도 적용하며,
+깨진 로그 행은 기존 방식으로 처리합니다. 결과 앞뒤에 JSON이 허용하지 않는 유니코드
+공백이 있으면 앞선 답변을 검증하지 않고 거부합니다. 직접 검증 함수와 다른 공급자의 사용자 정의
+스키마 처리는 기존 동작을 유지합니다.
+
+포함된 라이브러리는 위에 기록한 공개 dev5 사전 릴리스입니다. 이 호스트 후보는
+별도의 리뷰와 릴리스가 필요하며, 공개 후 일반 업데이트 절차를 사용합니다.
+호스트 공개와 설치는 별도 단계입니다. 업데이트 후에는 새 리뷰를 시작해야 하며
+이전에 실패한 라운드가 승인으로 바뀌지는 않습니다.
 
 ### 0.2.562 업그레이드
 
@@ -536,30 +559,34 @@ review runtime은 하나의 complete focused directory, required family별 하�
 receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 이상을
 요구하고 native `stream-json`을 사용합니다. formal plan-mode route는 native
 `--json-schema`를 전달하고 `structured_output`을 소비하여 로컬에서 검증하며,
-`gemini-3.1-pro-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
+`gemini-4-argon-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
-완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1200`을
-사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
+완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh`,
+`--timeout 1200` 또는 `--timeout 2400`을 사용하고 `--fallback-model`을
+지정하지 않은 경우에만 provider resolution 전에 통과합니다.
 현재 소스는 legacy formal과 public v2 리뷰의 기본 모델을 CLI가 해석하는 `opus`
 별칭으로 지정합니다. 이는 앞의 0.2.557 이력에 기록된 고정 ID 기본값을 대체합니다.
 v2의 명시적 모델 ID 및 null 선택, raw 호출의 사용자 모델 선택은 유지합니다.
 기본값 변경은 `--agent`를 추가하지 않으며 실제 실행 모델 버전을 보증하지 않습니다.
 현재 route timing은 Claude wrapper deadline 1,200초, AGY 또는 Gemini wrapper deadline
-600초, fresh Codex의 반복 가능한 1,200초 observation wait입니다. terminal outcome 해석은
+600초, fresh Codex의 반복 가능한 1,200초 observation wait를 유지합니다. 세 provider
+wrapper는 요청된 40분 legacy 리뷰에 명시적 `--timeout 2400`도 허용하며,
+다른 legacy 시간 값은 거부합니다. Raw/public-v2 기본값과 명확한 terminal 오류의
+즉시 종료 동작은 유지합니다. terminal outcome 해석은
 cross-family `references/convergence.md` 계약이 전담합니다.
 non-formal Claude permission 선택과 모든 project-trust policy는 native 설정을
 유지합니다. 일반 `codex`가 정상 경로입니다.
 
 명시적인 workspace four-leg gate는 guarded-worktree renderer에서 AGY
 `gemini-3.8-flash-high`, `high`를 추가로 사용할 수 있습니다. AGY route 하나를
-선택하고 Pro와 Flash를 별도로 preflight한 뒤, **모든** `render-worktree` 호출에
-Pro receipt를 `--google-preflight-receipt`, Flash receipt를
+선택하고 Argon과 Flash를 별도로 preflight한 뒤, **모든** `render-worktree` 호출에
+Argon receipt를 `--google-preflight-receipt`, Flash receipt를
 `--google-flash-preflight-receipt`로 전달합니다. 두 receipt가 공통 digest에
 포함됩니다. Flash prompt에는
 `--family google --google-review-model gemini-3.8-flash-high`를 추가하고,
 dispatch 시 Flash 자신의 receipt와 일치하는 model/high 인자를 사용합니다.
-수정한 Pro prompt나 Pro receipt로 Flash custody를 대체할 수 없습니다. 이 고정
+수정한 Argon prompt나 Argon receipt로 Flash custody를 대체할 수 없습니다. 이 고정
 opt-in은 공개 three-family 기본값, prepared-directory renderer, `LegVerdict`
 필드를 바꾸지 않으며 workspace admission 구성을 자동 설정하지 않습니다.
 
@@ -572,7 +599,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.562-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.563-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -1124,7 +1151,7 @@ owner가 준비한 AGY 프로젝트를 사용하려면 `--project <canonical-low
 있어야 하며 누락되면 owner 설정을 바꾸지 않고 거절합니다. true인 경우(v2 상시 허용
 또는 legacy 직접 요청) 이 전체 URL 차단이 남아 있으면 실행 전에
 거절하고 원래 규칙을 보존합니다. 기존 preflight의
-`route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Pro/Flash pair도 같은
+`route_args`와 receipt hash가 프로젝트를 review에 연결합니다. Argon/Flash pair도 같은
 프로젝트를 선택해야 하며, 호출 동안 프로젝트 설정을 유지해야 합니다. 이는 설정된
 native permission 경계이며 OS 격리나 실행 중 정책 증명은 아닙니다. `--project`를
 생략하면 프로젝트 설정 검증을 생략하며 전역 설정은 변경하지 않습니다. 정확한 명령은
@@ -1176,8 +1203,10 @@ Canonical wrapper도 성공 결과를 내보내기 전에 원본 답변과 nativ
 JSON 중복을 검사하며, 중복 판정은 추가 formal provider 호출 없이 schema failure로
 반환합니다. 예약 표기 `verdict_schema:LegVerdict`와 `verdict_schema.LegVerdict`는
 모두 패키지의 스키마 파일을 읽고 dispatch 전에 세 expected review binding을
-요구합니다. 사용자 정의 스키마, raw 조사, 깨진 AGY 로그 행 처리와 기존 provider
-실패 우선순위는 유지합니다. schema field나 리뷰 구성은 추가하지 않습니다.
+요구합니다. 직접 사용자 정의 스키마 검증과 다른 공급자의 처리는 기존 동작을 유지하며,
+AGY 스키마 호출은 [0.2.563](#02563-업그레이드)의 엄격한 파싱을 적용합니다.
+스키마 없는 raw 조사, 깨진 AGY 로그 행 처리와 기존 provider 실패 우선순위는 유지합니다.
+schema field나 리뷰 구성은 추가하지 않습니다.
 result-file reader만으로는 다른 호출자가 이미 없앤 중복을 복원할 수 없습니다.
 
 ## Google CLI 메타데이터 스냅샷

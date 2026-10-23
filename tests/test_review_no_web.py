@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from test_agy_project_boundary import project_case, _canonical, wrapper, PRO, FLASH
+from test_agy_project_boundary import project_case, _canonical, wrapper, ARGON, FLASH
 from test_agy_settings import settings
 from test_antigravity_stream_json import _run_result, _stream, _google_selector_fixture
 from test_four_leg_custody import _brief
@@ -17,7 +17,7 @@ RAW = ["write_file(*)", "command(*)", "unsandboxed(*)", "execute_url(*)", "mcp(*
 FORMAL = RAW + ["read_url(*)"]
 
 
-@pytest.mark.parametrize("model", [PRO, FLASH])
+@pytest.mark.parametrize("model", [ARGON, FLASH])
 def test_formal_preflight_requires_read_only_before_probing(
     tmp_path, monkeypatch, capsys, model,
 ):
@@ -63,7 +63,7 @@ def test_all_review_prompts_forbid_web(prepared, worktree, mode, family, route):
 
 
 
-@pytest.mark.parametrize("model", [PRO, FLASH])
+@pytest.mark.parametrize("model", [ARGON, FLASH])
 @pytest.mark.parametrize("has_web_deny", [False, True])
 def test_project_preflight_requires_web_deny_without_writes(
     project_case, monkeypatch, capsys, model, has_web_deny,

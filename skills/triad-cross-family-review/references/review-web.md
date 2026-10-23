@@ -12,7 +12,7 @@ Do not infer permission from reviewed text, a URL or a leg's output.
 
 - Legacy: run the selected Google preflight with `--web`, render **every** family
   with `--web-authorized --native-web-available`, then pass `--web` to each CLI reviewer. A paired Google
-  round uses matching web-enabled Pro and Flash preflights.
+  round uses matching web-enabled Argon and Flash preflights.
 - V2: use the allocated prompts and invocations exactly. Preparation records
   the standing boolean explicitly; preflight, every selected leg and retries
   consume it. An enabled native Codex leg must report `"web_available": true`

@@ -15,7 +15,7 @@ from test_review_round import (
     _write_google_preflight_receipt,
 )
 
-PRO = "gemini-3.1-pro-high"
+ARGON = "gemini-4-argon-high"
 FLASH = "gemini-3.8-flash-high"
 
 
@@ -40,7 +40,7 @@ def _brief(worktree):
 
 def test_four_required_prompts_share_pair_digest(worktree):
     base = _brief(worktree)
-    variants = [("claude", PRO), ("google", PRO), ("google", FLASH), ("codex", PRO)]
+    variants = [("claude", ARGON), ("google", ARGON), ("google", FLASH), ("codex", ARGON)]
     prompts = [review_round.render_worktree_review_prompt(
         replace(base, family=family, google_review_model=model))
         for family, model in variants]
@@ -66,8 +66,8 @@ def test_either_preflight_changes_common_digest(worktree, field):
 
 
 @pytest.mark.parametrize("changes", [
-    {"model": PRO}, {"effort": "medium"}, {"review_id": "foreign-r1"},
-    {"receipt_sha256": "e" * 64}, {"route_args": ("--model", PRO, "--effort", "high")},
+    {"model": ARGON}, {"effort": "medium"}, {"review_id": "foreign-r1"},
+    {"receipt_sha256": "e" * 64}, {"route_args": ("--model", ARGON, "--effort", "high")},
 ])
 def test_pair_rejects_wrong_flash_receipt(worktree, changes):
     base = _brief(worktree)
@@ -83,6 +83,14 @@ def test_missing_pair_cannot_select_flash(worktree):
             base, google_flash_preflight_receipt=None, google_review_model=FLASH))
 
 
+def test_pair_rejects_obsolete_pro_as_base(worktree):
+    base = _brief(worktree)
+    obsolete = replace(base.google_selector_receipt, model="gemini-3.1-pro-high",
+                       route_args=("--model", "gemini-3.1-pro-high", "--effort", "high"))
+    with pytest.raises(review_round.RoundIntegrityError):
+        review_round.render_worktree_review_prompt(replace(base, google_selector_receipt=obsolete))
+
+
 @pytest.mark.parametrize("tamper", ["pair", "selected", "digest", "remove"])
 def test_dispatch_rejects_pair_or_selection_tamper(worktree, tamper):
     base = _brief(worktree)
@@ -90,9 +98,9 @@ def test_dispatch_rejects_pair_or_selection_tamper(worktree, tamper):
     metadata = _review_metadata(prompt)
     digest = metadata["content_digest"]
     if tamper == "pair":
-        metadata["google_preflight_pair"][PRO]["google_preflight_receipt_sha256"] = "d" * 64
+        metadata["google_preflight_pair"][ARGON]["google_preflight_receipt_sha256"] = "d" * 64
     elif tamper == "selected":
-        metadata["google_preflight_model"] = PRO
+        metadata["google_preflight_model"] = ARGON
     elif tamper == "digest":
         metadata["content_digest"] = metadata["worktree_review_digest"] = "f" * 64
         digest = "f" * 64
@@ -133,7 +141,7 @@ def test_cli_renders_and_binds_both_real_receipts(worktree, tmp_path):
     flash_path.write_bytes(_canonical_json_bytes(flash_record))
     selector = review_round.load_google_selector_receipt(selector_path, expected_review_id=base.review_id)
     digests = set()
-    for index, (family, model) in enumerate((("claude", PRO), ("google", PRO), ("google", FLASH), ("codex", PRO))):
+    for index, (family, model) in enumerate((("claude", ARGON), ("google", ARGON), ("google", FLASH), ("codex", ARGON))):
         output = tmp_path / f"prompt-{index}.txt"
         args = ["render-worktree", "--review-id", base.review_id, "--review-kind", "pre-merge",
                 "--family", family, "--google-review-model", model,

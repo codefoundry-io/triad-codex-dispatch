@@ -11,7 +11,7 @@ from conftest import profile_receipt
 from test_antigravity_stream_json import (
     _google_selector_fixture, _formal_payload, _run_result, _stream, wrapper,
 )
-from test_four_leg_custody import _brief, PRO, FLASH
+from test_four_leg_custody import _brief, ARGON, FLASH
 from test_review_round import worktree, _review_metadata  # noqa: F401
 
 review_round = wrapper.review_round
@@ -51,12 +51,12 @@ def project_case(tmp_path, monkeypatch):
     selector_path, _, _ = _google_selector_fixture(tmp_path)
     args = ["antigravity_wrapper.py", "--prompt", "inspect approved source",
             "--cwd", str(cwd), "--sandbox", "read-only", "--project", PROJECT,
-            "--model", PRO, "--effort", "high", "--google-selector-receipt",
+            "--model", ARGON, "--effort", "high", "--google-selector-receipt",
             str(selector_path), "--expected-review-id", "review-r1", "--preflight-only"]
     return home, cwd, project_path, record, selector_path, args
 
 
-@pytest.mark.parametrize("model", [PRO, FLASH])
+@pytest.mark.parametrize("model", [ARGON, FLASH])
 def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
     project_case, monkeypatch, capsys, tmp_path, model,
 ):
@@ -76,7 +76,7 @@ def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
         assert "--sandbox" in cmd
         assert "--dangerously-skip-permissions" not in cmd
         event = _stream({"status": "SUCCESS", "structured_output": verdict})
-        event = event.replace(PRO, model)
+        event = event.replace(ARGON, model)
         return _run_result(event)
 
     monkeypatch.setattr(wrapper._common, "_run_once", native)
@@ -91,7 +91,7 @@ def test_project_preflight_and_dispatch_preserve_permissions_and_bind_uuid(
     selector = review_round.load_google_selector_receipt(selector_path, expected_review_id="review-r1")
     bound = review_round.validate_google_preflight_receipt(receipt_path, selector, expected_review_id="review-r1")
     # Both routes use the existing fixed pair contract; Flash cannot dispatch a singular prompt.
-    other_model = FLASH if model == PRO else PRO
+    other_model = FLASH if model == ARGON else ARGON
     other_record = {**receipt, "model": other_model,
                     "route_args": ["--model", other_model, "--effort", "high", "--project", PROJECT]}
     other_path = tmp_path / "other-preflight.json"
@@ -183,19 +183,19 @@ def test_project_argument_defect_rejects_before_probing(project_case, monkeypatc
 @pytest.mark.parametrize("suffix", [(), ("--project", PROJECT)])
 def test_project_pair_accepts_one_boundary_and_binds_digest(worktree, suffix):
     base = _brief(worktree)
-    pro = replace(base.google_selector_receipt, route_args=("--model", PRO, "--effort", "high") + suffix,
+    pro = replace(base.google_selector_receipt, route_args=("--model", ARGON, "--effort", "high") + suffix,
                   preflight_receipt_sha256="d" * 64 if suffix else "e" * 64)
     flash = replace(base.google_flash_preflight_receipt, route_args=("--model", FLASH, "--effort", "high") + suffix)
     brief = replace(base, google_selector_receipt=pro, google_flash_preflight_receipt=flash)
     prompts = [review_round.render_worktree_review_prompt(replace(brief, family=family, google_review_model=model))
-               for family, model in (("claude", PRO), ("google", PRO), ("google", FLASH), ("codex", PRO))]
+               for family, model in (("claude", ARGON), ("google", ARGON), ("google", FLASH), ("codex", ARGON))]
     assert len({_review_metadata(p)["content_digest"] for p in prompts}) == 1
 
 
 @pytest.mark.parametrize("flash_suffix", [(), ("--project", OTHER_PROJECT)])
 def test_project_pair_rejects_different_permission_boundaries(worktree, flash_suffix):
     base = _brief(worktree)
-    pro = replace(base.google_selector_receipt, route_args=("--model", PRO, "--effort", "high", "--project", PROJECT))
+    pro = replace(base.google_selector_receipt, route_args=("--model", ARGON, "--effort", "high", "--project", PROJECT))
     flash = replace(base.google_flash_preflight_receipt, route_args=("--model", FLASH, "--effort", "high") + flash_suffix)
     with pytest.raises(review_round.RoundIntegrityError):
         review_round.render_worktree_review_prompt(replace(base, google_selector_receipt=pro, google_flash_preflight_receipt=flash))
@@ -206,10 +206,10 @@ def test_project_pair_rejects_different_permission_boundaries(worktree, flash_su
 def test_project_receipt_accepts_only_canonical_suffix(project_case, tmp_path, suffix):
     _, _, _, _, selector_path, _ = project_case
     selector = review_round.load_google_selector_receipt(selector_path, expected_review_id="review-r1")
-    record = {**profile_receipt(), "agy_version": "1.2.2", "effort": "high", "model": PRO, "provider_started": False,
+    record = {**profile_receipt(), "agy_version": "1.2.2", "effort": "high", "model": ARGON, "provider_started": False,
               "review_id": "review-r1", "route": "agy", "executable": str(selector.executable),
               "google_selector_receipt_sha256": selector.receipt_sha256,
-              "route_args": ["--model", PRO, "--effort", "high", *suffix]}
+              "route_args": ["--model", ARGON, "--effort", "high", *suffix]}
     path = tmp_path / "preflight.json"
     payload = _canonical(record)
     path.write_bytes(payload)

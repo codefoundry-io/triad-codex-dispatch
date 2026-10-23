@@ -169,7 +169,7 @@ def test_explicit_gemini_pin_uses_own_block_with_agy_present(adapter_case):
     google = output["google"]
     assert google["route"] == "gemini" and google["model"] == "gemini-3.1-pro-preview"
     call = next(call for call in calls if "--preflight-only" in call)
-    assert "--effort" not in call and "gemini-3.1-pro-high" not in call
+    assert "--effort" not in call and "gemini-4-argon-high" not in call
 
 
 @pytest.mark.parametrize("fault", ["personal-pin", "missing-pin", "gemini-effort", "native-model", "native-effort", "native-source", "claude-agent", "claude-model"])
@@ -302,6 +302,6 @@ def test_C65_google_later_versions_keep_actual_preflight_controls(route, monkeyp
     assert rc == 0, error
     record = json.loads(output)
     assert record["agy_version" if name == "agy" else "gemini_version"] == version
-    assert record["model"] == ("gemini-3.1-pro-high" if name == "agy" else "gemini-3.1-pro-preview")
+    assert record["model"] == ("gemini-4-argon-high" if name == "agy" else "gemini-3.1-pro-preview")
     assert record["effort"] == ("high" if name == "agy" else None)
     assert record["provider_started"] is False
