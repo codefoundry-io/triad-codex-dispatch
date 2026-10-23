@@ -149,6 +149,7 @@ codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 
 For an already registered marketplace, use [Update](#update) to keep its existing
 source and tracked ref. To change either (including a candidate branch to `main`), run
+the first-migration checks under [Update](#update) before any removal. Once shared, run
 the [Remove procedure](../README.md#remove) in order: installed bootstrap removal,
 plugin removal, then marketplace removal. Register the chosen source above or
 below and install again. Preserve other marketplace registrations and personal settings.
@@ -332,7 +333,13 @@ denied writes/shell, and explicitly requested web separately on the chosen route
 
 ## Update
 
-For the first migration from direct launchers, keep the original four launchers
+The direct Codex migration supports 0.2.563 with exact dev5 pins and this release's
+dev6 direct source-SOT groups; older Codex groups refuse unchanged. Supported AGY
+requires the exact [80-file baseline](shared-runtime.md#installation-and-selection).
+Older direct installs need a separately reviewed transition that preserves any
+active consumer/round targets; removal is not an authentication bypass.
+
+For the first migration from a supported direct group, keep the original four launchers
 and their toolkit available until the new verified bootstrap has authenticated
 and retained their legacy binding. Do not run the old removal script first. If
 your plugin manager cannot retain the old cache during an update, use a verified
@@ -351,7 +358,9 @@ python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex"
 Run the printed command before removing its cache. It unregisters only that
 installation receipt and retains the shared commands, bindings and assets,
 owner-authored settings and learned classifier patches. If removal fails, resolve its reported
-problem before continuing. Then remove only this plugin, keeping the marketplace:
+problem before continuing. Multiple contexts for one root require the
+[explicit binding removal procedure](shared-runtime.md#installation-and-selection).
+Then remove only this plugin, keeping the marketplace:
 
 ```bash
 codex plugin remove triad-codex-dispatch@triad-codex-dispatch

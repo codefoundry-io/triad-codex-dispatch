@@ -139,6 +139,7 @@ codex plugin marketplace add codefoundry-io/triad-codex-dispatch --ref main
 
 이미 등록했다면 [업데이트](#업데이트)는 기존 경로와 추적 ref를 유지합니다.
 경로나 ref를 바꿀 때(후보 브랜치에서 `main`으로 전환하는 경우 포함)는
+[업데이트](#업데이트)의 첫 이관 검사를 어떤 제거보다 먼저 적용합니다. 공용 이관 후에
 [제거 절차](../README.ko.md#삭제)를 따라 설치된 bootstrap 제거, 플러그인 제거,
 마켓플레이스 제거 순서로 진행합니다. 위 또는 아래의 선택한 경로를 등록한 뒤
 다시 설치하세요. 다른 마켓플레이스와 개인 설정은 보존합니다.
@@ -319,7 +320,13 @@ Gemini 구버전 CLI 사용은 `triad-gemini-dispatch`, AGY는
 
 ## 업데이트
 
-직접 launcher를 처음 공용으로 이관할 때는 새로 검증한 bootstrap이 기존 legacy
+직접 Codex 이관은 정확한 dev5 pin의 0.2.563과 이 릴리스의 dev6 직접 source-SOT
+그룹만 지원하며 이전 버전은 변경 없이 거부합니다. AGY는 정확한
+[80파일 기준](shared-runtime.ko.md#설치와-선택)이 필요합니다. 이전 직접 설치는
+활성 consumer·라운드의 대상을 보존하는 별도 검토된 이관 절차가 필요하며 제거를
+인증 우회에 사용하지 않습니다.
+
+지원하는 직접 launcher를 처음 공용으로 이관할 때는 새로 검증한 bootstrap이 기존 legacy
 binding을 검증·보존할 때까지 원래 launcher 네 개와 toolkit을 유지합니다. 기존
 제거 스크립트를 먼저 실행하지 마세요. Plugin manager가 이전 cache를 유지할 수
 없으면 검증한 릴리스를 안정된 로컬 Git 경로(경로 B)에 두고 새 bootstrap을 먼저
@@ -336,6 +343,7 @@ python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex"
 캐시를 삭제하기 전에 출력된 명령을 실행하세요. 해당 설치 receipt만 등록 해제하고
 공용 명령·binding·자산, 사용자 작성 설정과 학습된 classifier patch를 보존합니다.
 제거가 실패하면 보고된 문제를 해결한 뒤 계속하세요.
+같은 root에 context가 여러 개면 [명시적 binding 제거 절차](shared-runtime.ko.md#설치와-선택)를 적용합니다.
 마켓플레이스 등록을 유지하면서 해당 플러그인만 제거합니다:
 
 ```bash

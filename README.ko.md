@@ -33,9 +33,9 @@ codex 플러그인으로 설치하고 계속 codex 에서 작업하되, 외부 �
 ## 제공 기능
 
 - `skills/` 아래의 Codex 플러그인 skill.
-- bootstrap은 Claude, agy, Gemini 세 provider wrapper와 `review_round.py`
-  selector launcher를 publish합니다.
-  `triad-setup` 및 `triad-doctor`는 remove-only legacy cleanup 이름입니다.
+- bootstrap은 Claude, agy, Gemini 공용 provider 명령과 `review_round.py`를
+  검증·등록하고 기존 legacy 기본값과 consumer별 고정 context를 보존합니다.
+  폐기된 `triad-setup` 및 `triad-doctor` 자산도 일반 공용 모드에서는 남으며 정리는 별도 작업입니다.
 - 정식 Google review는 어떤 family도 시작하기 전에 route를 선택해 고정합니다.
   AGY를 우선하며 개인 Google Sign-In에는 AGY가 필요합니다. owner가 Gemini
   Enterprise OAuth를 선택했고 AGY 실행 파일이 없을 때만 기존 Gemini CLI wrapper로
@@ -564,13 +564,14 @@ Vendor exit가 0인 plan-mode `ERROR` 결과에서, 실패한 `finish` 뒤에 �
 프로필에서만 인정합니다. Terminal `structured_output`은 기존 스키마·모델·review
 binding 검증을 거치며, 일반 `SUCCESS` 결과에는 이 복구용 감사를 추가하지 않습니다.
 
-일반 `--install`과 `--remove`는 marker 및 expected byte가 일치하는 정확한
-plugin-owned legacy profile, launcher rule, repair-agent registration, pre-spawn
-`[shell_environment_policy]`, retired apply/repair launcher만 정리합니다. Foreign,
-edited, linked, non-regular target은 보존하고 보고합니다. owner-authored 설정을 보존하며
-rule, permission profile, credential, 관련 없는 파일을 건드리지 않습니다.
-Legacy agent TOML은 전체 내용이 확인된 원본과 일치할 때만 정리합니다.
-확인되지 않았거나 설치 경로에 따라 생성된 파일은 unmanaged 경고와 함께 보존합니다.
+일반 공용 `--install`과 `--remove`는 legacy profile, launcher rule,
+repair-agent registration, pre-spawn `[shell_environment_policy]`, retired
+apply/repair launcher를 정확한 plugin-owned fragment까지 보존합니다. 정리는
+별도 작업이며 업데이트로 이 항목들이 비활성화됐다고 가정하면 안 됩니다.
+명시적으로 격리한 source-SOT stage에서만 marker와 byte가 일치하는 legacy
+항목을 정리합니다. 이 경로도 foreign, edited, linked, non-regular target은
+보존하며 legacy agent TOML은 전체 내용이 알려진 원본과 일치할 때만 정리합니다.
+사용자 작성 설정과 credential은 변경하지 않습니다.
 
 review runtime은 하나의 complete focused directory, required family별 하나의
 `LegVerdict`, bounded fix 이후 fresh complete round를 사용합니다. Batch, packet,
@@ -834,9 +835,9 @@ toolkit이 어디서 멈추는지 알 수 있도록, 정직한 경계:
 [마켓플레이스 또는 로컬 Git 업데이트 절차](docs/installation.ko.md#업데이트)를
 따라 개인 설정을 보존하면서 설치 캐시를 교체하세요.
 
-새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 permission state를 만들지 않고
-three provider wrapper launchers와 review-round selector launcher를 다시 publish하며 exact plugin-owned legacy cleanup을
-수행합니다. 업데이트 후 일반 Codex session을 새로 시작하세요.
+새로 출력된 절대 명령을 실행하세요. 기본 `--install`은 공용 명령 그룹을 검증하고
+보존 consumer binding을 등록하거나 재사용합니다. Permission state를 만들지 않으며
+전역 설정과 legacy 자산을 보존합니다. 업데이트 후 일반 Codex session을 새로 시작하세요.
 
 ## 설치 검증
 

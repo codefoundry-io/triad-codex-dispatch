@@ -17,10 +17,17 @@ command group before publishing a replacement:
 | Existing group | Result |
 | --- | --- |
 | All four commands absent | Register Codex and establish its first legacy default |
-| Verified direct Codex launchers | Preserve the original legacy target; add a retained Codex binding |
+| Verified supported direct Codex launchers | Preserve the original legacy target; add a retained Codex binding |
 | Verified supported AGY launchers | Preserve the original AGY payload, target and default; add Codex |
 | Verified shared generation | Preserve existing bindings/default; add or reuse Codex |
 | Partial, mixed, edited or unknown group | Refuse without replacing the group |
+
+Supported direct Codex inputs are 0.2.563 with the exact published dev5 package
+and source pins, or direct source-SOT launchers with this release's exact dev6
+package. Older Codex releases (including 0.2.562/dev4 and 0.2.561/dev3) are not
+admitted by this migration and are left unchanged. Keep their original toolkit
+and use a separately reviewed transition; do not delete their launchers or
+caches to bypass authentication while another consumer or direct round needs them.
 
 The supported direct AGY baseline is source commit
 `00f255826e894b82105d2b32e68b209d761f964b`: 80 runtime files, with canonical
@@ -60,6 +67,23 @@ hardened launchers, which pin the interpreter, vendor paths, trusted PATH and
 classifier path. The classifier's learned contents remain mutable under their
 existing policy. CLI calls preserve arguments, standard streams and exit status.
 
+Save `binding_id` from bootstrap's installation JSON. A provider-path or PATH
+change can create a second binding for the same plugin root. To recover a lost
+ID, inspect only regular JSON receipts in the installation directory whose
+`plugin_root` exactly matches the canonical root. The parent directory name of
+each receipt's `binding_file` is a candidate ID; authenticate it with
+`resolve --plugin-root "$plugin_root" --binding "$binding_id" --json` before use.
+Compare the returned context to select deliberately; do not choose by recency.
+To unregister one superseded receipt, use a command-local selector:
+
+```sh
+TRIAD_RUNTIME_BINDING="$old_binding_id" bash "$plugin_root/scripts/bootstrap.sh" --remove
+```
+
+This retains its binding and active-round assets. It does not change the legacy
+default or unregister other receipts. Use the selected new ID explicitly until
+only the intended receipt remains for that root.
+
 ## Rounds, updates and removal
 
 Resolve once before creating a round. Use its retained toolkit for every helper,
@@ -78,6 +102,20 @@ these directories rather than deleting them as cache cleanup.
 Normal shared installation/removal also preserves global shell and Codex
 configuration, including recognized legacy-managed fragments. Their cleanup is
 separate work; isolated source-SOT staging retains its scoped cleanup behavior.
+
+### Interrupted publication or unexpected files
+
+A killed install can leave `.<target-name>.<random>.tmp` hard-link residue;
+unexpected files such as `.DS_Store` in the receipt directory also cause refusal.
+Do not clear a runtime directory or ignore failed authentication. Stop its
+install/remove writers and retain the exact error, file paths and backups.
+An operator may unlink one confirmed temporary duplicate only after checking
+that it and its expected destination are regular, owner-owned files with the
+same device/inode, link count two, and expected bytes. Recheck authentication
+afterward. Unknown files require individual ownership review and preservation
+outside the managed directory; their names alone authorize no deletion.
+A mixed command group after interruption needs a reviewed recovery from the
+captured original group; removing a temporary link does not repair that group.
 
 The guarantees have explicit limits:
 

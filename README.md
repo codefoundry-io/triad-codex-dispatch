@@ -37,10 +37,10 @@ reaches out to the other families for you.
 ## What You Get
 
 - Codex plugin skills under `skills/`.
-- Bootstrap newly publishes three provider wrapper commands—Claude, agy, and
-  Gemini—plus one managed `review_round.py` selector launcher. The selector
-  launcher reuses the packaged script with both install-resolved Google CLI
-  pins. `triad-setup` and `triad-doctor` are remove-only legacy cleanup names.
+- Bootstrap authenticates and registers three shared provider commands—Claude,
+  agy, and Gemini—plus `review_round.py`, preserving the established legacy
+  default and each consumer's pinned context. Retired `triad-setup` and
+  `triad-doctor` artifacts remain in normal shared mode; their cleanup is separate.
 - Formal Google review selects and freezes its route before any family starts.
   AGY is preferred and is required for personal Google Sign-In. For an
   owner-selected Gemini Enterprise OAuth account, an absent AGY executable
@@ -599,14 +599,14 @@ execution. Web reads count only with the authorized web profile. The terminal
 `structured_output` still passes the existing schema, model and review-binding
 checks. This recovery check does not add an audit to ordinary `SUCCESS` results.
 
-Ordinary `--install` and `--remove` clean up only exact plugin-owned legacy
-profiles, launcher rules, repair-agent registration, pre-spawn
-`[shell_environment_policy]`, and retired apply/repair launchers whose markers
-and expected bytes match. Foreign, edited, linked, or non-regular targets are
-preserved and reported. This cleanup preserves owner-authored settings, rules,
-permission profiles, and credentials; unrelated files remain untouched.
-Legacy agent TOMLs qualify only when their complete bytes match a known original.
-Unknown or machine-rendered variants are preserved with the unmanaged-file warning.
+Ordinary shared `--install` and `--remove` preserve legacy profiles, launcher
+rules, repair-agent registration, pre-spawn `[shell_environment_policy]`, and
+retired apply/repair launchers, including exact plugin-owned fragments. Their
+cleanup is separate work; do not assume they were deactivated by an update.
+Only explicit isolated source-SOT staging performs marker/byte-matched legacy
+cleanup. In that branch, foreign, edited, linked or non-regular targets remain
+preserved; legacy agent TOMLs qualify only when their complete bytes match a
+known original. Owner-authored settings and credentials remain unchanged.
 
 The review runtime now uses one complete focused directory, one `LegVerdict`
 from each required family, and fresh complete rounds after bounded fixes. Batch,
@@ -893,10 +893,10 @@ Honest boundaries, so you know where the toolkit stops:
 Follow the [marketplace or local Git update procedure](docs/installation.md#update)
 to replace the installed cache while preserving personal settings.
 
-Run the newly printed absolute command. A plain `--install` republishes the
-three provider wrapper launchers plus the review-round selector launcher and performs exact plugin-owned legacy cleanup
-without creating permission state. Start a new ordinary Codex session after
-updating.
+Run the newly printed absolute command. A plain `--install` authenticates the
+shared command group and registers or reuses a retained consumer binding. It
+preserves global settings and legacy artifacts without creating permission
+state. Start a new ordinary Codex session after updating.
 
 ## Verify The Install
 

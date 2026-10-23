@@ -253,10 +253,11 @@ That coarse proposal validation is not semantic proof. Fine-grained substring
 specificity and residual misclassification remain analyzer and owner
 responsibility.
 
-Wrapper-launcher command groups continue to publish all-or-nothing through the
-existing staged transaction. That publication contract is separate from
-retired repair-agent cleanup, so failure does not expose a partial launcher
-group.
+Wrapper-launcher command groups use the existing staged transaction and roll
+back caught publication failures. This is not crash-atomic publication: a killed
+writer may leave temporary links or a mixed group requiring reviewed recovery.
+Normal shared mode preserves retired repair artifacts; exact cleanup is limited
+to isolated source-SOT staging. See [interruption recovery](docs/shared-runtime.md#interrupted-publication-or-unexpected-files).
 
 ## Review and coverage boundary
 

@@ -15,6 +15,12 @@
 binding을 추가합니다. 이미 공용 generation이면 기존 binding과 기본값을 유지합니다.
 일부만 존재하거나 서로 다른 출처, 수정된 파일, 알 수 없는 형식이면 교체를 거부합니다.
 
+직접 Codex 이관 입력은 정확한 공개 dev5 패키지·source pin을 가진 0.2.563,
+또는 이 릴리스와 동일한 dev6 패키지의 직접 source-SOT launcher만 지원합니다.
+0.2.562/dev4, 0.2.561/dev3 등 이전 버전은 변경 없이 거부합니다. 원래 toolkit을
+보존하고 별도로 검토한 이관 절차를 사용하세요. 다른 consumer나 직접 라운드가
+사용하는 launcher·cache를 삭제해서 인증을 우회하면 안 됩니다.
+
 지원하는 직접 AGY 기준은 커밋 `00f255826e894b82105d2b32e68b209d761f964b`의
 runtime 파일 80개입니다. canonical inventory SHA-256은
 `1b40aaf00c786a4595333a0d389cb6fba5d51ee002dc04f8e1c2add7500a6d83`입니다.
@@ -52,6 +58,21 @@ launcher로 interpreter, provider 경로, trusted PATH와 classifier 경로를 �
 classifier의 학습 내용은 기존 정책대로 변경할 수 있습니다. 인자·표준 입출력·종료
 상태는 그대로 전달합니다.
 
+설치 JSON의 `binding_id`를 보관하세요. Provider 경로나 PATH가 바뀌면 같은
+plugin root에 두 번째 binding이 생길 수 있습니다. ID를 잃었다면 설치 디렉터리의
+일반 JSON receipt 중 `plugin_root`가 canonical root와 정확히 일치하는 것만
+확인합니다. 각 `binding_file`의 부모 디렉터리 이름은 후보 ID이며, 사용 전에
+`resolve --plugin-root "$plugin_root" --binding "$binding_id" --json`으로
+검증하세요. 반환된 context를 비교해 선택하고 최신 파일이라는 이유로 고르지 않습니다.
+이전 receipt 하나만 등록 해제하려면 해당 명령에만 selector를 지정합니다.
+
+```sh
+TRIAD_RUNTIME_BINDING="$old_binding_id" bash "$plugin_root/scripts/bootstrap.sh" --remove
+```
+
+Binding과 활성 라운드 자산, legacy 기본값, 다른 receipt는 유지합니다. 같은 root에
+원하는 receipt 하나만 남을 때까지 새 ID를 명시적으로 사용하세요.
+
 ## 라운드, 업데이트와 제거
 
 라운드 준비 전에 한 번 선택하고 모든 helper·schema·reference·receipt에 같은
@@ -66,6 +87,18 @@ binding을 재사용하고 새 root·context는 이전 binding을 보존합니�
 활성 의존성을 확정할 수 없으면 모두 보존하고 자동 GC하지 않습니다.
 일반 공용 설치·제거는 전역 shell과 Codex 설정의 기존 managed fragment도 보존합니다.
 그 정리는 별도 작업이며 격리된 source-SOT stage의 기존 정리 동작은 유지합니다.
+
+### 게시 중단 또는 예상 밖 파일
+
+설치가 강제 종료되면 `.<target-name>.<random>.tmp` hard-link 잔여물이 남을 수
+있으며 receipt 디렉터리의 `.DS_Store` 같은 예상 밖 파일도 거부 원인이 됩니다.
+Runtime 디렉터리를 비우거나 인증 실패를 무시하지 마세요. 설치·제거 writer를
+종료하고 정확한 오류, 경로와 백업을 보존합니다. 운영자가 임시 중복 파일 하나를
+unlink하려면 예상 destination과 모두 일반 소유 파일이고 device/inode가 같으며
+link count가 2이고 예상 byte와 일치하는지 먼저 확인해야 합니다. 이후 인증을
+다시 확인합니다. 알 수 없는 파일은 개별 소유권을 확인하고 관리 디렉터리 밖에
+보존해야 하며 이름만으로 삭제하지 않습니다. 중단 후 혼합된 명령 그룹은 원본
+백업을 통한 별도 검토된 복구가 필요합니다. 임시 링크 제거만으로 그룹이 복구되지는 않습니다.
 
 보장 범위에는 다음 제한이 있습니다.
 

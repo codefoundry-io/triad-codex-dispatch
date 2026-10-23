@@ -23,6 +23,11 @@
 - Keeps host release, installation, fresh-session discovery and real provider
   behavior as separate verification claims. Claude and AGY adoption remains
   independently owned; no host-native model or effort contract changes here.
+- Clarifies preserved legacy settings, exact prior-Codex migration support,
+  explicit receipt selection/removal and interrupted-publication recovery.
+  Prior-library tests use frozen real dev5 bytes with a synthetic host; AGY unit
+  fixtures are synthetic. Actual supported AGY migration is a separate deployment
+  check, not evidence supplied by those fixtures.
 
 ## 0.2.563 — 2026-10-22
 
