@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import _common
 import google_preflight_v2
 import review_round
+import shared_runtime
 from claude_wrapper import EFFORT_CHOICES as CLAUDE_EFFORT_CHOICES
 from review_roster import DEFAULTS, _validate
 from validate_v2 import _json, load_contracts
@@ -32,6 +33,22 @@ def resolve_binary(name: str) -> str | None:
     if not path.is_file() or not os.access(path, os.X_OK):
         raise ValueError("selected CLI is not an executable file")
     return str(path)
+
+
+def _resolve(name, runtime_context):
+    if runtime_context is None:
+        return resolve_binary(name)
+    record = shared_runtime.verify_runtime_context(runtime_context, ROOT)
+    binary = record['context']['providers'][name]
+    if binary is not None and (not Path(binary).is_file() or not os.access(binary, os.X_OK)):
+        raise ValueError('pinned provider is unavailable')
+    return binary
+
+
+def _probe(argv, *, cwd, runtime_context):
+    if runtime_context is not None:
+        argv = shared_runtime.probe_invocation(runtime_context, argv)
+    return probe(argv, cwd=cwd)
 
 
 def probe(argv: list[str], *, cwd: Path, env: dict | None = None, cli: str = "preflight") -> str:
@@ -105,25 +122,25 @@ def _claude_selection_conflicts(requested: str | None, selected: str) -> bool:
     return pin in ("opus", "sonnet", "haiku", "fable") and pin != family
 
 
-def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
+def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False, runtime_context=None) -> dict:
     agent, model, effort = (block.get(key) for key in ("agent", "model", "effort"))
     if agent is not None and (
             not agent.strip() or any(char in agent for char in ("\x00", "\r", "\n"))):
         raise ValueError("Claude agent must be a nonblank native name without control separators")
     if effort is not None and effort not in CLAUDE_EFFORT_CHOICES:
         raise ValueError("Claude wrapper does not support the requested effort")
-    binary = resolve_binary("claude")
+    binary = _resolve("claude", runtime_context)
     if binary is None:
         raise ValueError("Claude reviewer executable is unavailable")
     data = _json(review_round._canonical_regular_file_bytes(ROOT / "bin/data/claude-capabilities.json", "Claude capabilities"))
     if (not isinstance(data, dict) or not isinstance(data.get("minimum_preflight_version"), str)
             or re.fullmatch(r"\d+\.\d+\.\d+", data["minimum_preflight_version"]) is None):
         raise ValueError("invalid packaged Claude capability document")
-    version_text = probe([binary, "--version"], cwd=cwd)
+    version_text = _probe([binary, "--version"], cwd=cwd, runtime_context=runtime_context)
     found = re.search(r"\b(\d+\.\d+\.\d+)\b", version_text)
     if found is None or tuple(map(int, found[1].split("."))) < tuple(map(int, data["minimum_preflight_version"].split("."))):
         raise ValueError("Claude session-only model preflight requires the supported CLI version")
-    help_text = probe([binary, "--help"], cwd=cwd)
+    help_text = _probe([binary, "--help"], cwd=cwd, runtime_context=runtime_context)
     required = ("--print", "--model", "--effort", "--no-session-persistence", "--permission-mode", "--output-format")
     if any(flag not in help_text for flag in required) or (agent is not None and "--agent" not in help_text):
         raise ValueError("installed Claude interface lacks required review controls")
@@ -136,7 +153,7 @@ def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
         command += ["--model", model]
     if effort is not None:
         command += ["--effort", effort]
-    selection = probe(command + (["/model " + model] if model is not None else ["/model"]), cwd=cwd)
+    selection = _probe(command + (["/model " + model] if model is not None else ["/model"]), cwd=cwd, runtime_context=runtime_context)
     prefix = "Set model to " if model is not None else "Current model: "
     if not selection.startswith(prefix):
         raise ValueError("Claude refused or did not expose the requested model selection")
@@ -179,16 +196,16 @@ def _claude(block: dict, *, cwd: Path, folder: Path, web: bool = False) -> dict:
 
 def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
             authentication_class: str, folder: Path, attempt: int, web: bool = False,
-            review_packet_dir: Path | None = None) -> dict:
+            review_packet_dir: Path | None = None, runtime_context=None) -> dict:
     pin = entry.get("google", {}).get("route")
     if authentication_class not in ("personal-google", "gemini-enterprise"):
         raise ValueError("unsupported Google authentication class")
     if pin == "gemini" and authentication_class == "personal-google":
         raise ValueError("personal Google authentication requires AGY")
-    route = pin or ("agy" if resolve_binary("agy") is not None else "gemini")
+    route = pin or ("agy" if _resolve("agy", runtime_context) is not None else "gemini")
     if route == "gemini" and authentication_class == "personal-google":
         raise ValueError("personal Google authentication requires an available AGY")
-    binary = resolve_binary(route)
+    binary = _resolve(route, runtime_context)
     if binary is None:
         raise ValueError("selected Google route is unavailable; no route substitution")
     block = entry.get(route)
@@ -228,6 +245,9 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
         argv += ["--sandbox", "read-only"]
     env = {"TRIAD_REQUIRE_PINNED_VENDOR": "1", "TRIAD_" + route.upper() + "_BIN": binary,
            "TRIAD_DISPATCH_LOG_DIR": str(folder / "logs")}
+    if runtime_context is not None:
+        call = shared_runtime.provider_invocation(runtime_context, wrapper.name, argv[2:], log_dir=folder / 'logs')
+        argv, env = call['argv'], call['env']
     raw = probe(argv, cwd=cwd, env=env,
                 cli="gemini" if route == "gemini" else "antigravity").encode("utf-8")
     preflight_file = folder / "preflight.json"
@@ -241,7 +261,9 @@ def _google(entry: dict, *, defaults: dict, review_id: str, cwd: Path,
 
 def prepare_adapters(roster: dict, *, review_id: str, cwd: Path, authentication_class: str,
                      native_capabilities: dict, receipt_root: Path, attempt: int = 1, review_web_authorized: bool = False,
-                     review_packet_dir: Path | None = None) -> dict:
+                     review_packet_dir: Path | None = None, runtime_context=None) -> dict:
+    if runtime_context is not None:
+        shared_runtime.verify_runtime_context(runtime_context, ROOT)
     if type(review_web_authorized) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
     review_round._validate_review_id(review_id)
@@ -270,11 +292,11 @@ def prepare_adapters(roster: dict, *, review_id: str, cwd: Path, authentication_
             if family == "codex":
                 extra = _native(entry["codex"], native_capabilities, web=review_web_authorized)
             elif family == "claude":
-                extra = _claude(entry["claude"], cwd=cwd, folder=folder, web=review_web_authorized)
+                extra = _claude(entry["claude"], cwd=cwd, folder=folder, web=review_web_authorized, runtime_context=runtime_context)
             else:
                 extra = _google(entry, defaults=defaults["google"], review_id=review_id,
                                 cwd=cwd, authentication_class=authentication_class, folder=folder, attempt=attempt,
-                                web=review_web_authorized, review_packet_dir=review_packet_dir)
+                                web=review_web_authorized, review_packet_dir=review_packet_dir, runtime_context=runtime_context)
             output[name] = {**base, **extra}
             _new(folder / "adapter.json", output[name])
         except (ValueError, OSError) as error:

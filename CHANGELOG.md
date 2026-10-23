@@ -1,8 +1,38 @@
 # Changelog
 
+## 0.2.564 — 2026-10-23
+
+- Bundles published `triad-dispatch-lib 0.1.0.dev6`, source
+  `1872227abd42553635c733e0aa228548a577a732`, wheel SHA-256
+  `5baf86483fe04935b2e21654508678eb21f7003a0038fb3875355a2e2967bfdc`.
+  Its additive compatibility API validates consumer bindings, selects only an
+  explicit or established legacy consumer and retains unknown dependencies.
+- Installs one verified shared command group with immutable consumer bindings
+  and retained Codex toolkits. A supported existing AGY group keeps its original
+  default, launcher payload and target; Codex calls select their own binding.
+  Partial, mixed, altered and unknown groups refuse before replacement.
+- Resolves installed skills once to the authenticated retained toolkit. Public
+  v2 seals that binding and its interpreter/provider/classifier context, uses
+  immutable hardened CLI allocations and verifies the same context on retry and
+  collection. Native spawning and source-SOT staging retain their existing routes.
+- Updates preserve old bindings. Removal unregisters only the selected
+  installation receipt and retains shared commands/assets conservatively.
+  Pre-migration direct rounds still require their original cache; independent
+  older AGY installers and external runtime dependencies remain outside the
+  guarantee. See [compatibility and lifecycle limits](docs/shared-runtime.md).
+- Keeps host release, installation, fresh-session discovery and real provider
+  behavior as separate verification claims. Claude and AGY adoption remains
+  independently owned; no host-native model or effort contract changes here.
+- Clarifies preserved legacy settings, exact prior-Codex migration support,
+  explicit receipt selection/removal and interrupted-publication recovery.
+  Prior-library tests use frozen real dev5 bytes with a synthetic host; AGY unit
+  fixtures are synthetic. Actual supported AGY migration is a separate deployment
+  check, not evidence supplied by those fixtures.
+
 ## 0.2.563 — 2026-10-22
 
-Unreleased candidate; status updated 2026-10-23.
+Historical candidate notes below. PR #47 was subsequently merged and v0.2.563
+published on 2026-10-23; its release record supersedes the candidate status.
 
 - Adds explicit `--timeout 2400` support to all three legacy formal provider
   wrappers while retaining Claude1200 and Google600 calls. Other legacy deadline

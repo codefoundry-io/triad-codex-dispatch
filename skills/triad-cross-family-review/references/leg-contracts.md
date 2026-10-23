@@ -128,11 +128,12 @@ and is the preflight's sole prompt input. Bind `google_authentication_class` to
 `personal-google` or `gemini-enterprise` as selected under
 [reviewer routing](reviewer-routing.md).
 
-For an installed operational skill whose bootstrap-managed launcher targets that installed
-toolkit root, bind it normally:
+For an installed operational skill, first resolve the authenticated retained
+toolkit and binding through [consumer selection](shared-runtime.md). Select its
+immutable hardened launcher; an unqualified common command can belong to AGY:
 
 ```text
-google_selector_launcher="$(command -v review_round.py)"
+google_selector_launcher="$launcher_dir/review_round.py"
 ```
 
 For source-SOT pre-deployment, stage an isolated launcher group from that exact

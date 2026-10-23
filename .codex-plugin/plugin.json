@@ -1,6 +1,6 @@
 {
   "name": "triad-codex-dispatch",
-  "version": "0.2.563",
+  "version": "0.2.564",
   "description": "Codex-led reviewer dispatch for Claude, Antigravity, Gemini, and convergent cross-family review.",
   "author": {
     "name": "codefoundry-io"

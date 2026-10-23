@@ -5,6 +5,10 @@ description: Use when a bounded task needs one authorized AGY Google-family answ
 
 # Antigravity Dispatch
 
+Installed calls first resolve the authenticated retained toolkit and use its
+per-binding hardened launcher under [consumer selection](../triad-cross-family-review/references/shared-runtime.md).
+Source-SOT examples below retain direct packaged-wrapper execution.
+
 Use the packaged `bin/antigravity_wrapper.py`.
 All read-only calls require AGY >=1.2.1 and select an explicitly provisioned
 native-tool profile with `excludeDefaultComponents: true`. Formal review selects

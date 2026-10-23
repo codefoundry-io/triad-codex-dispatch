@@ -253,10 +253,11 @@ That coarse proposal validation is not semantic proof. Fine-grained substring
 specificity and residual misclassification remain analyzer and owner
 responsibility.
 
-Wrapper-launcher command groups continue to publish all-or-nothing through the
-existing staged transaction. That publication contract is separate from
-retired repair-agent cleanup, so failure does not expose a partial launcher
-group.
+Wrapper-launcher command groups use the existing staged transaction and roll
+back caught publication failures. This is not crash-atomic publication: a killed
+writer may leave temporary links or a mixed group requiring reviewed recovery.
+Normal shared mode preserves retired repair artifacts; exact cleanup is limited
+to isolated source-SOT staging. See [interruption recovery](docs/shared-runtime.md#interrupted-publication-or-unexpected-files).
 
 ## Review and coverage boundary
 
@@ -343,9 +344,34 @@ selected route invalidates the round. See the
 
 ## Installation, cleanup, and owner state
 
+The shared runtime authenticates full consumer bindings, installation receipts,
+retained toolkit inventories and generated launchers before selecting a target.
+The supported direct AGY migration verifies its complete pinned runtime baseline
+and hardened AST; an AGY marker alone never establishes ownership. The ordinary
+Codex managed-command recognizer retains its stricter ownership boundary.
+Partial or mixed command groups and explicit unknown bindings refuse without
+fallback. See [compatibility boundaries](docs/shared-runtime.md).
+
+Bindings cover exact toolkit and classifier paths, interpreter/provider pins,
+trusted PATH and launcher bytes. Classifier contents remain mutable. Public v2
+authenticates and seals the installed context once; retries and collection do
+not follow the latest installation receipt. Native spawning remains host-owned.
+Snapshots do not attest external interpreters, user-site packages, provider
+binaries or credentials. Original AGY targets and pre-migration direct rounds
+still depend on their original installations.
+
+Publishing four common entry points plus an installation receipt uses rollback
+on failure, not simultaneous atomic replacement of every path. Prior bindings
+and assets remain retained. Shared removal unregisters the selected receipt;
+unknown dependencies cause conservative retention rather than asset deletion.
+Independent older AGY installers/removers remain outside that guarantee.
+
 Bootstrap installs three provider wrapper launchers plus one review-round
 selector launcher that supplies both install-resolved Google executable pins,
-and prints the owner apply argv. Install and remove perform exact plugin-owned legacy cleanup for old
+and prints the owner apply argv. Normal shared install/remove does not clean up
+global shell or Codex configuration, including exact legacy-managed fragments.
+Those fragments may remain for separately authorized cleanup. The existing
+isolated source-SOT branch retains exact plugin-owned cleanup for old
 profiles, command rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]` fragments, legacy agent TOMLs, and retired
 launchers only when their marker and expected content match. Foreign, edited,

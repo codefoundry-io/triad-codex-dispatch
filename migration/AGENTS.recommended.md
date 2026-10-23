@@ -114,6 +114,23 @@ returned `installedPath`. Run that printed absolute bootstrap command exactly
 from a normal terminal outside the plugin cache or checkout. Do not carry a
 temporary plugin-path variable across terminal or process boundaries.
 
+Installed operation resolves that canonical plugin root through its packaged
+`bin/shared_runtime.py resolve --plugin-root ROOT --json`. Authenticate the returned
+binding, retained toolkit and per-binding launchers before preparing a round.
+Use that same toolkit for all helper, provider, schema and reference calls;
+public v2 includes the returned `runtime_binding` and seals its execution context.
+Run allocations exactly as returned and retain the binding through retries and
+collection. Do not select Codex through an unqualified generic command, guess
+from PATH/CODEX_HOME, choose the latest receipt or write a global binding export.
+Ambiguous or invalid context stops preparation. Source-SOT remains direct.
+
+During first shared migration, preserve the original command group and toolkit
+until the new verified bootstrap has retained them. Shared removal unregisters
+only the selected installation receipt and retains shared assets. Direct rounds
+begun before migration and retained AGY legacy targets still need their original
+installation; independent older AGY installers and external dependencies need
+separate coordination. Follow the packaged shared-runtime guide.
+
 For source-SOT pre-deployment staging, follow the canonical leg-contract recipe:
 preserve login `HOME` and `CODEX_HOME`, and scope bootstrap's Codex directory with
 `TRIAD_BOOTSTRAP_CODEX_ROOT`. This does not change provider authentication or grant

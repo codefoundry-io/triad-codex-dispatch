@@ -5,6 +5,9 @@ description: Use when an owner requests independent cross-family review or when 
 
 # Triad Cross-Family Review
 
+Resolve one runtime before either route: installed operation follows
+[consumer selection](references/shared-runtime.md); source-SOT uses its isolated direct-source toolkit.
+
 Explicit owner/project selection of **public v2** uses [the v2 procedure](references/public-v2-review.md)
 for named rosters, producer/render/collector commands, host evidence and same-basis
 retry. Every enabled entry participates, including informational entries; never
@@ -36,21 +39,19 @@ zero-start, partial-start, finding, and rerun handling.
 
 ## Leader workflow
 
-1. **Authorize and bound.** The current owner-supplied task or explicitly
-   designated executable plan is the execution authority for the round. Record the objective,
+1. **Authorize and bound.** The current owner-supplied task or explicitly designated executable plan is the execution authority for the round. Record the objective,
    criteria, approved paths or categories, exclusions, test-source rule, and
    Google authentication class. Ask the owner when a required product or design
    decision is absent. Exclude credentials, authentication files, environment
    dumps, provider logs, and unrelated data.
 
-2. **Resolve one toolkit.** Resolve the repository root from this canonical
-   `SKILL.md` realpath and use only its packaged lifecycle and wrapper code.
-   Source-SOT review uses that source checkout; installed operation uses the matching installed launcher. Treat a different checkout or cache as a
-   different runtime even when one file is byte-identical.
+2. **Resolve one toolkit.** Resolve the root from this canonical `SKILL.md` realpath.
+   Source-SOT uses that checkout; installed operation uses it as the lookup key for
+   the authenticated retained toolkit and per-binding launchers in [consumer selection](references/shared-runtime.md).
+   Keep that binding and toolkit for every call; another checkout/cache is a different runtime.
    For source-SOT pre-deployment, stage the isolated launcher group from [leg contracts](references/leg-contracts.md) before creating or capturing the review basis.
-   Launch all TRIAD lifecycle, provider, test, and development commands outside
-   the Codex workspace sandbox under the user-selected host policy. Do not
-   install or mutate the Codex host permission policy.
+   Launch all TRIAD lifecycle, provider, test, and development commands outside the Codex
+   workspace sandbox under the user-selected host policy. Do not install or mutate the Codex host permission policy.
 
 3. **Create the basis.** For a prepared-directory round, pass the selected
    canonical source root, exact member-list file, required-member JSON, and fresh
@@ -111,18 +112,17 @@ zero-start, partial-start, finding, and rerun handling.
     adjudicates conflicting verified claims or oscillation on unchanged bytes.
 
 11. **Clean the exact round.** After integrity verification and adjudication,
-    finish all TRIAD-owned writers. Run packaged `export --review-id ID --expected-root ROOT
-    --output DESTINATION` to a new approved durable directory, then `cleanup`
-    with the same ID/root, one cleanup at a time. Worktree-first artifacts use the project's exact export/cleanup.
+    finish all TRIAD-owned writers. Run packaged `export --review-id ID --expected-root ROOT --output DESTINATION`
+    to a new approved durable directory, then `cleanup` with the same ID/root, one cleanup at a time.
+    Worktree-first artifacts use the project's exact export/cleanup.
     Preserve refused residue; follow [recovery](../../README.md#review-evidence-cleanup).
 
 ## Result and release boundary
 
 `SAFE` allows Minor findings but no Critical/Major finding or open question.
-`NOT-SAFE` requires a Critical/Major finding or open question. Provider prose,
-confidence, or policy disclaimers do not replace the structured result. The gate
-passes only when all three admitted results are `SAFE` for one verified digest.
+`NOT-SAFE` requires a Critical/Major finding or open question. Prose cannot replace
+the structured result: all three admitted results must be `SAFE` for one verified digest.
 
-Repository tests and a successful source review do not prove distribution. A
-release claim separately requires clean distribution verification of the packaged
-manifest and skill bytes, exact-byte staging, and a fresh Codex process proving the exact current marker.
+Repository tests and source review do not prove distribution. Release claims require clean
+distribution verification of packaged manifest and skill bytes, exact-byte staging,
+and a fresh Codex process proving the exact current marker.

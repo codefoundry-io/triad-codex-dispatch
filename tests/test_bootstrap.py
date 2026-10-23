@@ -102,10 +102,18 @@ def _make_repo_root(
     )
     shutil.copy2(BOOTSTRAP_REPAIR, bin_dir / "bootstrap_repair.py")
     shutil.copy2(ROOT / "requirements.txt", repo_root / "requirements.txt")
-    for name in ("library_adoption.py", "validate_v2.py", "verdict_schema.py"):
+    for name in ('README.md', 'README.ko.md', 'SECURITY.md', 'docs/installation.md',
+                 'docs/installation.ko.md', 'docs/shared-runtime.md', 'docs/shared-runtime.ko.md',
+                 'docs/references/repair-protocol.md'):
+        reference = repo_root / name
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, reference)
+    for name in ("library_adoption.py", "validate_v2.py", "verdict_schema.py", "shared_runtime.py"):
         shutil.copy2(ROOT / "bin" / name, bin_dir / name)
     shutil.copytree(ROOT / "bin/triad_dispatch_lib", bin_dir / "triad_dispatch_lib",
                     ignore=shutil.ignore_patterns("__pycache__"))
+    (bin_dir / 'data').mkdir(exist_ok=True)
+    shutil.copy2(ROOT / 'bin/data/agy-legacy-baseline.json', bin_dir / 'data/agy-legacy-baseline.json')
     for name in ("contracts/library-adoption.json", "vendor/triad-dispatch-lib.LICENSE"):
         target = repo_root / name
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -199,6 +207,10 @@ def _run_bootstrap(
         if key != "CODEX_HOME" and not key.startswith("TRIAD_")
     }
     default_pydantic_site = _fake_pydantic_site(tmp_path)
+    # Historical direct-launcher/cleanup assertions exercise the preserved
+    # source-SOT lifecycle. Shared installation tests explicitly clear this flag.
+    source_review = tmp_path / 'source-review'
+    source_review.mkdir(exist_ok=True)
     env = {
         **base_env,
         "HOME": str(tmp_path / "home"),
@@ -207,6 +219,7 @@ def _run_bootstrap(
         "TRIAD_BOOTSTRAP_REPO_ROOT": str(repo_root),
         "TRIAD_BOOTSTRAP_BIN_DIR": str(launcher_bin),
         "PYTHONPATH": str(default_pydantic_site),
+        "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": str(source_review),
     }
     if env_overrides:
         env.update(env_overrides)
@@ -2830,6 +2843,7 @@ def test_check_supports_workspace_contained_install_targets(tmp_path):
             "CODEX_HOME": str(workspace_codex),
             "XDG_CONFIG_HOME": str(workspace_config),
             "TRIAD_BOOTSTRAP_BIN_DIR": str(workspace_bin),
+            "TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT": "",
         },
     )
 
@@ -5212,3 +5226,49 @@ def test_install_reports_inventory_path_before_persistent_mutation(tmp_path, ext
         assert target.is_dir()
     else:
         assert target.read_text() == "owner metadata"
+
+
+def test_shared_install_then_remove_keeps_launchers_and_snapshot(tmp_path):
+    repo = _make_repo_root(tmp_path, real_skills=True)
+    result, env, commands = _run_bootstrap(tmp_path, repo_root=repo,
+        env_overrides={'TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT': ''}, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    receipts = Path(env['HOME']) / '.local/share/triad-codex-dispatch/installations'
+    receipt = json.loads(next(receipts.glob('*.json')).read_text())
+    binding = json.loads(Path(receipt['binding_file']).read_text())
+    retained = Path(binding['record']['toolkit_root'])
+    assert retained != repo and retained.is_dir()
+    before = {name: (commands / name).read_bytes() for name in MANAGED_LAUNCHERS}
+    assert all(b'# triad-dispatch shared launcher v1' in body for body in before.values())
+    removed, _, _ = _run_bootstrap(tmp_path, repo_root=repo, arg='--remove',
+        env_overrides={'TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT': ''}, timeout=30)
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert not list(receipts.glob('*.json'))
+    assert retained.is_dir()
+    assert before == {name: (commands / name).read_bytes() for name in MANAGED_LAUNCHERS}
+
+
+def test_source_sot_rejects_shared_binding_before_publication(tmp_path):
+    result, _, commands = _run_bootstrap(tmp_path, env_overrides={'TRIAD_RUNTIME_BINDING': 'a' * 64})
+    assert result.returncode != 0
+    assert 'conflicts with explicit shared runtime binding' in result.stderr
+    assert not any(commands.iterdir())
+
+
+def test_shared_lifecycle_preserves_exact_legacy_global_config_and_shell_bytes(tmp_path):
+    repo = _make_repo_root(tmp_path, real_skills=True)
+    codex = tmp_path / 'home/.codex'
+    codex.mkdir(parents=True)
+    profile = codex / 'triad-codex-dispatch.config.toml'
+    profile.write_bytes(FROZEN_LEGACY_PROFILE)
+    shell = tmp_path / 'shellrc'
+    shell.write_bytes(FROZEN_LEGACY_SHELL_ENTRY)
+    config = codex / 'config.toml'
+    helper = _load_bootstrap_repair_module()
+    config.write_bytes(helper.current_config_fragment(b'\n'))
+    before = {path: path.read_bytes() for path in (profile, shell, config)}
+    overrides = {'TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT': '', 'TRIAD_BOOTSTRAP_SHELL_RC': str(shell)}
+    for action in ('--install', '--remove'):
+        result, _, _ = _run_bootstrap(tmp_path, repo_root=repo, arg=action, env_overrides=overrides, timeout=30)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert before == {path: path.read_bytes() for path in before}

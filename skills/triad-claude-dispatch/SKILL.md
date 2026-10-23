@@ -5,6 +5,10 @@ description: Use when a bounded task needs one authorized Claude-family answer o
 
 # Claude Dispatch
 
+Installed calls first resolve the authenticated retained toolkit and use its
+per-binding hardened launcher under [consumer selection](../triad-cross-family-review/references/shared-runtime.md).
+Source-SOT examples below retain direct packaged-wrapper execution.
+
 Use the packaged `bin/claude_wrapper.py`; do not call provider internals or
 modify Claude authentication or user configuration. Ordinary calls leave Claude
 permission selection native. The fully bound formal `LegVerdict` route adds

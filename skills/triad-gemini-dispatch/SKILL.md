@@ -5,6 +5,10 @@ description: Use when a bounded task needs one authorized standalone Gemini CLI 
 
 # Gemini Dispatch
 
+Installed calls first resolve the authenticated retained toolkit and use its
+per-binding hardened launcher under [consumer selection](../triad-cross-family-review/references/shared-runtime.md).
+Source-SOT examples below retain direct packaged-wrapper execution.
+
 Use the packaged `bin/gemini_wrapper.py`; preserve native authentication,
 workspace trust, and permissions.
 

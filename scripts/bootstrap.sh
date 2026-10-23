@@ -10,23 +10,21 @@ usage() {
 Usage: scripts/bootstrap.sh --install
        scripts/bootstrap.sh --remove
 
---install checks local prerequisites for triad-codex-dispatch, removes exact
-plugin-owned repair and permission artifacts from older installs, and installs
-the provider and selector launcher group. Applying a validated proposal remains an explicit
+--install checks local prerequisites for triad-codex-dispatch and registers the
+verified shared provider and selector launcher group, preserving an authenticated
+legacy default and global configuration. Applying a validated proposal remains an explicit
 owner action through the bootstrap-printed login-shell Python argv (see
 docs/references/repair-protocol.md).
-It also quarantines any legacy personal-scope
-repair-agent TOMLs (bootstrap-authored provenance only — a same-name file
-without that provenance is left in place) left by an older install into a
-timestamped directory outside agents/, recoverable if needed.
 
---remove uninstalls managed provider and selector launchers and exact legacy plugin-owned
-profile, command-rule, config-fragment, shell-entry, and repair artifacts. It
-preserves owner-authored or edited artifacts and refuses unsafe targets without
-following or changing them. It
-also removes any bootstrap-managed (provenance-matched) legacy personal-scope
-repair-agent TOMLs left by an older install; a non-matching same-name file is
-preserved. Learned classifier patches are preserved.
+--remove unregisters only the selected installation receipt, retaining shared
+commands and runtime assets. Global configuration and learned classifier patches
+are preserved. Unsafe targets are refused without following or changing them.
+
+Only the explicit isolated TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT mode uses
+direct launchers and legacy scoped cleanup of exact plugin-owned artifacts.
+In that mode, install quarantines bootstrap-provenance-matched legacy personal
+repair-agent TOMLs; remove deletes managed direct launchers and matching legacy
+artifacts. Owner-authored, edited, or non-matching same-name files are preserved.
 
 TRIAD_BOOTSTRAP_CODEX_ROOT selects only bootstrap's Codex-directory targets and
 checks. It must resolve to an absolute path outside the guarded worktree.
@@ -245,7 +243,15 @@ PY
 
 publish_command_group() {
   [ -n "$COMMAND_MANIFEST" ] || return 0
-  if ! python3 "$REPO_ROOT/bin/bootstrap_repair.py" commands-install --manifest "$COMMAND_MANIFEST"; then
+  if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+    python3 "$REPO_ROOT/bin/bootstrap_repair.py" commands-install --manifest "$COMMAND_MANIFEST"
+  else
+    python3 "$REPO_ROOT/bin/shared_runtime.py" install --plugin-root "$REPO_ROOT" \
+      --launcher-dir "$LAUNCHER_DIR" --manifest "$COMMAND_MANIFEST" \
+      --shared-root "${TRIAD_BOOTSTRAP_SHARED_ROOT:-$HOME/.local/share/triad-dispatch-runtime}" \
+      --receipt-root "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}"
+  fi
+  if [ "$?" -ne 0 ]; then
     fail "could not install managed command group"
   else
     ok "managed command group installed"
@@ -421,12 +427,12 @@ PY
 }
 
 check_workspace_escape() {
-  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$BOOTSTRAP_CODEX_ROOT" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" <<'PY'
+  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$BOOTSTRAP_CODEX_ROOT" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" "${TRIAD_BOOTSTRAP_SHARED_ROOT:-$HOME/.local/share/triad-dispatch-runtime}" "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}" <<'PY'
 from pathlib import Path
 import os
 import sys
 
-pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, shell_rc_raw, repo_root_raw, source_sot_review_raw = sys.argv[1:]
+pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, shell_rc_raw, repo_root_raw, source_sot_review_raw, shared_raw, receipts_raw = sys.argv[1:]
 workspace = Path(pwd_raw).resolve()
 
 
@@ -453,6 +459,8 @@ targets = (
     ("python3 runtime", Path(sys.executable)),
 )
 failures = []
+if not source_sot_review_raw:
+    targets += (("shared runtime root", Path(shared_raw)), ("installation receipt root", Path(receipts_raw)))
 for label, target in targets:
     resolved = target.expanduser().resolve()
     if _within(resolved, workspace):
@@ -843,6 +851,16 @@ check_formal_schema_dependency() {
 }
 
 preflight_install_command_targets() {
+  if [ -z "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+    python3 "$REPO_ROOT/bin/shared_runtime.py" preflight --launcher-dir "$LAUNCHER_DIR" \
+      --shared-root "${TRIAD_BOOTSTRAP_SHARED_ROOT:-$HOME/.local/share/triad-dispatch-runtime}" \
+      --receipt-root "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}"
+    return "$?"
+  fi
+  if [ -n "${TRIAD_RUNTIME_BINDING:-}" ]; then
+    fail "source-SOT mode conflicts with explicit shared runtime binding"
+    return 1
+  fi
   command_preflight_failed=0
   for wrapper in $MANAGED_LAUNCHERS; do
     launcher="$LAUNCHER_DIR/$wrapper"
@@ -897,7 +915,7 @@ install_launchers() {
       fail "refusing to overwrite symlinked launcher: $launcher"
       continue
     fi
-    if ! launcher_is_managed "$launcher" "$wrapper"; then
+    if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ] && ! launcher_is_managed "$launcher" "$wrapper"; then
       fail "refusing to overwrite unmanaged launcher: $launcher"
       continue
     fi
@@ -1193,6 +1211,10 @@ remove_legacy_permission_artifacts() {
 }
 
 run_remove() {
+  if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ] && [ -n "${TRIAD_RUNTIME_BINDING:-}" ]; then
+    fail "source-SOT mode conflicts with explicit shared runtime binding"
+    return
+  fi
   if ! command -v python3 >/dev/null 2>&1; then
     fail "missing required binary: python3"
     return
@@ -1203,6 +1225,15 @@ run_remove() {
   # symlink) must not make install succeed and the matching remove fail.
   canonicalize_path_inputs
   if [ "$errors" -ne 0 ]; then
+    return
+  fi
+
+  if [ -z "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+    python3 "$REPO_ROOT/bin/shared_runtime.py" remove --plugin-root "$REPO_ROOT" \
+      --receipt-root "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}"
+    if [ "$?" -ne 0 ]; then
+      fail "could not remove authenticated installation receipt"
+    fi
     return
   fi
 
@@ -1383,7 +1414,7 @@ fi
 # Exact legacy repair targets share config and launcher state with the remaining
 # bootstrap steps. Reject unsafe removal targets before the first persistent
 # mutation; the later transactional cleanup revalidates them against races.
-if ! run_repair_lifecycle preflight-remove; then
+if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ] && ! run_repair_lifecycle preflight-remove; then
   printf '[error] legacy repair cleanup preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
@@ -1399,11 +1430,13 @@ if ! preflight_classifier; then
   printf '[error] classifier preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
-if ! remove_legacy_permission_artifacts; then
-  printf '[error] legacy plugin artifact cleanup failed; skipping installation steps\n' >&2
-  exit 1
+if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+  if ! remove_legacy_permission_artifacts; then
+    printf '[error] legacy plugin artifact cleanup failed; skipping installation steps\n' >&2
+    exit 1
+  fi
+  migrate_legacy_repair_agents
 fi
-migrate_legacy_repair_agents
 ensure_log_dir
 if ! ensure_classifier; then
   printf '[error] classifier installation failed; skipping remaining installation steps\n' >&2

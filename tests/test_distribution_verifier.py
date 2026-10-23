@@ -25,6 +25,7 @@ EXPECTED_HASH_TARGETS = (
     "skills/triad-cross-family-review/references/review-prompt-contract.md",
     "skills/triad-cross-family-review/references/reviewer-routing.md",
     "skills/triad-cross-family-review/references/public-v2-review.md",
+    "skills/triad-cross-family-review/references/shared-runtime.md",
     "skills/triad-cross-family-review/references/review-web.md",
     "skills/triad-gemini-dispatch/SKILL.md",
     "skills/triad-gemini-dispatch/agents/openai.yaml",
@@ -51,6 +52,7 @@ EXPECTED_HASH_TARGETS = (
     "bin/google_preflight_v2.py",
     "bin/data/gemini-models.json",
     "bin/data/claude-capabilities.json",
+    "bin/data/agy-legacy-baseline.json",
     "bin/verdict_schema.py",
     "bin/validate_v2.py",
     "contracts/leg-verdict.schema.json",
@@ -69,6 +71,7 @@ EXPECTED_HASH_TARGETS = (
     "requirements.txt",
     "scripts/bootstrap.sh",
     "bin/bootstrap_repair.py",
+    "bin/shared_runtime.py",
     "bin/library_adoption.py",
     "contracts/library-adoption.json",
     "scripts/vendor_library.py",
@@ -198,7 +201,7 @@ def test_verifier_archives_head_compares_hashes_and_runs_package_tests(
         (fixture_repo / manifest).read_bytes()
     ).hexdigest()
     assert report["version"] == "0.2.533"
-    assert report["library_adoption"]["version"] == "0.1.0.dev5"
+    assert report["library_adoption"]["version"] == "0.1.0.dev6"
     assert report["os"] and report["architecture"] and report["python"]
     assert report["tests"]["skipped"] == 0
     assert report["tests"]["returncode"] == 0
