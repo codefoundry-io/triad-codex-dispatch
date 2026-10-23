@@ -93,7 +93,7 @@ def test_invalid_roster_stops_before_adapter_preparation(round_fixture, monkeypa
     monkeypatch.setattr(mod, "prepare_adapters", forbidden)
     with pytest.raises(ValueError, match='instance_path=\\["legs", 0, "timeout_s"\\]'):
         mod.create_basis(request, root=root)
-    assert not (root / "basis.json").exists()
+    assert not (root / "basis-v2.json").exists()
 
 
 def finish(fixture, allocation, *, changes=None, failed=False, reads=None,

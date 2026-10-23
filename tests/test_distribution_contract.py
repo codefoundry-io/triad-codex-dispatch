@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import stat
 import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +19,29 @@ SKILLS = ROOT / "skills"
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("document,heading", [("README.md", "## Remove"), ("README.ko.md", "## 삭제")])
+def test_documented_removal_prints_selected_installation_not_marketplace_source(tmp_path, document, heading):
+    installed = tmp_path / 'installed "plugin"'
+    (installed / 'scripts').mkdir(parents=True)
+    (installed / 'scripts/bootstrap.sh').write_text('exit 99\n')
+    marketplace = tmp_path / 'marketplace-source'
+    fake_bin = tmp_path / 'bin'
+    fake_bin.mkdir()
+    metadata = {"installed": [{"pluginId": "triad-codex-dispatch@triad-codex-dispatch",
+                              "source": {"path": str(marketplace)}}]}
+    codex = fake_bin / 'codex'
+    codex.write_text('#!/bin/sh\nprintf \'%s\\n\' ' + shlex.quote(json.dumps(metadata)) + '\n')
+    codex.chmod(0o755)
+    section = _text(ROOT / document).split(heading, 1)[1]
+    block = section.split('```bash\n', 1)[1].split('```', 1)[0]
+    command = next(line for line in block.splitlines() if line.startswith('python3 '))
+    result = subprocess.run(['bash', '-c', 'plugin_root=' + shlex.quote(str(installed)) + '\n' + command],
+                            capture_output=True, text=True,
+                            env={**os.environ, 'PATH': str(fake_bin) + os.pathsep + os.environ['PATH']})
+    assert result.returncode == 0, result.stderr
+    assert shlex.split(result.stdout) == ['bash', str(installed / 'scripts/bootstrap.sh'), '--remove']
 
 
 def test_manifest_describes_the_convergent_distribution() -> None:

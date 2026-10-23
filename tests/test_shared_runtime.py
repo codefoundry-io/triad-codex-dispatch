@@ -53,6 +53,146 @@ def install(parts):
                                        receipt_root=receipts, launcher_dir=commands)
 
 
+def frozen_dev6_generation(tmp_path, consumer):
+    """Run the verified old producer in a separate interpreter, never in the host."""
+    parts = fixture(tmp_path)
+    module, toolkit, context, shared, receipts, commands = parts
+    old_toolkit = tmp_path / 'old-dev6-plugin'
+    shutil.copytree(toolkit, old_toolkit)
+    shutil.rmtree(old_toolkit / 'bin/triad_dispatch_lib')
+    frozen_root = ROOT / 'tests/fixtures/shared-runtime-dev6'
+    for filename, approved in (
+        ('library.zip', 'ea1ff46ef16e79d446abfc1d97f75c78eca81ca929466feafc8397a88a12082a'),
+        ('producer.zip', '3416c06224f415293d9503e562ff3b0f0470d4f043cfbf58ea7d77c271ea2ee2'),
+    ):
+        archive = frozen_root / filename
+        assert module.digest(archive.read_bytes()) == approved
+        with zipfile.ZipFile(archive) as frozen:
+            names = frozen.namelist()
+            if filename == 'library.zip':
+                adoption = json.loads(frozen.read('contracts/library-adoption.json'))
+                assert adoption['source_commit'] == '1872227abd42553635c733e0aa228548a577a732'
+                assert module.digest(module.canonical(adoption['sha256'])) == '6929313b5f1cb32f9fb3b148ec77f35486d304c9091ebc073da362d66eaed018'
+                assert sorted(names) == sorted(['contracts/library-adoption.json', *adoption['sha256']])
+            else:
+                assert sorted(names) == ['bin/bootstrap_repair.py', 'bin/library_adoption.py', 'bin/shared_runtime.py']
+            for name in names:
+                relative = Path(name)
+                assert not relative.is_absolute() and '..' not in relative.parts
+                target = old_toolkit / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(frozen.read(name))
+    baseline = None
+    if consumer == 'agy':
+        legacy = tmp_path / 'agy-legacy'
+        shutil.copytree(toolkit, legacy)
+        commands.mkdir()
+        legacy_context = {**context, 'classifier': str(tmp_path / 'legacy-classifier.json')}
+        for name in module.COMMANDS:
+            body = module.launcher_bytes(legacy, name, legacy_context).decode()
+            body = body.replace('env.pop("TRIAD_RUNTIME_BINDING", None)\n', '').replace('"-E", "-B",', '"-E",')
+            body = body.replace('# triad-codex-dispatch managed launcher', '# agy-triad-dispatch managed launcher')
+            (commands / name).write_text(body)
+            (commands / name).chmod(0o755)
+        scopes = json.loads((ROOT / 'bin/data/agy-legacy-baseline.json').read_text())['inventory_scope']
+        assets = module.inventory(legacy, scopes)
+        baseline = dict(inventory_scope=scopes, inventory=assets,
+                        inventory_serialization={'sha256': module.digest(module.canonical(assets))},
+                        library={'approved_content_sha256': 'a' * 64})
+    request = tmp_path / 'old-producer-request.json'
+    request.write_text(json.dumps(dict(toolkit=str(old_toolkit), context=context, shared=str(shared),
+                                      receipts=str(receipts), commands=str(commands), baseline=baseline)))
+    runner = '''import json,sys
+from pathlib import Path
+request=json.loads(Path(sys.argv[1]).read_text())
+sys.path.insert(0,str(Path(request['toolkit'])/'bin'))
+import shared_runtime as old
+if request['baseline'] is not None:
+    original=old.verify_legacy_group
+    old.verify_legacy_group=lambda paths: original(paths,request['baseline'])
+result=old.publish_installation(Path(request['toolkit']),request['context'],
+    shared_root=Path(request['shared']),receipt_root=Path(request['receipts']),
+    launcher_dir=Path(request['commands']))
+print(json.dumps(result))
+'''
+    result = subprocess.run([sys.executable, '-E', '-B', '-c', runner, str(request)],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    return parts, json.loads(result.stdout), old_toolkit
+
+
+@pytest.mark.parametrize('consumer', ['codex', 'agy'])
+@pytest.mark.parametrize('receipt_present', [True, False])
+def test_frozen_dev6_shared_generation_upgrades_preserving_bindings_and_default(tmp_path, consumer, receipt_present):
+    parts, old, old_toolkit = frozen_dev6_generation(tmp_path, consumer)
+    module, toolkit, context, shared, receipts, commands = parts
+    _, before = module.preflight_group(commands)
+    old_bindings = {identity: Path(path).read_bytes() for identity, path in before['bindings'].items()}
+    call = [str(commands / 'claude_wrapper.py'), 'unchanged']
+    observed = subprocess.run(call, input='input', capture_output=True, text=True, env={})
+    assert observed.returncode == 7, observed.stderr
+    old_classifier = context['classifier']
+    context['classifier'] = str(tmp_path / 'new-classifier.json')
+    if not receipt_present:
+        Path(old['receipt_file']).unlink()
+    installed = install(parts)
+    _, after = module.preflight_group(commands)
+    assert after['legacy_binding'] == before['legacy_binding']
+    assert set(after['bindings']) == {*old_bindings, installed['binding_id']}
+    assert all(Path(after['bindings'][identity]).read_bytes() == payload
+               for identity, payload in old_bindings.items())
+    if receipt_present:
+        assert module.resolve_installed_runtime(old_toolkit, receipt_root=receipts)['binding_id'] == old['binding_id']
+    assert module.runtime_context(Path(before['bindings'][old['binding_id']])) == old['runtime_context']
+    for selector in (None, old['binding_id'], installed['binding_id']):
+        result = subprocess.run(call, input='input', capture_output=True, text=True,
+                                env={} if selector is None else {'TRIAD_RUNTIME_BINDING': selector})
+        assert result.returncode == 7, result.stderr
+        output = json.loads(result.stdout)
+        assert output['argv'] == ['unchanged']
+        assert output['stdin'] == 'input'
+        if selector is not None:
+            assert output['classifier'] == (context['classifier'] if selector == installed['binding_id']
+                                            else old_classifier)
+        if selector is None:
+            assert (result.stdout, result.stderr) == (observed.stdout, observed.stderr)
+
+
+@pytest.mark.parametrize('damage', ['license', 'adoption', 'extra-file'])
+def test_frozen_dev6_generation_tamper_refuses_before_replacement(tmp_path, damage):
+    parts, old, _ = frozen_dev6_generation(tmp_path, 'codex')
+    module, _, _, shared, receipts, commands = parts
+    # Exercise generation authentication itself, without receipt inventory checks.
+    Path(old['receipt_file']).unlink()
+    snapshot = Path(old['toolkit_root'])
+    if damage == 'extra-file':
+        (snapshot / 'bin/triad_dispatch_lib/unlisted.py').write_text('# unlisted\n')
+    else:
+        target = snapshot / ('vendor/triad-dispatch-lib.LICENSE' if damage == 'license'
+                             else 'contracts/library-adoption.json')
+        target.chmod(0o644)
+        if damage == 'license':
+            target.write_bytes(target.read_bytes() + b'\nchanged\n')
+        else:
+            adoption = json.loads(target.read_text())
+            adoption['source_commit'] = '0' * 40
+            target.write_text(json.dumps(adoption))
+    def state():
+        return {str(path): path.read_bytes() for root in (shared, receipts, commands)
+                for path in root.rglob('*') if path.is_file()}
+    before = state()
+    with pytest.raises(ValueError):
+        install(parts)
+    assert state() == before
+
+
+def test_new_codex_binding_requires_current_library_even_when_prior_generation_is_supported(tmp_path):
+    parts, _, old_toolkit = frozen_dev6_generation(tmp_path, 'codex')
+    module, _, context, shared, _, _ = parts
+    with pytest.raises(ValueError, match='unexpected library adoption identity'):
+        module.create_codex_binding(old_toolkit, context, shared_root=shared)
+
+
 @pytest.mark.parametrize('version,source,inventory_digest,count,archive_digest', [
     ('dev5', '859f27c07c1123e87b50344f587999a0cbc172a6',
      'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08', 26,

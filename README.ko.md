@@ -904,8 +904,15 @@ fresh shell에서 현재 설치된 plugin 경로를 다시 확인해 managed uni
 출력한 뒤 plugin cache를 지우세요(script가 그 cache 안에 있습니다).
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+plugin_root="/absolute/path/to/currently-installed/triad-codex-dispatch"
+python3 -c 'import pathlib,shlex,sys; root=pathlib.Path(sys.argv[1]); assert root.is_absolute() and root.resolve(strict=True)==root; script=root / "scripts" / "bootstrap.sh"; assert script.is_file(); print(shlex.join(["bash",str(script),"--remove"]))' "$plugin_root"
 ```
+
+`plugin_root`에는 설치 버전의 canonical 캐시 디렉터리(일반적으로
+`~/.codex/plugins/cache/triad-codex-dispatch/triad-codex-dispatch/<installed-version>`)
+또는 등록한 로컬 설치 root를 지정합니다. `codex plugin list --json`으로 설치
+버전을 확인하되, `source.path`는 마켓플레이스 snapshot일 수 있습니다.
+[runtime resolver](docs/installation.ko.md#설치-확인)로 선택한 설치 root를 검증하세요.
 
 출력된 절대 removal 명령을 실행한 다음 plugin registration을 제거합니다.
 
@@ -965,9 +972,10 @@ cleanup까지 남아 있습니다.
 그 한계를 밝히고 escalation을 반환합니다.
 
 직접 만든 Codex custom subagent가 triad dispatch skill을 호출해야 한다면 Codex
-`skills.config`에 필요한 `SKILL.md` 경로를 명시하세요. 경로는 live
-`codex plugin list --json` 출력의 현재 설치 plugin `source.path` 아래 skill 파일을
-가리키면 됩니다.
+`skills.config`에 필요한 `SKILL.md` 경로를 명시하세요. [삭제](#삭제) 안내에 따라
+검증한 canonical 설치 `plugin_root` 아래 파일을 선택합니다. 예:
+`$plugin_root/skills/triad-claude-dispatch/SKILL.md`. 설정에는 변수를 확장한 절대
+경로를 입력하세요. 마켓플레이스의 `source.path`는 설치 root가 아닙니다.
 
 custom-agent TOML을 바꾼 뒤에는 새 Codex session을 시작하세요.
 

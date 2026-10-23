@@ -968,8 +968,15 @@ uninstall command before removing the plugin cache (the script lives inside
 it):
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+plugin_root="/absolute/path/to/currently-installed/triad-codex-dispatch"
+python3 -c 'import pathlib,shlex,sys; root=pathlib.Path(sys.argv[1]); assert root.is_absolute() and root.resolve(strict=True)==root; script=root / "scripts" / "bootstrap.sh"; assert script.is_file(); print(shlex.join(["bash",str(script),"--remove"]))' "$plugin_root"
 ```
+
+Set `plugin_root` to the installed version's canonical cache directory (normally
+`~/.codex/plugins/cache/triad-codex-dispatch/triad-codex-dispatch/<installed-version>`)
+or its registered local installation root. `codex plugin list --json` identifies
+the installed version, but its `source.path` may identify a marketplace snapshot.
+Verify the selected installed root with the [runtime resolver](docs/installation.md#verify-the-installation).
 
 Run that printed absolute removal command, then remove the plugin registration:
 
@@ -1037,8 +1044,10 @@ from unrelated public errors; unavailable needed research ends in escalation.
 
 If you create your own Codex custom subagent that should call triad dispatch
 skills, opt in explicitly with Codex `skills.config` entries pointing at the
-needed `SKILL.md` files under the current installed plugin `source.path` from
-live `codex plugin list --json` output.
+needed `SKILL.md` files under the canonical installed `plugin_root` verified
+as described under [Remove](#remove), for example
+`$plugin_root/skills/triad-claude-dispatch/SKILL.md`. Use an expanded absolute
+path in the configuration. A marketplace `source.path` is not the installed root.
 
 After editing custom-agent TOML files, start a new Codex session.
 
