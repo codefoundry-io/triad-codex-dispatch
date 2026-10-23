@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry
 
 import review_round as lifecycle
+import shared_runtime
 from review_prompts_v2 import load_bundle, render_prompt
 from review_roster import resolve_roster
 from validate_v2 import BINDING_FIELDS, _json, load_contracts, validate_review_kind, validate_verdict
@@ -118,6 +119,13 @@ def _load_basis(path: Path) -> dict:
     if _hash(_bytes(substantive)) != claimed:
         raise ValueError("v2 basis content digest mismatch")
     request = basis["request"]
+    context = basis.get("runtime_context")
+    if context is not None:
+        shared_runtime.verify_runtime_context(context, TOOLKIT)
+        if request.get("runtime_binding") != context["binding_id"]:
+            raise ValueError("basis runtime binding mismatch")
+    elif shared_runtime.context_for_toolkit(TOOLKIT, request.get("runtime_binding")) is not None:
+        raise ValueError("missing sealed runtime context")
     if lifecycle._lifecycle_root(Path(request["prepared_dir"])) != path.parent:
         raise ValueError("v2 basis must remain in its managed review root")
     snapshot = lifecycle.RoundSnapshot(**basis["snapshot"])
@@ -131,9 +139,10 @@ def _load_basis(path: Path) -> dict:
 def create_basis(request: dict, *, root: Path) -> dict:
     required = {"review_id", "project_root", "prepared_dir", "worktree", "mode", "objective",
                 "criteria", "approved_boundary", "authentication_class", "native_capabilities"}
-    if not isinstance(request, dict) or not required <= set(request) or set(request) - required - {"prior_residual", "review_web_authorized", "review_kind"}:
+    if not isinstance(request, dict) or not required <= set(request) or set(request) - required - {"prior_residual", "review_web_authorized", "review_kind", "runtime_binding"}:
         raise ValueError("invalid v2 review request fields")
     request = _json(_bytes(request))
+    runtime_context = shared_runtime.context_for_toolkit(TOOLKIT, request.get("runtime_binding"))
     request.setdefault("review_web_authorized", False)
     if type(request["review_web_authorized"]) is not bool:
         raise ValueError("review_web_authorized must be a boolean")
@@ -161,6 +170,7 @@ def create_basis(request: dict, *, root: Path) -> dict:
         authentication_class=request["authentication_class"],
         native_capabilities=request["native_capabilities"], receipt_root=preparation,
         review_packet_dir=prepared if request["mode"] == "guarded-worktree" else None,
+        **({"runtime_context": runtime_context} if runtime_context is not None else {}),
         **({"review_web_authorized": True} if request["review_web_authorized"] else {}))
     if set(adapters) != set(roster["enabled"]) or any(
             adapter.get("capabilities_checked") is not True for adapter in adapters.values()):
@@ -175,6 +185,8 @@ def create_basis(request: dict, *, root: Path) -> dict:
              "roster": roster, "enabled": roster["enabled"], "adapters": adapters,
              "adapter_files": _adapter_files(adapters), "snapshot": dataclasses.asdict(snapshot),
              "packet_files": [str(path) for path in packet], "toolkit": _toolkit()}
+    if runtime_context is not None:
+        basis["runtime_context"] = runtime_context
     basis["content_digest"] = _hash(_bytes(basis))
     # Exercise all prompt inputs before sealing a usable basis, without dispatch.
     for name in basis["enabled"]:
@@ -207,7 +219,7 @@ def _prompt(basis: dict, binding: dict, adapter: dict) -> str:
         review_kind=request["review_kind"], review_date=basis["review_date"])
 
 
-def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict:
+def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str, *, runtime_context=None) -> dict:
     if adapter["family"] == "codex":
         return {"tool": "collaboration.spawn_agent", "arguments": {
             "task_name": "review_" + _hash((binding["review_id"] + ":" + binding["leg_name"]).encode())[:12] + "_" + str(binding["attempt"]),
@@ -240,6 +252,10 @@ def _invocation(binding: dict, adapter: dict, folder: Path, prompt: str) -> dict
     if adapter.get("project") is not None:
         argv += ["--project", adapter["project"]]
     binary_name = "AGY" if route == "agy" else route.upper()
+    if runtime_context is not None:
+        shared_runtime.verify_runtime_context(runtime_context, TOOLKIT)
+        return {**shared_runtime.provider_invocation(runtime_context, wrapper, argv[2:], log_dir=folder / "logs"),
+                "stdout_file": str(folder / "wrapper.stdout"), "stderr_file": str(folder / "wrapper.stderr")}
     return {"argv": argv, "stdout_file": str(folder / "wrapper.stdout"),
             "stderr_file": str(folder / "wrapper.stderr"),
             "env": {"TRIAD_DISPATCH_LOG_DIR": str(folder / "logs"),
@@ -269,6 +285,11 @@ def _allocation(basis: dict, name: str, path: Path) -> dict:
             or item["folder"] != str(path) or _controls(item["adapter"]) != _controls(basis["adapters"][name])):
         raise ValueError("v2 allocation does not match its basis")
     _check_files(item["files"])
+    if basis.get("runtime_context") is not None:
+        expected = _invocation(item["binding"], item["adapter"], path,
+                               _read(path / "prompt.md").decode(), runtime_context=basis["runtime_context"])
+        if item["invocation"] != expected:
+            raise ValueError("allocated invocation differs from retained runtime")
     return item
 
 
@@ -289,6 +310,7 @@ def allocate_attempt(basis_file: Path, name: str, *, diagnosis: str | None = Non
             authentication_class=request["authentication_class"], native_capabilities=request["native_capabilities"],
             receipt_root=_preparation(Path(basis["root"])), attempt=number,
             review_packet_dir=Path(request["prepared_dir"]) if request["mode"] == "guarded-worktree" else None,
+            **({"runtime_context": basis["runtime_context"]} if basis.get("runtime_context") is not None else {}),
             **({"review_web_authorized": True} if request.get("review_web_authorized", False) else {}))[name]
         if _controls(adapter) != _controls(basis["adapters"][name]):
             raise ValueError("launch controls changed; every entry requires a new basis")
@@ -307,7 +329,7 @@ def allocate_attempt(basis_file: Path, name: str, *, diagnosis: str | None = Non
             "prompt_file": str(folder / "prompt.md"), "result_file": str(folder / "result.json"),
             "read_evidence_file": str(folder / "read-evidence.json"),
             "receipt_file": str(folder / "provider-receipt.json"),
-            "invocation": _invocation(binding, adapter, folder, prompt),
+            "invocation": _invocation(binding, adapter, folder, prompt, runtime_context=basis.get("runtime_context")),
             "files": {str(folder / "prompt.md"): _hash(prompt.encode("utf-8")),
                       **_adapter_files({name: adapter})}}
     _load_basis(basis_file)
@@ -444,7 +466,7 @@ def record_cli_attempt(basis_file: Path, name: str, *, run_log: Path,
     files = {run_log: _host_file(item, run_log)}
     receipt = _json(files[run_log])
     if (not isinstance(receipt, dict) or receipt.get("cli") != cli
-            or receipt.get("wrapper_cmd") != item["invocation"]["argv"][1:]):
+            or receipt.get("wrapper_cmd") != item["invocation"].get("expected_wrapper_cmd", item["invocation"]["argv"][1:])):
         raise ValueError("run log does not match the allocated wrapper invocation")
     for key in ("stdout_file", "stderr_file"):
         path = Path(item["invocation"][key])

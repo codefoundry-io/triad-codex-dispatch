@@ -6,17 +6,17 @@ import re
 import stat
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "859f27c07c1123e87b50344f587999a0cbc172a6"
-VERSION = "0.1.0.dev5"
+COMMIT = "1872227abd42553635c733e0aa228548a577a732"
+VERSION = "0.1.0.dev6"
 # SHA-256 of the canonical full package + MIT-license path/digest inventory
 # inspected at COMMIT. Independent of generated adoption records and wheel ZIP
 # timestamps; changing source content requires an explicit reviewed pin update.
-APPROVED_CONTENT_SHA256 = "ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08"
+APPROVED_CONTENT_SHA256 = "6929313b5f1cb32f9fb3b148ec77f35486d304c9091ebc073da362d66eaed018"
 PACKAGE = "bin/triad_dispatch_lib"
 LICENSE = "vendor/triad-dispatch-lib.LICENSE"
 RECORD = "contracts/library-adoption.json"
 MANIFESTS = {"receipt": "data/receipt-bundle/source-manifest.json", "verdict": "data/source-manifest.json", "roster": "data/roster-bundle/source-manifest.json", "prompt": "data/prompt-bundle/source-manifest.json"}
-MODULES = {"receipt", "__init__", "agreement", "bundle_manifest", "contracts", "dispatch", "errors", "json_input", "output", "prompts", "roster", "verdict"}
+MODULES = {"receipt", "__init__", "agreement", "bundle_manifest", "contracts", "dispatch", "errors", "json_input", "output", "prompts", "roster", "verdict", "runtime_compat"}
 
 
 def verify_approved_content(digests):

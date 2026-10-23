@@ -245,7 +245,15 @@ PY
 
 publish_command_group() {
   [ -n "$COMMAND_MANIFEST" ] || return 0
-  if ! python3 "$REPO_ROOT/bin/bootstrap_repair.py" commands-install --manifest "$COMMAND_MANIFEST"; then
+  if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+    python3 "$REPO_ROOT/bin/bootstrap_repair.py" commands-install --manifest "$COMMAND_MANIFEST"
+  else
+    python3 "$REPO_ROOT/bin/shared_runtime.py" install --plugin-root "$REPO_ROOT" \
+      --launcher-dir "$LAUNCHER_DIR" --manifest "$COMMAND_MANIFEST" \
+      --shared-root "${TRIAD_BOOTSTRAP_SHARED_ROOT:-$HOME/.local/share/triad-dispatch-runtime}" \
+      --receipt-root "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}"
+  fi
+  if [ "$?" -ne 0 ]; then
     fail "could not install managed command group"
   else
     ok "managed command group installed"
@@ -421,12 +429,12 @@ PY
 }
 
 check_workspace_escape() {
-  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$BOOTSTRAP_CODEX_ROOT" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" <<'PY'
+  workspace_guard_output="$(python3 - "$PWD" "$LAUNCHER_DIR" "$BOOTSTRAP_CODEX_ROOT" "$(dirname -- "$CLASSIFIER_PATH")" "$SHELL_RC" "$REPO_ROOT" "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" "${TRIAD_BOOTSTRAP_SHARED_ROOT:-$HOME/.local/share/triad-dispatch-runtime}" "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}" <<'PY'
 from pathlib import Path
 import os
 import sys
 
-pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, shell_rc_raw, repo_root_raw, source_sot_review_raw = sys.argv[1:]
+pwd_raw, launcher_raw, codex_home_raw, classifier_dir_raw, shell_rc_raw, repo_root_raw, source_sot_review_raw, shared_raw, receipts_raw = sys.argv[1:]
 workspace = Path(pwd_raw).resolve()
 
 
@@ -453,6 +461,8 @@ targets = (
     ("python3 runtime", Path(sys.executable)),
 )
 failures = []
+if not source_sot_review_raw:
+    targets += (("shared runtime root", Path(shared_raw)), ("installation receipt root", Path(receipts_raw)))
 for label, target in targets:
     resolved = target.expanduser().resolve()
     if _within(resolved, workspace):
@@ -843,6 +853,16 @@ check_formal_schema_dependency() {
 }
 
 preflight_install_command_targets() {
+  if [ -z "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+    python3 "$REPO_ROOT/bin/shared_runtime.py" preflight --launcher-dir "$LAUNCHER_DIR" \
+      --shared-root "${TRIAD_BOOTSTRAP_SHARED_ROOT:-$HOME/.local/share/triad-dispatch-runtime}" \
+      --receipt-root "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}"
+    return "$?"
+  fi
+  if [ -n "${TRIAD_RUNTIME_BINDING:-}" ]; then
+    fail "source-SOT mode conflicts with explicit shared runtime binding"
+    return 1
+  fi
   command_preflight_failed=0
   for wrapper in $MANAGED_LAUNCHERS; do
     launcher="$LAUNCHER_DIR/$wrapper"
@@ -897,7 +917,7 @@ install_launchers() {
       fail "refusing to overwrite symlinked launcher: $launcher"
       continue
     fi
-    if ! launcher_is_managed "$launcher" "$wrapper"; then
+    if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ] && ! launcher_is_managed "$launcher" "$wrapper"; then
       fail "refusing to overwrite unmanaged launcher: $launcher"
       continue
     fi
@@ -1193,6 +1213,10 @@ remove_legacy_permission_artifacts() {
 }
 
 run_remove() {
+  if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ] && [ -n "${TRIAD_RUNTIME_BINDING:-}" ]; then
+    fail "source-SOT mode conflicts with explicit shared runtime binding"
+    return
+  fi
   if ! command -v python3 >/dev/null 2>&1; then
     fail "missing required binary: python3"
     return
@@ -1203,6 +1227,15 @@ run_remove() {
   # symlink) must not make install succeed and the matching remove fail.
   canonicalize_path_inputs
   if [ "$errors" -ne 0 ]; then
+    return
+  fi
+
+  if [ -z "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+    python3 "$REPO_ROOT/bin/shared_runtime.py" remove --plugin-root "$REPO_ROOT" \
+      --receipt-root "${TRIAD_BOOTSTRAP_RECEIPT_ROOT:-$HOME/.local/share/triad-codex-dispatch/installations}"
+    if [ "$?" -ne 0 ]; then
+      fail "could not remove authenticated installation receipt"
+    fi
     return
   fi
 
@@ -1383,7 +1416,7 @@ fi
 # Exact legacy repair targets share config and launcher state with the remaining
 # bootstrap steps. Reject unsafe removal targets before the first persistent
 # mutation; the later transactional cleanup revalidates them against races.
-if ! run_repair_lifecycle preflight-remove; then
+if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ] && ! run_repair_lifecycle preflight-remove; then
   printf '[error] legacy repair cleanup preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
@@ -1399,11 +1432,13 @@ if ! preflight_classifier; then
   printf '[error] classifier preflight failed; skipping installation steps\n' >&2
   exit 1
 fi
-if ! remove_legacy_permission_artifacts; then
-  printf '[error] legacy plugin artifact cleanup failed; skipping installation steps\n' >&2
-  exit 1
+if [ -n "${TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT:-}" ]; then
+  if ! remove_legacy_permission_artifacts; then
+    printf '[error] legacy plugin artifact cleanup failed; skipping installation steps\n' >&2
+    exit 1
+  fi
+  migrate_legacy_repair_agents
 fi
-migrate_legacy_repair_agents
 ensure_log_dir
 if ! ensure_classifier; then
   printf '[error] classifier installation failed; skipping remaining installation steps\n' >&2
