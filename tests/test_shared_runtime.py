@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import zipfile
 
 import pytest
 from test_v2_rounds import round_fixture, worktree, finish, start
@@ -50,6 +51,67 @@ def install(parts):
     module, toolkit, context, shared, receipts, commands = parts
     return module.publish_installation(toolkit, context, shared_root=shared,
                                        receipt_root=receipts, launcher_dir=commands)
+
+
+@pytest.mark.parametrize('damage', [None, 'package', 'adoption', 'extra-file'])
+def test_frozen_dev5_library_migration_authenticates_before_command_changes(tmp_path, damage):
+    parts = fixture(tmp_path)
+    module, toolkit, context, _, _, commands = parts
+    legacy = tmp_path / 'legacy-dev5'
+    shutil.copytree(toolkit, legacy)
+    shutil.rmtree(legacy / 'bin/triad_dispatch_lib')
+    archive = ROOT / 'tests/fixtures/shared-runtime-dev5/library.zip'
+    assert module.digest(archive.read_bytes()) == '6d36cba0869ef73a9da315a0fdc53f391421966a81f0f47924453702df798b5e'
+    with zipfile.ZipFile(archive) as frozen:
+        record = 'contracts/library-adoption.json'
+        adoption = json.loads(frozen.read(record))
+        expected = adoption['sha256']
+        assert adoption['version'] == '0.1.0.dev5'
+        assert adoption['source_commit'] == '859f27c07c1123e87b50344f587999a0cbc172a6'
+        assert len(expected) == 26
+        assert module.digest(module.canonical(expected)) == 'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'
+        assert sorted(frozen.namelist()) == sorted([record, *expected])
+        for name in frozen.namelist():
+            relative = Path(name)
+            assert not relative.is_absolute() and '..' not in relative.parts
+            payload = frozen.read(name)
+            if name != record:
+                assert module.digest(payload) == expected[name]
+            target = legacy / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+    assert module.inventory(legacy, ('bin/triad_dispatch_lib', 'vendor/triad-dispatch-lib.LICENSE')) == expected
+    commands.mkdir()
+    for name in module.COMMANDS:
+        body = module.launcher_bytes(legacy, name, context).decode()
+        body = body.replace('env.pop("TRIAD_RUNTIME_BINDING", None)\n', '').replace('"-E", "-B",', '"-E",')
+        (commands / name).write_text(body)
+        (commands / name).chmod(0o755)
+    before = {name: ((commands / name).read_bytes(), (commands / name).stat()) for name in module.COMMANDS}
+    if damage == 'package':
+        with (legacy / 'bin/triad_dispatch_lib/errors.py').open('ab') as stream:
+            stream.write(b'\n# altered package\n')
+    elif damage == 'adoption':
+        adoption['source_commit'] = '0' * 40
+        (legacy / record).write_text(json.dumps(adoption))
+    elif damage == 'extra-file':
+        (legacy / 'bin/triad_dispatch_lib/unlisted.py').write_text('# unlisted\n')
+    if damage:
+        with pytest.raises(ValueError, match='unsupported direct Codex library baseline'):
+            install(parts)
+        assert {name: ((commands / name).read_bytes(), (commands / name).stat()) for name in module.COMMANDS} == before
+    else:
+        paths = {name: commands / name for name in module.COMMANDS}
+        authenticated = module.verify_legacy_group(paths)
+        assert authenticated['consumer'] == 'codex'
+        assert authenticated['library_digest'] == module.digest(module.canonical(expected))
+        installed = install(parts)
+        assert Path(installed['receipt_file']).is_file()
+        result = subprocess.run([str(commands / 'claude_wrapper.py'), 'dev5'], input='old input',
+                                capture_output=True, text=True, env={})
+        assert result.returncode == 7, result.stderr
+        assert json.loads(result.stdout)['argv'] == ['dev5']
+        assert json.loads(result.stdout)['stdin'] == 'old input'
 
 
 def test_empty_install_retains_context_after_cache_and_receipt_removal(tmp_path):
