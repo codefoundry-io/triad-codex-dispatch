@@ -209,6 +209,11 @@ def _legacy_context(payloads):
 def _supported_library_digest(toolkit):
     """Authenticate current/prior package bytes without executing old modules."""
     adoption = json.loads(_read(toolkit / library_adoption.RECORD))
+    if not isinstance(adoption, dict):
+        raise ValueError('invalid library adoption record')
+    expected = adoption.get('sha256')
+    if not isinstance(expected, dict):
+        raise ValueError('invalid library adoption inventory')
     prior_pins = {
         '0.1.0.dev5': ('859f27c07c1123e87b50344f587999a0cbc172a6',
                        'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'),
@@ -219,7 +224,6 @@ def _supported_library_digest(toolkit):
         library_adoption.verify_library(toolkit)
         return library_adoption.APPROVED_CONTENT_SHA256
     source, content = prior_pins[adoption['version']]
-    expected = adoption.get('sha256', {})
     if (adoption.get('source_commit') != source
             or digest(canonical(expected)) != content
             or any(digest(_read(toolkit / name)) != value for name, value in expected.items())

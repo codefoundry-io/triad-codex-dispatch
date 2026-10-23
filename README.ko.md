@@ -253,7 +253,14 @@ class, route에서 identity를 추론하지 않습니다.
 루트이며 위치를 알 수 없으면 생략합니다. 입력값과 알 수 없는 속성 이름은
 노출하지 않습니다. 잘못된 로스터의 종료 코드는 계속 2입니다.
 
-lib dev7와 [공용 runtime](docs/shared-runtime.ko.md)을 적용합니다. 공용 명령은
+lib dev7을 적용합니다. 정확한 dev6 패키지를 가진 기존 0.2.564 공용 generation을
+업데이트할 때 인증하고, 기존 binding과 legacy 기본값을 보존합니다.
+[업데이트 절차](docs/installation.ko.md#업데이트)를 따라 설치된 bootstrap을 실행한 뒤
+새 Codex 세션을 시작하세요.
+
+### 0.2.564 업그레이드
+
+lib dev6와 [공용 runtime](docs/shared-runtime.ko.md)을 적용합니다. 공용 명령은
 기존 legacy consumer를 기본값으로 유지하고 Codex skill은 명시적으로 검증된
 보존 toolkit을 선택합니다. 지원 AGY 설치의 기존 기본 호출을 유지하며 marker만
 맞거나 출처가 섞인 설치는 이관을 거부합니다. 전역 shell export나 provider 설정은

@@ -272,7 +272,14 @@ Roster schema refusals now include `document` and `instance_path` as JSON, for e
 means the document root; unavailable locations are omitted. Input values and
 unknown property spelling are excluded. Invalid rosters still exit with status 2.
 
-This version adopts lib dev7 and the [shared runtime](docs/shared-runtime.md).
+This release adopts lib dev7. Updates authenticate existing 0.2.564 shared
+generations with the exact dev6 package and preserve their bindings and
+established legacy default. Follow the [update procedure](docs/installation.md#update),
+run the installed bootstrap and start a fresh Codex session.
+
+### Upgrading to 0.2.564
+
+This version adopts lib dev6 and the [shared runtime](docs/shared-runtime.md).
 One generic command group preserves its established legacy consumer while Codex
 skills resolve an explicit, authenticated retained toolkit. A supported AGY
 installation keeps its bare-call behavior; marker-only or mixed installations

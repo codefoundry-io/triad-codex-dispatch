@@ -193,6 +193,42 @@ def test_new_codex_binding_requires_current_library_even_when_prior_generation_i
         module.create_codex_binding(old_toolkit, context, shared_root=shared)
 
 
+@pytest.mark.parametrize('container', [None, [], 'not-an-object'])
+@pytest.mark.parametrize('field', ['record', 'sha256'])
+def test_malformed_prior_adoption_has_controlled_public_refusal_without_replacement(tmp_path, field, container):
+    parts, old, _ = frozen_dev6_generation(tmp_path, 'codex')
+    module, _, _, shared, receipts, commands = parts
+    Path(old['receipt_file']).unlink()
+    target = Path(old['toolkit_root']) / 'contracts/library-adoption.json'
+    adoption = json.loads(target.read_text())
+    if field == 'record':
+        adoption = container
+    else:
+        adoption['sha256'] = container
+    target.chmod(0o644)
+    target.write_text(json.dumps(adoption))
+
+    def state():
+        return {str(path): (path.stat().st_ino, path.stat().st_mode,
+                            path.stat().st_mtime_ns, path.read_bytes())
+                for root in (shared, receipts, commands)
+                for path in root.rglob('*') if path.is_file()}
+
+    before = state()
+    result = subprocess.run([
+        sys.executable, '-E', '-B', str(ROOT / 'bin/shared_runtime.py'), 'preflight',
+        '--launcher-dir', str(commands), '--shared-root', str(shared),
+        '--receipt-root', str(receipts), '--json',
+    ], capture_output=True, text=True)
+    assert result.returncode == 1
+    assert result.stdout == ''
+    assert result.stderr.startswith('shared runtime refused: ')
+    assert 'Traceback' not in result.stderr
+    with pytest.raises(ValueError):
+        install(parts)
+    assert state() == before
+
+
 @pytest.mark.parametrize('version,source,inventory_digest,count,archive_digest', [
     ('dev5', '859f27c07c1123e87b50344f587999a0cbc172a6',
      'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08', 26,
