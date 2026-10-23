@@ -1066,8 +1066,9 @@ def test_main_forwards_native_route_and_prints_validated_terminal_json(
     assert calls[0][calls[0].index("--effort") + 1] == "high"
 
 
+@pytest.mark.parametrize("timeout", [600, 2400])
 def test_main_uses_native_schema_and_binds_formal_leg_locally(
-    monkeypatch, capsys, tmp_path
+    monkeypatch, capsys, tmp_path, timeout
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.delenv("AGY_NO_HEADLESS_AUTOAPPROVE", raising=False)
@@ -1093,8 +1094,8 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
 
     def fake_run(_cli, cmd, _cwd, _timeout, *, classify_and_log, remove_env):
         calls.append(cmd)
-        assert _timeout == 600
-        assert cmd[cmd.index("--print-timeout") + 1] == "590s"
+        assert _timeout == timeout
+        assert cmd[cmd.index("--print-timeout") + 1] == {600: "590s", 2400: "2390s"}[timeout]
         assert set(remove_env) == set(wrapper.FORMAL_AGY_ENV_REMOVE)
         schema_index = cmd.index("--json-schema")
         schema = json.loads(cmd[schema_index + 1])
@@ -1128,7 +1129,7 @@ def test_main_uses_native_schema_and_binds_formal_leg_locally(
             "--effort",
             "high",
             "--timeout",
-            "600",
+            str(timeout),
             "--pydantic",
             "verdict_schema:LegVerdict",
             "--expected-review-id",
@@ -1565,8 +1566,8 @@ def test_formal_agy_rejects_arguments_different_from_bound_preflight_before_prob
     )
 
 
-@pytest.mark.parametrize("timeout", ("599", "601"))
-def test_formal_agy_rejects_non_600_timeout_before_binary_probe(
+@pytest.mark.parametrize("timeout", ("599", "601", "2399", "2401"))
+def test_formal_agy_rejects_unsupported_timeout_before_binary_probe(
     monkeypatch, capsys, tmp_path, timeout
 ) -> None:
     selector_receipt, prompt, selected = _google_selector_fixture(tmp_path)
@@ -1609,7 +1610,7 @@ def test_formal_agy_rejects_non_600_timeout_before_binary_probe(
     )
 
     assert wrapper.main() == _common.EXIT_ARG_ERROR
-    assert "formal AGY review requires --timeout 600" in capsys.readouterr().err
+    assert "formal AGY review requires --timeout 600 or 2400" in capsys.readouterr().err
 
 
 def test_formal_agy_rejects_non_google_prompt_before_binary_probe(

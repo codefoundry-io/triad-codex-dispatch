@@ -399,10 +399,10 @@ def main() -> int:
         log("expected review ID has invalid syntax")
         return EXIT_ARG_ERROR
     if formal_verdict and not v2_verdict and (
-        args.timeout != FORMAL_GEMINI_TIMEOUT or args.model is not None
+        args.timeout not in (FORMAL_GEMINI_TIMEOUT, 2400) or args.model is not None
     ):
         log(
-            "formal Gemini review requires --timeout 600 and CLI Auto model routing"
+            "formal Gemini review requires --timeout 600 or 2400 and CLI Auto model routing"
         )
         return EXIT_ARG_ERROR
     if args.preflight_only and not v2_verdict and (

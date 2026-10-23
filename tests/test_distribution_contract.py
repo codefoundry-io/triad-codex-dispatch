@@ -319,7 +319,7 @@ def test_formal_duration_and_terminal_outcome_contract_is_single_sourced() -> No
     assert "FORMAL_CLAUDE_TIMEOUT = 1200" in _text(ROOT / "bin" / "claude_wrapper.py")
     assert "FORMAL_AGY_TIMEOUT = 600" in _text(ROOT / "bin" / "antigravity_wrapper.py")
     assert "FORMAL_GEMINI_TIMEOUT = 600" in _text(ROOT / "bin" / "gemini_wrapper.py")
-    assert "any timeout other than `1200`" in claude
+    assert "any timeout outside `1200` or `2400`" in claude
     assert "--timeout 600" in agy
     assert "--timeout 600" in gemini
     for clause in (
@@ -549,17 +549,17 @@ def test_formal_claude_route_is_fail_closed_across_distribution_contracts() -> N
 
     assert (
         "The fully bound formal route rejects any model other than `opus`, any "
-        "effort other than `xhigh`, any timeout other than `1200`, and every "
+        "effort other than `xhigh`, any timeout outside `1200` or `2400`, and every "
         "`--fallback-model` before provider resolution." in claude
     )
     assert (
         "A fully bound formal Claude route fails closed before provider resolution "
-        "unless it uses `--model opus --effort xhigh --timeout 1200` with no "
-        "`--fallback-model`." in readme
+        "unless it uses `--model opus --effort xhigh`, `--timeout 1200` or `--timeout 2400`, "
+        "and no `--fallback-model`." in readme
     )
     assert (
-        "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh "
-        "--timeout 1200`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
+        "완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh`, "
+        "`--timeout 1200` 또는 `--timeout 2400`을 사용하고 `--fallback-model`을 지정하지 않은 경우에만 "
         "provider resolution 전에 통과합니다." in readme_ko
     )
     assert "fail-closed formal Claude route pinning" in changelog

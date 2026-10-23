@@ -12,7 +12,7 @@ native per-call Plan Mode without changing persistent user configuration.
 Explicitly requested `--web` preapproves native `WebSearch`/`WebFetch`; review calls
 must also match the [bound round condition](../triad-cross-family-review/references/review-web.md).
 The fully bound formal route rejects any model other than `opus`, any effort
-other than `xhigh`, any timeout other than `1200`, and every `--fallback-model`
+other than `xhigh`, any timeout outside `1200` or `2400`, and every `--fallback-model`
 before provider resolution.
 
 ## Ordinary bounded dispatch
@@ -34,7 +34,8 @@ Use `triad-cross-family-review` and read its
 --expected-review-id "$review_id" --expected-family claude
 --expected-content-digest "$review_digest"`. Claude reviews only; it does not
 edit or execute candidate code. One validated result belongs to one review ID
-and content digest.
+and content digest. An explicit `--timeout 2400` selects the longer deadline;
+the existing 1200-second invocation remains valid.
 
 ## Result handling
 

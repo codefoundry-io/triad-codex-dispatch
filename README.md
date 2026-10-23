@@ -599,15 +599,18 @@ locally. It passes `gemini-4-argon-high` with `high` effort. A formally bound
 Claude leg adds native `--permission-mode plan`; an exact formal `LegVerdict`
 schema without all three review bindings fails before provider resolution.
 A fully bound formal Claude route fails closed before provider resolution unless
-it uses `--model opus --effort xhigh --timeout 1200` with no `--fallback-model`.
+it uses `--model opus --effort xhigh`, `--timeout 1200` or `--timeout 2400`,
+and no `--fallback-model`.
 The current source defaults to the CLI-resolved `opus` alias on both legacy
 formal and public v2 reviews; this supersedes the fixed-ID default described
 in the historical 0.2.557 upgrade note. Explicit model IDs and null selection
 remain available on v2, and raw dispatch preserves the caller's selection.
 The default adds no `--agent` and does not attest a fixed runtime version.
-Current route timing is a 1,200-second Claude wrapper deadline, a 600-second AGY
-or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex observation
-waits. Terminal-outcome interpretation is owned by the cross-family
+The existing route timing remains a 1,200-second Claude wrapper deadline, a
+600-second AGY or Gemini wrapper deadline, and repeatable 1,200-second fresh Codex
+observation waits. Each provider wrapper also accepts explicit `--timeout 2400`
+for a requested 40-minute legacy review; other legacy values remain refused.
+Raw/public-v2 defaults and early terminal-error handling are unchanged. Terminal-outcome interpretation is owned by the cross-family
 `references/convergence.md` contract.
 Non-formal Claude permission selection and all project-trust policy remain
 native. Ordinary `codex` remains the normal path.

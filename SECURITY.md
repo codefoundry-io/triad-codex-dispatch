@@ -465,7 +465,8 @@ rosters or grant authority. The displayed configuration is not an admission or
 capability receipt; runtime route and model checks are a separate boundary.
 
 The current Claude review default is the CLI-resolved `opus` alias with `xhigh`
-effort. The legacy formal route still requires 1200 seconds and no fallback;
+effort. The legacy formal route accepts 1200 seconds or explicit 2400 seconds
+and still forbids fallback;
 raw and v2 explicit model overrides retain their existing semantics. The alias
 does not pin or attest a runtime version, and the default selects no agent.
 

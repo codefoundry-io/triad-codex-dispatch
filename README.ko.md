@@ -562,14 +562,18 @@ receipt, PTY, sentinel review transport는 제거되었습니다. AGY는 1.1.20 
 `gemini-4-argon-high`와 `high` effort를 전달합니다. formal binding이 완료된 Claude
 leg는 native `--permission-mode plan`을 추가하며, 세 review binding이 모두 없는
 정확한 formal `LegVerdict` schema는 provider를 resolve하기 전에 실패합니다.
-완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh --timeout 1200`을
-사용하고 `--fallback-model`을 지정하지 않은 경우에만 provider resolution 전에 통과합니다.
+완전히 바인딩된 formal Claude route는 `--model opus --effort xhigh`,
+`--timeout 1200` 또는 `--timeout 2400`을 사용하고 `--fallback-model`을
+지정하지 않은 경우에만 provider resolution 전에 통과합니다.
 현재 소스는 legacy formal과 public v2 리뷰의 기본 모델을 CLI가 해석하는 `opus`
 별칭으로 지정합니다. 이는 앞의 0.2.557 이력에 기록된 고정 ID 기본값을 대체합니다.
 v2의 명시적 모델 ID 및 null 선택, raw 호출의 사용자 모델 선택은 유지합니다.
 기본값 변경은 `--agent`를 추가하지 않으며 실제 실행 모델 버전을 보증하지 않습니다.
 현재 route timing은 Claude wrapper deadline 1,200초, AGY 또는 Gemini wrapper deadline
-600초, fresh Codex의 반복 가능한 1,200초 observation wait입니다. terminal outcome 해석은
+600초, fresh Codex의 반복 가능한 1,200초 observation wait를 유지합니다. 세 provider
+wrapper는 요청된 40분 legacy 리뷰에 명시적 `--timeout 2400`도 허용하며,
+다른 legacy 시간 값은 거부합니다. Raw/public-v2 기본값과 명확한 terminal 오류의
+즉시 종료 동작은 유지합니다. terminal outcome 해석은
 cross-family `references/convergence.md` 계약이 전담합니다.
 non-formal Claude permission 선택과 모든 project-trust policy는 native 설정을
 유지합니다. 일반 `codex`가 정상 경로입니다.

@@ -99,9 +99,9 @@ The formal plan-mode route passes native `--json-schema`, admits only the
 terminal result event's `structured_output`, and repeats strict local
 `LegVerdict` validation. It checks the exact review ID,
 Google family, content digest, and review-relative path shape locally. Invalid
-output is terminal and causes no schema-repair provider call. The formal leg uses
-an explicit 600-second wrapper provider-process deadline, and the AGY child gets
-`--print-timeout 590s`. Apply [convergence](../triad-cross-family-review/references/convergence.md)
+output is terminal and causes no schema-repair provider call. The formal leg accepts
+`--timeout 600` or explicit `--timeout 2400`; other deadline values are refused.
+The AGY child gets `--print-timeout 590s` or `--print-timeout 2390s`, respectively. Apply [convergence](../triad-cross-family-review/references/convergence.md)
 to observation waits and terminal outcomes. The formal Google prompt
 authorizes only AGY native file-read/search tools for local inspection.
 Web research is prohibited by default; MCP calls are forbidden by the profile and formal prompt. It forbids command, shell, terminal,

@@ -673,8 +673,8 @@ def main() -> int:
         return _common.EXIT_ARG_ERROR
 
     formal_bindings = all(value is not None for value in binding_values)
-    if formal_bindings and not v2_verdict and args.timeout != FORMAL_AGY_TIMEOUT:
-        _common.log("formal AGY review requires --timeout 600")
+    if formal_bindings and not v2_verdict and args.timeout not in (FORMAL_AGY_TIMEOUT, 2400):
+        _common.log("formal AGY review requires --timeout 600 or 2400")
         return _common.EXIT_ARG_ERROR
     selected_context = args.preflight_only or formal_bindings
     try:

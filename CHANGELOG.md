@@ -4,6 +4,12 @@
 
 Unreleased candidate; status updated 2026-10-23.
 
+- Adds explicit `--timeout 2400` support to all three legacy formal provider
+  wrappers while retaining Claude1200 and Google600 calls. Other legacy deadline
+  values remain refused; raw/public-v2 defaults, authentication, model/effort,
+  no-fallback rules and early terminal-error handling are unchanged. AGY derives
+  a 2390-second child deadline from the 2400-second wrapper budget.
+
 - Select `gemini-4-argon-high` / `high` for the default AGY and fixed legacy
   review route, including the Argon/Flash pair and source-skill examples. Explicit
   raw/public-v2 model overrides and the separate Gemini CLI route remain supported.

@@ -9,6 +9,11 @@ named roster and per-CLI settings through [the v2 procedure](public-v2-review.md
 
 ## Required routes
 
+The table retains the standard legacy deadlines. Explicit `--timeout 2400` is
+also supported for each provider wrapper; use it when the owner requests a
+40-minute review. Previous 1200/600-second calls remain valid. Other legacy
+deadline values are refused; ordinary/raw and public-v2 defaults are unchanged.
+
 | Family | Formal route |
 |---|---|
 | Claude | `opus`, `xhigh`, 1,200-second wrapper deadline |
