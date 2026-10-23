@@ -16,7 +16,8 @@ binding을 추가합니다. 이미 공용 generation이면 기존 binding과 기
 일부만 존재하거나 서로 다른 출처, 수정된 파일, 알 수 없는 형식이면 교체를 거부합니다.
 
 직접 Codex 이관 입력은 정확한 공개 dev5 패키지·source pin을 가진 0.2.563,
-또는 이 릴리스와 동일한 dev6 패키지의 직접 source-SOT launcher만 지원합니다.
+또는 정확한 공개 dev6 및 현재 dev7 패키지의 직접 source-SOT launcher만 지원합니다.
+지원하는 모든 pin은 전체 패키지와 라이선스 inventory를 인증합니다.
 0.2.562/dev4, 0.2.561/dev3 등 이전 버전은 변경 없이 거부합니다. 원래 toolkit을
 보존하고 별도로 검토한 이관 절차를 사용하세요. 다른 consumer나 직접 라운드가
 사용하는 launcher·cache를 삭제해서 인증을 우회하면 안 됩니다.

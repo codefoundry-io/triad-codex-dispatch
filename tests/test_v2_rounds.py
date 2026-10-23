@@ -83,6 +83,19 @@ def start(fixture, name):
     return mod.allocate_attempt(Path(basis["basis_file"]), name)
 
 
+def test_invalid_roster_stops_before_adapter_preparation(round_fixture, monkeypatch):
+    mod, _, root, _, request, calls = round_fixture(
+        make_basis=False, config_legs=[{"name": "codex", "timeout_s": 0}])
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid input reached adapter preparation/provider preflight")
+
+    monkeypatch.setattr(mod, "prepare_adapters", forbidden)
+    with pytest.raises(ValueError, match='instance_path=\\["legs", 0, "timeout_s"\\]'):
+        mod.create_basis(request, root=root)
+    assert not (root / "basis.json").exists()
+
+
 def finish(fixture, allocation, *, changes=None, failed=False, reads=None,
            raw_override=None, receipt_changes=None):
     mod, basis, *_ = fixture

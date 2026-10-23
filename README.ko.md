@@ -6,7 +6,7 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-공개된 `triad-dispatch-lib 0.1.0.dev6` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+공개된 `triad-dispatch-lib 0.1.0.dev7` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
 Claude와 AGY는 별도로 배포합니다. 라이브러리의
 [dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/859f27c07c1123e87b50344f587999a0cbc172a6/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
@@ -246,9 +246,14 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
-### 0.2.564 업그레이드
+### 0.2.565 업그레이드
 
-lib dev6와 [공용 runtime](docs/shared-runtime.ko.md)을 적용합니다. 공용 명령은
+로스터 스키마 오류는 JSON 형식의 `document`와 `instance_path`를 표시합니다. 예:
+`[document="override", instance_path=["legs", 1, "timeout_s"]]`. 빈 배열은 문서
+루트이며 위치를 알 수 없으면 생략합니다. 입력값과 알 수 없는 속성 이름은
+노출하지 않습니다. 잘못된 로스터의 종료 코드는 계속 2입니다.
+
+lib dev7와 [공용 runtime](docs/shared-runtime.ko.md)을 적용합니다. 공용 명령은
 기존 legacy consumer를 기본값으로 유지하고 Codex skill은 명시적으로 검증된
 보존 toolkit을 선택합니다. 지원 AGY 설치의 기존 기본 호출을 유지하며 marker만
 맞거나 출처가 섞인 설치는 이관을 거부합니다. 전역 shell export나 provider 설정은
@@ -618,7 +623,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.564-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.565-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.

@@ -490,6 +490,12 @@ paths. It does not execute configuration values, probe providers, read user-glob
 rosters or grant authority. The displayed configuration is not an admission or
 capability receipt; runtime route and model checks are a separate boundary.
 
+Schema refusal diagnostics expose only the document and canonical instance path
+as JSON. Root locations use an empty array; unavailable locations are omitted.
+Input values and unknown property spelling are excluded. Typed host exceptions
+retain shared diagnostic fields; suppressed displayed chaining does not erase
+input references from Python exception internals or tracebacks.
+
 The current Claude review default is the CLI-resolved `opus` alias with `xhigh`
 effort. The legacy formal route accepts 1200 seconds or explicit 2400 seconds
 and still forbids fallback;

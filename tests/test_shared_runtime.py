@@ -53,23 +53,32 @@ def install(parts):
                                        receipt_root=receipts, launcher_dir=commands)
 
 
+@pytest.mark.parametrize('version,source,inventory_digest,count,archive_digest', [
+    ('dev5', '859f27c07c1123e87b50344f587999a0cbc172a6',
+     'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08', 26,
+     '6d36cba0869ef73a9da315a0fdc53f391421966a81f0f47924453702df798b5e'),
+    ('dev6', '1872227abd42553635c733e0aa228548a577a732',
+     '6929313b5f1cb32f9fb3b148ec77f35486d304c9091ebc073da362d66eaed018', 27,
+     'ea1ff46ef16e79d446abfc1d97f75c78eca81ca929466feafc8397a88a12082a'),
+])
 @pytest.mark.parametrize('damage', [None, 'package', 'adoption', 'extra-file'])
-def test_frozen_dev5_library_migration_authenticates_before_command_changes(tmp_path, damage):
+def test_frozen_library_migration_authenticates_before_command_changes(
+        tmp_path, damage, version, source, inventory_digest, count, archive_digest):
     parts = fixture(tmp_path)
     module, toolkit, context, _, _, commands = parts
-    legacy = tmp_path / 'legacy-dev5'
+    legacy = tmp_path / ('legacy-' + version)
     shutil.copytree(toolkit, legacy)
     shutil.rmtree(legacy / 'bin/triad_dispatch_lib')
-    archive = ROOT / 'tests/fixtures/shared-runtime-dev5/library.zip'
-    assert module.digest(archive.read_bytes()) == '6d36cba0869ef73a9da315a0fdc53f391421966a81f0f47924453702df798b5e'
+    archive = ROOT / ('tests/fixtures/shared-runtime-' + version + '/library.zip')
+    assert module.digest(archive.read_bytes()) == archive_digest
     with zipfile.ZipFile(archive) as frozen:
         record = 'contracts/library-adoption.json'
         adoption = json.loads(frozen.read(record))
         expected = adoption['sha256']
-        assert adoption['version'] == '0.1.0.dev5'
-        assert adoption['source_commit'] == '859f27c07c1123e87b50344f587999a0cbc172a6'
-        assert len(expected) == 26
-        assert module.digest(module.canonical(expected)) == 'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'
+        assert adoption['version'] == '0.1.0.' + version
+        assert adoption['source_commit'] == source
+        assert len(expected) == count
+        assert module.digest(module.canonical(expected)) == inventory_digest
         assert sorted(frozen.namelist()) == sorted([record, *expected])
         for name in frozen.namelist():
             relative = Path(name)
@@ -107,10 +116,10 @@ def test_frozen_dev5_library_migration_authenticates_before_command_changes(tmp_
         assert authenticated['library_digest'] == module.digest(module.canonical(expected))
         installed = install(parts)
         assert Path(installed['receipt_file']).is_file()
-        result = subprocess.run([str(commands / 'claude_wrapper.py'), 'dev5'], input='old input',
+        result = subprocess.run([str(commands / 'claude_wrapper.py'), version], input='old input',
                                 capture_output=True, text=True, env={})
         assert result.returncode == 7, result.stderr
-        assert json.loads(result.stdout)['argv'] == ['dev5']
+        assert json.loads(result.stdout)['argv'] == [version]
         assert json.loads(result.stdout)['stdin'] == 'old input'
 
 

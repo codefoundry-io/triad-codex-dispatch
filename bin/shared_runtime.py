@@ -218,12 +218,18 @@ def verify_legacy_group(paths, baseline=None):
         consumer = 'agy'
     else:
         adoption = json.loads(_read(toolkit / library_adoption.RECORD))
-        if adoption.get('version') == '0.1.0.dev5':
-            # The immediately preceding released Codex library is a supported
-            # direct-launcher migration input, not an executable importer.
+        prior_pins = {
+            '0.1.0.dev5': ('859f27c07c1123e87b50344f587999a0cbc172a6',
+                           'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'),
+            '0.1.0.dev6': ('1872227abd42553635c733e0aa228548a577a732',
+                           '6929313b5f1cb32f9fb3b148ec77f35486d304c9091ebc073da362d66eaed018'),
+        }
+        if adoption.get('version') in prior_pins:
+            # Supported direct-launcher migration inputs; never executable importers.
+            source, content = prior_pins[adoption['version']]
             expected = adoption.get('sha256', {})
-            if (adoption.get('source_commit') != '859f27c07c1123e87b50344f587999a0cbc172a6'
-                    or digest(canonical(expected)) != 'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'
+            if (adoption.get('source_commit') != source
+                    or digest(canonical(expected)) != content
                     or any(digest(_read(toolkit / name)) != value for name, value in expected.items())
                     or inventory(toolkit, ('bin/triad_dispatch_lib', 'vendor/triad-dispatch-lib.LICENSE')) != expected):
                 raise ValueError('unsupported direct Codex library baseline')

@@ -8,8 +8,8 @@
 
 ## 포함된 공통 라이브러리
 
-이 소스는 공개된 `triad-dispatch-lib 0.1.0.dev6` 사전 릴리스를
-커밋 `1872227abd42553635c733e0aa228548a577a732`에서 가져와
+이 소스는 공개된 `triad-dispatch-lib 0.1.0.dev7` 사전 릴리스를
+커밋 `62c3a741b729c6359cc5079a0306fad1fdd1fac8`에서 가져와
 `bin/triad_dispatch_lib/`에 포함합니다. 별도 라이브러리 checkout이나 editable
 설치는 필요 없습니다. 선택한 Python 3.12+ 환경에 배포본의 `requirements.txt`를
 설치하며 `referencing>=0.37,<1`을 사용합니다. 리뷰 실행 중 의존성을 설치하지
@@ -21,17 +21,17 @@
 
 ```bash
 python3 scripts/vendor_library.py --wheel /absolute/path/to/wheel \
-  --source-commit 1872227abd42553635c733e0aa228548a577a732 --write
+  --source-commit 62c3a741b729c6359cc5079a0306fad1fdd1fac8 --write
 ```
 
 검토한 아티팩트 해시와 라이브러리 변경을 먼저 확인합니다. 변경되거나 예상하지
 못한 관리 파일이 있으면 갱신을 거부하고 보존합니다. 이 검사는 Codex 자체의
 플러그인 캐시 교체 동작을 변경하지 않으므로 기존 업데이트·제거 절차를 따릅니다.
 
-[dev6 릴리스](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev6)에
+[dev7 릴리스](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev7)에
 wheel과 `triad-release.json`이 공개되었습니다. 이 번들에 사용한 릴리스 wheel은 [`contracts/library-adoption.json`](../contracts/library-adoption.json)에
 기록되어 있으며, `wheel_sha256`은
-`5baf86483fe04935b2e21654508678eb21f7003a0038fb3875355a2e2967bfdc`입니다.
+`cc24c8d285927c9a874a54c0b72a01668eaf77abbf183e6cf3abb8771ea9b480`입니다.
 갱신 전에 릴리스 manifest, 원본 커밋과 wheel SHA-256을 확인합니다.
 전체 패키지에는 네 리소스 번들이 포함되며 일부 모듈만 복사하는 방식은 지원하지 않습니다.
 
@@ -320,7 +320,7 @@ Gemini 구버전 CLI 사용은 `triad-gemini-dispatch`, AGY는
 
 ## 업데이트
 
-직접 Codex 이관은 정확한 dev5 pin의 0.2.563과 이 릴리스의 dev6 직접 source-SOT
+직접 Codex 이관은 정확한 dev5 pin의 0.2.563, dev6 및 현재 dev7 직접 source-SOT
 그룹만 지원하며 이전 버전은 변경 없이 거부합니다. AGY는 정확한
 [80파일 기준](shared-runtime.ko.md#설치와-선택)이 필요합니다. 이전 직접 설치는
 활성 consumer·라운드의 대상을 보존하는 별도 검토된 이관 절차가 필요하며 제거를
@@ -337,8 +337,16 @@ cache는 유지하며 최종 설치 root에서도 bootstrap을 실행해 등록�
 이미 공용으로 설치된 cache를 교체하려면 먼저 해당 bootstrap의 제거 명령을 출력합니다:
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+plugin_root="/absolute/path/to/currently-installed/triad-codex-dispatch"
+python3 -c 'import pathlib,shlex,sys; root=pathlib.Path(sys.argv[1]); assert root.is_absolute() and root.resolve(strict=True)==root; script=root / "scripts" / "bootstrap.sh"; assert script.is_file(); print(shlex.join(["bash",str(script),"--remove"]))' "$plugin_root"
 ```
+
+`plugin_root`에는 설치된 버전의 canonical 캐시 디렉터리(일반적으로
+`~/.codex/plugins/cache/triad-codex-dispatch/triad-codex-dispatch/<installed-version>`)
+또는 등록한 로컬 설치 root를 지정합니다. `codex plugin list --json`으로 설치
+버전을 확인하세요. `source.path`는 마켓플레이스 snapshot일 수 있으므로 설치된
+plugin root로 사용하지 마세요. [설치 확인](#설치-확인)의 runtime resolver로
+선택한 root를 검증하세요.
 
 캐시를 삭제하기 전에 출력된 명령을 실행하세요. 해당 설치 receipt만 등록 해제하고
 공용 명령·binding·자산, 사용자 작성 설정과 학습된 classifier patch를 보존합니다.
