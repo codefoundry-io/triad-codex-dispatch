@@ -75,6 +75,9 @@ and context reuse a binding, while a new root/context keeps prior bindings.
 consumers and retained assets remain available. Unknown active dependencies cause
 conservative retention; this release has no automatic garbage collector. Preserve
 these directories rather than deleting them as cache cleanup.
+Normal shared installation/removal also preserves global shell and Codex
+configuration, including recognized legacy-managed fragments. Their cleanup is
+separate work; isolated source-SOT staging retains its scoped cleanup behavior.
 
 The guarantees have explicit limits:
 

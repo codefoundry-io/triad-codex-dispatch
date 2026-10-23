@@ -978,7 +978,9 @@ receipt and conservatively retains common launchers, consumer bindings and
 snapshots. It does not uninstall another host. See [lifecycle limits](docs/shared-runtime.md#rounds-updates-and-removal)
 before deleting an old cache or runtime dependency.
 
-Legacy direct installation cleanup deletes only verified direct launchers and exact plugin-owned
+Normal shared install/remove preserves global shell/Codex settings, including
+recognized legacy-managed fragments; cleanup of those fragments is separate work.
+The isolated source-SOT branch retains cleanup of verified direct launchers and exact plugin-owned
 legacy launchers, profiles, command rules, repair-agent registration, and
 `[shell_environment_policy]` fragments only when their markers and expected
 bytes match. It also removes legacy three-agent TOMLs whose complete bytes match

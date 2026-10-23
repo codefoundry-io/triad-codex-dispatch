@@ -912,7 +912,8 @@ codex plugin marketplace remove triad-codex-dispatch
 binding과 snapshot을 보존합니다. 다른 호스트는 제거하지 않습니다. 이전 cache나
 runtime 의존성을 삭제하기 전에 [보장 범위](docs/shared-runtime.ko.md#라운드-업데이트와-제거)를 확인하세요.
 
-Legacy 직접 설치 cleanup은 검증된 직접 launcher와 exact plugin-owned legacy launcher,
+일반 공용 설치·제거는 전역 shell/Codex 설정의 기존 managed fragment도 보존하며
+그 정리는 별도 작업입니다. 격리된 source-SOT branch의 cleanup은 검증된 직접 launcher와 exact plugin-owned legacy launcher,
 profile, command rule, repair-agent registration, `[shell_environment_policy]` fragment를
 marker와 expected byte가 정확히 일치할 때만 삭제합니다. Legacy three-agent TOML은
 전체 내용이 확인된 원본과 일치할 때만 제거하며, 확인되지 않았거나 설치 경로에 따라

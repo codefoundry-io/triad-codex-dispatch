@@ -367,7 +367,10 @@ Independent older AGY installers/removers remain outside that guarantee.
 
 Bootstrap installs three provider wrapper launchers plus one review-round
 selector launcher that supplies both install-resolved Google executable pins,
-and prints the owner apply argv. Install and remove perform exact plugin-owned legacy cleanup for old
+and prints the owner apply argv. Normal shared install/remove does not clean up
+global shell or Codex configuration, including exact legacy-managed fragments.
+Those fragments may remain for separately authorized cleanup. The existing
+isolated source-SOT branch retains exact plugin-owned cleanup for old
 profiles, command rules, repair-agent registration, pre-spawn
 `[shell_environment_policy]` fragments, legacy agent TOMLs, and retired
 launchers only when their marker and expected content match. Foreign, edited,

@@ -71,7 +71,8 @@ mode with an installed runtime binding.
 Updates preserve existing bindings and their retained assets. Removal unregisters
 only the selected installation receipt; unknown consumers or active uses cause
 conservative retention. Do not delete retained runtime directories manually as
-cleanup. Rounds begun before migration with a direct legacy cache path still
+cleanup. Normal shared installation/removal preserves global shell/Codex settings,
+including old managed fragments; their cleanup is separate work. Rounds begun before migration with a direct legacy cache path still
 need that original cache; their receipts cannot be moved to a new path. An
 independent older AGY installer/remover and external Python/provider dependency
 removal remain outside this shared installer's lifecycle guarantee.

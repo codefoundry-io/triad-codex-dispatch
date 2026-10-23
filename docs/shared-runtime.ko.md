@@ -64,6 +64,8 @@ plugin이나 provider 경로가 바뀌면 bootstrap을 다시 실행합니다. �
 binding을 재사용하고 새 root·context는 이전 binding을 보존합니다. `--remove`는
 해당 설치 receipt만 등록 해제하며 공용 명령, 다른 consumer와 보존 자산을 유지합니다.
 활성 의존성을 확정할 수 없으면 모두 보존하고 자동 GC하지 않습니다.
+일반 공용 설치·제거는 전역 shell과 Codex 설정의 기존 managed fragment도 보존합니다.
+그 정리는 별도 작업이며 격리된 source-SOT stage의 기존 정리 동작은 유지합니다.
 
 보장 범위에는 다음 제한이 있습니다.
 
