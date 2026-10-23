@@ -10,23 +10,21 @@ usage() {
 Usage: scripts/bootstrap.sh --install
        scripts/bootstrap.sh --remove
 
---install checks local prerequisites for triad-codex-dispatch, removes exact
-plugin-owned repair and permission artifacts from older installs, and installs
-the provider and selector launcher group. Applying a validated proposal remains an explicit
+--install checks local prerequisites for triad-codex-dispatch and registers the
+verified shared provider and selector launcher group, preserving an authenticated
+legacy default and global configuration. Applying a validated proposal remains an explicit
 owner action through the bootstrap-printed login-shell Python argv (see
 docs/references/repair-protocol.md).
-It also quarantines any legacy personal-scope
-repair-agent TOMLs (bootstrap-authored provenance only — a same-name file
-without that provenance is left in place) left by an older install into a
-timestamped directory outside agents/, recoverable if needed.
 
---remove uninstalls managed provider and selector launchers and exact legacy plugin-owned
-profile, command-rule, config-fragment, shell-entry, and repair artifacts. It
-preserves owner-authored or edited artifacts and refuses unsafe targets without
-following or changing them. It
-also removes any bootstrap-managed (provenance-matched) legacy personal-scope
-repair-agent TOMLs left by an older install; a non-matching same-name file is
-preserved. Learned classifier patches are preserved.
+--remove unregisters only the selected installation receipt, retaining shared
+commands and runtime assets. Global configuration and learned classifier patches
+are preserved. Unsafe targets are refused without following or changing them.
+
+Only the explicit isolated TRIAD_BOOTSTRAP_SOURCE_SOT_REVIEW_ROOT mode uses
+direct launchers and legacy scoped cleanup of exact plugin-owned artifacts.
+In that mode, install quarantines bootstrap-provenance-matched legacy personal
+repair-agent TOMLs; remove deletes managed direct launchers and matching legacy
+artifacts. Owner-authored, edited, or non-matching same-name files are preserved.
 
 TRIAD_BOOTSTRAP_CODEX_ROOT selects only bootstrap's Codex-directory targets and
 checks. It must resolve to an absolute path outside the guarded worktree.
