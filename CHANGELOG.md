@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.565 — 2026-10-24
+
+- Bundles published `triad-dispatch-lib 0.1.0.dev7`, source
+  `62c3a741b729c6359cc5079a0306fad1fdd1fac8`, wheel SHA-256
+  `cc24c8d285927c9a874a54c0b72a01668eaf77abbf183e6cf3abb8771ea9b480`.
+  All four resource bundle identities remain unchanged.
+- Preserves typed roster refusal fields through the host ValueError boundary.
+  Schema failures append the document and canonical instance location as JSON;
+  an empty array identifies the root. Diagnostics exclude input values and
+  unknown property spelling. Other roster refusal text and CLI exit 2 remain unchanged.
+- Preserves authenticated dev6 direct-launcher migration alongside dev5 through
+  complete pinned package/license inventories; existing runtime selection and
+  retained bindings remain unchanged.
+
 ## 0.2.564 — 2026-10-23
 
 - Bundles published `triad-dispatch-lib 0.1.0.dev6`, source

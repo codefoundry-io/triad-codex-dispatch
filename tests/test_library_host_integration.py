@@ -112,6 +112,27 @@ def test_shared_contract_fault_escapes_roster_input_error_handler(tmp_path, monk
         review_roster.resolve_roster(tmp_path)
 
 
+@pytest.mark.parametrize("location", [(), None])
+def test_host_schema_diagnostic_retains_shared_fields_without_inventing_location(tmp_path, monkeypatch, location):
+    error = shared.RosterError("schema_violation")
+    error.path = ("required",)
+    error.missing = "legs"
+    error.document = "defaults"
+    error.instance_path = location
+
+    def rejected(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(shared, "resolve_roster", rejected)
+    with pytest.raises(review_roster.RosterValidationError) as caught:
+        review_roster.resolve_roster(tmp_path)
+    host = caught.value
+    assert (host.code, host.path, host.missing, host.document, host.instance_path) == (
+        "schema_violation", ("required",), "legs", "defaults", location)
+    suffix = ' [document="defaults", instance_path=[]]' if location == () else ""
+    assert str(host) == "invalid roster: Roster violates the canonical schema." + suffix
+
+
 @pytest.mark.parametrize("family,route", [("claude", None), ("codex", None), ("google", "agy"), ("google", "gemini")])
 @pytest.mark.parametrize("control", ["\r", "\n", ""], ids=["CR", "LF", "quoted"])
 def test_prompt_path_encoding_preserves_native_identity(tmp_path, monkeypatch, family, route, control):

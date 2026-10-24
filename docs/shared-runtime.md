@@ -23,8 +23,9 @@ command group before publishing a replacement:
 | Partial, mixed, edited or unknown group | Refuse without replacing the group |
 
 Supported direct Codex inputs are 0.2.563 with the exact published dev5 package
-and source pins, or direct source-SOT launchers with this release's exact dev6
-package. Older Codex releases (including 0.2.562/dev4 and 0.2.561/dev3) are not
+and source pins, or direct source-SOT launchers with the exact published dev6
+or current dev7 package. Every supported pin authenticates the complete package
+and license inventory. Older Codex releases (including 0.2.562/dev4 and 0.2.561/dev3) are not
 admitted by this migration and are left unchanged. Keep their original toolkit
 and use a separately reviewed transition; do not delete their launchers or
 caches to bypass authentication while another consumer or direct round needs them.

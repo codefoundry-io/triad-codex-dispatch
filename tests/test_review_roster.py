@@ -10,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import review_round
+import review_roster
 
 
 def write_config(project, legs=None, *, raw=None):
@@ -168,3 +169,53 @@ def test_display_can_show_zero_enabled_entries(tmp_path, capsys):
     data = json.loads(stdout)
     assert data["enabled"] == [] and data["families"] == []
     assert len(data["legs"]) == 3 and data["capabilities_checked"] is False
+
+
+@pytest.mark.parametrize("legs,document,location,missing", [
+    ([{"name": "codex"}, {"name": "claude", "timeout_s": 0}],
+     "override", ("legs", 1, "timeout_s"), None),
+    ([{"name": "new-google", "vendor": "google", "enabled": True,
+       "acceptance": "participating", "timeout_s": 600,
+       "google": {"route": "agy"}, "gemini": {}}],
+     "resolved", ("legs", 3), "agy"),
+])
+def test_schema_location_survives_facade(tmp_path, capsys, legs, document, location, missing):
+    write_config(tmp_path, legs)
+    with pytest.raises(ValueError) as caught:
+        review_roster.resolve_roster(tmp_path)
+    error = caught.value
+    assert isinstance(error, review_roster.RosterValidationError)
+    assert error.code == "schema_violation"
+    assert isinstance(error.path, tuple)
+    assert error.document == document
+    assert error.instance_path == location
+    assert error.missing == missing
+    code, stdout, stderr = resolve(tmp_path, capsys)
+    assert code == 2 and stdout == ""
+    assert str(error) in stderr
+    assert f"document={json.dumps(document)}, instance_path={json.dumps(location)}" in stderr
+
+
+@pytest.mark.parametrize("raw,location", [
+    ('{"schema":"triad-review-legs.v2","legs":[],"SENTINEL_KEY":"SENTINEL_VALUE"}', ()),
+    ('{"schema":"triad-review-legs.v2","legs":[{"name":"codex","codex":{"SENTINEL_KEY":"SENTINEL_VALUE"}}]}', ("legs", 0, "codex")),
+])
+def test_schema_location_is_value_free_including_root(tmp_path, capsys, raw, location):
+    write_config(tmp_path, raw=raw)
+    with pytest.raises(ValueError) as caught:
+        review_roster.resolve_roster(tmp_path)
+    assert caught.value.instance_path == location
+    code, stdout, stderr = resolve(tmp_path, capsys)
+    assert code == 2 and stdout == ""
+    assert f"instance_path={json.dumps(location)}" in stderr
+    assert "SENTINEL" not in stderr
+
+
+def test_non_schema_refusal_keeps_text_and_unavailable_location(tmp_path):
+    write_config(tmp_path, raw="{broken")
+    with pytest.raises(ValueError) as caught:
+        review_roster.resolve_roster(tmp_path)
+    assert str(caught.value) == "invalid roster: Invalid roster override JSON."
+    assert caught.value.code == "invalid_json"
+    assert (caught.value.path, caught.value.missing, caught.value.document,
+            caught.value.instance_path) == (None, None, None, None)

@@ -8,8 +8,8 @@ under the same marketplace name.
 
 ## Bundled shared library
 
-This source includes the published `triad-dispatch-lib 0.1.0.dev6` prerelease at
-`1872227abd42553635c733e0aa228548a577a732` under `bin/triad_dispatch_lib/`;
+This source includes the published `triad-dispatch-lib 0.1.0.dev7` prerelease at
+`62c3a741b729c6359cc5079a0306fad1fdd1fac8` under `bin/triad_dispatch_lib/`;
 no separate library checkout or editable install is needed. Continue using the
 selected Python 3.12+ runtime and install the shipped
 `requirements.txt` there, including `referencing>=0.37,<1`. Bootstrap checks
@@ -23,7 +23,7 @@ generated files:
 
 ```bash
 python3 scripts/vendor_library.py --wheel /absolute/path/to/wheel \
-  --source-commit 1872227abd42553635c733e0aa228548a577a732 --write
+  --source-commit 62c3a741b729c6359cc5079a0306fad1fdd1fac8 --write
 ```
 
 Review its recorded artifact hash and library changes first. The refresh refuses
@@ -31,11 +31,11 @@ modified or unexpected managed files; preserve and resolve those conflicts befor
 retrying. This source maintenance check does not add edit-preservation guarantees
 to Codex's own plugin-cache replacement. Keep the existing update/removal procedure.
 
-The [dev6 release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev6)
+The [dev7 release](https://github.com/codefoundry-io/triad-dispatch-lib/releases/tag/v0.1.0.dev7)
 publishes the wheel and `triad-release.json`. The release wheel used for this
 bundle is recorded in
 [`contracts/library-adoption.json`](../contracts/library-adoption.json), with
-`wheel_sha256` equal to `5baf86483fe04935b2e21654508678eb21f7003a0038fb3875355a2e2967bfdc`.
+`wheel_sha256` equal to `cc24c8d285927c9a874a54c0b72a01668eaf77abbf183e6cf3abb8771ea9b480`.
 Verify the release manifest, source commit and wheel SHA-256 before refreshing.
 The complete package includes four resource bundles; partial module copies are
 not supported.
@@ -333,8 +333,8 @@ denied writes/shell, and explicitly requested web separately on the chosen route
 
 ## Update
 
-The direct Codex migration supports 0.2.563 with exact dev5 pins and this release's
-dev6 direct source-SOT groups; older Codex groups refuse unchanged. Supported AGY
+The direct Codex migration supports 0.2.563 with exact dev5 pins, published dev6,
+and current dev7 direct source-SOT groups; older Codex groups refuse unchanged. Supported AGY
 requires the exact [80-file baseline](shared-runtime.md#installation-and-selection).
 Older direct installs need a separately reviewed transition that preserves any
 active consumer/round targets; removal is not an authentication bypass.
@@ -352,8 +352,16 @@ For an already shared installation's explicit cache replacement, first print its
 removal command:
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+plugin_root="/absolute/path/to/currently-installed/triad-codex-dispatch"
+python3 -c 'import pathlib,shlex,sys; root=pathlib.Path(sys.argv[1]); assert root.is_absolute() and root.resolve(strict=True)==root; script=root / "scripts" / "bootstrap.sh"; assert script.is_file(); print(shlex.join(["bash",str(script),"--remove"]))' "$plugin_root"
 ```
+
+Set `plugin_root` to the installed version's canonical cache directory (normally
+`~/.codex/plugins/cache/triad-codex-dispatch/triad-codex-dispatch/<installed-version>`)
+or its registered local installation root. Confirm the installed version with
+`codex plugin list --json`. Its `source.path` may identify a marketplace snapshot,
+so do not use that field as the installed plugin root. Verify the selected root
+with the runtime resolver shown under [Verify the installation](#verify-the-installation).
 
 Run the printed command before removing its cache. It unregisters only that
 installation receipt and retains the shared commands, bindings and assets,

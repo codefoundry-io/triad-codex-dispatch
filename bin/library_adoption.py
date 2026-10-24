@@ -6,12 +6,12 @@ import re
 import stat
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "1872227abd42553635c733e0aa228548a577a732"
-VERSION = "0.1.0.dev6"
+COMMIT = "62c3a741b729c6359cc5079a0306fad1fdd1fac8"
+VERSION = "0.1.0.dev7"
 # SHA-256 of the canonical full package + MIT-license path/digest inventory
 # inspected at COMMIT. Independent of generated adoption records and wheel ZIP
 # timestamps; changing source content requires an explicit reviewed pin update.
-APPROVED_CONTENT_SHA256 = "6929313b5f1cb32f9fb3b148ec77f35486d304c9091ebc073da362d66eaed018"
+APPROVED_CONTENT_SHA256 = "e8c2a2fe70f65daf2743b39085104c732b555e8fc9ad1309c413dab24a04a0a8"
 PACKAGE = "bin/triad_dispatch_lib"
 LICENSE = "vendor/triad-dispatch-lib.LICENSE"
 RECORD = "contracts/library-adoption.json"

@@ -6,7 +6,7 @@
 버전별 릴리스와 다운로드 체크섬을 확인할 수 있습니다.
 
 이 소스는 명시적 v2의 roster·프롬프트·판정 처리에
-공개된 `triad-dispatch-lib 0.1.0.dev6` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
+공개된 `triad-dispatch-lib 0.1.0.dev7` 사전 릴리스를 포함합니다. [적용 기록](contracts/library-adoption.json)에
 원본과 생성 파일 해시를 고정하며 실행 중 패키지를 다운로드하지 않습니다.
 Claude와 AGY는 별도로 배포합니다. 라이브러리의
 [dev5 AGY 메타데이터 결정](https://github.com/codefoundry-io/triad-dispatch-lib/blob/859f27c07c1123e87b50344f587999a0cbc172a6/spec/decisions/2026-10-22-agy-result-metadata.md)을 참고하세요.
@@ -245,6 +245,18 @@ class, route에서 identity를 추론하지 않습니다.
   session 을 시작하세요.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
+
+### 0.2.565 업그레이드
+
+로스터 스키마 오류는 JSON 형식의 `document`와 `instance_path`를 표시합니다. 예:
+`[document="override", instance_path=["legs", 1, "timeout_s"]]`. 빈 배열은 문서
+루트이며 위치를 알 수 없으면 생략합니다. 입력값과 알 수 없는 속성 이름은
+노출하지 않습니다. 잘못된 로스터의 종료 코드는 계속 2입니다.
+
+lib dev7을 적용합니다. 정확한 dev6 패키지를 가진 기존 0.2.564 공용 generation을
+업데이트할 때 인증하고, 기존 binding과 legacy 기본값을 보존합니다.
+[업데이트 절차](docs/installation.ko.md#업데이트)를 따라 설치된 bootstrap을 실행한 뒤
+새 Codex 세션을 시작하세요.
 
 ### 0.2.564 업그레이드
 
@@ -618,7 +630,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.564-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.565-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
@@ -899,8 +911,15 @@ fresh shell에서 현재 설치된 plugin 경로를 다시 확인해 managed uni
 출력한 뒤 plugin cache를 지우세요(script가 그 cache 안에 있습니다).
 
 ```bash
-python3 -c 'import json,pathlib,shlex,subprocess; result=subprocess.run(["codex","plugin","list","--json"],check=True,capture_output=True,text=True); data=json.loads(result.stdout); item=next(item for item in data["installed"] if item["pluginId"]=="triad-codex-dispatch@triad-codex-dispatch"); root=pathlib.Path(item["source"]["path"]); assert root.is_absolute(); print(shlex.join(["bash",str(root / "scripts" / "bootstrap.sh"),"--remove"]))'
+plugin_root="/absolute/path/to/currently-installed/triad-codex-dispatch"
+python3 -c 'import pathlib,shlex,sys; root=pathlib.Path(sys.argv[1]); assert root.is_absolute() and root.resolve(strict=True)==root; script=root / "scripts" / "bootstrap.sh"; assert script.is_file(); print(shlex.join(["bash",str(script),"--remove"]))' "$plugin_root"
 ```
+
+`plugin_root`에는 설치 버전의 canonical 캐시 디렉터리(일반적으로
+`~/.codex/plugins/cache/triad-codex-dispatch/triad-codex-dispatch/<installed-version>`)
+또는 등록한 로컬 설치 root를 지정합니다. `codex plugin list --json`으로 설치
+버전을 확인하되, `source.path`는 마켓플레이스 snapshot일 수 있습니다.
+[runtime resolver](docs/installation.ko.md#설치-확인)로 선택한 설치 root를 검증하세요.
 
 출력된 절대 removal 명령을 실행한 다음 plugin registration을 제거합니다.
 
@@ -960,9 +979,10 @@ cleanup까지 남아 있습니다.
 그 한계를 밝히고 escalation을 반환합니다.
 
 직접 만든 Codex custom subagent가 triad dispatch skill을 호출해야 한다면 Codex
-`skills.config`에 필요한 `SKILL.md` 경로를 명시하세요. 경로는 live
-`codex plugin list --json` 출력의 현재 설치 plugin `source.path` 아래 skill 파일을
-가리키면 됩니다.
+`skills.config`에 필요한 `SKILL.md` 경로를 명시하세요. [삭제](#삭제) 안내에 따라
+검증한 canonical 설치 `plugin_root` 아래 파일을 선택합니다. 예:
+`$plugin_root/skills/triad-claude-dispatch/SKILL.md`. 설정에는 변수를 확장한 절대
+경로를 입력하세요. 마켓플레이스의 `source.path`는 설치 root가 아닙니다.
 
 custom-agent TOML을 바꾼 뒤에는 새 Codex session을 시작하세요.
 

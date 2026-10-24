@@ -82,6 +82,7 @@ class RosterError(ValueError):
     def __init__(self, code: str):
         self.code = code
         self.path: tuple[str | int, ...] | None = None
+        self.instance_path: tuple[str | int, ...] | None = None
         self.missing: str | None = None
         self.document: str | None = None
         super().__init__({

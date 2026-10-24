@@ -206,6 +206,32 @@ def _legacy_context(payloads):
     return roots[0], _context(dict(python=python, path=path, classifier=classifier, providers=providers)), markers[0]
 
 
+def _supported_library_digest(toolkit):
+    """Authenticate current/prior package bytes without executing old modules."""
+    adoption = json.loads(_read(toolkit / library_adoption.RECORD))
+    if not isinstance(adoption, dict):
+        raise ValueError('invalid library adoption record')
+    expected = adoption.get('sha256')
+    if not isinstance(expected, dict):
+        raise ValueError('invalid library adoption inventory')
+    prior_pins = {
+        '0.1.0.dev5': ('859f27c07c1123e87b50344f587999a0cbc172a6',
+                       'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'),
+        '0.1.0.dev6': ('1872227abd42553635c733e0aa228548a577a732',
+                       '6929313b5f1cb32f9fb3b148ec77f35486d304c9091ebc073da362d66eaed018'),
+    }
+    if adoption.get('version') not in prior_pins:
+        library_adoption.verify_library(toolkit)
+        return library_adoption.APPROVED_CONTENT_SHA256
+    source, content = prior_pins[adoption['version']]
+    if (adoption.get('source_commit') != source
+            or digest(canonical(expected)) != content
+            or any(digest(_read(toolkit / name)) != value for name, value in expected.items())
+            or inventory(toolkit, ('bin/triad_dispatch_lib', 'vendor/triad-dispatch-lib.LICENSE')) != expected):
+        raise ValueError('unsupported direct Codex library baseline')
+    return content
+
+
 def verify_legacy_group(paths, baseline=None):
     payloads = {name: _read(paths[name]) for name in COMMANDS}
     toolkit, context, marker = _legacy_context(payloads)
@@ -217,20 +243,7 @@ def verify_legacy_group(paths, baseline=None):
         library = baseline['library']['approved_content_sha256']
         consumer = 'agy'
     else:
-        adoption = json.loads(_read(toolkit / library_adoption.RECORD))
-        if adoption.get('version') == '0.1.0.dev5':
-            # The immediately preceding released Codex library is a supported
-            # direct-launcher migration input, not an executable importer.
-            expected = adoption.get('sha256', {})
-            if (adoption.get('source_commit') != '859f27c07c1123e87b50344f587999a0cbc172a6'
-                    or digest(canonical(expected)) != 'ba9eaf2991226d2438e5b207653cc5c71c6d722dd90ffe387f26542e02ee9b08'
-                    or any(digest(_read(toolkit / name)) != value for name, value in expected.items())
-                    or inventory(toolkit, ('bin/triad_dispatch_lib', 'vendor/triad-dispatch-lib.LICENSE')) != expected):
-                raise ValueError('unsupported direct Codex library baseline')
-            library = digest(canonical(expected))
-        else:
-            library_adoption.verify_library(toolkit)
-            library = library_adoption.APPROVED_CONTENT_SHA256
+        library = _supported_library_digest(toolkit)
         assets = inventory(toolkit)
         consumer = 'codex'
     return dict(toolkit_root=str(toolkit), context=context, launchers={n: b.decode() for n, b in payloads.items()},
@@ -407,7 +420,7 @@ def _load_generation(path):
                    or digest(_read(artifact_root / name)) != expected
                    for name, expected in value['artifact_inventory'].items())):
         raise ValueError('runtime artifact identity mismatch')
-    library_adoption.verify_library(artifact_root)
+    _supported_library_digest(artifact_root)
     bindings = []
     for identity, binding_file in value['bindings'].items():
         binding, _ = _load_binding(binding_file, verify_assets=False)

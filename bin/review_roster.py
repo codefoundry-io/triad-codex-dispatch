@@ -12,6 +12,22 @@ from verdict_schema import _read_canonical_regular_file
 DEFAULTS = Path(__file__).resolve().parents[1] / "contracts/review-legs.default.json"
 
 
+class RosterValidationError(ValueError):
+    """Preserve value-free shared diagnostics through the host input boundary."""
+
+    def __init__(self, error):
+        self.code = error.code
+        self.path = error.path
+        self.missing = error.missing
+        self.document = error.document
+        self.instance_path = error.instance_path
+        message = f"invalid roster: {error}"
+        if self.code == "schema_violation" and self.instance_path is not None:
+            message += (f" [document={json.dumps(self.document, ensure_ascii=True)}, "
+                        f"instance_path={json.dumps(self.instance_path, ensure_ascii=True)}]")
+        super().__init__(message)
+
+
 def _check_placeholders(document: dict) -> None:
     for entry in document["legs"]:
         for provider in ("claude", "codex", "agy", "gemini"):
@@ -34,11 +50,11 @@ def _validate(document: object, schema: dict, *, resolved: bool) -> None:
 
 def resolve_roster(project_root: Path) -> dict:
     """Return resolved data and its display metadata; execution validates capabilities."""
+    shared = _library()
     try:
         root = project_root.resolve(strict=True)
         if not root.is_dir():
             raise ValueError("project root must be an existing directory")
-        shared = _library()
         load_contracts()
         defaults = _json(_read_canonical_regular_file(DEFAULTS))
         config = root / ".agents" / "triad-review-legs.json"
@@ -69,5 +85,7 @@ def resolve_roster(project_root: Path) -> dict:
                 "enabled": [entry["name"] for entry in enabled],
                 "families": sorted({entry["vendor"] for entry in enabled}),
                 "capabilities_checked": False}
+    except shared.RosterError as error:
+        raise RosterValidationError(error) from None
     except (OSError, ValueError, RecursionError) as error:
         raise ValueError(f"invalid roster: {error}") from None
