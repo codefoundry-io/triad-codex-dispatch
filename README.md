@@ -859,6 +859,12 @@ The completed-answer banner veto retains its prior permissive interpretation;
 that veto does not admit a read-only answer. Original-JSON schema errors take
 priority over other undecodable records, with duplicate-member errors first.
 
+
+AGY stdout and saved run logs preserve original LF record framing. A bare CR is
+not a record boundary for read-only or schema calls. On UTF-8 capture failure,
+only complete LF-terminated prefix records are retained. Other providers and
+stderr retain their existing newline normalization.
+
 AGY's terminal `result.error` beginning `timeout waiting for response`, with
 status `ERROR`, an empty response and vendor exit `1`, is reported as
 `vendor-timeout` / `65` with no answer. A wrapper deadline remains `timeout` / `2`.

@@ -337,3 +337,60 @@ def test_task_denial_cannot_contradict_exposed_parameters(parameters, other_para
             event['step_update'].setdefault('tool_info', {})['parameters'] = value
     result = interpret(run_result([active, denial], status='SUCCESS'))
     assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))
+
+
+@pytest.mark.parametrize('observations,allowed', [
+    ([('ACTIVE', {'Action': 'create'}), ('ACTIVE', {'Action': 'list'}), ('ERROR', 'absent')], False),
+    ([('ACTIVE', {'Action': 'create'}), ('ERROR', {'Action': 'list'}), ('ERROR', 'absent')], False),
+    ([('ACTIVE', {'Action': 'list'}), ('ACTIVE', {'Action': 'list'}), ('ERROR', 'absent')], True),
+    ([('ACTIVE', 'absent'), ('ACTIVE', {'Action': 'list'}), ('ERROR', 'absent')], True),
+    ([('ACTIVE', {'count': 1}), ('ACTIVE', {'count': True}), ('ERROR', 'absent')], False),
+    ([('ACTIVE', None), ('ACTIVE', {'Action': 'list'}), ('ERROR', 'absent')], False),
+    ([('ACTIVE', {'a': 1, 'b': 2}), ('ACTIVE', {'b': 2, 'a': 1}), ('ERROR', 'absent')], True),
+])
+def test_task_denial_requires_consistent_group_parameters(observations, allowed):
+    events = []
+    for state, parameters in observations:
+        event = step('manage_task', state, index=2,
+                     error={'message': 'tool call denied by pre-tool hook'} if state == 'ERROR' else None)
+        event['conversation_id'] = 'same'
+        if parameters != 'absent':
+            event['step_update'].setdefault('tool_info', {})['parameters'] = parameters
+        events.append(event)
+    result = interpret(run_result(events, status='SUCCESS'))
+    assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))
+    if not allowed:
+        assert result.final_answer == '' and result.validated is None
+
+
+@pytest.mark.parametrize('separation', ['index', 'conversation', 'result'])
+def test_separate_task_identity_parameter_groups_do_not_conflict(separation):
+    events = []
+    for group in (0, 1):
+        if group and separation == 'result':
+            events.append({'event': 'result', 'result': {'status': 'SUCCESS', 'response': 'first'}})
+        for state in ('ACTIVE', 'ERROR'):
+            event = step('manage_task', state, index=group if separation == 'index' else 2,
+                         error={'message': 'tool call denied by pre-tool hook'} if state == 'ERROR' else None)
+            event['conversation_id'] = str(group) if separation == 'conversation' else 'same'
+            if state == 'ACTIVE':
+                event['step_update'].setdefault('tool_info', {})['parameters'] = {'value': group}
+            events.append(event)
+    assert interpret(run_result(events, status='SUCCESS')).exit_code == 0
+
+
+@pytest.mark.parametrize('message,allowed', [
+    ('permission check failed for command "x": user denied permission', False),
+    ('permission check failed for command "x": permission denied for command', False),
+    ('tool call denied by pre-tool hook', True), ('user denied permission', True),
+])
+@pytest.mark.parametrize('active', [False, True])
+@pytest.mark.parametrize('formal', [False, True])
+def test_task_denial_does_not_borrow_command_permission_failure(message, allowed, active, formal):
+    events = ([step('manage_task', 'ACTIVE', index=2)] if active else [])
+    events.append(step('manage_task', 'ERROR', index=2, alias='manage_task', error={'message': message}))
+    run = run_result(events, status='SUCCESS')
+    result = (interpret(run) if formal else wrapper._interpret_run(run, None, read_only=True))
+    assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))
+    permissive = wrapper._interpret_run(run_result(events, status='SUCCESS'), None)
+    assert permissive.exit_code == 0

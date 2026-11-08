@@ -811,6 +811,11 @@ AGY 인증 실패의 근거는 중복 멤버와 비유한 숫자가 없는 원�
 기존 판정은 유지하지만, 이것만으로 읽기 전용 답변을 승인하지는 않습니다.
 원본 JSON의 schema 오류가 다른 해석 불가 행보다 우선하며 중복 멤버 오류가 먼저입니다.
 
+AGY stdout과 저장된 run-log는 원본 LF 레코드 경계를 보존합니다. read-only 또는
+schema 호출에서는 단독 CR을 레코드 경계로 취급하지 않습니다. UTF-8 수집 실패 시에는
+마지막 정상 LF까지 완성된 앞부분의 레코드만 남깁니다. 다른 공급자와 stderr의
+줄바꿈 정규화는 유지합니다.
+
 AGY의 최종 `result.error`가 `timeout waiting for response`로 시작하고,
 상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면 답변 없이
 `vendor-timeout` / `65`로 보고합니다. Wrapper 제한시간 초과는 `timeout` / `2`입니다.

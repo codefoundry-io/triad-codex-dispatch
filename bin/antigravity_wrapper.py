@@ -242,7 +242,7 @@ def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) 
     return {"done_view_file_event_count": count, "relative_paths": paths} if count else None
 
 
-def _agy_step_denied(step: dict[str, Any]) -> bool:
+def _agy_step_denied(step: dict[str, Any], *, wrapped_permission_check: bool = True) -> bool:
     """Measured denial heads are separate from structured finish recovery."""
     info = step.get("tool_info")
     error = info.get("error") if isinstance(info, dict) else None
@@ -252,7 +252,7 @@ def _agy_step_denied(step: dict[str, Any]) -> bool:
     first = next((line.strip().casefold() for line in message.splitlines() if line.strip()), "")
     if first.startswith(("tool call denied by pre-tool hook", "user denied permission")):
         return True
-    if first.startswith("permission check failed for ") and '": ' in first:
+    if wrapped_permission_check and first.startswith("permission check failed for ") and '": ' in first:
         return first.rsplit('": ', 1)[-1].startswith(("user denied permission", "permission denied for"))
     return False
 
@@ -311,17 +311,9 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
 
 
 def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
-    """Refuse task operations except an observed native pre-execution denial."""
-    def compatible_parameters(left: dict, right: dict) -> bool:
-        left_info, right_info = left.get("tool_info"), right.get("tool_info")
-        if (not isinstance(left_info, dict) or "parameters" not in left_info
-                or not isinstance(right_info, dict) or "parameters" not in right_info):
-            return True
-        # Compare JSON types too: Python equality treats true as integer 1.
-        return (json.dumps(left_info["parameters"], sort_keys=True)
-                == json.dumps(right_info["parameters"], sort_keys=True))
-
+    """Refuse task operations except an unambiguous pre-execution denial."""
     attempts = []
+    parameter_sets: dict[tuple, set[str]] = {}
     segment = 0
     for pos, event in enumerate(events):
         if event.get("event") == "result":
@@ -334,24 +326,30 @@ def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
         names = ([step["tool_name"]] if "tool_name" in step else [])
         if "name" in info:
             names.append(info["name"])
-        if step.get("step_type") == "tool" and "manage_task" in names:
-            consistent = all(name == "manage_task" for name in names)
-            denied = consistent and _agy_step_denied(step)
-            attempts.append((pos, segment, event, step, consistent, denied))
-    for pos, segment, event, step, consistent, denied in attempts:
-        if denied:
+        if step.get("step_type") != "tool" or "manage_task" not in names:
             continue
         index = step.get("step_index")
-        if (consistent and step.get("state") == "ACTIVE" and type(index) is int
-                and any(later > pos and later_segment == segment
-                        and type(other.get("step_index")) is int
-                        and other["step_index"] == index
-                        and (("conversation_id" not in event and "conversation_id" not in other_event)
-                             or (isinstance(identity := event.get("conversation_id"), str)
-                                 and bool(identity.strip())
-                                 and identity == other_event.get("conversation_id")))
-                        and other_denied and compatible_parameters(step, other)
-                        for later, later_segment, other_event, other, _, other_denied in attempts)):
+        identity = event.get("conversation_id")
+        key = None
+        if (type(index) is int and ("conversation_id" not in event
+                or isinstance(identity, str) and bool(identity.strip()))):
+            key = (segment, index, identity)
+        if key is not None and "parameters" in info:
+            # Missing fields cannot erase contradictions elsewhere in this
+            # identity. JSON comparison distinguishes true from integer 1.
+            parameter_sets.setdefault(key, set()).add(json.dumps(info["parameters"], sort_keys=True))
+        consistent = all(name == "manage_task" for name in names)
+        # A command-specific permission failure does not establish that the
+        # enclosing task operation was denied before execution.
+        denied = consistent and _agy_step_denied(step, wrapped_permission_check=False)
+        attempts.append((pos, key, step, consistent, denied))
+    for pos, key, step, consistent, denied in attempts:
+        if denied:
+            continue
+        if (consistent and step.get("state") == "ACTIVE" and key is not None
+                and len(parameter_sets.get(key, ())) <= 1
+                and any(later > pos and other_key == key and other_denied
+                        for later, other_key, _, _, other_denied in attempts)):
             continue
         return True
     return False

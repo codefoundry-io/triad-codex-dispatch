@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve original LF framing in AGY stdout and saved run logs; a bare CR is
+  not a read-only/schema record boundary. UTF-8 capture failures retain only
+  complete LF-terminated prefix records. Other providers and stderr retain
+  newline normalization.
+
 - Adopt the merged C84 read-tool rule for AGY 1.5.3: accept `read_file` in the
   disabled hook, diagnostic path projection and same-run finish recovery.
 - With a terminal result, withhold read-only answers after a `manage_task` attempt without a recognized

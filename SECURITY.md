@@ -405,6 +405,12 @@ including transport and permissive calls. The prior completed-answer banner veto
 uses permissive interpretation only to suppress auth, never as positive auth
 evidence or read-only answer admission. Original-JSON schema errors precede
 other undecodable records; duplicate-member errors take priority.
+
+AGY stdout and saved run logs preserve original LF record framing. A bare CR is
+not a record boundary for read-only or schema calls. On UTF-8 capture failure,
+only complete LF-terminated prefix records are retained. Other providers and
+stderr retain their existing newline normalization.
+
 This is post-run refusal, not prevention
 or rollback of side effects. Both `read_file(Path)` and `view_file(AbsolutePath)`
 feed bounded diagnostic telemetry. The historical `done_view_file_event_count`
