@@ -393,15 +393,18 @@ success is not workflow authority.
 AGY 1.5.3 can expose `manage_task` despite profile default-component exclusion.
 With a terminal result, read-only admission therefore withholds any observed attempt
 without a recognized native pre-execution denial (`admission-refused` / 65).
-Undecodable `{`-prefixed event records are also refused, even without a terminal.
-Otherwise decodable events with duplicate members are refused before normalization:
-schema calls retain `schema-fail` / 66, raw read-only calls use `admission-refused` / 65.
+Read-only event checks use original lines. Duplicate members, nonfinite numbers
+and non-JSON surrounding whitespace retain `schema-fail` / 66 on schema calls;
+raw read-only calls use `admission-refused` / 65. Other undecodable `{`-prefixed
+records and decoder-limit failures use the latter refusal even without a terminal.
 Both are INVALID in public v2, not same-basis transport retries. Existing
 authentication, timeout and transport guards retain precedence. Permissive calls
-retain their old event parsing behavior. AGY auth carriers must themselves have
-unambiguous JSON on every route, including transport and permissive calls; a
-duplicate event cannot fabricate a primary authentication stop. When a schema
-call contains both duplicate and undecodable records, schema failure takes priority.
+retain their old event parsing behavior. Positive AGY auth carriers must have
+original JSON without duplicate members or nonfinite numbers on every route,
+including transport and permissive calls. The prior completed-answer banner veto
+uses permissive interpretation only to suppress auth, never as positive auth
+evidence or read-only answer admission. Original-JSON schema errors precede
+other undecodable records; duplicate-member errors take priority.
 This is post-run refusal, not prevention
 or rollback of side effects. Both `read_file(Path)` and `view_file(AbsolutePath)`
 feed bounded diagnostic telemetry. The historical `done_view_file_event_count`

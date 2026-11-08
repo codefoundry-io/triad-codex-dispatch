@@ -194,3 +194,66 @@ def test_duplicate_event_cannot_fabricate_auth_priority(clean_auth, monkeypatch)
                                                        else ("admission-refused", 65))
     assert result.final_answer == ""
 
+
+@pytest.mark.parametrize("edge", ["\u00a0", "\u2003", " \t\r"], ids=["nbsp", "em-space", "json-space"])
+@pytest.mark.parametrize("terminal", [False, True])
+@pytest.mark.parametrize("read_only", [False, True])
+def test_original_event_whitespace_is_not_normalized_before_read_only_admission(edge, terminal, read_only):
+    event = '{"event":"result","result":{"status":"SUCCESS","response":"first"}}' if terminal else '{"event":"step_update","step_update":{}}'
+    run = network_run(status="SUCCESS", response="done", rc=0)
+    run.stdout = edge + event + edge + '\n' + run.stdout
+    original = run.stdout
+    result = wrapper._interpret_run(run, None, read_only=read_only)
+    if read_only and edge != " \t\r":
+        assert (result.classification, result.exit_code) == ("admission-refused", 65)
+        assert result.final_answer == ""
+    else:
+        assert (result.classification, result.exit_code, result.final_answer) == ("ok", 0, "done")
+    assert result.stdout == original
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity", "1e999"])
+@pytest.mark.parametrize("read_only", [False, True])
+def test_nonfinite_event_cannot_bypass_read_only_admission(constant, read_only):
+    run = network_run(status="SUCCESS", response="done", rc=0)
+    run.stdout = '{"event":"step_update","usage":' + constant + '}\n' + run.stdout
+    result = wrapper._interpret_run(run, None, read_only=read_only)
+    assert (result.classification, result.exit_code) == (("admission-refused", 65) if read_only else ("ok", 0))
+
+
+@pytest.mark.parametrize("formal", [False, True])
+def test_undecodable_record_without_terminal_is_refused(formal):
+    run = network_run(rc=0)
+    run.stdout = '{"event":"step_update",'
+    result = wrapper._interpret_run(run, None, plan_mode=formal, read_only=not formal)
+    assert (result.classification, result.exit_code) == ("admission-refused", 65)
+
+
+def test_task_record_without_terminal_retains_extraction_failure():
+    run = network_run(rc=0)
+    run.stdout = json.dumps(step("manage_task"))
+    result = wrapper._interpret_run(run, None, read_only=True)
+    assert (result.classification, result.exit_code) == ("extraction-error", 1)
+
+
+@pytest.mark.parametrize("earlier", [False, True])
+def test_unmatched_or_earlier_denial_does_not_clear_active_task(earlier):
+    active = step("manage_task", "ACTIVE", index=1)
+    denial = step("manage_task", "ERROR", index=1 if earlier else 2,
+                  error={"message": "tool call denied by pre-tool hook"})
+    result = interpret(run_result([denial, active] if earlier else [active, denial], status="SUCCESS"))
+    assert (result.classification, result.exit_code) == ("admission-refused", 65)
+
+
+@pytest.mark.parametrize("record,error", [
+    ('{"event":"step_update","event":"ignored"}', "duplicate_member"),
+    ('{"event":"step_update","usage":NaN}', "nonfinite_number"),
+    ('\u00a0{"event":"step_update"}', "invalid_json"),
+])
+def test_original_json_schema_error_precedes_separate_undecodable_record(record, error):
+    run = run_result([], status="SUCCESS")
+    run.stdout = '{invalid\n' + record + '\n' + run.stdout
+    result = interpret(run)
+    assert (result.classification, result.exit_code) == ("schema-fail", 66)
+    assert result.validation_error == error and result.validated is None
+

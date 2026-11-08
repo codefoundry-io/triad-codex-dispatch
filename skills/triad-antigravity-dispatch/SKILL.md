@@ -56,8 +56,9 @@ Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. Formal calls select the packaged primary AGY
 profile for tool discovery; its declarations are not a permission boundary.
-Undecodable read-only events are refused even without a terminal; duplicate event
-members are refused before normalization (schema calls 66, raw read-only calls 65).
+Read-only checks use original event lines. Duplicate members, nonfinite numbers
+and non-JSON surrounding whitespace retain schema-call 66 or raw-read-only 65.
+Other undecodable events are refused with 65 even without a terminal.
 The measured ERROR-only finish-resubmission exception uses
 structured step type, state, error and ordering fields; an earlier failed finish
 can be rescued by a later successful finish under the wrapper's existing checks.

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -136,8 +137,14 @@ def _build_cmd(
 
 
 def parse_agy_stream(text: str, *, decode_errors: list[str] | None = None) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    """Return parsed events and the last complete terminal result payload."""
+    """Return events and the last terminal payload.
+
+    Passing decode_errors selects read-only original-JSON checks: rejected
+    records are omitted and bounded error codes replace decoder exceptions.
+    Omitting it retains the permissive strip/last-member-wins decoder.
+    """
     duplicate_member = False
+    nonfinite_number = False
     def collect_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         nonlocal duplicate_member
         result = {}
@@ -147,25 +154,39 @@ def parse_agy_stream(text: str, *, decode_errors: list[str] | None = None) -> tu
             result[key] = value
         return result
 
+    def finite_number(value: str) -> float:
+        nonlocal nonfinite_number
+        number = float(value)
+        if not math.isfinite(number):
+            nonfinite_number = True
+        return number
+
     events: list[dict[str, Any]] = []
     terminal: dict[str, Any] | None = None
-    for line in (text or "").split("\n"):
-        line = line.strip()
-        if not line.startswith("{"):
+    for original_line in (text or "").split("\n"):
+        if not original_line.lstrip().startswith("{"):
             continue
+        line = original_line if decode_errors is not None else original_line.strip()
         duplicate_member = False
+        nonfinite_number = False
         try:
-            event = json.loads(line, object_pairs_hook=collect_members if decode_errors is not None else None)
+            event = json.loads(
+                line, object_pairs_hook=collect_members if decode_errors is not None else None,
+                parse_constant=finite_number if decode_errors is not None else None,
+                parse_float=finite_number if decode_errors is not None else None,
+            )
         except (ValueError, RecursionError) as exc:
             if decode_errors is None and not isinstance(exc, json.JSONDecodeError):
                 raise
-            marker = "undecodable AGY event"
+            marker = ("invalid_json" if original_line.strip() != original_line.strip(" \t\r")
+                      else "undecodable AGY event")
             if decode_errors is not None and marker not in decode_errors:
                 decode_errors.append(marker)
             continue
-        if duplicate_member and decode_errors is not None:
-            if "duplicate_member" not in decode_errors:
-                decode_errors.append("duplicate_member")
+        if (duplicate_member or nonfinite_number) and decode_errors is not None:
+            for marker, present in (("duplicate_member", duplicate_member), ("nonfinite_number", nonfinite_number)):
+                if present and marker not in decode_errors:
+                    decode_errors.append(marker)
             continue
         if not isinstance(event, dict):
             continue
@@ -431,8 +452,10 @@ def _interpret_run(
             "AGY turn timed out" + _terminal_error_suffix(result),
         )
 
-    if pydantic_cls is not None and "duplicate_member" in decode_errors:
-        run.validation_error = "duplicate_member"
+    original_json_error = next((code for code in ("duplicate_member", "nonfinite_number", "invalid_json")
+                                if code in decode_errors), None)
+    if pydantic_cls is not None and original_json_error is not None:
+        run.validation_error = original_json_error
         return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, run.validation_error)
     if decode_errors:
         return _fail(run, "admission-refused", _common.EXIT_TERMINAL,

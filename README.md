@@ -845,16 +845,19 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
 
 With a terminal result, AGY read-only task attempts without a recognized native
-denial return `admission-refused` / `65`, with no answer. Undecodable
-`{`-prefixed event records also return that refusal, even without a terminal
-result. Duplicate members in otherwise decodable events are refused before
-normalization: `schema-fail` / `66` for schema calls, `admission-refused` / `65`
-for raw read-only calls. These refusals are `INVALID` in public v2; diagnose and
+denial return `admission-refused` / `65`, with no answer. Read-only event checks
+use original lines, not whitespace-normalized text. Duplicate members, nonfinite
+numbers and non-JSON surrounding whitespace retain `schema-fail` / `66` for
+schema calls and use `admission-refused` / `65` for raw read-only calls. Other
+undecodable `{`-prefixed records and decoder-limit failures return the latter
+refusal even without a terminal result. These refusals are `INVALID` in public v2; diagnose and
 correct the cause before a fresh basis, rather than retrying as a transport failure.
 Existing authentication, timeout and transport guards retain precedence.
-AGY authentication carriers must themselves have unambiguous JSON, including
-in the transport layer and permissive calls. If a schema call contains both
-duplicate and undecodable records, duplicate-member schema failure takes priority.
+Positive AGY authentication evidence must have original JSON without duplicate
+members or nonfinite numbers, including in transport and permissive calls.
+The completed-answer banner veto retains its prior permissive interpretation;
+that veto does not admit a read-only answer. Original-JSON schema errors take
+priority over other undecodable records, with duplicate-member errors first.
 
 AGY's terminal `result.error` beginning `timeout waiting for response`, with
 status `ERROR`, an empty response and vendor exit `1`, is reported as

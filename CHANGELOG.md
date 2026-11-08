@@ -8,8 +8,10 @@
   native denial; default-component exclusion alone is not execution evidence.
 - Refuse undecodable and duplicate-member read-only events before normalization;
   preserve schema diagnostics, permissive parsing and primary failure guards.
-- Require unambiguous AGY authentication carriers, including transport timeout
+- Require original finite, unambiguous AGY authentication carriers, including transport timeout
   and signal handling, so duplicate events cannot fabricate an auth stop.
+- Preserve permissive completed-answer/banner behavior and structured JSON
+  diagnostics while checking original read-only event lines without stripping.
 - Document current native-tool availability and pointer-only web evidence.
   Preserve profiles, version floors and pinned shared prompts; upstream DL-180
   remains pending. No installed-cache update or release is implied.
