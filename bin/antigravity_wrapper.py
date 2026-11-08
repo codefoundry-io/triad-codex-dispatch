@@ -135,7 +135,7 @@ def _build_cmd(
     return cmd + _route_args(model, effort, project)
 
 
-def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+def parse_agy_stream(text: str, *, decode_errors: list[str] | None = None) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return parsed events and the last complete terminal result payload."""
     events: list[dict[str, Any]] = []
     terminal: dict[str, Any] | None = None
@@ -145,7 +145,11 @@ def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | 
             continue
         try:
             event = json.loads(line)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError) as exc:
+            if decode_errors is None and not isinstance(exc, json.JSONDecodeError):
+                raise
+            if decode_errors is not None and not decode_errors:
+                decode_errors.append("undecodable AGY event")
             continue
         if not isinstance(event, dict):
             continue
@@ -364,7 +368,10 @@ def _interpret_run(
 ) -> _common.RunResult:
     """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
-    events, result = parse_agy_stream(run.stdout)
+    decode_errors: list[str] = []
+    events, result = parse_agy_stream(
+        run.stdout, decode_errors=decode_errors if plan_mode or read_only else None,
+    )
     if plan_mode:
         run._agy_read_telemetry = _project_agy_done_view_files(events, run._effective_cwd)
     exposed_model = None
@@ -408,6 +415,16 @@ def _interpret_run(
             "AGY turn timed out" + _terminal_error_suffix(result),
         )
 
+    if decode_errors:
+        return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
+                     "read-only AGY event could not be checked; answer withheld")
+
+    # AGY 1.5.3 exposes manage_task even with excludeDefaultComponents.
+    # A complete error result must not disguise an observed task operation.
+    if result is not None and (plan_mode or read_only) and _agy_task_attempted(events):
+        return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
+                     "read-only AGY run attempted manage_task; answer withheld")
+
     if run.vendor_exit_code != 0:
         detail = "\n".join(
             part for part in (run.stderr, f"agy result status={status}") if part
@@ -435,11 +452,6 @@ def _interpret_run(
             _common.EXIT_CLI_FAIL,
             "missing terminal result event",
         )
-    # AGY 1.5.3 exposes manage_task even with excludeDefaultComponents.
-    # A native profile is not proof that this tool could not execute.
-    if (plan_mode or read_only) and _agy_task_attempted(events):
-        return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
-                     "read-only AGY run attempted manage_task; answer withheld")
     denied_post_completion = (
         plan_mode
         and pydantic_cls is not None

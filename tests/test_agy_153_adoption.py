@@ -10,6 +10,7 @@ import antigravity_wrapper as wrapper
 from test_agy_finish_resubmission import step, failed_finish, finished, run_result, interpret
 from test_agy_search_profile import profiles  # noqa: F401
 from test_v2_google_wrappers import route, ready  # noqa: F401
+from test_agy_network_carrier import make_run as network_run
 
 
 def test_canonical_read_is_allowed_but_task_management_is_denied():
@@ -75,10 +76,11 @@ def test_raw_cli_task_manager_refusal_is_limited_to_read_only(profiles, route, m
     options = ["--prompt", "Read the fixture", "--cwd", str(route["home"])]
     if sandbox:
         options += ["--sandbox", sandbox]
-    rc, output, _ = route["invoke"](base=options)
+    rc, output, error = route["invoke"](base=options)
     assert rc == expected
     if expected:
         assert output == ""
+        assert "antigravity admission-refused" in error
 
 
 @pytest.mark.parametrize("name", [[], {}])
@@ -88,4 +90,60 @@ def test_malformed_diagnostic_tool_name_does_not_change_success(tmp_path, name):
     result = interpret(run)
     assert result.exit_code == 0
     assert result._agy_read_telemetry is None
+
+
+@pytest.mark.parametrize("task", [False, True])
+@pytest.mark.parametrize("read_only", [False, True])
+def test_task_refusal_precedes_completed_network_error(task, read_only, monkeypatch):
+    monkeypatch.setattr(wrapper._common, "_load_classifier_extension", lambda: {})
+    run = network_run(events=[step("manage_task")] if task else [])
+    result = wrapper._interpret_run(run, None, read_only=read_only)
+    expected = ("admission-refused", 65) if task and read_only else ("server-capacity", 64)
+    assert (result.classification, result.exit_code) == expected
+    assert result.final_answer == ""
+
+
+@pytest.mark.parametrize("bad", [
+    '{"event":"step_update",',
+    '{"event":"step_update","step_update":{"step_index":' + '9' * 5000 + '}}',
+], ids=["truncated", "integer-limit"])
+@pytest.mark.parametrize("formal", [False, True])
+def test_undecodable_step_withholds_read_only_answer_without_traceback(bad, formal):
+    run = run_result([], status="SUCCESS")
+    run.stdout = bad + '\n' + run.stdout
+    original = run.stdout
+    old_limit = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(4300)
+        result = wrapper._interpret_run(run, None, plan_mode=formal, read_only=not formal)
+    finally:
+        sys.set_int_max_str_digits(old_limit)
+    assert (result.classification, result.exit_code) == ("admission-refused", 65)
+    assert result.final_answer == "" and result.validated is None
+    assert result.stdout == original
+
+
+def test_decoder_recursion_limit_withholds_read_only_answer(monkeypatch):
+    # Decoder recursion limits vary by Python version; exercise the documented
+    # failure at the decoder boundary without relying on a fixed nesting depth.
+    original_loads = wrapper.json.loads
+    bad = '{"event":"step_update","step_update":{}}'
+    def limited_loads(value, *args, **kwargs):
+        if value == bad:
+            raise RecursionError("decoder recursion limit")
+        return original_loads(value, *args, **kwargs)
+    monkeypatch.setattr(wrapper.json, "loads", limited_loads)
+    run = run_result([], status="SUCCESS")
+    run.stdout = bad + '\n' + run.stdout
+    result = wrapper._interpret_run(run, None, read_only=True)
+    assert (result.classification, result.exit_code) == ("admission-refused", 65)
+    assert result.final_answer == "" and result.validated is None
+
+
+def test_undecodable_progress_preserves_typed_terminal_timeout():
+    run = network_run(error="timeout waiting for response")
+    run.stdout = '{"event":"step_update",\n' + run.stdout
+    result = wrapper._interpret_run(run, None, read_only=True)
+    assert (result.classification, result.exit_code) == ("vendor-timeout", 65)
+    assert result.final_answer == ""
 

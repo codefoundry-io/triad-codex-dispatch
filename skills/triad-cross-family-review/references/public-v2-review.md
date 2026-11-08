@@ -247,6 +247,8 @@ After diagnosis, only `FAILED_TO_RUN` permits `v2-allocate --basis BASIS
 rechecks capabilities and preserves completed siblings and all earlier evidence.
 Preparation failure during this retry also keeps its own receipts. A valid
 negative or malformed completed answer is not a retryable transport failure.
+Completed AGY `admission-refused` results (exit 65) are `INVALID`, including
+observed task attempts and event records that cannot be checked safely.
 
 Any source or substantive review-condition change requires a fresh review ID,
 new basis and full-scope review by every enabled entry. No prior approval

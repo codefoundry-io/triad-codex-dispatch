@@ -56,8 +56,8 @@ Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. Formal calls select the packaged primary AGY
 profile for tool discovery; its declarations are not a permission boundary.
-The wrapper does not reinterpret a completed review from the vendor's evolving
-telemetry schema. The measured ERROR-only finish-resubmission exception uses
+The wrapper refuses observed task operations and undecodable read-only events.
+The measured ERROR-only finish-resubmission exception uses
 structured step type, state, error and ordering fields; an earlier failed finish
 can be rescued by a later successful finish under the wrapper's existing checks.
 The route remains read-only by intent plus selected profile, local result

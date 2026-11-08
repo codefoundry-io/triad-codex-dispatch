@@ -795,6 +795,13 @@ Gemini는 Google Cloud 프로젝트 변수 4개를 유지하고 다른 경로는
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |
 | `1` | Wrapper가 답변을 추출하지 못했거나(`extraction-error`) 분류가 `unknown`임 | 최종 wrapper 분류와 provider 진단을 확인한 뒤 적절히 재시도하거나 escalation하세요. |
 
+AGY 읽기 전용 호출에서 인식 가능한 native 거부 없이 작업 도구를 시도하거나
+해석할 수 없는 이벤트가 관찰되면
+답변 없이 `admission-refused` / `65`를 반환합니다. 완료된 containment 거부는
+public v2에서 `INVALID`입니다. 원인을 진단하고 수정한 뒤 새 review basis를
+만들며, 전송 실패로 취급해 같은 basis에서 재시도하지 않습니다.
+기존 인증·시간 초과·전송 오류 처리가 우선합니다.
+
 AGY의 최종 `result.error`가 `timeout waiting for response`로 시작하고,
 상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면 답변 없이
 `vendor-timeout` / `65`로 보고합니다. Wrapper 제한시간 초과는 `timeout` / `2`입니다.

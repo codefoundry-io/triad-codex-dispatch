@@ -843,6 +843,12 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
 
+AGY read-only task attempts without a recognized native denial, and undecodable event records, return
+`admission-refused` / `65`, with no answer. Completed containment refusals are
+`INVALID` in public v2; diagnose and correct the cause before a fresh review
+basis, rather than retrying the same basis as a transport failure.
+Existing authentication, timeout and transport guards retain precedence.
+
 AGY's terminal `result.error` beginning `timeout waiting for response`, with
 status `ERROR`, an empty response and vendor exit `1`, is reported as
 `vendor-timeout` / `65` with no answer. A wrapper deadline remains `timeout` / `2`.
