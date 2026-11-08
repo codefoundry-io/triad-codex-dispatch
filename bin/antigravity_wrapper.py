@@ -305,7 +305,10 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
 def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
     """Refuse task operations except an observed native pre-execution denial."""
     attempts = []
+    segment = 0
     for pos, event in enumerate(events):
+        if event.get("event") == "result":
+            segment += 1
         step = event.get("step_update")
         if event.get("event") != "step_update" or not isinstance(step, dict):
             continue
@@ -313,15 +316,21 @@ def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
         info = info if isinstance(info, dict) else {}
         if (step.get("step_type") == "tool"
                 and "manage_task" in (step.get("tool_name"), info.get("name"))):
-            attempts.append((pos, step))
-    for pos, step in attempts:
+            attempts.append((pos, segment, event, step))
+    for pos, segment, event, step in attempts:
         if _agy_step_denied(step):
             continue
         index = step.get("step_index")
         if (step.get("state") == "ACTIVE" and type(index) is int
-                and any(later > pos and type(other.get("step_index")) is int
+                and any(later > pos and later_segment == segment
+                        and type(other.get("step_index")) is int
                         and other["step_index"] == index
-                        and _agy_step_denied(other) for later, other in attempts)):
+                        and (("conversation_id" not in event and "conversation_id" not in other_event)
+                             or (isinstance(identity := event.get("conversation_id"), str)
+                                 and bool(identity.strip())
+                                 and identity == other_event.get("conversation_id")))
+                        and _agy_step_denied(other)
+                        for later, later_segment, other_event, other in attempts)):
             continue
         return True
     return False
@@ -406,8 +415,13 @@ def _interpret_run(
     """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
     decode_errors: list[str] = []
+    # Every schema selects status and member spans from original LF records.
+    # Only schema-free permissive replies retain legacy newline normalization.
+    stream = run.stdout
+    if pydantic_cls is None and not (plan_mode or read_only):
+        stream = stream.replace("\r\n", "\n").replace("\r", "\n")
     events, result = parse_agy_stream(
-        run.stdout, decode_errors=decode_errors if plan_mode or read_only else None,
+        stream, decode_errors=decode_errors if plan_mode or read_only else None,
     )
     if plan_mode:
         run._agy_read_telemetry = _project_agy_done_view_files(events, run._effective_cwd)

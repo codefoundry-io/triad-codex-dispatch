@@ -82,7 +82,7 @@ def map_classification_to_exit(cls: str) -> int:
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # current AGY stream driver emission; surface, never classifier-patched
-        "admission-refused": EXIT_TERMINAL,  # completed read-only AGY containment refusal
+        "admission-refused": EXIT_TERMINAL,  # read-only AGY event/containment refusal
         "vendor-timeout": EXIT_TERMINAL,  # AGY typed terminal turn-timeout; not a wrapper deadline
         "input-delivery-failed": EXIT_TERMINAL,  # shared table parity; retain existing stdin phase handling
         "truncated-answer": EXIT_TERMINAL,  # AGY own-line marker in the emitted raw answer
@@ -742,7 +742,8 @@ def _auth_carrier_stop(cli: str, stderr: str, stdout: str,
     elif cli == "antigravity":
         # Preserve the existing permissive completed-answer veto. It is not
         # positive authentication evidence or read-only answer admission.
-        completed = [e["result"] for e in _error_events(stdout) if e.get("event") == "result"
+        legacy_stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
+        completed = [e["result"] for e in _error_events(legacy_stdout) if e.get("event") == "result"
                    and isinstance(e.get("result"), dict)]
         # A completed usable answer is not stopped by a sign-in banner.
         if (vendor_exit_code == 0 and completed and completed[-1].get("status") == "SUCCESS"
@@ -1499,10 +1500,17 @@ def _run_once_owned(
                 try:
                     captured[name] = data.decode("utf-8")
                 except UnicodeDecodeError as error:
-                    captured[name] = data[:error.start].decode("utf-8")
+                    # A truncated JSON record must not become positive auth
+                    # evidence just because the undecodable suffix was dropped.
+                    end = (data.rfind(b"\n", 0, error.start) + 1
+                           if cli == "antigravity" and name == "stdout" else error.start)
+                    captured[name] = data[:end].decode("utf-8")
                     raise
                 finally:
-                    captured[name] = captured[name].replace("\r\n", "\n").replace("\r", "\n")
+                    # Strict AGY consumers and persisted replay need original
+                    # LF framing. Permissive consumers normalize their own view.
+                    if cli != "antigravity" or name != "stdout":
+                        captured[name] = captured[name].replace("\r\n", "\n").replace("\r", "\n")
             except (OSError, UnicodeError) as error:
                 transport_error = transport_error or f"{name} collection failed ({type(error).__name__})"
 

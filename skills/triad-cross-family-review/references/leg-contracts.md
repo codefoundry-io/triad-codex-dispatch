@@ -1,5 +1,9 @@
 # Review leg contracts
 
+The formal argv examples below are the legacy entry point. Explicit public v2
+uses [generated allocations and host evidence](public-v2-review.md); raw
+investigation and shared containment sections remain applicable to both paths.
+
 ## AGY native tool availability
 
 AGY 1.5.3 exposes `read_file` with `Path`, `StartLine`, `EndLine` and
@@ -33,12 +37,9 @@ and [pending decision record PR31](https://github.com/codefoundry-io/triad-dispa
 These facts do not adopt an unpublished library revision or change Codex's
 existing minimum version, profile bytes or web authorization.
 
-The formal argv examples below are the legacy entry point. Explicit public v2
-uses [generated allocations and host evidence](public-v2-review.md); raw
-investigation and shared containment sections remain applicable to both paths.
-
 ## Contents
 
+- [AGY native tool availability](#agy-native-tool-availability)
 - [Claude](#claude)
 - [Google family](#google-family)
 - [Fresh Codex](#fresh-codex)

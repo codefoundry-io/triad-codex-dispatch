@@ -257,3 +257,25 @@ def test_original_json_schema_error_precedes_separate_undecodable_record(record,
     assert (result.classification, result.exit_code) == ("schema-fail", 66)
     assert result.validation_error == error and result.validated is None
 
+
+
+@pytest.mark.parametrize('active_id,denial_id,allowed', [
+    ('a', 'a', True), (None, None, True), ('a', 'b', False),
+    ('a', None, False), (None, 'a', False), ('', '', False),
+    (1, 1, False), ([], [], False), ({}, {}, False),
+])
+@pytest.mark.parametrize('boundary', [False, True])
+def test_task_denial_requires_same_conversation_and_result_segment(active_id, denial_id, allowed, boundary):
+    active = step('manage_task', 'ACTIVE', index=2)
+    denial = step('manage_task', 'ERROR', index=2,
+                  error={'message': 'tool call denied by pre-tool hook'})
+    if active_id is not None:
+        active['conversation_id'] = active_id
+    if denial_id is not None:
+        denial['conversation_id'] = denial_id
+    events = [active]
+    if boundary:
+        events.append({'event': 'result', 'result': {'status': 'SUCCESS', 'response': 'first'}})
+    events.append(denial)
+    result = interpret(run_result(events, status='SUCCESS'))
+    assert (result.classification, result.exit_code) == (('ok', 0) if allowed and not boundary else ('admission-refused', 65))

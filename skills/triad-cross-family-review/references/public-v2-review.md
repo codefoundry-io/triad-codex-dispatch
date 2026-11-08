@@ -249,6 +249,7 @@ Preparation failure during this retry also keeps its own receipts. A valid
 negative or malformed completed answer is not a retryable transport failure.
 AGY `admission-refused` results (exit 65) are `INVALID`: task attempts are checked
 with a terminal envelope; undecodable records are refused even without one.
+A decodable task record without a terminal follows generic failure classification.
 Original-JSON violations (duplicate members, nonfinite numbers, non-JSON surrounding
 whitespace) also block admission; schema calls retain `schema-fail` / 66.
 Neither classification permits a same-basis retry.
