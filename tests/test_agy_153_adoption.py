@@ -279,3 +279,61 @@ def test_task_denial_requires_same_conversation_and_result_segment(active_id, de
     events.append(denial)
     result = interpret(run_result(events, status='SUCCESS'))
     assert (result.classification, result.exit_code) == (('ok', 0) if allowed and not boundary else ('admission-refused', 65))
+
+
+@pytest.mark.parametrize('name,alias,allowed', [
+    ('manage_task', 'run_command', False), ('run_command', 'manage_task', False),
+    ('manage_task', 'manage_task', True), ('manage_task', None, True),
+    (None, 'manage_task', True), ('manage_task', [], False),
+])
+@pytest.mark.parametrize('active', [False, True])
+def test_task_denial_requires_consistent_exposed_names(name, alias, allowed, active):
+    denial = step(name, 'ERROR', index=2, alias=alias,
+                  error={'message': 'tool call denied by pre-tool hook'})
+    events = ([step('manage_task', 'ACTIVE', index=2)] if active else []) + [denial]
+    result = interpret(run_result(events, status='SUCCESS'))
+    assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))
+
+
+@pytest.mark.parametrize('body,expected', [
+    ('"x":1,"x":2', 'duplicate_member'),
+    ('"x":NaN', 'nonfinite_number'),
+    ('"x":NaN,"x":2', 'duplicate_member'),
+])
+@pytest.mark.parametrize('schema', [False, True])
+def test_original_json_diagnostics_survive_trailing_non_json_whitespace(body, expected, schema):
+    run = run_result([], status='SUCCESS')
+    run.stdout = '{"event":"step_update",' + body + '}\u00a0\n' + run.stdout
+    cls = wrapper._common.load_pydantic_class('verdict_schema:LegVerdict') if schema else None
+    result = wrapper._interpret_run(run, cls, read_only=True)
+    assert (result.classification, result.exit_code) == (('schema-fail', 66) if schema else ('admission-refused', 65))
+    if schema:
+        assert result.validation_error == expected
+    assert result.final_answer == '' and result.validated is None
+
+
+@pytest.mark.parametrize('active_name,active_alias', [('manage_task', 'run_command'), ('run_command', 'manage_task')])
+def test_ambiguous_active_names_cannot_borrow_consistent_denial(active_name, active_alias):
+    events = [step(active_name, 'ACTIVE', index=2, alias=active_alias),
+              step('manage_task', 'ERROR', index=2,
+                   error={'message': 'tool call denied by pre-tool hook'})]
+    result = interpret(run_result(events, status='SUCCESS'))
+    assert (result.classification, result.exit_code) == ('admission-refused', 65)
+
+
+@pytest.mark.parametrize('parameters,other_parameters,allowed', [
+    ({'Action': 'create'}, {'Action': 'list'}, False),
+    ({'Action': 'list'}, {'Action': 'list'}, True),
+    ({'Action': 'list', 'count': 1}, {'count': True, 'Action': 'list'}, False),
+    ({'Action': 'list', 'count': 1}, {'count': 1, 'Action': 'list'}, True),
+    (None, {'Action': 'list'}, True), ({'Action': 'list'}, None, True), (None, None, True),
+])
+def test_task_denial_cannot_contradict_exposed_parameters(parameters, other_parameters, allowed):
+    active = step('manage_task', 'ACTIVE', index=2)
+    denial = step('manage_task', 'ERROR', index=2,
+                  error={'message': 'tool call denied by pre-tool hook'})
+    for event, value in ((active, parameters), (denial, other_parameters)):
+        if value is not None:
+            event['step_update'].setdefault('tool_info', {})['parameters'] = value
+    result = interpret(run_result([active, denial], status='SUCCESS'))
+    assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))

@@ -180,8 +180,16 @@ def parse_agy_stream(text: str, *, decode_errors: list[str] | None = None) -> tu
                 raise
             marker = ("invalid_json" if original_line.strip() != original_line.strip(" \t\r")
                       else "undecodable AGY event")
-            if decode_errors is not None and marker not in decode_errors:
-                decode_errors.append(marker)
+            if decode_errors is not None:
+                # Trailing non-JSON whitespace does not erase violations the
+                # original decoder already observed within the object.
+                if marker == "invalid_json":
+                    for code, present in (("duplicate_member", duplicate_member),
+                                          ("nonfinite_number", nonfinite_number)):
+                        if present and code not in decode_errors:
+                            decode_errors.append(code)
+                if marker not in decode_errors:
+                    decode_errors.append(marker)
             continue
         if (duplicate_member or nonfinite_number) and decode_errors is not None:
             for marker, present in (("duplicate_member", duplicate_member), ("nonfinite_number", nonfinite_number)):
@@ -304,6 +312,15 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
 
 def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
     """Refuse task operations except an observed native pre-execution denial."""
+    def compatible_parameters(left: dict, right: dict) -> bool:
+        left_info, right_info = left.get("tool_info"), right.get("tool_info")
+        if (not isinstance(left_info, dict) or "parameters" not in left_info
+                or not isinstance(right_info, dict) or "parameters" not in right_info):
+            return True
+        # Compare JSON types too: Python equality treats true as integer 1.
+        return (json.dumps(left_info["parameters"], sort_keys=True)
+                == json.dumps(right_info["parameters"], sort_keys=True))
+
     attempts = []
     segment = 0
     for pos, event in enumerate(events):
@@ -314,14 +331,18 @@ def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
             continue
         info = step.get("tool_info")
         info = info if isinstance(info, dict) else {}
-        if (step.get("step_type") == "tool"
-                and "manage_task" in (step.get("tool_name"), info.get("name"))):
-            attempts.append((pos, segment, event, step))
-    for pos, segment, event, step in attempts:
-        if _agy_step_denied(step):
+        names = ([step["tool_name"]] if "tool_name" in step else [])
+        if "name" in info:
+            names.append(info["name"])
+        if step.get("step_type") == "tool" and "manage_task" in names:
+            consistent = all(name == "manage_task" for name in names)
+            denied = consistent and _agy_step_denied(step)
+            attempts.append((pos, segment, event, step, consistent, denied))
+    for pos, segment, event, step, consistent, denied in attempts:
+        if denied:
             continue
         index = step.get("step_index")
-        if (step.get("state") == "ACTIVE" and type(index) is int
+        if (consistent and step.get("state") == "ACTIVE" and type(index) is int
                 and any(later > pos and later_segment == segment
                         and type(other.get("step_index")) is int
                         and other["step_index"] == index
@@ -329,8 +350,8 @@ def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
                              or (isinstance(identity := event.get("conversation_id"), str)
                                  and bool(identity.strip())
                                  and identity == other_event.get("conversation_id")))
-                        and _agy_step_denied(other)
-                        for later, later_segment, other_event, other in attempts)):
+                        and other_denied and compatible_parameters(step, other)
+                        for later, later_segment, other_event, other, _, other_denied in attempts)):
             continue
         return True
     return False
@@ -487,7 +508,7 @@ def _interpret_run(
         )
         classification = _common.classify(
             "antigravity",
-            stderr=detail,
+            stderr=run.stderr,
             stdout="",
             exit_code=_common.EXIT_CLI_FAIL,
             vendor_exit_code=run.vendor_exit_code,

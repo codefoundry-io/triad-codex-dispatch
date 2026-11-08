@@ -21,10 +21,11 @@ SUCCESS = json.dumps({'event': 'result', 'result': {
 AUTH = json.dumps({'event': 'result', 'result': {'status': 'ERROR', 'error': 'not logged in'}}).encode()
 
 
-def capture(tmp_path, data, *, timeout=False, stderr=b'', cli='antigravity'):
+def capture(tmp_path, data, *, timeout=False, stderr=b'', cli='antigravity', rc=0):
     code = f'import os,time; os.write(1,{data!r}); os.write(2,{stderr!r})'
     if timeout:
         code += '; time.sleep(30)'
+    code += f'; raise SystemExit({rc})'
     return _common._run_once(cli, [sys.executable, '-c', code], str(tmp_path),
                              1 if timeout else 5, classify_and_log=False)
 
@@ -117,3 +118,21 @@ def test_schema_status_and_payload_use_same_original_record(tmp_path, first_stat
         assert result.exit_code == 0 and result.validated == {'ok': False}
     else:
         assert result.exit_code != 0 and result.validated is None and result.final_answer == ''
+
+
+@pytest.mark.parametrize('mode', ['permissive', 'readonly', 'schema'])
+@pytest.mark.parametrize('tail', [b'\n', b'\rgarbage\n'])
+@pytest.mark.parametrize('real_banner', [False, True])
+def test_status_diagnostic_is_not_an_authentication_carrier(tmp_path, mode, tail, real_banner):
+    banner = 'Authentication required. Please visit the URL to log in:'
+    raw = json.dumps({'event': 'result', 'result': {'status': 'ERROR\n' + banner}}).encode() + tail
+    run = capture(tmp_path, raw, stderr=banner.encode() if real_banner else b'', rc=1)
+    result = wrapper._interpret_run(run, Answer if mode == 'schema' else None,
+                                    read_only=mode == 'readonly')
+    if real_banner:
+        assert (result.classification, result.exit_code) == ('oauth-env', 65)
+    elif mode == 'readonly' and tail == b'\rgarbage\n':
+        assert (result.classification, result.exit_code) == ('admission-refused', 65)
+    else:
+        assert (result.classification, result.exit_code) == ('unknown', 1)
+    assert result.final_answer == '' and result.validated is None
