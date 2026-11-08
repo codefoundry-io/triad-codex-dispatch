@@ -34,7 +34,7 @@ def _envelope(route, answer):
         return '{"is_error":false,"structured_output":' + answer + '}'
     if route == "gemini":
         return '{"response":' + answer + '}'
-    return 'noise\n{invalid\n{"event":"result","result":{"status":"SUCCESS","structured_output":' + answer + '}}\n'
+    return 'noise\n{"event":"result","result":{"status":"SUCCESS","structured_output":' + answer + '}}\n'
 
 
 def _admit(route, raw, cls, monkeypatch):
@@ -125,12 +125,17 @@ def test_duplicate_outer_answer_member_is_rejected(route, monkeypatch):
     '{"event":"progress","payload":{"x":1,"x":2}} trailing',
     '{"event":"progress","payload":{"x":1,"x":2}',
 ])
-def test_agy_ignores_malformed_noise_even_with_nested_duplicate(noise, monkeypatch):
+def test_agy_read_only_refuses_malformed_progress_even_with_nested_duplicate(noise, monkeypatch):
     raw = noise + "\n" + _envelope("agy", _answer("google"))
     cls = _common.load_pydantic_class("verdict_schema:LegVerdict")
     result = _admit("agy", raw, cls, monkeypatch)
-    assert result.exit_code == 0
-    assert result.validated["content_digest"] == "a" * 64
+    assert (result.exit_code, result.classification) == (65, "admission-refused")
+    assert result.final_answer == "" and result.validated is None
+    permissive_raw = noise + '\n' + json.dumps({
+        "event": "result", "result": {"status": "SUCCESS", "response": "answer"}})
+    permissive = antigravity_wrapper._interpret_run(_run(permissive_raw), None)
+    assert permissive.exit_code == 0
+    assert permissive.final_answer == "answer"
 
 
 @pytest.mark.parametrize("route", ["claude", "agy"])
