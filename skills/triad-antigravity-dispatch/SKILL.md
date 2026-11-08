@@ -46,7 +46,7 @@ another-page continuation. If native reads and searches are insufficient, report
 `open_questions`. For ordinary SUCCESS results, formal `step_update` telemetry is diagnostic vendor output,
 not an admission schema: added fields, changed optional tool arguments, denied
 attempts, and duplicate progress events do not invalidate an otherwise valid
-terminal verdict. An observed `manage_task` attempt without a recognized native
+terminal verdict. With a terminal result, a `manage_task` attempt without a recognized native
 denial withholds the read-only answer, including an otherwise successful result.
 The prompt and native `--mode plan` define the static-review
 behavior. The profile explicitly declares native tools and excludes default components.
@@ -56,7 +56,8 @@ Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. Formal calls select the packaged primary AGY
 profile for tool discovery; its declarations are not a permission boundary.
-The wrapper refuses observed task operations and undecodable read-only events.
+Undecodable read-only events are refused even without a terminal; duplicate event
+members are refused before normalization (schema calls 66, raw read-only calls 65).
 The measured ERROR-only finish-resubmission exception uses
 structured step type, state, error and ordering fields; an earlier failed finish
 can be rescued by a later successful finish under the wrapper's existing checks.

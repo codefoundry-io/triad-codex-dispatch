@@ -648,17 +648,25 @@ def agy_print_timed_out(stderr: str) -> bool:
     return bool(_AGY_PRINT_TIMEOUT_RE.search(stderr))
 
 
-def _error_document(text: str) -> dict:
+def _error_document(text: str, *, reject_duplicates: bool = False) -> dict:
+    def unique_members(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("ambiguous error carrier")
+            obj[key] = value
+        return obj
     try:
-        obj = json.loads(text)
+        obj = json.loads(text, object_pairs_hook=unique_members if reject_duplicates else None)
     except (ValueError, TypeError, RecursionError):
         return {}
     return obj if isinstance(obj, dict) else {}
 
 
-def _error_events(text: str) -> list[dict]:
+def _error_events(text: str, *, reject_duplicates: bool = False) -> list[dict]:
     # JSON strings may contain raw Unicode line separators: split only on LF.
-    return [obj for line in text.split("\n") if (obj := _error_document(line))]
+    return [obj for line in text.split("\n")
+            if (obj := _error_document(line, reject_duplicates=reject_duplicates))]
 
 
 def _gemini_error_envelope(stderr: str) -> dict:
@@ -724,7 +732,9 @@ def _auth_carrier_stop(cli: str, stderr: str, stdout: str,
             if said(message):
                 return True
     elif cli == "antigravity":
-        events = _error_events(stdout)
+        # Ambiguous JSON cannot manufacture a primary auth stop, including in
+        # the transport layer before read-only event admission runs.
+        events = _error_events(stdout, reject_duplicates=True)
         results = [e["result"] for e in events if e.get("event") == "result"
                    and isinstance(e.get("result"), dict)]
         # A completed usable answer is not stopped by a sign-in banner.

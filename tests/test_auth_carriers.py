@@ -168,6 +168,25 @@ def test_C37_real_timeout_preserves_printed_auth_carrier(tmp_path, cli, stderr, 
     assert result.final_answer == ""
 
 
+def test_ambiguous_agy_auth_event_cannot_override_transport_timeout(tmp_path):
+    raw = '{"event":"step_update","event":"result","result":{"status":"ERROR","error":"not logged in"}}'
+    script = f"import time; print({raw!r},flush=True); time.sleep(30)"
+    result = _common._run_once("antigravity", [sys.executable, "-c", script],
+                               str(tmp_path), 1, classify_and_log=False)
+    assert raw in result.stdout
+    assert result.exit_code == _common.EXIT_TIMEOUT
+    interpreted = antigravity_wrapper._interpret_run(result, None, read_only=True)
+    assert (interpreted.classification, interpreted.exit_code) == ("timeout", 2)
+
+
+def test_ambiguous_agy_auth_event_cannot_override_signal_failure():
+    raw = '{"event":"step_update","event":"result","result":{"status":"ERROR","error":"not logged in"}}'
+    result = _common.RunResult(1, raw, "", 0.1, vendor_exit_code=1)
+    _common._mark_signal_failure(result, signal.SIGTERM, "antigravity")
+    assert result.classification == "unknown" and result.exit_code == 1
+    assert result._output_transport_failed
+
+
 def test_C37_late_signal_preserves_captured_authentication(monkeypatch, tmp_path):
     original = _common._run_once_owned
 

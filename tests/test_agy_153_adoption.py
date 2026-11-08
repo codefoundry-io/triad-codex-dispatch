@@ -1,5 +1,6 @@
 """AGY 1.5.3 canonical reads retain containment and bounded diagnostics."""
 from pathlib import Path
+import json
 import sys
 import pytest
 
@@ -16,6 +17,14 @@ from test_agy_network_carrier import make_run as network_run
 def test_canonical_read_is_allowed_but_task_management_is_denied():
     assert agy_hook.decide({"toolCall": {"name": "read_file", "args": {"Path": "/review/TASK.md"}}})["decision"] == "allow"
     assert agy_hook.decide({"toolCall": {"name": "manage_task", "args": {}}})["decision"] == "deny"
+
+
+def test_observed_agy153_task_list_shape_is_refused():
+    records = [json.loads(line) for line in
+               (ROOT / "tests/fixtures/agy153-manage-task-list.jsonl").read_text().splitlines()]
+    result = interpret(run_result(records, status="SUCCESS"))
+    assert (result.classification, result.exit_code) == ("admission-refused", 65)
+    assert result.final_answer == "" and result.validated is None
 
 
 def test_canonical_read_projects_path_without_using_legacy_argument(tmp_path):
@@ -145,5 +154,43 @@ def test_undecodable_progress_preserves_typed_terminal_timeout():
     run.stdout = '{"event":"step_update",\n' + run.stdout
     result = wrapper._interpret_run(run, None, read_only=True)
     assert (result.classification, result.exit_code) == ("vendor-timeout", 65)
+    assert result.final_answer == ""
+
+
+@pytest.mark.parametrize("schema", [False, True])
+@pytest.mark.parametrize("network_error", [False, True])
+@pytest.mark.parametrize("record", [
+    '{"event":"step_update","step_update":{"step_type":"tool","state":"DONE","tool_name":"manage_task","tool_name":"read_file"}}',
+    '{"event":"step_update","step_update":{"step_type":"tool","state":"DONE","tool_info":{"name":"manage_task","name":"read_file"}}}',
+    '{"event":"step_update","event":"ignored","step_update":{"step_type":"tool","state":"DONE","tool_name":"manage_task"}}',
+], ids=["tool-name", "info-name", "event-kind"])
+def test_ambiguous_tool_event_cannot_hide_task_attempt(record, network_error, schema, monkeypatch):
+    monkeypatch.setattr(wrapper._common, "_load_classifier_extension", lambda: {})
+    run = network_run() if network_error else network_run(status="SUCCESS", response="answer", rc=0)
+    run.stdout = record + '\n' + run.stdout
+    original = run.stdout
+    cls = wrapper._common.load_pydantic_class("verdict_schema:LegVerdict") if schema else None
+    result = wrapper._interpret_run(run, cls, read_only=True, plan_mode=schema)
+    expected = ("schema-fail", 66) if schema else ("admission-refused", 65)
+    assert (result.classification, result.exit_code) == expected
+    assert result.final_answer == "" and result.validated is None
+    assert result.stdout == original
+    if schema:
+        assert result.validation_error == "duplicate_member"
+    permissive = network_run() if network_error else network_run(status="SUCCESS", response="answer", rc=0)
+    permissive.stdout = original
+    control = wrapper._interpret_run(permissive, None)
+    assert control.exit_code == (64 if network_error else 0)
+
+
+@pytest.mark.parametrize("clean_auth", [False, True])
+def test_duplicate_event_cannot_fabricate_auth_priority(clean_auth, monkeypatch):
+    monkeypatch.setattr(wrapper._common, "_load_classifier_extension", lambda: {})
+    run = network_run(error="not logged in") if clean_auth else network_run()
+    run.stdout = ('{"event":"step_update","event":"result","result":'
+                  '{"status":"ERROR","response":"","error":"not logged in"}}\n') + run.stdout
+    result = wrapper._interpret_run(run, None, read_only=True)
+    assert (result.classification, result.exit_code) == (("oauth-env", 65) if clean_auth
+                                                       else ("admission-refused", 65))
     assert result.final_answer == ""
 

@@ -137,19 +137,35 @@ def _build_cmd(
 
 def parse_agy_stream(text: str, *, decode_errors: list[str] | None = None) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return parsed events and the last complete terminal result payload."""
+    duplicate_member = False
+    def collect_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        nonlocal duplicate_member
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                duplicate_member = True
+            result[key] = value
+        return result
+
     events: list[dict[str, Any]] = []
     terminal: dict[str, Any] | None = None
     for line in (text or "").split("\n"):
         line = line.strip()
         if not line.startswith("{"):
             continue
+        duplicate_member = False
         try:
-            event = json.loads(line)
+            event = json.loads(line, object_pairs_hook=collect_members if decode_errors is not None else None)
         except (ValueError, RecursionError) as exc:
             if decode_errors is None and not isinstance(exc, json.JSONDecodeError):
                 raise
-            if decode_errors is not None and not decode_errors:
-                decode_errors.append("undecodable AGY event")
+            marker = "undecodable AGY event"
+            if decode_errors is not None and marker not in decode_errors:
+                decode_errors.append(marker)
+            continue
+        if duplicate_member and decode_errors is not None:
+            if "duplicate_member" not in decode_errors:
+                decode_errors.append("duplicate_member")
             continue
         if not isinstance(event, dict):
             continue
@@ -415,6 +431,9 @@ def _interpret_run(
             "AGY turn timed out" + _terminal_error_suffix(result),
         )
 
+    if pydantic_cls is not None and "duplicate_member" in decode_errors:
+        run.validation_error = "duplicate_member"
+        return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, run.validation_error)
     if decode_errors:
         return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
                      "read-only AGY event could not be checked; answer withheld")

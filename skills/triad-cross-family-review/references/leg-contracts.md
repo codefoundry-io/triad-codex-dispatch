@@ -8,7 +8,7 @@ may expose `view_file` with `AbsolutePath`. Existing profiles retain the old
 registry names: on 1.5.3 `view_file` resolves to `read_file`. Do not add both
 aliases to a profile: that build refuses the duplicate resolved name.
 `manage_task` may be exposed despite `excludeDefaultComponents`; it remains
-forbidden and a read-only run that attempts it without a recognized denial
+forbidden and a completed read-only run that attempts it without a recognized denial
 withholds the answer. The disabled hook helper does not enforce runtime policy.
 
 Before dispatch, put current native capability facts in the bound TASK/EVIDENCE:

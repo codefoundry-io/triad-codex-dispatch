@@ -294,7 +294,8 @@ lib dev6와 [공용 runtime](docs/shared-runtime.ko.md)을 적용합니다. 공�
 불일치하는 바인딩과 terminal 실패 검사는 유지합니다.
 AGY 스키마 호출은 legacy와 사용자 정의 스키마를 포함해 분리 전에 원본 JSON 이벤트
 행을 엄격히 파싱하고 중복 멤버와 비유한 숫자를 거부합니다. 중간 이벤트에도 적용하며,
-깨진 로그 행은 기존 방식으로 처리합니다. 결과 앞뒤에 JSON이 허용하지 않는 유니코드
+깨진 로그 행의 기존 허용 동작은 permissive 호출에만 유지합니다. 읽기 전용 호출은
+아래 종료 코드 절의 이벤트 거부 규칙을 따릅니다. 결과 앞뒤에 JSON이 허용하지 않는 유니코드
 공백이 있으면 앞선 답변을 검증하지 않고 거부합니다. 직접 검증 함수와 다른 공급자의 사용자 정의
 스키마 처리는 기존 동작을 유지합니다.
 
@@ -795,12 +796,17 @@ Gemini는 Google Cloud 프로젝트 변수 4개를 유지하고 다른 경로는
 | `67` | Codex가 제출된 output schema를 거부함(`schema-rejected`) | schema/configuration 불일치를 확인하고 explicit new invocation을 만드세요. |
 | `1` | Wrapper가 답변을 추출하지 못했거나(`extraction-error`) 분류가 `unknown`임 | 최종 wrapper 분류와 provider 진단을 확인한 뒤 적절히 재시도하거나 escalation하세요. |
 
-AGY 읽기 전용 호출에서 인식 가능한 native 거부 없이 작업 도구를 시도하거나
-해석할 수 없는 이벤트가 관찰되면
-답변 없이 `admission-refused` / `65`를 반환합니다. 완료된 containment 거부는
-public v2에서 `INVALID`입니다. 원인을 진단하고 수정한 뒤 새 review basis를
-만들며, 전송 실패로 취급해 같은 basis에서 재시도하지 않습니다.
+최종 result가 있는 AGY 읽기 전용 호출에서 인식 가능한 native 거부 없이 작업
+도구를 시도하면 답변 없이 `admission-refused` / `65`를 반환합니다.
+해석할 수 없는 `{` 시작 이벤트 행도 최종 result 유무와 관계없이 같은 거부를
+반환합니다. 구문상 유효한 이벤트의 중복 멤버는 정규화 전에 거부하며, 스키마
+호출은 `schema-fail` / `66`, raw 읽기 전용 호출은 `admission-refused` / `65`입니다.
+이 거부는 public v2에서 `INVALID`입니다. 원인을 수정한 뒤 새 review basis를
+만들며 전송 실패로 취급해 같은 basis에서 재시도하지 않습니다.
 기존 인증·시간 초과·전송 오류 처리가 우선합니다.
+AGY 인증 오류의 JSON 자체에도 중복 멤버가 없어야 하며, 전송 계층과 permissive
+호출에도 적용합니다. 스키마 호출에 중복 이벤트와 해석 불가 이벤트가 함께 있으면
+중복 멤버의 schema failure 분류가 우선합니다.
 
 AGY의 최종 `result.error`가 `timeout waiting for response`로 시작하고,
 상태가 `ERROR`, 응답이 빈 문자열, vendor 종료코드가 `1`이면 답변 없이
@@ -1266,7 +1272,8 @@ JSON 중복을 검사하며, 중복 판정은 추가 formal provider 호출 없�
 모두 패키지의 스키마 파일을 읽고 dispatch 전에 세 expected review binding을
 요구합니다. 직접 사용자 정의 스키마 검증과 다른 공급자의 처리는 기존 동작을 유지하며,
 AGY 스키마 호출은 [0.2.563](#02563-업그레이드)의 엄격한 파싱을 적용합니다.
-스키마 없는 raw 조사, 깨진 AGY 로그 행 처리와 기존 provider 실패 우선순위는 유지합니다.
+permissive 호출의 깨진 로그 행 처리는 유지합니다. 읽기 전용 호출은 종료 코드 절의
+이벤트 거부 규칙을 따르며 기존 인증·시간 초과·전송 오류 처리가 우선합니다.
 schema field나 리뷰 구성은 추가하지 않습니다.
 result-file reader만으로는 다른 호출자가 이미 없앤 중복을 복원할 수 없습니다.
 

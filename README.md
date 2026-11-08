@@ -315,8 +315,9 @@ and their aliases remain application data. Unknown fields, invalid JSON, missing
 verdicts, mismatched bindings and terminal failures retain their existing checks.
 AGY schema calls, including legacy and custom schemas, strictly parse original
 JSON event lines before separation, rejecting duplicate members and non-finite
-values. This includes intermediate events; malformed noise retains its existing
-handling. Non-JSON Unicode whitespace around a result is refused instead of
+values. This includes intermediate events; only permissive calls retain the old
+malformed-noise tolerance. Read-only event refusals follow the exit-code guidance below.
+Non-JSON Unicode whitespace around a result is refused instead of
 validating an earlier answer. Direct validation and other providers keep their prior behavior.
 
 The bundled library is the published dev5 prerelease recorded above. This host
@@ -843,11 +844,17 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
 
-AGY read-only task attempts without a recognized native denial, and undecodable event records, return
-`admission-refused` / `65`, with no answer. Completed containment refusals are
-`INVALID` in public v2; diagnose and correct the cause before a fresh review
-basis, rather than retrying the same basis as a transport failure.
+With a terminal result, AGY read-only task attempts without a recognized native
+denial return `admission-refused` / `65`, with no answer. Undecodable
+`{`-prefixed event records also return that refusal, even without a terminal
+result. Duplicate members in otherwise decodable events are refused before
+normalization: `schema-fail` / `66` for schema calls, `admission-refused` / `65`
+for raw read-only calls. These refusals are `INVALID` in public v2; diagnose and
+correct the cause before a fresh basis, rather than retrying as a transport failure.
 Existing authentication, timeout and transport guards retain precedence.
+AGY authentication carriers must themselves have unambiguous JSON, including
+in the transport layer and permissive calls. If a schema call contains both
+duplicate and undecodable records, duplicate-member schema failure takes priority.
 
 AGY's terminal `result.error` beginning `timeout waiting for response`, with
 status `ERROR`, an empty response and vendor exit `1`, is reported as
@@ -1352,8 +1359,9 @@ return schema failure without another formal provider call. The reserved
 the packaged schema file and require all three expected review bindings before
 dispatch. Direct custom-schema validation and other providers retain their existing
 behavior; AGY schema calls follow the strict parsing described under
-[0.2.563](#upgrading-to-02563). Schema-free raw investigation, malformed AGY noise and
-primary provider-failure precedence retain their existing behavior. No schema field or
+[0.2.563](#upgrading-to-02563). Permissive calls retain their existing malformed-noise
+handling; read-only calls follow the event-refusal rules in the exit-code section.
+Primary authentication, timeout and transport guards retain precedence. No schema field or
 review-composition change is introduced. A result-file reader alone cannot
 recover duplicates already removed by an unrelated caller.
 
