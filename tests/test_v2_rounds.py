@@ -128,6 +128,14 @@ def all_success(fixture):
     return {name: finish(fixture, start(fixture, name)) for name in fixture[1]["enabled"]}
 
 
+def test_completed_containment_refusal_is_not_a_transport_retry(round_fixture):
+    fixture = round_fixture()
+    result = finish(fixture, start(fixture, "google"), failed=True,
+                    receipt_changes={"classification": "admission-refused", "exit_code": 65,
+                                     "vendor_exit_code": 0})
+    assert result["state"] == "INVALID"
+
+
 @pytest.mark.parametrize("residual", ["", '현재 rebuttal: "증거"\n```excerpt```\nUnknown: deployed context'])
 def test_C62_current_residual_is_included_once(round_fixture, residual):
     objective = '지원 2.1.205; locked 2.1.280; observed 2.1.300\nUnknown: runtime'

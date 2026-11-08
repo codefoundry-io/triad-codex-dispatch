@@ -171,12 +171,13 @@ def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) 
         step = event.get("step_update")
         if (event.get("event") != "step_update" or not isinstance(step, dict)
                 or step.get("state") != "DONE" or step.get("step_type") != "tool"
-                or step.get("tool_name") != "view_file"):
+                or step.get("tool_name") not in ("view_file", "read_file")):
             continue
         count += 1
         info = step.get("tool_info")
         params = info.get("parameters") if isinstance(info, dict) else None
-        raw = params.get("AbsolutePath") if isinstance(params, dict) else None
+        path_key = "Path" if step["tool_name"] == "read_file" else "AbsolutePath"
+        raw = params.get(path_key) if isinstance(params, dict) else None
         if not isinstance(raw, str) or len(paths) >= 128:
             continue
         try:
@@ -216,7 +217,7 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
                if event.get("event") == "step_update" and isinstance(event.get("step_update"), dict)]
     if any(pos > results[0] for pos, _ in updates):
         return False
-    reads = {"view_file", "grep_search", "list_dir", "find_by_name"}
+    reads = {"read_file", "view_file", "grep_search", "list_dir", "find_by_name"}
     if web:
         reads.update(("read_url_content", "search_web"))
     tools = []
@@ -258,6 +259,31 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
         if names <= reads and state == "DONE" and not error:
             read_succeeded = True
     return read_succeeded and last_error >= 0 and last_success > last_error
+
+
+def _agy_task_attempted(events: list[dict[str, Any]]) -> bool:
+    """Refuse task operations except an observed native pre-execution denial."""
+    attempts = []
+    for pos, event in enumerate(events):
+        step = event.get("step_update")
+        if event.get("event") != "step_update" or not isinstance(step, dict):
+            continue
+        info = step.get("tool_info")
+        info = info if isinstance(info, dict) else {}
+        if (step.get("step_type") == "tool"
+                and "manage_task" in (step.get("tool_name"), info.get("name"))):
+            attempts.append((pos, step))
+    for pos, step in attempts:
+        if _agy_step_denied(step):
+            continue
+        index = step.get("step_index")
+        if (step.get("state") == "ACTIVE" and type(index) is int
+                and any(later > pos and type(other.get("step_index")) is int
+                        and other["step_index"] == index
+                        and _agy_step_denied(other) for later, other in attempts)):
+            continue
+        return True
+    return False
 
 
 def _terminal_error_suffix(result: dict[str, Any] | None) -> str:
@@ -334,6 +360,7 @@ def _interpret_run(
     expected_content_digest: str | None = None,
     plan_mode: bool = False,
     web: bool = False,
+    read_only: bool = False,
 ) -> _common.RunResult:
     """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
@@ -408,6 +435,11 @@ def _interpret_run(
             _common.EXIT_CLI_FAIL,
             "missing terminal result event",
         )
+    # AGY 1.5.3 exposes manage_task even with excludeDefaultComponents.
+    # A native profile is not proof that this tool could not execute.
+    if (plan_mode or read_only) and _agy_task_attempted(events):
+        return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
+                     "read-only AGY run attempted manage_task; answer withheld")
     denied_post_completion = (
         plan_mode
         and pydantic_cls is not None
@@ -891,6 +923,7 @@ def main() -> int:
         expected_content_digest=args.expected_content_digest,
         plan_mode=local_plan_response,
         web=args.web,
+        read_only=readonly,
     )
     if configuration_error is not None:
         if result.exit_code == _common.EXIT_OK:

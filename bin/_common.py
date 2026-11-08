@@ -81,7 +81,7 @@ def map_classification_to_exit(cls: str) -> int:
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # current AGY stream driver emission; surface, never classifier-patched
-        "admission-refused": EXIT_TERMINAL,  # shared table parity; not currently emitted by this host
+        "admission-refused": EXIT_TERMINAL,  # completed read-only AGY containment refusal
         "vendor-timeout": EXIT_TERMINAL,  # AGY typed terminal turn-timeout; not a wrapper deadline
         "input-delivery-failed": EXIT_TERMINAL,  # shared table parity; retain existing stdin phase handling
         "truncated-answer": EXIT_TERMINAL,  # AGY own-line marker in the emitted raw answer

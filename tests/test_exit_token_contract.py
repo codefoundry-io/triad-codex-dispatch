@@ -20,7 +20,7 @@ import gemini_wrapper
 PAYLOAD = ROOT / "tests/fixtures/shared-spec/exit-tokens.json"
 CONTRACT = json.loads(PAYLOAD.read_text())
 TOKENS = {row["token"]: row["exit"] for row in CONTRACT["tokens"]}
-MAP_ONLY = {"admission-refused", "input-delivery-failed"}
+MAP_ONLY = {"input-delivery-failed"}
 
 
 def test_fixture_has_exact_published_bytes():
@@ -84,7 +84,7 @@ def test_alias_and_direct_exception_do_not_expand_repair_targets():
     assert _common.map_classification_to_exit("permission-unavailable") == 65
     assert any(row.startswith("route-mismatch ")
                for row in CONTRACT["b_delta"]["emitted_without_map_row"])
-    assert not (MAP_ONLY | {"vendor-timeout", "route-mismatch", "permission-unavailable"}) & _common.CLASSIFICATION_TOKENS
+    assert not (MAP_ONLY | {"admission-refused", "vendor-timeout", "route-mismatch", "permission-unavailable"}) & _common.CLASSIFICATION_TOKENS
     assert _common.map_classification_to_exit("not-a-registered-token") == 1
 
 

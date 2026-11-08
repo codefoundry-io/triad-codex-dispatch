@@ -1,5 +1,38 @@
 # Review leg contracts
 
+## AGY native tool availability
+
+AGY 1.5.3 exposes `read_file` with `Path`, `StartLine`, `EndLine` and
+`ByteOffset`; use its current native declaration for paging. Earlier builds
+may expose `view_file` with `AbsolutePath`. Existing profiles retain the old
+registry names: on 1.5.3 `view_file` resolves to `read_file`. Do not add both
+aliases to a profile: that build refuses the duplicate resolved name.
+`manage_task` may be exposed despite `excludeDefaultComponents`; it remains
+forbidden and a read-only run that attempts it without a recognized denial
+withholds the answer. The disabled hook helper does not enforce runtime policy.
+
+Before dispatch, put current native capability facts in the bound TASK/EVIDENCE:
+read authorized files with the offered read tool, use native local search or
+listing only if offered, and report necessary inaccessible coverage as an open
+question. Do not claim a complete related-source search from supplied paths alone.
+For raw investigations, put these facts and required coverage in the caller brief.
+Never use shell, mutation, delegation or task tools to replace missing tools.
+The pinned shared v2 clauses remain unchanged; library DL-180
+tracks their pending tool-name update. The host-owned legacy renderer uses
+capability-conditional tool names. If shared requirements cannot be met,
+report the limitation rather than claiming coverage or modifying the allocation.
+
+When page fetch is unavailable, authorized `search_web` yields a POINTER
+(synthesized summary and redirect URL), not fetched evidence. A decisive web
+claim requires original-page verification by a capable leg or the leader,
+including relevant date/version. Keep unverified decisive claims as open
+questions; new evidence changes the review basis and requires a fresh round.
+
+Source: library [merged C84 rule](https://github.com/codefoundry-io/triad-dispatch-lib/blob/9d0a5ce6aa4bccdbf6484c88c9c4f788f947314f/spec/decisions/2026-11-08-agy-153-toolset.md)
+and [pending decision record PR31](https://github.com/codefoundry-io/triad-dispatch-lib/pull/31).
+These facts do not adopt an unpublished library revision or change Codex's
+existing minimum version, profile bytes or web authorization.
+
 The formal argv examples below are the legacy entry point. Explicit public v2
 uses [generated allocations and host evidence](public-v2-review.md); raw
 investigation and shared containment sections remain applicable to both paths.
@@ -405,7 +438,10 @@ Resolved prompt-file/cwd success evidence and refusal paths use existing masking
 
 The leader checks completed page-fetch events against each cited URL and verifies
 the page's date/version and interpretation. A search-only or failed fetch is
-UNSURE, not evidence. Clause insertion alone is not this verification. Existing
+UNSURE, not evidence. For AGY 1.5.3 without page fetch, follow
+[native availability](#agy-native-tool-availability): retain search pointers and
+obtain original-page verification through a capable leg or the leader before
+using a decisive fact. Clause insertion alone is not this verification. Existing
 unredacted audit argv and failure run logs receive the final prompt; hardened
 audit masking and success-log truncation still apply. A successful ordinary call
 does not by itself provide complete exact prompt/fetch custody.

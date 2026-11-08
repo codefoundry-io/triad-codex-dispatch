@@ -95,7 +95,6 @@ def test_missing_later_success_or_successful_read_refuses(events):
 
 @pytest.mark.parametrize('extra', [
     step('run_command'),
-    step('manage_task', 'ERROR', error={'type': 'TOOL_ERROR', 'message': 'argument rejected'}),
     step('view_file', alias='run_command'),
     step(),
     step('run_command', 'DONE', error={'message': 'user denied permission'}),

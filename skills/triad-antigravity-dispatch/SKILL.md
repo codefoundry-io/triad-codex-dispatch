@@ -33,7 +33,9 @@ other action tools plus experiments, and undecidable uncertainty goes to
 `open_questions`. MCP calls are prohibited by the formal Google prompt; tool absence is not attested.
 Public v2 uses its bound standing authorization. Legacy REVIEW defaults to no web; only a direct owner request enables
 [the bound web option](../triad-cross-family-review/references/review-web.md).
-Use `grep_search`
+Consult [current native availability](../triad-cross-family-review/references/leg-contracts.md#agy-native-tool-availability)
+before dispatch. On AGY 1.5.3 use `read_file` with `Path`; local search/listing
+and page fetch are not offered. Where an earlier build exposes them, use `grep_search`
 with the required `SearchPath` and `Query` arguments to search inside the review
 target identified by Review metadata, and use `list_dir`, `find_by_name`, and `view_file` as
 needed. For every `view_file` call, provide the required `AbsolutePath` argument. For files
@@ -44,7 +46,9 @@ another-page continuation. If native reads and searches are insufficient, report
 `open_questions`. For ordinary SUCCESS results, formal `step_update` telemetry is diagnostic vendor output,
 not an admission schema: added fields, changed optional tool arguments, denied
 attempts, and duplicate progress events do not invalidate an otherwise valid
-terminal verdict. The prompt and native `--mode plan` define the static-review
+terminal verdict. An observed `manage_task` attempt without a recognized native
+denial withholds the read-only answer, including an otherwise successful result.
+The prompt and native `--mode plan` define the static-review
 behavior. The profile explicitly declares native tools and excludes default components.
 The current1.3.3 probe proved useful read/search/web and no file after a direct
 write request, not provider denial of an attempted write or universal prevention.

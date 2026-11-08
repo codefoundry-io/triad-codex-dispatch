@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Adopt the merged C84 read-tool rule for AGY 1.5.3: accept `read_file` in the
+  disabled hook, diagnostic path projection and same-run finish recovery.
+- Withhold read-only answers after a `manage_task` attempt without a recognized
+  native denial; default-component exclusion alone is not execution evidence.
+- Document current native-tool availability and pointer-only web evidence.
+  Preserve profiles, version floors and pinned shared prompts; upstream DL-180
+  remains pending. No installed-cache update or release is implied.
+
 ## 0.2.565 — 2026-10-24
 
 - Bundles published `triad-dispatch-lib 0.1.0.dev7`, source

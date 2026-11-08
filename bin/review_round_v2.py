@@ -378,7 +378,7 @@ def _observations(item: dict, receipt: dict, reads: dict, raw: bytes) -> tuple[s
     if failed:
         # A completed invalid answer is not a failed-to-run review. Retain it,
         # but never turn schema/extraction failure into a transport retry.
-        state = "INVALID" if receipt["classification"] in ("schema-fail", "extraction-error", "identity-mismatch") else "FAILED_TO_RUN"
+        state = "INVALID" if receipt["classification"] in ("schema-fail", "extraction-error", "identity-mismatch", "admission-refused") else "FAILED_TO_RUN"
         return state, None
     allowed_delivery = (("not-used", "unexposed") if source == "native-host" else
                         ("not-used",) if adapter["transport_route"] in ("agy", "gemini") else

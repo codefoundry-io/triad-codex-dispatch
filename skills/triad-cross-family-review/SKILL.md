@@ -12,9 +12,9 @@ Explicit owner/project selection of **public v2** uses [the v2 procedure](refere
 for named rosters, producer/render/collector commands, host evidence and same-basis
 retry. Every enabled entry participates, including informational entries; never
 convert v2 results to legacy. Candidate presence changes no revision or existing gate.
-Public v2 binds the owner's standing [review-web authorization](references/review-web.md) to every new round. Legacy below retains explicit per-round authorization. Raw [investigations](references/leg-contracts.md#authorized-agy-web-investigation) remain available.
+Public v2 binds the owner's standing [review-web authorization](references/review-web.md) to every new round. Legacy below retains explicit per-round authorization. Raw [investigations](references/leg-contracts.md#authorized-agy-web-investigation) remain available. For AGY 1.5.3, read [native tool availability](references/leg-contracts.md#agy-native-tool-availability) before preparing a round.
 
-Otherwise follow the legacy workflow below: one fresh review ID, one immutable
+Without explicit public-v2 selection, follow the legacy workflow below: one fresh review ID, one immutable
 basis, one Claude `LegVerdict`, one Google `LegVerdict`, and one fresh Codex
 `LegVerdict`. All review the same complete scope. Batches, shards, and mixed-round
 evidence are not supported. The Codex leader owns scope, findings and corrections.

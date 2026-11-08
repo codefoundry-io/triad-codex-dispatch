@@ -2,6 +2,14 @@
 
 [한국어 README](README.ko.md)
 
+AGY 1.5.3 source compatibility: read-only calls recognize `read_file(Path)` as
+well as historical `view_file(AbsolutePath)`. Task-manager attempts withhold the
+answer unless a native pre-execution denial is observed. Existing profile bytes
+and version floors are preserved; the historical `view_file` profile entry is
+an alias on 1.5.3, so do not add both names. See
+[current native-tool and web-evidence limits](skills/triad-cross-family-review/references/leg-contracts.md#agy-native-tool-availability).
+Shared prompt updates remain pending upstream as DL-180; the dev7 pin is unchanged.
+
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
 [Published releases](https://github.com/codefoundry-io/triad-codex-dispatch/releases)
@@ -588,10 +596,12 @@ plus round-integrity verification remain the admission gates.
 The formal AGY prompt remains explicitly static-only: it permits
 native local file read/search, denies web by default and always denies MCP calls, forbids command, write, experiment, notebook, subagent,
 browser-actuation, and scratch tools, and sends unresolved static uncertainty to
-`open_questions`. Inside the prepared directory it uses native `list_dir`,
+`open_questions`. Where offered by the installed build, inside the prepared directory it uses native `list_dir`,
 `find_by_name`, and `view_file` as needed, and uses native `grep_search` with the
 required `SearchPath` and `Query` arguments. Every view supplies the required `AbsolutePath` argument; large files use explicit
 positive-integer `StartLine` and `EndLine` ranges.
+On 1.5.3, use the offered `read_file(Path)` instead; absent search/listing or
+page fetch is a coverage limit, not permission for a shell workaround.
 `ContentOffset`, `IsSkillFile`, and implicit `another page` continuation remain
 forbidden.
 On AGY 1.1.20 or newer, the formal plan-mode route passes native
@@ -1179,7 +1189,8 @@ not change dispatch or admission.
 Formal AGY plan-mode audit may also include `agy_read_telemetry`: the observed
 `done_view_file_event_count` and first-seen unique `relative_paths` under that
 host launch cwd (at most 128 paths, each at most 1024 UTF-8-valid characters).
-Only DONE tool steps named `view_file` count; repeats and failed reads still
+DONE tool steps named `view_file` or `read_file` count under the historical
+field name; their path keys are `AbsolutePath` and `Path` respectively. Repeats and failed reads still
 count. Malformed, relative, `..`-containing, outside or symlink-escaping paths
 are omitted, and path-resolution errors never affect the verdict. Redacted/hardened audit keeps
 only the count. No usable cwd or matching events means no telemetry. This is
@@ -1295,7 +1306,7 @@ python3 bin/agy_hook.py --render-config
 It prints a named hook with `enabled:false` and a shell-quoted absolute helper
 path. It writes no configuration, installs no hook, and changes no wrapper or
 project permissions. Bootstrap does not activate it. The normal stdin interface
-returns JSON `allow` only for exact names `view_file`, `grep_search`, `list_dir`,
+returns JSON `allow` only for exact names `read_file`, `view_file`, `grep_search`, `list_dir`,
 `find_by_name`, `search_web`, and `read_url_content`; all other names are denied.
 The documented `toolCall.name` string and `toolCall.args` object are required.
 Invalid UTF-8/JSON, duplicate members, more than 64 nested object/array containers

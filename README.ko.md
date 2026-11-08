@@ -1,5 +1,12 @@
 # triad-codex-dispatch
 
+AGY 1.5.3 대응 소스는 읽기 전용 호출에서 `read_file(Path)`와 기존
+`view_file(AbsolutePath)`를 인식합니다. 실행 전 거부가 확인되지 않은 작업 관리자
+호출은 결과를 차단합니다. 기존 프로필과 최소 버전은 유지합니다. 1.5.3에서는
+프로필의 `view_file`이 별칭이므로 두 이름을 동시에 추가하지 마세요.
+[현재 도구 및 웹 근거 제한](skills/triad-cross-family-review/references/leg-contracts.md#agy-native-tool-availability)을
+확인하세요. 공통 프롬프트 수정은 상위 DL-180에서 대기 중이며 dev7 고정은 유지합니다.
+
 [설치와 개인 설정](docs/installation.ko.md): 일반 마켓플레이스 또는 Git 다운로드 후
 로컬 설치를 선택합니다. 최신 공개 버전은 `main`을 사용하며,
 [공개 릴리스](https://github.com/codefoundry-io/triad-codex-dispatch/releases)에서
@@ -555,10 +562,12 @@ duplicate progress event가 유효한 terminal review를 사후에 무효화하�
 formal AGY 프롬프트는 계속 명시적인 정적 전용 계약입니다.
 로컬 검사는 native file read/search만 허용하고, 웹은 기본적으로 차단하며 MCP 호출은 항상 차단하고 command, write, experiment, notebook, subagent, browser
 actuation, scratch 도구를 금지합니다. 정적 검사로 결정할 수 없는 불확실성은
-`open_questions`에 기록합니다. prepared directory 안에서는 native `list_dir`,
+`open_questions`에 기록합니다. 설치된 버전에서 제공할 때 prepared directory 안에서는 native `list_dir`,
 `find_by_name`, `view_file`을 필요에 따라 사용하고, 필수 `SearchPath`와 `Query` 인자를
 전달하는 native `grep_search`를 사용합니다. 모든 view는 필수 `AbsolutePath` 인자를 전달하고, 큰 파일은 양의 정수 `StartLine`과
 `EndLine` 범위를 명시해 읽습니다.
+1.5.3에서는 제공되는 `read_file(Path)`를 사용합니다. 검색·목록·페이지 가져오기
+도구 부재는 검토 범위의 한계이며 shell 우회를 허용하지 않습니다.
 `ContentOffset`, `IsSkillFile`, 묵시적 `another page` 연속 읽기는 금지합니다.
 AGY 1.1.20 이상의 formal plan-mode route는 native `--json-schema`를 전달하고
 terminal `structured_output`을 소비한 뒤 strict local `LegVerdict` 및 exact
@@ -1100,7 +1109,8 @@ dispatch와 admission을 변경하지 않습니다.
 Formal AGY plan-mode audit에는 `agy_read_telemetry`가 포함될 수 있습니다.
 관측한 `done_view_file_event_count`와 host 실행 cwd 안에서 해석한 고유
 `relative_paths`를 최초 등장 순서대로 남깁니다(최대 128개, 경로당 유효한
-UTF-8 문자 최대 1024개). `view_file`인 DONE tool event만 세며 반복·실패도
+UTF-8 문자 최대 1024개). `view_file`과 `read_file`의 DONE tool event를 기존
+필드명으로 셉니다. 경로 인자는 각각 `AbsolutePath`와 `Path`이며 반복·실패도
 포함합니다. 잘못된 경로, 상대경로, `..` 구성요소가 있는 경로, cwd 밖 또는
 symlink로 이탈하는 경로는 제외하고 경로 해석 실패는 판정에 영향을 주지 않습니다. Redacted/hardened
 audit에는 개수만 남습니다. 유효한 cwd 또는 해당 event가 없으면 생략합니다.
@@ -1213,7 +1223,7 @@ python3 bin/agy_hook.py --render-config
 항상 `enabled:false`와 shell quoting된 helper 절대 경로를 출력합니다.
 설정 파일 생성·설치·활성화나 wrapper/project 권한 변경은 하지 않으며,
 bootstrap도 이 훅을 활성화하지 않습니다. 기본 stdin 인터페이스는 정확한
-이름 `view_file`, `grep_search`, `list_dir`, `find_by_name`, `search_web`,
+이름 `read_file`, `view_file`, `grep_search`, `list_dir`, `find_by_name`, `search_web`,
 `read_url_content`에만 JSON `allow`를 반환합니다. 나머지 이름은 거부합니다.
 `toolCall.name` 문자열과 `toolCall.args` 객체가 필요합니다. 잘못된 UTF-8/JSON,
 중복 키, 객체·배열 64단계 초과 중첩(루트가 1단계), 1 MiB 초과 입력은

@@ -198,7 +198,7 @@ shares existing private audit retention and is excluded from failure/repair IPC;
 it does not attest the provider's later cwd or read coverage. No environment dump
 is added. Existing unredacted streams and human stderr remain sensitive.
 
-AGY plan-mode `agy_read_telemetry` counts observed DONE view_file tool events,
+AGY plan-mode `agy_read_telemetry` counts observed DONE `view_file` and `read_file` tool events,
 including repeated or failed reads. It projects only up to 128 unique relative
 paths (1024 valid-UTF-8 characters each) currently resolving inside that captured
 cwd; malformed/relative/`..`-containing/outside/symlink-escaping paths are omitted.
@@ -389,6 +389,13 @@ provider/data boundary require their own owner authorization. Native permission
 success is not workflow authority.
 
 ## Disabled AGY hook helper
+
+AGY 1.5.3 can expose `manage_task` despite profile default-component exclusion.
+Read-only result admission therefore withholds any observed attempt without a
+recognized native pre-execution denial. This is post-run refusal, not prevention
+or rollback of side effects. Both `read_file(Path)` and `view_file(AbsolutePath)`
+feed bounded diagnostic telemetry. The historical `done_view_file_event_count`
+field counts both names; neither counts nor paths attest to successful coverage.
 
 The packaged `bin/agy_hook.py` only evaluates a fixed tool-name allowlist and
 prints decisions or an always-disabled configuration. It never executes the

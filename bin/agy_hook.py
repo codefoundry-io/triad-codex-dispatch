@@ -12,7 +12,7 @@ from pathlib import Path
 MAX_INPUT_BYTES = 1024 * 1024
 MAX_CONTAINER_DEPTH = 64
 READ_TOOLS = frozenset({
-    "view_file", "grep_search", "list_dir", "find_by_name",
+    "read_file", "view_file", "grep_search", "list_dir", "find_by_name",
     "search_web", "read_url_content",
 })
 
