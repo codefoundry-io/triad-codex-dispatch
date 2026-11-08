@@ -394,3 +394,109 @@ def test_task_denial_does_not_borrow_command_permission_failure(message, allowed
     assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))
     permissive = wrapper._interpret_run(run_result(events, status='SUCCESS'), None)
     assert permissive.exit_code == 0
+
+
+def raw_parameter_task(state, raw, *, index=2, usage=None):
+    event = step('manage_task', state, index=index,
+                 error={'message': 'tool call denied by pre-tool hook'} if state == 'ERROR' else None)
+    event['step_update'].setdefault('tool_info', {})['parameters'] = '__RAW_PARAMETERS__'
+    encoded = json.dumps(event).replace('"__RAW_PARAMETERS__"', raw)
+    if usage is not None:
+        encoded = encoded[:-1] + ',"usage":' + usage + '}'
+    return encoded
+
+
+@pytest.mark.parametrize('left,right,allowed', [
+    ('{"count":9007199254740992.0}', '{"count":9007199254740993.0}', False),
+    ('{"count":1e-400}', '{"count":2e-400}', False),
+    ('{"count":1.0}', '{"count":1.00}', True),
+    ('{"count":1.00}', '{"count":1e0}', True),
+    ('{"count":0.0012300}', '{"count":123e-5}', True),
+    ('{"a":[{"count":9007199254740992.0}]}', '{"a":[{"count":9007199254740993.0}]}', False),
+    ('{"count":1.0,"x":[true,null]}', '{"x":[true,null],"count":1e0}', True),
+    ('{"count":1.0}', '{"count":"1.0"}', False),
+    ('{"count":1.0}', '{"count":["fractional","1.0"]}', False),
+    ('{"count":1.0}', '{"count":{"decimal":"1.0"}}', False),
+    ('{"count":1.0}', '{"count":1}', False),
+    ('{"count":-0.0}', '{"count":0.0}', False),
+])
+@pytest.mark.parametrize('formal', [False, True])
+def test_task_parameter_evidence_preserves_exact_original_numbers(left, right, allowed, formal):
+    run = run_result([], status='SUCCESS')
+    run.stdout = raw_parameter_task('ACTIVE', left) + '\n' + raw_parameter_task('ERROR', right) + '\n' + run.stdout
+    original = run.stdout
+    result = interpret(run) if formal else wrapper._interpret_run(run, None, read_only=True)
+    assert (result.classification, result.exit_code) == (('ok', 0) if allowed else ('admission-refused', 65))
+    assert result.stdout == original
+    control = run_result([], status='SUCCESS')
+    control.stdout = original
+    assert wrapper._interpret_run(control, None).exit_code == 0
+
+
+def test_parameterless_denial_cannot_hide_distinct_exact_number_observations():
+    run = run_result([], status='SUCCESS')
+    denial = json.dumps(step('manage_task', 'ERROR', index=2,
+                             error={'message': 'tool call denied by pre-tool hook'}))
+    run.stdout = '\n'.join([raw_parameter_task('ACTIVE', '{"count":1e-400}'),
+                            raw_parameter_task('ACTIVE', '{"count":2e-400}'), denial, run.stdout])
+    result = interpret(run)
+    assert (result.classification, result.exit_code) == ('admission-refused', 65)
+
+
+def test_unrelated_fractional_metadata_does_not_change_parameter_evidence():
+    run = run_result([], status='SUCCESS')
+    raw = '{"Action":"list"}'
+    huge_underflow = '1e-' + '9' * 100
+    run.stdout = '\n'.join([raw_parameter_task('ACTIVE', raw, usage=huge_underflow),
+                            raw_parameter_task('ERROR', raw, usage=huge_underflow), run.stdout])
+    assert interpret(run).exit_code == 0
+
+
+@pytest.mark.parametrize('kind', [None, 'message'])
+@pytest.mark.parametrize('state', ['ACTIVE', 'DONE', 'ERROR'])
+def test_task_named_step_with_unknown_type_cannot_prove_containment(kind, state):
+    event = step('manage_task', state, kind=kind, index=2,
+                 error={'message': 'tool call denied by pre-tool hook'} if state == 'ERROR' else None)
+    if kind is None:
+        del event['step_update']['step_type']
+    denial = step('manage_task', 'ERROR', index=2,
+                  error={'message': 'tool call denied by pre-tool hook'})
+    result = interpret(run_result([event, denial], status='SUCCESS'))
+    assert (result.classification, result.exit_code) == ('admission-refused', 65)
+
+
+def test_exact_parameter_side_evidence_does_not_change_returned_event_types():
+    raw = raw_parameter_task('ACTIVE', '{"float":9007199254740993.0,"integer":1,"boolean":true}')
+    signatures, errors = {}, []
+    events, result = wrapper.parse_agy_stream(raw, decode_errors=errors, parameter_signatures=signatures)
+    assert events == [json.loads(raw)] and result is None and errors == []
+    params = events[0]['step_update']['tool_info']['parameters']
+    assert type(params['float']) is float and type(params['integer']) is int and type(params['boolean']) is bool
+    assert set(signatures) == {0}
+
+
+@pytest.mark.parametrize('name,expected', [('manage_task', 65), ('read_file', 0)])
+def test_unavailable_exact_parameter_signature_fails_closed_only_for_task_correlation(name, expected):
+    raw = '{"count":1e-' + '9' * 5000 + '}'
+    run = run_result([], status='SUCCESS')
+    run.stdout = '\n'.join([raw_parameter_task('ACTIVE', raw).replace('manage_task', name),
+                            raw_parameter_task('ERROR', raw).replace('manage_task', name), run.stdout])
+    previous = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(4300)
+        result = interpret(run)
+    finally:
+        sys.set_int_max_str_digits(previous)
+    assert result.exit_code == expected
+
+
+def test_exact_parameter_evidence_positions_follow_accepted_events():
+    active = raw_parameter_task('ACTIVE', '{"count":1.00}')
+    other = json.dumps(step('read_file'))
+    denial = raw_parameter_task('ERROR', '{"count":1e0}')
+    raw = '\n'.join(['banner', active, '{invalid', other, 'noise', denial])
+    signatures, errors = {}, []
+    events, _ = wrapper.parse_agy_stream(raw, decode_errors=errors, parameter_signatures=signatures)
+    assert len(events) == 3 and errors == ['undecodable AGY event']
+    assert set(signatures) == {0, 2} and signatures[0] == signatures[2]
+    assert events[1]['step_update']['tool_name'] == 'read_file'
