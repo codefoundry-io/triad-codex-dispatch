@@ -376,9 +376,9 @@ def _observations(item: dict, receipt: dict, reads: dict, raw: bytes) -> tuple[s
         raise ValueError("terminal host observation is required")
     failed = receipt["exit_code"] != 0 or receipt["vendor_exit_code"] != 0 or receipt["classification"] != "ok"
     if failed:
-        # A completed invalid answer is not a failed-to-run review. Retain it,
+        # An event/containment refusal is not a failed-to-run review. Retain it,
         # but never turn schema/extraction failure into a transport retry.
-        state = "INVALID" if receipt["classification"] in ("schema-fail", "extraction-error", "identity-mismatch") else "FAILED_TO_RUN"
+        state = "INVALID" if receipt["classification"] in ("schema-fail", "extraction-error", "identity-mismatch", "admission-refused") else "FAILED_TO_RUN"
         return state, None
     allowed_delivery = (("not-used", "unexposed") if source == "native-host" else
                         ("not-used",) if adapter["transport_route"] in ("agy", "gemini") else

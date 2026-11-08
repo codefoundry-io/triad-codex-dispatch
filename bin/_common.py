@@ -27,6 +27,7 @@ import importlib
 import io
 import importlib.util
 import json
+import math
 import os
 import re
 import shlex
@@ -81,7 +82,7 @@ def map_classification_to_exit(cls: str) -> int:
         "config-conflict": EXIT_TERMINAL,
         "task-blocked": EXIT_TERMINAL,
         "vendor-error": EXIT_TERMINAL,  # current AGY stream driver emission; surface, never classifier-patched
-        "admission-refused": EXIT_TERMINAL,  # shared table parity; not currently emitted by this host
+        "admission-refused": EXIT_TERMINAL,  # read-only AGY event/containment refusal
         "vendor-timeout": EXIT_TERMINAL,  # AGY typed terminal turn-timeout; not a wrapper deadline
         "input-delivery-failed": EXIT_TERMINAL,  # shared table parity; retain existing stdin phase handling
         "truncated-answer": EXIT_TERMINAL,  # AGY own-line marker in the emitted raw answer
@@ -648,17 +649,32 @@ def agy_print_timed_out(stderr: str) -> bool:
     return bool(_AGY_PRINT_TIMEOUT_RE.search(stderr))
 
 
-def _error_document(text: str) -> dict:
+def _error_document(text: str, *, strict_json: bool = False) -> dict:
+    def unique_members(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("ambiguous error carrier")
+            obj[key] = value
+        return obj
+    def finite_number(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("nonfinite error carrier")
+        return number
     try:
-        obj = json.loads(text)
+        obj = json.loads(text, object_pairs_hook=unique_members if strict_json else None,
+                         parse_constant=finite_number if strict_json else None,
+                         parse_float=finite_number if strict_json else None)
     except (ValueError, TypeError, RecursionError):
         return {}
     return obj if isinstance(obj, dict) else {}
 
 
-def _error_events(text: str) -> list[dict]:
+def _error_events(text: str, *, strict_json: bool = False) -> list[dict]:
     # JSON strings may contain raw Unicode line separators: split only on LF.
-    return [obj for line in text.split("\n") if (obj := _error_document(line))]
+    return [obj for line in text.split("\n")
+            if (obj := _error_document(line, strict_json=strict_json))]
 
 
 def _gemini_error_envelope(stderr: str) -> dict:
@@ -724,15 +740,21 @@ def _auth_carrier_stop(cli: str, stderr: str, stdout: str,
             if said(message):
                 return True
     elif cli == "antigravity":
-        events = _error_events(stdout)
-        results = [e["result"] for e in events if e.get("event") == "result"
+        # Preserve the existing permissive completed-answer veto. It is not
+        # positive authentication evidence or read-only answer admission.
+        legacy_stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
+        completed = [e["result"] for e in _error_events(legacy_stdout) if e.get("event") == "result"
                    and isinstance(e.get("result"), dict)]
         # A completed usable answer is not stopped by a sign-in banner.
-        if (vendor_exit_code == 0 and results and results[-1].get("status") == "SUCCESS"
+        if (vendor_exit_code == 0 and completed and completed[-1].get("status") == "SUCCESS"
                 and not agy_print_timed_out(stderr)
-                and (results[-1].get("structured_output") is not None or
-                     isinstance(results[-1].get("response"), str) and results[-1]["response"].strip())):
+                and (completed[-1].get("structured_output") is not None or
+                     isinstance(completed[-1].get("response"), str) and completed[-1]["response"].strip())):
             return False
+        # Only strict original JSON can promote authentication, including in
+        # the transport layer before read-only event admission runs.
+        results = [e["result"] for e in _error_events(stdout, strict_json=True)
+                   if e.get("event") == "result" and isinstance(e.get("result"), dict)]
         extra = _load_classifier_extension().get(cli, {}).get("patterns", {})
         banners = AGY_AUTH_BANNER_PATTERNS + tuple(extra.get("AGY_AUTH_BANNER_PATTERNS", ()))
 
@@ -1478,10 +1500,17 @@ def _run_once_owned(
                 try:
                     captured[name] = data.decode("utf-8")
                 except UnicodeDecodeError as error:
-                    captured[name] = data[:error.start].decode("utf-8")
+                    # A truncated JSON record must not become positive auth
+                    # evidence just because the undecodable suffix was dropped.
+                    end = (data.rfind(b"\n", 0, error.start) + 1
+                           if cli == "antigravity" and name == "stdout" else error.start)
+                    captured[name] = data[:end].decode("utf-8")
                     raise
                 finally:
-                    captured[name] = captured[name].replace("\r\n", "\n").replace("\r", "\n")
+                    # Strict AGY consumers and persisted replay need original
+                    # LF framing. Permissive consumers normalize their own view.
+                    if cli != "antigravity" or name != "stdout":
+                        captured[name] = captured[name].replace("\r\n", "\n").replace("\r", "\n")
             except (OSError, UnicodeError) as error:
                 transport_error = transport_error or f"{name} collection failed ({type(error).__name__})"
 

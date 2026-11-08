@@ -198,7 +198,7 @@ shares existing private audit retention and is excluded from failure/repair IPC;
 it does not attest the provider's later cwd or read coverage. No environment dump
 is added. Existing unredacted streams and human stderr remain sensitive.
 
-AGY plan-mode `agy_read_telemetry` counts observed DONE view_file tool events,
+AGY plan-mode `agy_read_telemetry` counts observed DONE `view_file` and `read_file` tool events,
 including repeated or failed reads. It projects only up to 128 unique relative
 paths (1024 valid-UTF-8 characters each) currently resolving inside that captured
 cwd; malformed/relative/`..`-containing/outside/symlink-escaping paths are omitted.
@@ -390,6 +390,32 @@ success is not workflow authority.
 
 ## Disabled AGY hook helper
 
+AGY 1.5.3 can expose `manage_task` despite profile default-component exclusion.
+With a terminal result, read-only admission therefore withholds any observed attempt
+without a recognized native pre-execution denial (`admission-refused` / 65).
+Read-only event checks use original lines. Duplicate members, nonfinite numbers
+and non-JSON surrounding whitespace retain `schema-fail` / 66 on schema calls;
+raw read-only calls use `admission-refused` / 65. Other undecodable `{`-prefixed
+records and decoder-limit failures use the latter refusal even without a terminal.
+Both are INVALID in public v2, not same-basis transport retries. Existing
+authentication, timeout and transport guards retain precedence. Permissive calls
+retain their old event parsing behavior. Positive AGY auth carriers must have
+original JSON without duplicate members or nonfinite numbers on every route,
+including transport and permissive calls. The prior completed-answer banner veto
+uses permissive interpretation only to suppress auth, never as positive auth
+evidence or read-only answer admission. Original-JSON schema errors precede
+other undecodable records; duplicate-member errors take priority.
+
+AGY stdout and saved run logs preserve original LF record framing. A bare CR is
+not a record boundary for read-only or schema calls. On UTF-8 capture failure,
+only complete LF-terminated prefix records are retained. Other providers and
+stderr retain their existing newline normalization.
+
+This is post-run refusal, not prevention
+or rollback of side effects. Both `read_file(Path)` and `view_file(AbsolutePath)`
+feed bounded diagnostic telemetry. The historical `done_view_file_event_count`
+field counts both names; neither counts nor paths attest to successful coverage.
+
 The packaged `bin/agy_hook.py` only evaluates a fixed tool-name allowlist and
 prints decisions or an always-disabled configuration. It never executes the
 requested action, follows payload paths, records input, or installs policy.
@@ -419,10 +445,11 @@ same raw bytes to strict schema and identity validation. Duplicate errors do
 not reflect names or values; decoder recursion failure follows the existing
 invalid-result CLI path. Canonical wrapper admission checks the original answer
 and native envelope/event JSON before success, preserving primary failure
-precedence and malformed AGY-noise handling. Both reserved schema spellings
+precedence. Malformed AGY-noise tolerance is retained only for permissive calls;
+read-only calls use the event-refusal rules above. Both reserved schema spellings
 (`verdict_schema:LegVerdict`, `verdict_schema.LegVerdict`) use the packaged file
 loader and require complete expected bindings before dispatch. Arbitrary schema
-imports retain their hardened opt-in. Schema-free raw replies, direct custom-schema
+imports retain their hardened opt-in. Permissive schema-free raw replies, direct custom-schema
 validation and other providers' custom-schema handling retain their existing behavior. No
 provider re-ask, permission change or broader transport guarantee is introduced.
 A result-file reader alone cannot recover evidence discarded by another caller.
@@ -430,7 +457,8 @@ A result-file reader alone cannot recover evidence discarded by another caller.
 AGY schema admission, including legacy and custom schemas, strictly parses original
 JSON object event lines before metadata separation. Duplicate members and non-finite
 numbers are rejected in intermediate events as well as the terminal event; existing
-malformed-noise and primary terminal-failure handling is preserved. From the original
+malformed-noise handling is preserved only for permissive calls. Read-only refusal
+still preserves primary authentication, timeout and transport guards. From the original
 terminal `structured_output` span, only undeclared top-level `toolAction` and
 `toolSummary` are separated as provider metadata. Declared fields and aliases, nested
 data, other unknown-field checks, schema constraints and invocation bindings retain

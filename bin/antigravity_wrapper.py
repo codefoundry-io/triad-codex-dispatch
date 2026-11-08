@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -135,20 +136,120 @@ def _build_cmd(
     return cmd + _route_args(model, effort, project)
 
 
-def parse_agy_stream(text: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    """Return parsed events and the last complete terminal result payload."""
+class _AGYFractionToken(str):
+    """Original fractional/exponent token in discarded comparison-only data."""
+
+
+_AGY_PARAMETER_UNAVAILABLE = object()
+
+
+def _agy_parameter_signature(value: Any) -> tuple:
+    """Exact, type-tagged parameter evidence; never a returned event value."""
+    if isinstance(value, _AGYFractionToken):
+        negative = value.startswith("-")
+        token = value[1:] if negative else value
+        mantissa, _, exponent = token.lower().partition("e")
+        whole, _, fraction = mantissa.partition(".")
+        coefficient = (whole + fraction).lstrip("0")
+        if not coefficient:
+            return ("fractional", negative, "0", 0)
+        significant = coefficient.rstrip("0")
+        # json.loads already checked token grammar. Normalize coefficient and
+        # exponent exactly, without binary64 or context-sensitive arithmetic.
+        power = int(exponent or "0") - len(fraction) + len(coefficient) - len(significant)
+        return ("fractional", negative, significant, power)
+    if value is None:
+        return ("null",)
+    if type(value) is bool:
+        return ("boolean", value)
+    if type(value) is int:
+        return ("integer", value)
+    if isinstance(value, str):
+        return ("string", value)
+    if isinstance(value, list):
+        return ("array", tuple(_agy_parameter_signature(item) for item in value))
+    if isinstance(value, dict):
+        return ("object", tuple((key, _agy_parameter_signature(item))
+                                for key, item in sorted(value.items())))
+    raise ValueError("unsupported task parameter evidence")
+
+
+def parse_agy_stream(text: str, *, decode_errors: list[str] | None = None,
+                     parameter_signatures: dict[int, Any] | None = None) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Return events and the last terminal payload.
+
+    Passing decode_errors selects read-only original-JSON checks: rejected
+    records are omitted and bounded error codes replace decoder exceptions.
+    Omitting it retains the permissive strip/last-member-wins decoder.
+    Optional parameter signatures are private exact evidence indexed by accepted
+    event position; returned events retain their ordinary JSON numeric types.
+    """
+    duplicate_member = False
+    nonfinite_number = False
+    def collect_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        nonlocal duplicate_member
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                duplicate_member = True
+            result[key] = value
+        return result
+
+    def finite_number(value: str) -> float:
+        nonlocal nonfinite_number
+        number = float(value)
+        if not math.isfinite(number):
+            nonfinite_number = True
+        return number
+
     events: list[dict[str, Any]] = []
     terminal: dict[str, Any] | None = None
-    for line in (text or "").split("\n"):
-        line = line.strip()
-        if not line.startswith("{"):
+    for original_line in (text or "").split("\n"):
+        if not original_line.lstrip().startswith("{"):
             continue
+        line = original_line if decode_errors is not None else original_line.strip()
+        duplicate_member = False
+        nonfinite_number = False
         try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
+            event = json.loads(
+                line, object_pairs_hook=collect_members if decode_errors is not None else None,
+                parse_constant=finite_number if decode_errors is not None else None,
+                parse_float=finite_number if decode_errors is not None else None,
+            )
+        except (ValueError, RecursionError) as exc:
+            if decode_errors is None and not isinstance(exc, json.JSONDecodeError):
+                raise
+            marker = ("invalid_json" if original_line.strip() != original_line.strip(" \t\r")
+                      else "undecodable AGY event")
+            if decode_errors is not None:
+                # Trailing non-JSON whitespace does not erase violations the
+                # original decoder already observed within the object.
+                if marker == "invalid_json":
+                    for code, present in (("duplicate_member", duplicate_member),
+                                          ("nonfinite_number", nonfinite_number)):
+                        if present and code not in decode_errors:
+                            decode_errors.append(code)
+                if marker not in decode_errors:
+                    decode_errors.append(marker)
+            continue
+        if (duplicate_member or nonfinite_number) and decode_errors is not None:
+            for marker, present in (("duplicate_member", duplicate_member), ("nonfinite_number", nonfinite_number)):
+                if present and marker not in decode_errors:
+                    decode_errors.append(marker)
             continue
         if not isinstance(event, dict):
             continue
+        if decode_errors is not None and parameter_signatures is not None:
+            step = event.get("step_update")
+            info = step.get("tool_info") if isinstance(step, dict) else None
+            if event.get("event") == "step_update" and isinstance(info, dict) and "parameters" in info:
+                try:
+                    # Auxiliary tokens outside parameters are never converted.
+                    exact = json.loads(original_line, parse_float=_AGYFractionToken)
+                    signature = _agy_parameter_signature(exact["step_update"]["tool_info"]["parameters"])
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    signature = _AGY_PARAMETER_UNAVAILABLE
+                parameter_signatures[len(events)] = signature
         events.append(event)
         payload = event.get("result")
         if event.get("event") == "result" and isinstance(payload, dict):
@@ -171,12 +272,13 @@ def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) 
         step = event.get("step_update")
         if (event.get("event") != "step_update" or not isinstance(step, dict)
                 or step.get("state") != "DONE" or step.get("step_type") != "tool"
-                or step.get("tool_name") != "view_file"):
+                or step.get("tool_name") not in ("view_file", "read_file")):
             continue
         count += 1
         info = step.get("tool_info")
         params = info.get("parameters") if isinstance(info, dict) else None
-        raw = params.get("AbsolutePath") if isinstance(params, dict) else None
+        path_key = "Path" if step["tool_name"] == "read_file" else "AbsolutePath"
+        raw = params.get(path_key) if isinstance(params, dict) else None
         if not isinstance(raw, str) or len(paths) >= 128:
             continue
         try:
@@ -192,7 +294,7 @@ def _project_agy_done_view_files(events: list[dict[str, Any]], cwd: str | None) 
     return {"done_view_file_event_count": count, "relative_paths": paths} if count else None
 
 
-def _agy_step_denied(step: dict[str, Any]) -> bool:
+def _agy_step_denied(step: dict[str, Any], *, wrapped_permission_check: bool = True) -> bool:
     """Measured denial heads are separate from structured finish recovery."""
     info = step.get("tool_info")
     error = info.get("error") if isinstance(info, dict) else None
@@ -202,7 +304,7 @@ def _agy_step_denied(step: dict[str, Any]) -> bool:
     first = next((line.strip().casefold() for line in message.splitlines() if line.strip()), "")
     if first.startswith(("tool call denied by pre-tool hook", "user denied permission")):
         return True
-    if first.startswith("permission check failed for ") and '": ' in first:
+    if wrapped_permission_check and first.startswith("permission check failed for ") and '": ' in first:
         return first.rsplit('": ', 1)[-1].startswith(("user denied permission", "permission denied for"))
     return False
 
@@ -216,7 +318,7 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
                if event.get("event") == "step_update" and isinstance(event.get("step_update"), dict)]
     if any(pos > results[0] for pos, _ in updates):
         return False
-    reads = {"view_file", "grep_search", "list_dir", "find_by_name"}
+    reads = {"read_file", "view_file", "grep_search", "list_dir", "find_by_name"}
     if web:
         reads.update(("read_url_content", "search_web"))
     tools = []
@@ -258,6 +360,55 @@ def _agy_finish_resubmitted(events: list[dict[str, Any]], *, web: bool) -> bool:
         if names <= reads and state == "DONE" and not error:
             read_succeeded = True
     return read_succeeded and last_error >= 0 and last_success > last_error
+
+
+def _agy_task_attempted(events: list[dict[str, Any]], parameter_signatures: dict[int, Any]) -> bool:
+    """Refuse task operations except an unambiguous pre-execution denial."""
+    attempts = []
+    parameter_sets: dict[tuple, set[tuple]] = {}
+    unavailable_keys: set[tuple] = set()
+    segment = 0
+    for pos, event in enumerate(events):
+        if event.get("event") == "result":
+            segment += 1
+        step = event.get("step_update")
+        if event.get("event") != "step_update" or not isinstance(step, dict):
+            continue
+        info = step.get("tool_info")
+        info = info if isinstance(info, dict) else {}
+        names = ([step["tool_name"]] if "tool_name" in step else [])
+        if "name" in info:
+            names.append(info["name"])
+        if "manage_task" not in names:
+            continue
+        index = step.get("step_index")
+        identity = event.get("conversation_id")
+        key = None
+        if (type(index) is int and ("conversation_id" not in event
+                or isinstance(identity, str) and bool(identity.strip()))):
+            key = (segment, index, identity)
+        if key is not None and "parameters" in info:
+            # Missing fields cannot erase contradictory original values.
+            signature = parameter_signatures.get(pos, _AGY_PARAMETER_UNAVAILABLE)
+            if signature is _AGY_PARAMETER_UNAVAILABLE:
+                unavailable_keys.add(key)
+            else:
+                parameter_sets.setdefault(key, set()).add(signature)
+        consistent = step.get("step_type") == "tool" and all(name == "manage_task" for name in names)
+        # A command-specific permission failure does not establish that the
+        # enclosing task operation was denied before execution.
+        denied = consistent and _agy_step_denied(step, wrapped_permission_check=False)
+        attempts.append((pos, key, step, consistent, denied))
+    for pos, key, step, consistent, denied in attempts:
+        if denied:
+            continue
+        if (consistent and step.get("state") == "ACTIVE" and key is not None
+                and key not in unavailable_keys and len(parameter_sets.get(key, ())) <= 1
+                and any(later > pos and other_key == key and other_denied
+                        for later, other_key, _, _, other_denied in attempts)):
+            continue
+        return True
+    return False
 
 
 def _terminal_error_suffix(result: dict[str, Any] | None) -> str:
@@ -334,10 +485,21 @@ def _interpret_run(
     expected_content_digest: str | None = None,
     plan_mode: bool = False,
     web: bool = False,
+    read_only: bool = False,
 ) -> _common.RunResult:
     """Admit one terminal AGY result through local verdict and binding checks."""
     run.runtime_identity = "unexposed"
-    events, result = parse_agy_stream(run.stdout)
+    decode_errors: list[str] = []
+    parameter_signatures: dict[int, Any] = {}
+    # Every schema selects status and member spans from original LF records.
+    # Only schema-free permissive replies retain legacy newline normalization.
+    stream = run.stdout
+    if pydantic_cls is None and not (plan_mode or read_only):
+        stream = stream.replace("\r\n", "\n").replace("\r", "\n")
+    events, result = parse_agy_stream(
+        stream, decode_errors=decode_errors if plan_mode or read_only else None,
+        parameter_signatures=parameter_signatures if plan_mode or read_only else None,
+    )
     if plan_mode:
         run._agy_read_telemetry = _project_agy_done_view_files(events, run._effective_cwd)
     exposed_model = None
@@ -381,13 +543,28 @@ def _interpret_run(
             "AGY turn timed out" + _terminal_error_suffix(result),
         )
 
+    original_json_error = next((code for code in ("duplicate_member", "nonfinite_number", "invalid_json")
+                                if code in decode_errors), None)
+    if pydantic_cls is not None and original_json_error is not None:
+        run.validation_error = original_json_error
+        return _fail(run, "schema-fail", _common.EXIT_SCHEMA_FAIL, run.validation_error)
+    if decode_errors:
+        return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
+                     "read-only AGY event could not be checked; answer withheld")
+
+    # AGY 1.5.3 exposes manage_task even with excludeDefaultComponents.
+    # A complete error result must not disguise an observed task operation.
+    if result is not None and (plan_mode or read_only) and _agy_task_attempted(events, parameter_signatures):
+        return _fail(run, "admission-refused", _common.EXIT_TERMINAL,
+                     "read-only AGY run attempted manage_task; answer withheld")
+
     if run.vendor_exit_code != 0:
         detail = "\n".join(
             part for part in (run.stderr, f"agy result status={status}") if part
         )
         classification = _common.classify(
             "antigravity",
-            stderr=detail,
+            stderr=run.stderr,
             stdout="",
             exit_code=_common.EXIT_CLI_FAIL,
             vendor_exit_code=run.vendor_exit_code,
@@ -891,6 +1068,7 @@ def main() -> int:
         expected_content_digest=args.expected_content_digest,
         plan_mode=local_plan_response,
         web=args.web,
+        read_only=readonly,
     )
     if configuration_error is not None:
         if result.exit_code == _common.EXIT_OK:

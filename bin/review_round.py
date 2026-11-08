@@ -62,9 +62,9 @@ _RESULT_METADATA_COPY_CONTRACT = (
 )
 _AGY_GOOGLE_TOOL_CONTRACT = (
     "For this Google leg, use only AGY native file-read and search tools for local inspection. "
-    "Use grep_search with the required SearchPath and Query arguments to search inside the review target identified by Review metadata, "
-    "and use list_dir, find_by_name, and view_file as needed. For every view_file call, "
-    "provide the required AbsolutePath argument. For files larger than one native view, request "
+    "Use only tools offered by the installed build: read_file with Path, or historical view_file with AbsolutePath. "
+    "Use grep_search (SearchPath and Query), list_dir and find_by_name only when offered; "
+    "missing native discovery is a coverage limit. Never invoke manage_task. For files larger than one native view, request "
     "explicit positive-integer StartLine and EndLine ranges. Never request ContentOffset or IsSkillFile, "
     "and do not rely on implicit another-page continuation. If native reads and searches are insufficient, report "
     "the limit in open_questions. "

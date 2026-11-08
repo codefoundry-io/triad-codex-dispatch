@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Preserve original LF framing in AGY stdout and saved run logs; a bare CR is
+  not a read-only/schema record boundary. UTF-8 capture failures retain only
+  complete LF-terminated prefix records. Other providers and stderr retain
+  newline normalization.
+
+- Adopt the merged C84 read-tool rule for AGY 1.5.3: accept `read_file` in the
+  disabled hook, diagnostic path projection and same-run finish recovery.
+- With a terminal result, withhold read-only answers after a `manage_task` attempt without a recognized
+  native denial; default-component exclusion alone is not execution evidence.
+- Refuse undecodable and duplicate-member read-only events before normalization;
+  preserve schema diagnostics, permissive parsing and primary failure guards.
+- Require original finite, unambiguous AGY authentication carriers, including transport timeout
+  and signal handling, so duplicate events cannot fabricate an auth stop.
+- Preserve permissive completed-answer/banner behavior and structured JSON
+  diagnostics while checking original read-only event lines without stripping.
+- Document current native-tool availability and pointer-only web evidence.
+  Preserve profiles, version floors and pinned shared prompts; upstream DL-180
+  remains pending. No installed-cache update or release is implied.
+
 ## 0.2.565 — 2026-10-24
 
 - Bundles published `triad-dispatch-lib 0.1.0.dev7`, source

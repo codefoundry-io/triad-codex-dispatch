@@ -33,7 +33,9 @@ other action tools plus experiments, and undecidable uncertainty goes to
 `open_questions`. MCP calls are prohibited by the formal Google prompt; tool absence is not attested.
 Public v2 uses its bound standing authorization. Legacy REVIEW defaults to no web; only a direct owner request enables
 [the bound web option](../triad-cross-family-review/references/review-web.md).
-Use `grep_search`
+Consult [current native availability](../triad-cross-family-review/references/leg-contracts.md#agy-native-tool-availability)
+before dispatch. On AGY 1.5.3 use `read_file` with `Path`; local search/listing
+and page fetch are not offered. Where an earlier build exposes them, use `grep_search`
 with the required `SearchPath` and `Query` arguments to search inside the review
 target identified by Review metadata, and use `list_dir`, `find_by_name`, and `view_file` as
 needed. For every `view_file` call, provide the required `AbsolutePath` argument. For files
@@ -44,7 +46,9 @@ another-page continuation. If native reads and searches are insufficient, report
 `open_questions`. For ordinary SUCCESS results, formal `step_update` telemetry is diagnostic vendor output,
 not an admission schema: added fields, changed optional tool arguments, denied
 attempts, and duplicate progress events do not invalidate an otherwise valid
-terminal verdict. The prompt and native `--mode plan` define the static-review
+terminal verdict. With a terminal result, a `manage_task` attempt without a recognized native
+denial withholds the read-only answer, including an otherwise successful result.
+The prompt and native `--mode plan` define the static-review
 behavior. The profile explicitly declares native tools and excludes default components.
 The current1.3.3 probe proved useful read/search/web and no file after a direct
 write request, not provider denial of an attempted write or universal prevention.
@@ -52,8 +56,10 @@ Local verdict and review-binding checks plus
 round-integrity verification remain the admission gates. Round-integrity
 mutation detection is separate. Formal calls select the packaged primary AGY
 profile for tool discovery; its declarations are not a permission boundary.
-The wrapper does not reinterpret a completed review from the vendor's evolving
-telemetry schema. The measured ERROR-only finish-resubmission exception uses
+Read-only checks use original event lines. Duplicate members, nonfinite numbers
+and non-JSON surrounding whitespace retain schema-call 66 or raw-read-only 65.
+Other undecodable events are refused with 65 even without a terminal.
+The measured ERROR-only finish-resubmission exception uses
 structured step type, state, error and ordering fields; an earlier failed finish
 can be rescued by a later successful finish under the wrapper's existing checks.
 The route remains read-only by intent plus selected profile, local result

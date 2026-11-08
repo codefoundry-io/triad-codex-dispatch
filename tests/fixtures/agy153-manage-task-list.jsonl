@@ -1,0 +1,2 @@
+{"event": "step_update", "step_update": {"state": "ACTIVE", "step_index": 2, "step_type": "tool", "tool_info": {"name": "manage_task", "parameters": {"Action": "list"}}, "tool_name": "manage_task"}}
+{"event": "step_update", "step_update": {"state": "DONE", "step_index": 2, "step_type": "tool", "tool_info": {"name": "manage_task", "parameters": {"Action": "list"}}, "tool_name": "manage_task"}}

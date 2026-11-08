@@ -2,6 +2,14 @@
 
 [한국어 README](README.ko.md)
 
+AGY 1.5.3 source compatibility: read-only calls recognize `read_file(Path)` as
+well as historical `view_file(AbsolutePath)`. Task-manager attempts withhold the
+answer unless a native pre-execution denial is observed. Existing profile bytes
+and version floors are preserved; the historical `view_file` profile entry is
+an alias on 1.5.3, so do not add both names. See
+[current native-tool and web-evidence limits](skills/triad-cross-family-review/references/leg-contracts.md#agy-native-tool-availability).
+Shared prompt updates remain pending upstream as DL-180; the dev7 pin is unchanged.
+
 [Installation and personal settings](docs/installation.md): choose the normal
 marketplace or a local Git download. Use `main` for the current release line;
 [Published releases](https://github.com/codefoundry-io/triad-codex-dispatch/releases)
@@ -307,8 +315,9 @@ and their aliases remain application data. Unknown fields, invalid JSON, missing
 verdicts, mismatched bindings and terminal failures retain their existing checks.
 AGY schema calls, including legacy and custom schemas, strictly parse original
 JSON event lines before separation, rejecting duplicate members and non-finite
-values. This includes intermediate events; malformed noise retains its existing
-handling. Non-JSON Unicode whitespace around a result is refused instead of
+values. This includes intermediate events; only permissive calls retain the old
+malformed-noise tolerance. Read-only event refusals follow the exit-code guidance below.
+Non-JSON Unicode whitespace around a result is refused instead of
 validating an earlier answer. Direct validation and other providers keep their prior behavior.
 
 The bundled library is the published dev5 prerelease recorded above. This host
@@ -588,10 +597,12 @@ plus round-integrity verification remain the admission gates.
 The formal AGY prompt remains explicitly static-only: it permits
 native local file read/search, denies web by default and always denies MCP calls, forbids command, write, experiment, notebook, subagent,
 browser-actuation, and scratch tools, and sends unresolved static uncertainty to
-`open_questions`. Inside the prepared directory it uses native `list_dir`,
+`open_questions`. Where offered by the installed build, inside the prepared directory it uses native `list_dir`,
 `find_by_name`, and `view_file` as needed, and uses native `grep_search` with the
 required `SearchPath` and `Query` arguments. Every view supplies the required `AbsolutePath` argument; large files use explicit
 positive-integer `StartLine` and `EndLine` ranges.
+On 1.5.3, use the offered `read_file(Path)` instead; absent search/listing or
+page fetch is a coverage limit, not permission for a shell workaround.
 `ContentOffset`, `IsSkillFile`, and implicit `another page` continuation remain
 forbidden.
 On AGY 1.1.20 or newer, the formal plan-mode route passes native
@@ -832,6 +843,27 @@ summary exists, its class appears on the `[wrapper] <cli> <class> …` stderr li
 | `66` | Structured-output (`--pydantic`) schema validation failed | `schema-fail` is terminal for that invocation; the leader may make an explicit new invocation after deciding what to do. The shared-directory formal path does not require the legacy packet-bound schema. |
 | `67` | Codex rejected the submitted output schema (`schema-rejected`) | Inspect the schema/configuration mismatch and make an explicit new invocation. |
 | `1` | The wrapper could not extract an answer (`extraction-error`) or classification was `unknown` | Inspect the final wrapper classification and provider diagnostics, then retry or escalate as appropriate. |
+
+With a terminal result, AGY read-only task attempts without a recognized native
+denial return `admission-refused` / `65`, with no answer. Read-only event checks
+use original lines, not whitespace-normalized text. Duplicate members, nonfinite
+numbers and non-JSON surrounding whitespace retain `schema-fail` / `66` for
+schema calls and use `admission-refused` / `65` for raw read-only calls. Other
+undecodable `{`-prefixed records and decoder-limit failures return the latter
+refusal even without a terminal result. These refusals are `INVALID` in public v2; diagnose and
+correct the cause before a fresh basis, rather than retrying as a transport failure.
+Existing authentication, timeout and transport guards retain precedence.
+Positive AGY authentication evidence must have original JSON without duplicate
+members or nonfinite numbers, including in transport and permissive calls.
+The completed-answer banner veto retains its prior permissive interpretation;
+that veto does not admit a read-only answer. Original-JSON schema errors take
+priority over other undecodable records, with duplicate-member errors first.
+
+
+AGY stdout and saved run logs preserve original LF record framing. A bare CR is
+not a record boundary for read-only or schema calls. On UTF-8 capture failure,
+only complete LF-terminated prefix records are retained. Other providers and
+stderr retain their existing newline normalization.
 
 AGY's terminal `result.error` beginning `timeout waiting for response`, with
 status `ERROR`, an empty response and vendor exit `1`, is reported as
@@ -1179,7 +1211,8 @@ not change dispatch or admission.
 Formal AGY plan-mode audit may also include `agy_read_telemetry`: the observed
 `done_view_file_event_count` and first-seen unique `relative_paths` under that
 host launch cwd (at most 128 paths, each at most 1024 UTF-8-valid characters).
-Only DONE tool steps named `view_file` count; repeats and failed reads still
+DONE tool steps named `view_file` or `read_file` count under the historical
+field name; their path keys are `AbsolutePath` and `Path` respectively. Repeats and failed reads still
 count. Malformed, relative, `..`-containing, outside or symlink-escaping paths
 are omitted, and path-resolution errors never affect the verdict. Redacted/hardened audit keeps
 only the count. No usable cwd or matching events means no telemetry. This is
@@ -1295,7 +1328,7 @@ python3 bin/agy_hook.py --render-config
 It prints a named hook with `enabled:false` and a shell-quoted absolute helper
 path. It writes no configuration, installs no hook, and changes no wrapper or
 project permissions. Bootstrap does not activate it. The normal stdin interface
-returns JSON `allow` only for exact names `view_file`, `grep_search`, `list_dir`,
+returns JSON `allow` only for exact names `read_file`, `view_file`, `grep_search`, `list_dir`,
 `find_by_name`, `search_web`, and `read_url_content`; all other names are denied.
 The documented `toolCall.name` string and `toolCall.args` object are required.
 Invalid UTF-8/JSON, duplicate members, more than 64 nested object/array containers
@@ -1335,8 +1368,9 @@ return schema failure without another formal provider call. The reserved
 the packaged schema file and require all three expected review bindings before
 dispatch. Direct custom-schema validation and other providers retain their existing
 behavior; AGY schema calls follow the strict parsing described under
-[0.2.563](#upgrading-to-02563). Schema-free raw investigation, malformed AGY noise and
-primary provider-failure precedence retain their existing behavior. No schema field or
+[0.2.563](#upgrading-to-02563). Permissive calls retain their existing malformed-noise
+handling; read-only calls follow the event-refusal rules in the exit-code section.
+Primary authentication, timeout and transport guards retain precedence. No schema field or
 review-composition change is introduced. A result-file reader alone cannot
 recover duplicates already removed by an unrelated caller.
 

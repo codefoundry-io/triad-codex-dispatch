@@ -168,6 +168,62 @@ def test_C37_real_timeout_preserves_printed_auth_carrier(tmp_path, cli, stderr, 
     assert result.final_answer == ""
 
 
+def test_ambiguous_agy_auth_event_cannot_override_transport_timeout(tmp_path):
+    raw = '{"event":"step_update","event":"result","result":{"status":"ERROR","error":"not logged in"}}'
+    script = f"import time; print({raw!r},flush=True); time.sleep(30)"
+    result = _common._run_once("antigravity", [sys.executable, "-c", script],
+                               str(tmp_path), 1, classify_and_log=False)
+    assert raw in result.stdout
+    assert result.exit_code == _common.EXIT_TIMEOUT
+    interpreted = antigravity_wrapper._interpret_run(result, None, read_only=True)
+    assert (interpreted.classification, interpreted.exit_code) == ("timeout", 2)
+
+
+def test_ambiguous_agy_auth_event_cannot_override_signal_failure():
+    raw = '{"event":"step_update","event":"result","result":{"status":"ERROR","error":"not logged in"}}'
+    result = _common.RunResult(1, raw, "", 0.1, vendor_exit_code=1)
+    _common._mark_signal_failure(result, signal.SIGTERM, "antigravity")
+    assert result.classification == "unknown" and result.exit_code == 1
+    assert result._output_transport_failed
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity", "1e999"])
+@pytest.mark.parametrize("clean_auth", [False, True])
+def test_nonfinite_agy_auth_carrier_cannot_override_timeout(tmp_path, constant, clean_auth):
+    raw = '{"event":"result","result":{"status":"ERROR","error":"not logged in","usage":' + constant + '}}'
+    if clean_auth:
+        raw += '\n' + agy({"status": "ERROR", "error": LOGIN})
+    script = f"import time; print({raw!r},flush=True); time.sleep(30)"
+    result = _common._run_once("antigravity", [sys.executable, "-c", script], str(tmp_path), 1, classify_and_log=False)
+    assert raw in result.stdout
+    assert result.exit_code == (65 if clean_auth else 2)
+    interpreted = antigravity_wrapper._interpret_run(result, None, read_only=True)
+    assert (interpreted.classification, interpreted.exit_code) == (("oauth-env", 65) if clean_auth else ("timeout", 2))
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity", "1e999"])
+def test_nonfinite_agy_auth_carrier_cannot_override_signal(constant):
+    raw = '{"event":"result","result":{"status":"ERROR","error":"not logged in","usage":' + constant + '}}'
+    result = _common.RunResult(1, raw, "", 0.1, vendor_exit_code=1)
+    _common._mark_signal_failure(result, signal.SIGTERM, "antigravity")
+    assert result.classification == "unknown" and result.exit_code == 1
+    assert result._output_transport_failed
+
+
+@pytest.mark.parametrize("mode", ["permissive", "read-only", "schema"])
+def test_duplicate_success_preserves_banner_veto_before_read_only_admission(mode):
+    class Answer(BaseModel):
+        ok: bool
+    raw = '{"event":"result","result":{"status":"SUCCESS","response":"done","structured_output":{"ok":true},"usage":1,"usage":2}}'
+    run = _common.RunResult(0, raw, BANNER, 0.1, vendor_exit_code=0)
+    result = antigravity_wrapper._interpret_run(run, Answer if mode == "schema" else None,
+                                               read_only=mode != "permissive")
+    expected = {"permissive": ("ok", 0), "read-only": ("admission-refused", 65), "schema": ("schema-fail", 66)}
+    assert (result.classification, result.exit_code) == expected[mode]
+    assert result.final_answer == ("done" if mode == "permissive" else "")
+    assert result.stdout == raw
+
+
 def test_C37_late_signal_preserves_captured_authentication(monkeypatch, tmp_path):
     original = _common._run_once_owned
 
