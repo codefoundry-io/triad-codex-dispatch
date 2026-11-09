@@ -273,6 +273,15 @@ enforces it (summarized under [Security](#security) below).
 - `codex plugin add --json` reports marketplace `authPolicy`; this plugin still
   does not perform CLI OAuth/login.
 
+### Upgrading to 0.2.566
+
+This release includes AGY 1.5.3 read-tool compatibility and read-only task-attempt
+refusal, with original JSON evidence preserved through capture and replay.
+The dev7 library pin, provider profiles and version floors remain unchanged.
+Follow the [update procedure](docs/installation.md#update), run the newly installed
+bootstrap and start a fresh Codex session. Preserve retained runtime bindings and
+any older cache paths still used by active consumers.
+
 ### Upgrading to 0.2.565
 
 Roster schema refusals now include `document` and `instance_path` as JSON, for example
@@ -678,7 +687,7 @@ an additional release gate.
 Maintainers can verify exact clean-HEAD archive bytes before installation:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.565-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.566-final-r1'
 ```
 
 Use a new output label for every attempt; the verifier refuses an existing
