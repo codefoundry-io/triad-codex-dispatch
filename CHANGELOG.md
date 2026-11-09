@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.566 — 2026-11-10
 
 - Preserve original LF framing in AGY stdout and saved run logs; a bare CR is
   not a read-only/schema record boundary. UTF-8 capture failures retain only
@@ -19,7 +19,7 @@
   diagnostics while checking original read-only event lines without stripping.
 - Document current native-tool availability and pointer-only web evidence.
   Preserve profiles, version floors and pinned shared prompts; upstream DL-180
-  remains pending. No installed-cache update or release is implied.
+  remains pending. Follow the installed-cache update procedure separately.
 
 ## 0.2.565 — 2026-10-24
 

@@ -253,6 +253,15 @@ class, route에서 identity를 추론하지 않습니다.
 - `codex plugin add --json`은 marketplace `authPolicy`를 표시할 수 있지만, 이
   플러그인은 CLI OAuth/login을 수행하지 않습니다.
 
+### 0.2.566 업그레이드
+
+AGY 1.5.3 읽기 도구 호환성과 읽기 전용 호출의 작업 관리자 시도 차단을 포함하며,
+캡처·재생 과정에서 원본 JSON 근거를 보존합니다. dev7 라이브러리 고정,
+공급자 프로필과 최소 버전은 유지합니다.
+[업데이트 절차](docs/installation.ko.md#업데이트)를 따라 새 설치본의 bootstrap을
+실행한 뒤 새 Codex 세션을 시작하세요. 유지된 런타임 바인딩과 활성 소비자가
+사용하는 이전 캐시 경로를 보존하세요.
+
 ### 0.2.565 업그레이드
 
 로스터 스키마 오류는 JSON 형식의 `document`와 `instance_path`를 표시합니다. 예:
@@ -640,7 +649,7 @@ Ubuntu는 Ubuntu에서 검증하며, 다른 OS 검사는 해당 호스트나 해
 maintainer는 설치 전에 clean `HEAD`의 exact archive byte를 검증할 수 있습니다:
 
 ```bash
-/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.565-final-r1'
+/bin/zsh -lic 'python3 scripts/verify_distribution.py --source-root . --output-dir _runs/distribution/0.2.566-final-r1'
 ```
 
 시도마다 새 output label을 사용해야 하며 verifier는 기존 directory를 거부합니다.
